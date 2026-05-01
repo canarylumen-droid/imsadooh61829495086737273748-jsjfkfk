@@ -18,7 +18,7 @@ export function log(message: string, source = "express") {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(__dirname, "..", "dist", "public");
+  let distPath = path.resolve(__dirname, "..", "dist", "public");
   console.log(`[Static] Production static directory: ${distPath}`);
 
   if (!fs.existsSync(distPath)) {
@@ -26,8 +26,15 @@ export function serveStatic(app: Express) {
     const fallbackPath = path.resolve(process.cwd(), "dist", "public");
     if (fs.existsSync(fallbackPath)) {
       console.log(`[Static] Using fallback CWD path: ${fallbackPath}`);
+      distPath = fallbackPath;
     } else {
-      console.error(`❌ [Static] No valid static directory found at ${distPath} or ${fallbackPath}`);
+      const clientDistPath = path.resolve(process.cwd(), "client", "dist");
+      if (fs.existsSync(clientDistPath)) {
+         console.log(`[Static] Using client dist path: ${clientDistPath}`);
+         distPath = clientDistPath;
+      } else {
+         console.error(`❌ [Static] No valid static directory found at ${distPath} or ${fallbackPath}`);
+      }
     }
   } else {
     console.log(`✅ [Static] Found production directory at ${distPath}`);
