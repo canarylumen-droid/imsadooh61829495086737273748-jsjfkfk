@@ -1,5 +1,5 @@
 import { Redis } from 'ioredis';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'crypto';
 
 export interface ServiceInstance {
   id: string;
@@ -19,7 +19,7 @@ export class ServiceRegistry {
 
   constructor(redisUrl: string, role: string) {
     this.redis = new Redis(redisUrl);
-    this.serviceId = `${role}-${uuidv4().substring(0, 8)}`;
+    this.serviceId = `${role}-${randomUUID().substring(0, 8)}`;
     this.role = role;
   }
 
