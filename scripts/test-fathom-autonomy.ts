@@ -1,7 +1,7 @@
 import 'dotenv/config';
-import { db, pool } from '../server/db.js';
+import { db, pool } from '@shared/lib/db/db.js';
 import { leads, fathomCalls, followUpQueue } from '../shared/schema.js';
-import { processFathomWebhook } from '../server/lib/ai/fathom-integration.js';
+import { processFathomWebhook } from '@services/brain-worker/src/ai-lib/specialized/fathom-integration.js';
 import { eq, desc } from 'drizzle-orm';
 
 async function test() {

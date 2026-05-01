@@ -1,7 +1,7 @@
 
 import 'dotenv/config';
 import 'dotenv/config';
-import { db } from '../server/db.js';
+import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import * as schema from '../shared/schema.js';
 import { getTableConfig } from 'drizzle-orm/pg-core';

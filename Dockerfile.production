@@ -1,42 +1,46 @@
-# --- Stage 1: Frontend Builder ---
-FROM node:20-alpine AS frontend-builder
+# --- Stage 1: Dependency Resolver ---
+FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build:client
+# Install ALL dependencies (needed for build)
+RUN npm ci
 
-# --- Stage 2: Backend Builder ---
-FROM node:20-alpine AS backend-builder
+# --- Stage 2: Builder ---
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# Build both frontend and backend
+RUN npm run build:client && npm run build:server
+
+# --- Stage 3: Production Dependencies ---
+FROM node:20-alpine AS prod-deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
-COPY . .
-# Compile TypeScript to JavaScript
-RUN npm run build:server
+# Install ONLY production dependencies
+RUN npm ci --omit=dev
 
-# --- Stage 3: Production Runner ---
+# --- Stage 4: Production Runner ---
 FROM node:20-alpine
 WORKDIR /app
 
-# Only copy production dependencies
-COPY package*.json ./
-RUN npm install --omit=dev
+# Security: Run as non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+USER nodejs
 
-# Copy compiled assets from previous stages
-COPY --from=frontend-builder /app/dist/public ./dist/public
-COPY --from=backend-builder /app/dist ./dist
+# Copy runtime assets
+COPY --from=prod-deps --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/migrations ./migrations
+COPY --from=builder --chown=nodejs:nodejs /app/shared ./shared
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 
-# Copy migrations and schema for DB patching
-COPY --from=backend-builder /app/migrations ./migrations
-COPY --from=backend-builder /app/shared ./shared
-
-# Environment variables
+# Environment configuration
 ENV NODE_ENV=production
 ENV PORT=5000
 ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 
-# Expose the API port
+# Expose API port
 EXPOSE 5000
 
 # Healthcheck
@@ -44,5 +48,13 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD wget --quiet --tries=1 --spider http://localhost:5000/api/health/status || exit 1
 
 # Start script handles DB migrations/patches before launching
-# Support APP_ROLE for scaling (api vs worker)
-CMD ["sh", "-c", "npm run db:patch-target-url && if [ \"$APP_ROLE\" = \"worker\" ]; then node dist/server/lib/workers/worker-entry.js; else node dist/server/index.js; fi"]
+# Using 'node' directly from dist/ instead of 'tsx' for maximum performance
+CMD ["sh", "-c", "\
+  node dist/server/db/patch.js; \
+  case \"$APP_ROLE\" in \
+    outreach) node dist/services/outreach-worker/index.js ;; \
+    brain)    node dist/services/brain-worker/index.js ;; \
+    knowledge) node dist/services/rag-worker/index.js ;; \
+    email)    node dist/services/email-service/index.js ;; \
+    *)        node dist/services/api-gateway/index.js ;; \
+  esac"]

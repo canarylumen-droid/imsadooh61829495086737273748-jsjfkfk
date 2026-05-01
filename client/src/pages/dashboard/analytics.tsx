@@ -147,7 +147,7 @@ export default function AnalyticsPage() {
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
             {/* Summary Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
                 {hasData ? (
                     <>
                         <StatCard
@@ -194,6 +194,15 @@ export default function AnalyticsPage() {
                             isUp={true}
                             color="text-indigo-500"
                             index={4}
+                        />
+                        <StatCard
+                            label="Calls Booked"
+                            value={filteredMetrics?.booked || 0}
+                            icon={CalendarCheck2}
+                            trend={calculatePercentageChange(filteredMetrics?.booked || 0, previousStats?.convertedLeads).percentage}
+                            isUp={calculatePercentageChange(filteredMetrics?.booked || 0, previousStats?.convertedLeads).isUp}
+                            color="text-primary"
+                            index={5}
                         />
                     </>
                 ) : (

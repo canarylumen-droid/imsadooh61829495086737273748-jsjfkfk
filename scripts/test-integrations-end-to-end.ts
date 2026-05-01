@@ -1,9 +1,9 @@
 import 'dotenv/config';
-import { db, pool } from '../server/db.js';
+import { db, pool } from '@shared/lib/db/db.js';
 import { leads, fathomCalls, followUpQueue, pendingPayments, users, calendarSettings } from '../shared/schema.js';
 import { eq, desc } from 'drizzle-orm';
 
-import { processFathomWebhook } from '../server/lib/ai/fathom-integration.js';
+import { processFathomWebhook } from '@services/brain-worker/src/ai-lib/specialized/fathom-integration.js';
 
 async function runEndToEndTests() {
   console.log('--- STARTING END-TO-END INTEGRATION TEST ---');
@@ -108,7 +108,7 @@ async function runEndToEndTests() {
 
     console.log('\n--- CALENDLY BOOKING END-TO-END VALIDATION ---');
     // For Calendly, if a token isn't available we catch the error gracefully to prove the flow works.
-    const { calendlyOAuth } = await import('../server/lib/oauth/calendly.js');
+    const { calendlyOAuth } = await import('@services/api-gateway/src/oauth/calendly.js');
     try {
         const slots = await calendlyOAuth.getAvailableSlots(user.id, "2026-05-01", "2026-05-02");
         console.log(`✅ Calendly returned ${slots.length} slots.`);

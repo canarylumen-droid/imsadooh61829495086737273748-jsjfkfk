@@ -38,7 +38,7 @@ export const ScraperConsole = ({ logs, isVisible, onClose }: ScraperConsoleProps
                     threads: Math.floor(Math.random() * 200) + 1200,
                     requests: Math.floor(Math.random() * 50000) + 350000,
                     successRate: 99.2 + (Math.random() * 0.7),
-                    bandwidth: `${(Math.random() * 85 + 42).toFixed(1)} GB/s`
+                    bandwidth: `${(Math.random() * 85 + 42).toFixed(2)} GB/s`
                 });
             }, 2000);
             return () => clearInterval(interval);
@@ -134,7 +134,7 @@ export const ScraperConsole = ({ logs, isVisible, onClose }: ScraperConsoleProps
                         {/* Mobile Stats Toggle/Summary */}
                         <div className="lg:hidden px-6 py-4 bg-primary/5 border-t border-white/5 flex items-center justify-around gap-4 text-[9px] font-black uppercase tracking-widest text-primary">
                             <div className="flex items-center gap-1"><Shield className="w-3 h-3" /> {stats.proxies.toLocaleString()}</div>
-                            <div className="flex items-center gap-1"><Zap className="w-3 h-3" /> {stats.successRate.toFixed(1)}%</div>
+                            <div className="flex items-center gap-1"><Zap className="w-3 h-3" /> {stats.successRate.toFixed(2)}%</div>
                             <div className="flex items-center gap-1"><Activity className="w-3 h-3" /> {stats.bandwidth}</div>
                         </div>
                     </div>
@@ -148,7 +148,7 @@ export const ScraperConsole = ({ logs, isVisible, onClose }: ScraperConsoleProps
                                     { label: 'Active Connections', value: stats.proxies.toLocaleString(), icon: Shield, color: 'text-primary' },
                                     { label: 'Processing Units', value: stats.threads, icon: Cpu, color: 'text-indigo-400' },
                                     { label: 'Data Points Found', value: stats.requests.toLocaleString(), icon: Database, color: 'text-purple-400' },
-                                    { label: 'Verification Success Rate', value: `${stats.successRate.toFixed(1)}%`, icon: CheckCircle, color: 'text-emerald-400' },
+                                    { label: 'Verification Success Rate', value: `${stats.successRate.toFixed(2)}%`, icon: CheckCircle, color: 'text-emerald-400' },
                                 ].map((stat, i) => (
                                     <div key={i} className="group/stat">
                                         <div className="flex items-center justify-between mb-2">

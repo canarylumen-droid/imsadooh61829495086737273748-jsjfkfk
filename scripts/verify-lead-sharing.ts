@@ -1,7 +1,7 @@
 import "dotenv/config";
-import { db } from "../server/db.js";
+import { db } from "@shared/lib/db/db.js";
 import { leads, integrations, outreachCampaigns, campaignLeads, messages, users } from "../shared/schema.js";
-import { drizzleStorage } from "../server/drizzle-storage.js";
+import { drizzleStorage } from "@shared/lib/storage/drizzle-storage.js";
 import { eq, and, inArray } from "drizzle-orm";
 import { randomUUID } from "crypto";
 

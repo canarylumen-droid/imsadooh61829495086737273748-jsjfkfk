@@ -37,4 +37,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # Start the application
 # Support role-based execution (api, worker, notification)
 # Default to 'api' if no APP_ROLE is provided
-CMD ["sh", "-c", "npm run db:patch-target-url && if [ \"$APP_ROLE\" = \"worker\" ]; then npm run start:worker; else npm start; fi"]
+CMD ["sh", "-c", "npm run db:patch-target-url && if [ -n \"$APP_ROLE\" ] && [ \"$APP_ROLE\" != \"api\" ]; then npm run start:worker:$APP_ROLE; else npm run start:api; fi"]

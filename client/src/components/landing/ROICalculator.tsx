@@ -57,7 +57,7 @@ export function ROICalculator() {
     const annualAudnixRevenue = (audnixRevenue + humanCapitalOffset) * 12;
     const goalAttainment = (annualAudnixRevenue / annualRevenueGoal) * 100;
 
-    const multiplier = manualRevenue > 0 ? (audnixRevenue / manualRevenue).toFixed(1) : "9.0";
+    const multiplier = manualRevenue > 0 ? (audnixRevenue / manualRevenue).toFixed(2) : "9.0";
 
     return {
       manualClosedDeals,
@@ -71,13 +71,13 @@ export function ROICalculator() {
       annualAudnixRevenue,
       goalAttainment,
       multiplier,
-      audnixPercent: (audnixConversionRate * 100).toFixed(1)
+      audnixPercent: (audnixConversionRate * 100).toFixed(2)
     };
   }, [leadsPerMonth, avgDealValue, currentConvRate, costPerLead, annualRevenueGoal, humanOffset]);
 
   const formatCurrency = (value: number) => {
-    if (value >= 1000000) return `$${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `$${(value / 1000).toFixed(1)}K`;
+    if (value >= 1000000) return `$${(value / 1000000).toFixed(2)}M`;
+    if (value >= 1000) return `$${(value / 1000).toFixed(2)}K`;
     return `$${value.toLocaleString()}`;
   };
 

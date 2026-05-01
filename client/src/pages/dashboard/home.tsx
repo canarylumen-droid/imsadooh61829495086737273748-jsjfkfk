@@ -29,7 +29,8 @@ import {
   Brain,
   Plus,
   FileText,
-  Loader2
+  Loader2,
+  Clock
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useReducedMotion } from "@/lib/animation-utils";
@@ -103,6 +104,8 @@ interface DashboardStats {
   };
   aiActionLogs?: any[];
   reputationTrend?: any[];
+  globalBounceRate?: number;
+  timeSaved?: number;
 }
 
 interface PreviousDashboardStats {
@@ -346,14 +349,41 @@ export default function DashboardHome() {
       glow: "group-hover:shadow-[0_0_20px_rgba(168,85,247,0.15)]"
     },
     {
+      label: "BOUNCE RATE",
+      value: typeof stats?.globalBounceRate === 'number' ? (stats.globalBounceRate * 100).toFixed(2) : "0.00",
+      suffix: "%",
+      icon: AlertCircle,
+      percentage: "—", // Can be implemented with previousStats.bounceRate later
+      trend: "neutral",
+      color: "text-amber-500",
+      glow: "group-hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]"
+    },
+    {
       label: "REVENUE",
-      value: stats?.closedRevenue?.toLocaleString() || "0",
+      value: typeof stats?.closedRevenue === 'number' ? stats.closedRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00",
       prefix: "$",
       icon: DollarSign,
       percentage: calculatePercentageChange(stats?.closedRevenue || 0, previousStats?.closedRevenue),
       trend: previousStats ? ((stats?.closedRevenue || 0) > (previousStats?.closedRevenue || 0) ? "up" : (stats?.closedRevenue || 0) < (previousStats?.closedRevenue || 0) ? "down" : "neutral") : "neutral",
       color: "text-primary",
       glow: "hover:shadow-[0_0_20px_rgba(var(--primary),0.15)]"
+    },
+    {
+      label: "TIME SAVED",
+      value: (() => {
+        const seconds = stats?.timeSaved || 0;
+        if (seconds < 60) return `${Math.round(seconds)}s`;
+        const minutes = seconds / 60;
+        if (minutes < 60) return `${Math.floor(minutes)}m`;
+        const hours = minutes / 60;
+        if (hours < 24) return `${Math.floor(hours)}h ${Math.round(minutes % 60)}m`;
+        return `${Math.floor(hours / 24)}d ${Math.round(hours % 24)}h`;
+      })(),
+      icon: Clock,
+      percentage: "—",
+      trend: "up",
+      color: "text-emerald-500",
+      glow: "group-hover:shadow-[0_0_20px_rgba(16,185,129,0.15)]"
     },
   ];
 
@@ -451,7 +481,7 @@ export default function DashboardHome() {
         )}
 
         {/* KPI Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           {kpis.map((kpi, index) => {
             const Icon = kpi.icon;
             const TrendIcon = kpi.trend === "up" ? ArrowUp : kpi.trend === "down" ? ArrowDown : Minus;

@@ -12,8 +12,8 @@
  */
 
 import 'dotenv/config';
-import { storage } from '../server/storage.js';
-import { sendEmail } from '../server/lib/channels/email.js';
+import { storage } from '@shared/lib/storage/storage.js';
+import { sendEmail } from '@shared/lib/channels/email.js';
 import OpenAI from 'openai';
 
 const openai = new OpenAI({

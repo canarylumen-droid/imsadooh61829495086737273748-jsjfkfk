@@ -1,9 +1,0 @@
-﻿
-> rest-express@1.0.0 check
-> node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit
-
-client/src/components/dashboard/RecentConversations.tsx(70,11): error TS2304: Cannot find name 'SiMicrosoftoutlook'.
-server/storage.ts(468,11): error TS2322: Type '{ organizationId: string | null; externalId: string | null; company: string | null; role: string | null; bio: string | null; replyEmail: string | null; phone: string | null; status: "new" | ... 9 more ... | "warm"; ... 21 more ...; fathomMeetingId?: string | ... 1 more ... | undefined; }' is not assignable to type '{ email: string | null; id: string; name: string; company: string | null; timezone: string | null; role: string | null; metadata: Record<string, any>; createdAt: Date; updatedAt: Date; ... 20 more ...; fathomMeetingId: string | null; }'.
-  Types of property 'email' are incompatible.
-    Type 'string | null | undefined' is not assignable to type 'string | null'.
-      Type 'undefined' is not assignable to type 'string | null'.

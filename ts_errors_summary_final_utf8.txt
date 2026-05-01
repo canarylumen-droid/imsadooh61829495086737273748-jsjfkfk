@@ -1,6 +1,0 @@
-﻿
-> rest-express@1.0.0 check
-> node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit
-
-client/src/components/dashboard/LeadIntelligenceModal.tsx(66,20): error TS1109: Expression expected.
-client/src/components/dashboard/LeadIntelligenceModal.tsx(70,1): error TS1128: Declaration or statement expected.

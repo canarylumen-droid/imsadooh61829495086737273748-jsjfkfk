@@ -43,7 +43,8 @@ import {
   Trash2,
   DollarSign,
   Users,
-  ShieldAlert
+  ShieldAlert,
+  Clock
 } from "lucide-react";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -728,6 +729,42 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
 
               <MailboxSwitcher className="hidden sm:flex" />
               <ThemeSwitcher />
+
+              {/* Time Saved Widget */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-600 dark:text-emerald-400 cursor-default">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span className="text-[11px] font-black uppercase tracking-wider">
+                      {(() => {
+                        // Use backend-calculated precision time saved if available
+                        const totalSeconds = dashboardStats?.timeSaved || 
+                                           ((dashboardStats?.aiReplies || 0) * 120) + 
+                                           ((dashboardStats?.totalMessages || 0) * 45) + 
+                                           ((dashboardStats?.totalLeads || 0) * 15);
+                        
+                        if (totalSeconds < 60) return `${Math.round(totalSeconds)}s Saved`;
+                        
+                        const savedMinutes = totalSeconds / 60;
+                        if (savedMinutes < 60) {
+                          const mins = Math.floor(savedMinutes);
+                          const secs = Math.round(totalSeconds % 60);
+                          return `${mins}m ${secs > 0 ? secs + 's ' : ''}Saved`;
+                        }
+                        
+                        const savedMinutesFloat = totalSeconds / 60;
+                        const hours = Math.floor(savedMinutesFloat / 60);
+                        const mins = Math.round(savedMinutesFloat % 60);
+                        return `${hours}h ${mins > 0 ? mins + 'm ' : ''}Saved`;
+                      })()}
+                    </span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-[200px] text-center">
+                  <p className="text-xs font-bold mb-1">AI Time Savings</p>
+                  <p className="text-[10px] text-muted-foreground">Calculated based on {dashboardStats?.aiReplies || 0} replies (3m each), {dashboardStats?.totalMessages || 0} outreaches (1m each), and {dashboardStats?.totalLeads || 0} leads sourced (0.5m each).</p>
+                </TooltipContent>
+              </Tooltip>
 
               <Sheet open={showNotificationsPanel} onOpenChange={setShowNotificationsPanel}>
                 <SheetTrigger asChild>

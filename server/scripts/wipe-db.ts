@@ -1,4 +1,4 @@
-import { db } from "../db.js";
+import { db } from "@shared/lib/db/db.js";
 import { sql } from "drizzle-orm";
 
 async function wipeDatabase() {
@@ -16,7 +16,7 @@ async function wipeDatabase() {
     await (db as any).execute(sql`COMMENT ON SCHEMA public IS 'standard public schema';`);
 
     // 3. Flush Redis Memory
-    const { getRedisClient } = await import("../lib/redis.js");
+    const { getRedisClient } = await import("@shared/lib/redis/redis.js");
     const redis = await getRedisClient();
     if (redis) {
       console.log("🧹 Flushing Redis memory...");
@@ -36,3 +36,4 @@ async function wipeDatabase() {
 }
 
 wipeDatabase();
+

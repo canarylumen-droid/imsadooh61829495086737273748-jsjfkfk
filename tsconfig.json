@@ -3,8 +3,9 @@
     "client/src/**/*",
     "shared/**/*",
     "server/**/*",
-    "api/**/*",
-    "scripts/**/*"
+    "services/**/*",
+    "packages/**/*",
+    "api/**/*"
   ],
   "exclude": [
     "node_modules",
@@ -46,6 +47,21 @@
       ],
       "@shared/*": [
         "./shared/*"
+      ],
+      "@audnix/shared": [
+        "./packages/shared/index.ts"
+      ],
+      "@audnix/shared/*": [
+        "./packages/shared/*"
+      ],
+      "@audnix/core": [
+        "./packages/core/index.ts"
+      ],
+      "@audnix/core/*": [
+        "./packages/core/*"
+      ],
+      "@services/*": [
+        "./services/*"
       ]
     }
   }

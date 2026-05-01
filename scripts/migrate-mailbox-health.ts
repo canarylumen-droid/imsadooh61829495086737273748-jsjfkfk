@@ -12,7 +12,7 @@
  * Also adds new statuses to campaign_leads and notification types.
  */
 
-import { db } from '../server/db.js';
+import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 
 async function runMigration() {

@@ -1,7 +1,0 @@
-⚠️ DATABASE_URL not set. Running in demo mode.
-TypeError: Cannot read properties of null (reading 'execute')
-    at calculateAverageResponseTime (C:\Users\USER\Saved Games\audnix-ai-project\test-calculate.ts:5:34)
-    at <anonymous> (C:\Users\USER\Saved Games\audnix-ai-project\test-calculate.ts:40:1)
-    at ModuleJob.run (node:internal/modules/esm/module_job:413:25)
-    at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:660:26)
-    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)

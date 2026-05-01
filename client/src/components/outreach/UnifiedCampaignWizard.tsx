@@ -71,6 +71,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [targetDays, setTargetDays] = useState(10); // User-configurable target days
   const [excludeWeekends, setExcludeWeekends] = useState(false);
   const [aiAutonomousMode, setAiAutonomousMode] = useState(true);
+  const [aiAdjustCopy, setAiAdjustCopy] = useState(false);
   const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState("");
 
@@ -224,7 +225,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
           mailboxMaxMultipliers,
           followUpDelayDays: parseInt(followUpDays),
           mailboxIds: selectedMailboxes,
-          replyTo: replyTo || undefined
+          replyTo: replyTo || undefined,
+          aiAdjustCopy
         },
         template: {
           subject, body, autoReplyBody,
@@ -615,12 +617,24 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-6 bg-primary/5 rounded-3xl border border-primary/20 flex items-center justify-between col-span-1 md:col-span-2">
-                          <div>
-                            <p className="text-[11px] font-black uppercase text-primary">AI Autonomous Engine</p>
-                            <p className="text-[10px] opacity-60 italic mt-1 max-w-lg">Allows the AI to automatically pause follow-ups, send invoices, and book Calendly meetings by reading Fathom call summaries and lead replies.</p>
+                        <div className="p-6 bg-primary/5 rounded-3xl border border-primary/20 flex flex-col gap-4 col-span-1 md:col-span-2">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-[11px] font-black uppercase text-primary">AI Autonomous Engine</p>
+                              <p className="text-[10px] opacity-60 italic mt-1 max-w-lg">Allows the AI to automatically pause follow-ups, send invoices, and book Calendly meetings by reading Fathom call summaries and lead replies.</p>
+                            </div>
+                            <Switch checked={aiAutonomousMode} onCheckedChange={setAiAutonomousMode} className="scale-125 data-[state=checked]:bg-primary" />
                           </div>
-                          <Switch checked={aiAutonomousMode} onCheckedChange={setAiAutonomousMode} className="scale-125 data-[state=checked]:bg-primary" />
+                          
+                          {aiAutonomousMode && (
+                            <div className="flex items-center justify-between pt-4 border-t border-primary/10 animate-in fade-in slide-in-from-top-2">
+                              <div>
+                                <p className="text-[10px] font-black uppercase">Let AI Adjust Copy</p>
+                                <p className="text-[9px] opacity-60 italic mt-1 font-bold text-primary">Per-lead dynamic rewriter. If a lead's reply contradicts your planned follow-up, AI will automatically rewrite the next message ONLY for that specific lead to maintain conversation flow.</p>
+                              </div>
+                              <Switch checked={aiAdjustCopy} onCheckedChange={setAiAdjustCopy} className="scale-110" />
+                            </div>
+                          )}
                         </div>
                         <div className="p-6 bg-muted/10 rounded-3xl border border-border/10 space-y-3">
                            <Label className="text-[9px] font-black uppercase opacity-40">Reply-To Routing</Label>

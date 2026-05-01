@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DollarSign,
   Calendar,
@@ -18,7 +21,8 @@ import {
   Activity,
   Plus,
   Download,
-  Sparkles
+  Sparkles,
+  Settings
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -97,7 +101,11 @@ export default function DealsPage() {
   const { selectedMailboxId } = useMailbox();
   const { data: dealsData, isLoading } = useQuery<DealsApiResponse>({
     queryKey: ["/api/deals", { integrationId: selectedMailboxId }],
+    retry: false,
+  });
 
+  const { data: userProfile } = useQuery({
+    queryKey: ["/api/user/profile"],
     retry: false,
   });
 
@@ -154,6 +162,8 @@ export default function DealsPage() {
       });
     }
   };
+
+
 
   const exportDeals = () => {
     if (deals.length === 0) {

@@ -1,9 +1,9 @@
-import { getDatabase } from "../server/db.js";
+import { getDatabase } from "@shared/lib/db/db.js";
 import { prospects } from "../shared/schema.js";
 import { eq } from "drizzle-orm";
-import { EmailVerifier } from "../server/lib/scraping/email-verifier.js";
+import { EmailVerifier } from "@shared/lib/scraping/email-verifier.js";
 import { GoogleGenAI } from "@google/genai";
-import { GENAI_STABLE_MODEL } from "../server/lib/ai/model-config.js";
+import { GENAI_STABLE_MODEL } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
 import 'dotenv/config';
 
 async function performIntensiveCleanup() {

@@ -1,7 +1,7 @@
 
-import { storage } from '../server/storage.js';
-import { runDemoOutreach } from '../server/lib/outreach/outreach-runner.js';
-import { db } from '../server/db.js';
+import { storage } from '@shared/lib/storage/storage.js';
+import { runDemoOutreach } from '@services/outreach-worker/src/outreach-lib/outreach-runner.js';
+import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 
 async function main() {

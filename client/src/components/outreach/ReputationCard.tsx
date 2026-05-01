@@ -84,7 +84,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
                 "text-3xl font-black tracking-tighter",
                 score >= 80 ? "text-emerald-400" : score >= 60 ? "text-amber-400" : "text-rose-400"
               )}>
-                {score.toFixed(1)}%
+                {score.toFixed(2)}%
               </h3>
             </div>
             <div className="text-right">

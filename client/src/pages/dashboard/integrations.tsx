@@ -65,6 +65,8 @@ interface Integration {
     email?: string;
     username?: string;
   };
+  reputationScore?: number;
+  bounceRate?: number;
 }
 
 interface IntegrationsResponse {
@@ -206,7 +208,7 @@ export default function IntegrationsPage() {
   const { data: customEmailStatus, refetch: refetchStatus } = useQuery<{
     connected: boolean;
     email: string | null;
-    integrations: Array<{ id: string; email: string; connected: boolean; provider: string }>;
+    integrations: Array<{ id: string; email: string; connected: boolean; provider: string; reputationScore?: number; bounceRate?: number }>;
   }>({
     queryKey: ["/api/custom-email/status"],
     placeholderData: (prev) => prev,
@@ -973,6 +975,32 @@ export default function IntegrationsPage() {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0 transition-opacity">
+                          {mailbox.connected && (
+                            <div className="flex gap-4 px-4 py-2 bg-background/50 rounded-xl border border-border/50 mr-4">
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reputation</span>
+                                <span className={cn(
+                                  "text-sm font-black",
+                                  (mailbox.reputationScore ?? 100) >= 80 ? "text-emerald-500" :
+                                  (mailbox.reputationScore ?? 100) >= 50 ? "text-amber-500" : "text-destructive"
+                                )}>
+                                  {mailbox.reputationScore ?? 100}/100
+                                </span>
+                              </div>
+                              <div className="w-px bg-border/50" />
+                              <div className="flex flex-col">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bounce Rate</span>
+                                <span className={cn(
+                                  "text-sm font-black",
+                                  ((mailbox.bounceRate ?? 0) * 100) < 2 ? "text-emerald-500" :
+                                  ((mailbox.bounceRate ?? 0) * 100) < 5 ? "text-amber-500" : "text-destructive"
+                                )}>
+                                  {((mailbox.bounceRate ?? 0) * 100).toFixed(2)}%
+                                </span>
+                              </div>
+                            </div>
+                          )}
+
                           {mailbox.connected && (
                             <Button variant="outline" size="sm" className="h-8 rounded-lg text-[10px] px-3 w-full sm:w-auto" onClick={() => setIsTestEmailOpen(true)}>
                               <Mail className="h-3 w-3 mr-1.5" /> Test Connection

@@ -1,4 +1,4 @@
-import { GmailOAuth } from '../server/lib/oauth/gmail.js';
+import { GmailOAuth } from '@services/api-gateway/src/oauth/gmail.js';
 import dotenv from 'dotenv';
 dotenv.config();
 

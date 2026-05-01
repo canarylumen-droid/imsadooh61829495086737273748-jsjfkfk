@@ -1,4 +1,4 @@
-import { db } from "../server/db.js";
+import { db } from "@shared/lib/db/db.js";
 import { users, leads } from "../shared/schema.js";
 import { isNull, or, eq } from "drizzle-orm";
 

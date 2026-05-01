@@ -1,7 +1,7 @@
 import 'dotenv/config';
-import { GmailOAuth } from '../server/lib/oauth/gmail.js';
+import { GmailOAuth } from '@services/api-gateway/src/oauth/gmail.js';
 import { OutlookOAuth } from '../server/lib/oauth/outlook.ts';
-import { db } from '../server/db.js';
+import { db } from '@shared/lib/db/db.js';
 import { oauthAccounts, users } from '../shared/schema.js';
 import { eq, and } from 'drizzle-orm';
 

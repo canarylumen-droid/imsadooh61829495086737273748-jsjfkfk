@@ -1,4 +1,4 @@
-import { db } from '../server/db.js';
+import { db } from '@shared/lib/db/db.js';
 import { users, otpCodes, onboardingProfiles } from '../shared/schema.js';
 import { eq, sql, and, like, isNull, or, lt } from 'drizzle-orm';
 

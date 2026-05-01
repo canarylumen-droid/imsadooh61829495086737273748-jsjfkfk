@@ -62,7 +62,7 @@ async function checkDatabase(): Promise<void> {
   console.log('\n🗄️  Checking database connectivity...');
   const start = Date.now();
   try {
-    const { db } = await import('../server/db.js');
+    const { db } = await import('@shared/lib/db/db.js');
     const { sql } = await import('drizzle-orm');
     await (db as any).execute(sql`SELECT 1`);
     results.push(pass('DB: Connection', 'Successful', Date.now() - start));
@@ -76,7 +76,7 @@ async function checkAIService(): Promise<void> {
   console.log('\n🤖 Checking AI service...');
   const start = Date.now();
   try {
-    const { getAIStatus } = await import('../server/lib/ai/ai-service.js');
+    const { getAIStatus } = await import('@services/brain-worker/src/ai-lib/core/ai-service.js');
     const status = getAIStatus();
     if (status.activeProvider) {
       results.push(pass('AI: Provider', `${status.activeProvider} active`, Date.now() - start));
@@ -92,7 +92,7 @@ async function checkAIService(): Promise<void> {
 async function checkAvailabilityService(): Promise<void> {
   console.log('\n📅 Checking AvailabilityService (Timezone Bridge)...');
   try {
-    const { availabilityService } = await import('../server/lib/calendar/availability-service.js');
+    const { availabilityService } = await import('@shared/lib/calendar/availability-service.js');
     const testDate = new Date('2024-01-15T14:00:00Z'); // A Monday 2 PM UTC
     const isBusinessHours = availabilityService.isWithinUserBusinessHours(testDate, 'Africa/Lagos');
     // 2pm UTC = 3pm Lagos, should be valid business hours
@@ -118,7 +118,7 @@ async function checkAvailabilityService(): Promise<void> {
 async function checkStatsService(): Promise<void> {
   console.log('\n📊 Checking StatsService (Analytics)...');
   try {
-    const { statsService } = await import('../server/lib/analytics/stats-service.js');
+    const { statsService } = await import('@shared/lib/analytics/stats-service.js');
     // Use a fake userId – service should handle gracefully without throwing
     const stats = await statsService.getKPIStats('00000000-0000-0000-0000-000000000000');
     if (typeof stats.totalLeads === 'number') {
@@ -136,7 +136,7 @@ async function checkStatsService(): Promise<void> {
 async function checkWarmupService(): Promise<void> {
   console.log('\n🌡️  Checking WarmupService (Domain Warmup)...');
   try {
-    const { warmupService } = await import('../server/lib/outreach/warmup-service.js');
+    const { warmupService } = await import('@services/outreach-worker/src/outreach-lib/warmup-service.js');
     const newMailbox = { createdAt: new Date(), id: 'test', provider: 'gmail', limit: 500 } as any;
     const status = warmupService.getWarmupStatus(newMailbox, 500);
     if (status.isWarmingUp && status.dailyLimit <= 20) {

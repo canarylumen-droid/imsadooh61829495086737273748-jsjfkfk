@@ -1,5 +1,0 @@
-﻿Γ£à PostgreSQL database connected (Neon Serverless compatibility restored)
-Γ£ô Using DrizzleStorage with PostgreSQL (persistent storage enabled)
-≡ƒº¬ Starting Phase 2 Verification...
-≡ƒæñ Testing with user: 4906053c-e00c-40ba-ba1c-1ad132327b06
-Γ¥î FATAL ERROR: Connection terminated unexpectedly

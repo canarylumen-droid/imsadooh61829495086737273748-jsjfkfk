@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { storage } from '../storage.js';
+import { storage } from '@shared/lib/storage/storage.js';
 
 async function listLeads() {
   try {

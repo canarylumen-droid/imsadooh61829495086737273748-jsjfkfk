@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { getDatabase } from '../server/db.js';
+import { getDatabase } from '@shared/lib/db/db.js';
 import { users, integrations, leads } from '../shared/schema.js';
 import { eq, and } from 'drizzle-orm';
 

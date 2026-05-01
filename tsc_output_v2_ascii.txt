@@ -1,6 +1,0 @@
-
-> rest-express@1.0.0 check
-> node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit
-
-scripts/verify-lead-sharing.ts(25,1): error TS1128: Declaration or statement expected.
-scripts/verify-lead-sharing.ts(27,1): error TS1128: Declaration or statement expected.

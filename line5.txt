@@ -1,1 +1,0 @@
-﻿client/src/components/dashboard/DashboardLayout.tsx(648,27): error TS1005: '}' expected.

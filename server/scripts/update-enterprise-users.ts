@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db } from "../db.js";
-import { users } from "../../shared/schema.js";
+import { db } from "@shared/lib/db/db.js";
+import { users } from "@audnix/shared";
 import { eq, inArray } from "drizzle-orm";
 
 async function updateToEnterprise() {

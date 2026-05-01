@@ -14,12 +14,12 @@ services:
     restart: always
 
   # --- Main API Gateway ---
-  app:
+  api-gateway:
     build:
       context: .
       dockerfile: Dockerfile.production
     image: audnix-ai:latest
-    container_name: audnix-app
+    container_name: audnix-api-gateway
     environment:
       - NODE_ENV=production
       - PORT=5000
@@ -29,19 +29,88 @@ services:
       - SESSION_SECRET=${SESSION_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     restart: always
 
-  # --- Worker Service (AI / Email Sync / Outreach) ---
-  worker:
+  # --- Email Worker (Sync & Processing) ---
+  email-worker:
     build:
       context: .
       dockerfile: Dockerfile.production
     image: audnix-ai:latest
-    container_name: audnix-worker
+    container_name: audnix-email-worker
     environment:
       - NODE_ENV=production
-      - APP_ROLE=worker
+      - APP_ROLE=email
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: always
+
+  # --- Outreach Worker ---
+  outreach-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-outreach-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=outreach
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    restart: always
+
+  # --- RAG Worker ---
+  rag-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-rag-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=rag
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://redis:6379
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 2048M
+    restart: always
+
+  # --- Vector DB Service ---
+  vector-db-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-vector-db-service
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=vectordb
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://redis:6379
     depends_on:
@@ -56,6 +125,11 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     restart: always
 
   # --- Local Postgres (Optional, if not using Neon) ---

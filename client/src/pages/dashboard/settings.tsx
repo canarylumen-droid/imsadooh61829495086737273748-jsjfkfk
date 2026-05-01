@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2 } from "lucide-react";
+import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +38,11 @@ interface UserProfile {
   metadata?: any;
   defaultPaymentLink?: string;
   offerDescription?: string;
+  offerValue?: number;
+  offerDescription2?: string;
+  offerValue2?: number;
+  doubleOfferEnabled?: boolean;
+  aiAdjustCopyEnabled?: boolean;
   aiStickerFollowupsEnabled?: boolean;
 }
 
@@ -65,6 +70,11 @@ export default function SettingsPage() {
     autonomousMode: true,
     defaultPaymentLink: "",
     offerDescription: "",
+    offerValue: 0,
+    offerDescription2: "",
+    offerValue2: 0,
+    doubleOfferEnabled: false,
+    aiAdjustCopyEnabled: true,
     aiStickerFollowupsEnabled: true,
   });
 
@@ -82,6 +92,11 @@ export default function SettingsPage() {
         autonomousMode: (user as any).config?.autonomousMode !== false,
         defaultPaymentLink: user.defaultPaymentLink || "",
         offerDescription: (user as any).offerDescription || "",
+        offerValue: (user as any).offerValue || 0,
+        offerDescription2: (user as any).offerDescription2 || "",
+        offerValue2: (user as any).offerValue2 || 0,
+        doubleOfferEnabled: (user as any).doubleOfferEnabled ?? false,
+        aiAdjustCopyEnabled: (user as any).aiAdjustCopyEnabled ?? true,
         aiStickerFollowupsEnabled: user.aiStickerFollowupsEnabled ?? true,
       });
     }
@@ -309,7 +324,18 @@ export default function SettingsPage() {
                       placeholder="e.g. Done-for-you leads at $3,000/month"
                       className="rounded-xl h-11 border-primary/30 focus-visible:ring-primary"
                     />
-                    <p className="text-[10px] text-muted-foreground">AI will use this exact offer and price instead of guessing or using BANT.</p>
+                    <p className="text-[10px] text-muted-foreground">AI will use this exact offer description instead of guessing.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Default Deal Value ($)</Label>
+                    <Input
+                      type="number"
+                      value={formData.offerValue}
+                      onChange={e => handleFieldChange('offerValue', parseFloat(e.target.value) || 0)}
+                      placeholder="e.g. 5000"
+                      className="rounded-xl h-11 border-primary/30 focus-visible:ring-primary"
+                    />
+                    <p className="text-[10px] text-muted-foreground">Used as the baseline monetary value for new won deals.</p>
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Timezone</Label>
@@ -327,6 +353,45 @@ export default function SettingsPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+
+                <div className="space-y-6 pt-6 border-t border-border/40">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold uppercase tracking-widest px-3 h-6 flex items-center">Double Offer System</Badge>
+                      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Enable fallback offers for hesitant leads</p>
+                    </div>
+                    <Switch 
+                      checked={formData.doubleOfferEnabled}
+                      onCheckedChange={c => handleFieldChange('doubleOfferEnabled', c)}
+                    />
+                  </div>
+                  
+                  {formData.doubleOfferEnabled && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top-2 duration-300 bg-primary/5 p-6 rounded-2xl border border-primary/10">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Secondary Offer Description</Label>
+                        <Input
+                          value={formData.offerDescription2}
+                          onChange={e => handleFieldChange('offerDescription2', e.target.value)}
+                          placeholder="e.g. Lite version at $1,500/month"
+                          className="rounded-xl h-11 border-primary/20 focus-visible:ring-primary bg-background"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Used autonomously as a downsell when a lead rejects the primary offer.</p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Secondary Deal Value ($)</Label>
+                        <Input
+                          type="number"
+                          value={formData.offerValue2}
+                          onChange={e => handleFieldChange('offerValue2', parseFloat(e.target.value) || 0)}
+                          placeholder="e.g. 1500"
+                          className="rounded-xl h-11 border-primary/20 focus-visible:ring-primary bg-background"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Monetary baseline for the downsell offer.</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -396,6 +461,29 @@ export default function SettingsPage() {
                   <Switch
                     checked={formData.aiStickerFollowupsEnabled}
                     onCheckedChange={c => handleFieldChange('aiStickerFollowupsEnabled', c)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
+                <div className="flex gap-4">
+                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
+                    <Sparkles className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-base flex items-center gap-2">
+                      AI Dynamic Copy Adjustment
+                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">Advanced</Badge>
+                    </h4>
+                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+                      Enable the AI to autonomously rewrite message sequences for specific leads if the default copy is performing poorly or doesn't match the sentiment.
+                    </p>
+                  </div>
+                </div>
+                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
+                  <Switch
+                    checked={formData.aiAdjustCopyEnabled}
+                    onCheckedChange={c => handleFieldChange('aiAdjustCopyEnabled', c)}
                   />
                 </div>
               </div>
@@ -525,11 +613,11 @@ export default function SettingsPage() {
                     <div className="flex flex-col gap-1">
                       <div className="flex justify-between text-[10px] font-medium">
                         <span className="text-muted-foreground">Minutes Used</span>
-                        <span className="text-foreground">{voiceUsage?.used.toFixed(1) || 0}m</span>
+                        <span className="text-foreground">{voiceUsage?.used.toFixed(2) || 0}m</span>
                       </div>
                       <div className="flex justify-between text-[10px] font-medium">
                         <span className="text-muted-foreground">Remaining</span>
-                        <span className="text-emerald-500 font-bold">{voiceUsage?.remaining.toFixed(1) || 0}m</span>
+                        <span className="text-emerald-500 font-bold">{voiceUsage?.remaining.toFixed(2) || 0}m</span>
                       </div>
                     </div>
                   </CardContent>

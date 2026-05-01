@@ -1,9 +1,9 @@
 import 'dotenv/config';
-import { DrizzleStorage } from '../server/drizzle-storage.js';
-import { db } from '../server/db.js';
+import { DrizzleStorage } from '@shared/lib/storage/drizzle-storage.js';
+import { db } from '@shared/lib/db/db.js';
 import { outreachCampaigns, campaignLeads, leads, users } from '../shared/schema.js';
 import { eq, and } from 'drizzle-orm';
-import { isValidUUID } from '../server/lib/utils/validation.js';
+import { isValidUUID } from '@shared/lib/utils/validation.js';
 
 async function testCampaignLifecycle() {
   const storage = new DrizzleStorage();

@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { db } from '../server/db.js';
-import { sendEmail } from '../server/lib/channels/email.js';
+import { db } from '@shared/lib/db/db.js';
+import { sendEmail } from '@shared/lib/channels/email.js';
 import { users } from '../shared/schema.js';
 import { eq } from 'drizzle-orm';
 

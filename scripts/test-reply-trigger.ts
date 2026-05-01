@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { db } from '../server/db.js';
-import { pagedEmailImport } from '../server/lib/imports/paged-email-importer.js';
+import { db } from '@shared/lib/db/db.js';
+import { pagedEmailImport } from '@shared/lib/imports/paged-email-importer.js';
 import { followUpQueue, leads, users } from '../shared/schema.js';
 import { eq, desc } from 'drizzle-orm';
 import { randomUUID } from 'crypto';

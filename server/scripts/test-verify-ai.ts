@@ -1,6 +1,6 @@
 import 'dotenv/config';
-import { storage } from '../storage.js';
-import { analyzeInboundMessage } from '../lib/ai/inbound-message-analyzer.js';
+import { storage } from '@shared/lib/storage/storage.js';
+import { analyzeInboundMessage } from '@services/brain-worker/src/ai-lib/analyzers/inbound-message-analyzer.js';
 
 async function verify() {
   try {
@@ -67,3 +67,4 @@ async function verify() {
 }
 
 verify();
+
