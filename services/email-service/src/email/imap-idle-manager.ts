@@ -972,10 +972,14 @@ class ImapIdleManager {
                                                     });
                                                     
                                                     if (analysis?.shouldAutoReply) {
-                                                        const { scheduleAutomatedEmailReply } = await import("@services/brain-worker/src/ai-lib/core/email-automation.js");
-                                                        await scheduleAutomatedEmailReply(
-                                                            userId, lead.id, email.from, email.subject, email.text, analysis.intent as any, email.threadId
-                                                        );
+                                                        const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
+                                                        await enqueuePriorityReply({
+                                                            userId,
+                                                            leadId: lead.id,
+                                                            type: 'autonomous_reply',
+                                                            isAutonomous: true
+                                                        });
+                                                        console.log(`⚡ [Fast-Track] Enqueued priority AI reply for lead ${lead.id}`);
                                                     }
                                                 }
                                             }

@@ -155,8 +155,8 @@ export interface IStorage {
   clearFollowUpQueue(leadId: string): Promise<void>;
 
   // AI Learning Patterns
-  getLearningPatterns(userId: string): Promise<AiLearningPattern[]>;
-  recordLearningPattern(userId: string, key: string, success: boolean): Promise<void>;
+  getLearningPatterns(userId: string, filters?: { industry?: string; persona?: string; strengthThreshold?: number }): Promise<AiLearningPattern[]>;
+  recordLearningPattern(userId: string, key: string, success: boolean, metadata?: { industry?: string; persona?: string; insight?: string }): Promise<void>;
 
   // OAuth Accounts
   getOAuthAccount(userId: string, provider: string, providerAccountId?: string): Promise<OAuthAccount | undefined>;

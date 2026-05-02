@@ -36,24 +36,52 @@ export async function enqueueStandardOutreach(data: OutreachJobData, delayMs: nu
 }
 
 /**
+ * Helper to add a conversational reply to the front of the line
+ */
+export async function enqueuePriorityReply(data: OutreachJobData) {
+  return await outreachQueue.add('priority-reply', { ...data, priority: 1 }, {
+    priority: 1, // BullMQ: 1 is highest priority
+    jobId: `reply-${data.leadId}-${Date.now()}`
+  });
+}
+
+/**
+ * System 11: Schedule the persistent 12-hour Pulse Sweep
+ */
+export async function schedulePulseSweep() {
+  return await outreachQueue.add('pulse-sweep-trigger', { type: 'autonomous' } as any, {
+    repeat: {
+      every: 12 * 60 * 60 * 1000, // 12 hours
+    },
+    jobId: 'global-pulse-sweep'
+  });
+}
+
+/**
+ * Dispatch an outreach campaign for a specific user
+ */
+export async function dispatchOutreachCampaign(userId: string, campaignId: string) {
+  const job = await enqueueStandardOutreach({
+    userId,
+    campaignId,
+    type: 'initial'
+  });
+  
+  return {
+    jobId: job.id,
+    queued: !!job.id
+  };
+}
+
+
+/**
  * Start the global outreach engine worker
  */
 export async function startOutreachWorker() {
   const { outreachEngine } = await import("@services/outreach-worker/workers/outreach-engine.js");
-  return outreachEngine.start();
-}
-
-/**
- * Dispatch an entire campaign to the background queue
- */
-export async function dispatchOutreachCampaign(userId: string, campaignId: string) {
-  const job = await outreachQueue.add('campaign-dispatch', {
-    userId,
-    campaignId,
-    type: 'initial'
-  }, {
-    jobId: `campaign-${campaignId}-${Date.now()}`
-  });
   
-  return { jobId: job.id, queued: true };
+  // Initialize the persistent Pulse Sweep on startup
+  await schedulePulseSweep().catch(e => console.error("Failed to schedule pulse sweep:", e));
+  
+  return outreachEngine.start();
 }

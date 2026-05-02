@@ -103,6 +103,14 @@ async function startAIService() {
     }
   }, 4 * 60 * 60 * 1000);
 
+  // ── [HARDENING] System 11: Pulse Sweep & Strategy Distillation ──────────────────
+  // These were moved from local setInterval (which is volatile) to BullMQ (which is persistent).
+  // The persistent trigger is registered in shared/lib/queues/outreach-queue.ts
+  // The execution logic is handled in the 'pulse-sweep' and 'distill-patterns' cases below.
+
+  // Strategy distillation and Pulse Sweeps are now handled via persistent BullMQ jobs 
+  // registered in outreach-queue.ts or scheduled via the dashboard.
+
   // ── AI Provider smoke test ────────────────────────────────────────────────
   try {
     const { getAIStatus } = await import('@services/brain-worker/src/ai-lib/core/ai-service.js');
@@ -126,11 +134,29 @@ async function startAIService() {
           case 'enrich-lead':
             await leadEnrichmentWorker.enrichLead({ id: leadId, userId, ...data });
             break;
+          case 'timezone-enrichment':
+            const { timezoneEnrichmentWorker } = await import('./workers/timezone-enrichment-worker.js');
+            await timezoneEnrichmentWorker.enrichLead({ leadId, userId, ...data });
+            break;
           case 'post-mortem-tick':
             await postMortemWorker.tick();
             break;
+
           case 'objection-scan':
             await objectionService.extractWinningHandles(userId);
+            break;
+          case 'distill-patterns':
+            const { learningWorker: lw } = await import('./workers/learning-worker.js');
+            await lw.processRawEpisodes(); 
+            await lw.distillGlobalPatterns();
+            break;
+          case 'pulse-sweep':
+            const { AIObserver } = await import('./src/ai-lib/engines/ai-observer.js');
+            const allUsers = await db.select({ id: users.id }).from(users);
+            for (const u of allUsers) {
+               await AIObserver.survey(u.id).catch(e => log.error(`Pulse Sweep failed for ${u.id}`, { error: e.message }));
+            }
+            log.info('Global Pulse Sweep complete');
             break;
           case 'process-followup-queue':
             await followUpWorker.processQueue();

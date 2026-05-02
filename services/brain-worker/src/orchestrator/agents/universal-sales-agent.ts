@@ -393,10 +393,38 @@ export class UniversalSalesAI {
     return sorted[0]?.[0] || "cold_outreach_positive";
   }
 
+  /**
+   * Systems 1-3 Upgrade: Strategic Strategy Selector
+   * Instead of just picking the "globally best" pattern, we match the 
+   * lead's industry and persona to the specific pattern that works for them.
+   */
+  async selectWinningStrategyForLead(userId: string, lead: SalesLeadProfile): Promise<string> {
+    const allPatterns = await storage.getLearningPatterns(userId);
+    
+    // 1. INDUSTRY MATCH: Find patterns learned from similar companies
+    const industryPatterns = allPatterns.filter(p => (p.metadata as any)?.industry === lead.industry);
+    if (industryPatterns.length > 0) {
+        return industryPatterns.sort((a, b) => b.strength - a.strength)[0].patternKey;
+    }
+
+    // 2. PAIN POINT MATCH: If no industry match, look for pain point similarities
+    if (lead.painPoint) {
+        const painPatterns = allPatterns.filter(p => (p.metadata as any)?.insight?.toLowerCase().includes(lead.painPoint!.toLowerCase()));
+        if (painPatterns.length > 0) {
+            return painPatterns.sort((a, b) => b.strength - a.strength)[0].patternKey;
+        }
+    }
+
+    // 3. FALLBACK: Global Best
+    return this.getTopPerformingStrategy(userId);
+  }
+
   async adaptMessageBasedOnLearning(baseMessage: string, leadProfile: SalesLeadProfile): Promise<string> {
     const SYSTEM_USER_ID = "00000000-0000-0000-0000-000000000000";
     const userId = (leadProfile as any).userId || SYSTEM_USER_ID;
-    const topStrategy = await this.getTopPerformingStrategy(userId);
+    
+    // Systems 1-3 Hardening: Selective Strategic Matching
+    const topStrategy = await this.selectWinningStrategyForLead(userId, leadProfile);
 
     if (topStrategy.includes("positive")) {
       return baseMessage.replace(/challenge|difficult/gi, "opportunity");
@@ -512,6 +540,20 @@ export async function generateSmartMessage(
         ? "Handle objection - lead frame"
         : "Close them - make it easy to say yes";
 
+  // SYSTEM 5: Inject Learned Patterns
+  const topPatterns = await storage.getLearningPatterns(userId);
+  const winningLessons = topPatterns
+    .filter(p => p.strength > 0)
+    .slice(0, 3)
+    .map(p => `- ${(p.metadata as any)?.insight || p.patternKey} (Confidence: ${p.strength})`)
+    .join("\n");
+
+  const failingLessons = topPatterns
+    .filter(p => p.strength < 0)
+    .slice(0, 3)
+    .map(p => `- ${(p.metadata as any)?.insight || p.patternKey}`)
+    .join("\n");
+
   // Inject Lead History and Tags for better intent analysis
   const leadHistory = leadProfile.metadata?.conversationHistory || "No previous history";
   const leadTags = leadProfile.tags?.join(", ") || "No tags";
@@ -521,6 +563,12 @@ export async function generateSmartMessage(
 
   const prompt = `You are a world-class sales closer who closes million-dollar deals.
 Your goal: Make ${companyName} their first $1,000 close TODAY.
+
+WINNING PATTERNS (DO THESE):
+${winningLessons || "None yet - follow standard best practices."}
+
+FAILURE WARNINGS (AVOID THESE):
+${failingLessons || "None yet."}
 
 LEAD CONTEXT:
 - History: ${leadHistory}

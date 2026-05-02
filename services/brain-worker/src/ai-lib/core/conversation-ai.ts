@@ -31,6 +31,7 @@ import { getRegionalInstruction } from '../specialized/regional-norms.js';
 import { objectionService } from '../analyzers/objection-service.js';
 import { searchSimilarChunks } from '../context/vector-rpc.js';
 import { videoMonitors } from '@audnix/shared';
+import { HallucinationGuard } from './hallucination-guard.js';
 
 const isDemoMode = false;
 const PROMPT_VERSION = 'v1.2.0-resilience';
@@ -792,7 +793,56 @@ ${enrichedContext}`;
       };
     }
 
-    const aiResponse = finalAiResponse!;
+    let aiResponse = finalAiResponse!;
+
+    // --- PHASE 60: HALLUCINATION GUARD & BRAND ALIGNMENT ---
+    const allowedLinks = [
+      'audnixai.com', 
+      'calendly.com', 
+      'calendar.google.com',
+      userContext?.calendarLink || '',
+      ...(lead.metadata?.allowed_links as string[] || [])
+    ].filter(Boolean);
+
+    const verification = await HallucinationGuard.verify(aiResponse.text, {
+      userId: lead.userId,
+      leadId: lead.id,
+      allowedLinks,
+      brandContext: brandGuidelines
+    });
+
+    if (!verification.isValid) {
+      console.warn(`[HallucinationGuard] 🛡️ Verification failed: ${verification.reason}. Retrying with strict rules...`);
+      
+      const strictSystemPrompt = `${systemPrompt}\n\n[STRICT COMPLIANCE ALERT]: Your previous response was rejected for: ${verification.reason}. 
+DO NOT use bot phrases, DO NOT hallucinate links, and DO NOT mention technical timezones. 
+ONLY use the following links if necessary: ${allowedLinks.join(', ')}.`;
+
+      aiResponse = await generateReply(strictSystemPrompt, lastMessage.body, {
+        model: MODELS.sales_reasoning,
+        temperature: 0.5, // Lower temperature for more focused compliance
+        maxTokens: platform === 'email' ? 300 : 150,
+        history: messageContext
+      });
+
+      // Second-pass verification
+      const secondPass = await HallucinationGuard.verify(aiResponse.text, {
+        userId: lead.userId,
+        leadId: lead.id,
+        allowedLinks,
+        brandContext: brandGuidelines
+      });
+
+      if (!secondPass.isValid) {
+        console.error(`[HallucinationGuard] 🛑 Second-pass failed: ${secondPass.reason}. Blocking message to prevent hallucination.`);
+        return {
+          text: '',
+          useVoice: false,
+          blocked: true,
+          blockedReason: 'hallucination_blocked'
+        };
+      }
+    }
 
     // Phase 22 & 23: Billing Agent check for payment intent
     let responseText = await billingAgent.handlePaymentIntent(lead.id, aiResponse.text);

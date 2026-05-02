@@ -10,7 +10,6 @@ import {
   inferTimezoneFromCity,
   inferPreferredWindowFromNiche,
   isWithinLeadPreferredWindow,
-  formatLocalHour,
   populateLeadProfile,
 } from './lead-timezone-intelligence.js';
 import { socketService } from '@shared/lib/realtime/socket-service.js';
@@ -28,6 +27,13 @@ function isNightHour(date: Date, timezone: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Format a 24h integer hour into a human-readable time string like "9am" or "2pm" */
+function formatLocalHour(hour: number): string {
+  if (hour === 0) return '12am';
+  if (hour === 12) return '12pm';
+  return hour < 12 ? `${hour}am` : `${hour - 12}pm`;
 }
 
 /** Format a UTC ISO string as a natural human booking suggestion */
@@ -146,7 +152,6 @@ export class BookingProposer {
         await populateLeadProfile(lead.id, this.userId, {
           city: (lead as any).city,
           niche: lead.metadata?.niche || lead.metadata?.industry,
-          industry: lead.metadata?.industry,
         });
         leadProfile = await getLeadProfile(lead.id);
       }

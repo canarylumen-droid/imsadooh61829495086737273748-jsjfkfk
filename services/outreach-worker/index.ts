@@ -40,18 +40,20 @@ async function startOutreachService() {
 
   // ── Load all outreach workers ───────────────────────────────
   const [
-    { outreachEngine },
+    outreachEngineModule,
     { meetingReminderWorker },
     { leadGovernanceWorker },
     { emojiFollowupWorker },
     { reputationWorker },
   ] = await Promise.all([
-    import('./workers/outreach-engine.js').catch(() => ({ outreachEngine: { start: () => {}, stop: () => {} } })),
+    import('./workers/outreach-engine.js').catch(() => ({ outreachEngine: null as any })),
     import('./workers/meeting-reminder-worker.js').catch(() => ({ meetingReminderWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/lead-governance-worker.js').catch(() => ({ leadGovernanceWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/emoji-followup-worker.js').catch(() => ({ emojiFollowupWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/reputation-worker.js').catch(() => ({ reputationWorker: { start: () => {}, stop: () => {} } })),
   ]);
+
+  const outreachEngine = outreachEngineModule.outreachEngine;
 
   await startWorkerModule('Outreach Engine',       () => outreachEngine.start());
   await startWorkerModule('Meeting Reminders',     () => meetingReminderWorker.start());
@@ -61,17 +63,27 @@ async function startOutreachService() {
 
   // ── BullMQ Worker — processes queue-dispatched jobs with retry support ────
   createWorker(outreachQueue.name, async (job) => {
-    const { action, campaignId, leadId, userId, metadata } = job.data;
-    log.info('Processing outreach job', { action, userId, leadId, jobId: job.id });
+    log.info('Processing outreach job', { name: job.name, userId: job.data?.userId, leadId: job.data?.leadId, jobId: job.id });
 
-    switch (action) {
-      case 'send_email':
-      case 'check_reply':
-      case 'follow_up':
-        // Placeholder for the actual processing logic
-        break;
-      default:
-        log.warn('Unknown outreach job action', { action });
+    try {
+      switch (job.name) {
+        case 'engine-tick':
+          await outreachEngine.tick();
+          break;
+        case 'priority-reply':
+        case 'standard-send':
+        case 'high-priority-send':
+          await outreachEngine.processJob(job);
+          break;
+        case 'pulse-sweep-trigger':
+          await outreachEngine.performGlobalPulseSweep();
+          break;
+        default:
+          log.warn('Unknown outreach job name', { name: job.name });
+      }
+    } catch (err: any) {
+      log.error('Outreach job processing failed', { name: job.name, error: err.message });
+      throw err; // Allow BullMQ to retry
     }
   });
 

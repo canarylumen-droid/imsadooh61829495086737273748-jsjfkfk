@@ -452,9 +452,26 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
 
             if (leadsChunk.length > 0) {
               try {
-                await db.insert(leads).values(leadsChunk as any);
-                leadsToSave.push(...leadsChunk);
+                const inserted = await db.insert(leads).values(leadsChunk as any).returning();
+                leadsToSave.push(...inserted);
                 filteredCount += verifiedChunk.filter(l => (l as any).bouncy).length;
+
+                // Phase 1.1: Dispatch background timezone enrichment
+                const { aiProcessingQueue } = await import('../core/queues.js');
+                if (aiProcessingQueue) {
+                  const enrichmentJobs = inserted.map(lead => ({
+                    name: 'timezone-enrichment',
+                    data: {
+                      type: 'timezone-enrichment',
+                      userId,
+                      leadId: lead.id,
+                      data: { useAI: true }
+                    }
+                  }));
+                  await aiProcessingQueue.addBulk(enrichmentJobs).catch(err => 
+                    console.warn(`[CSV Import] Failed to queue enrichment:`, err)
+                  );
+                }
               } catch (dbErr) {
                 // If a chunk fails (e.g. malformed data), we don't want to kill the whole import
                 console.error(`[CSV Import] Chunk starting at ${i} failed to insert:`, dbErr);
@@ -1070,6 +1087,23 @@ router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Pr
       const chunk = newLeadsToInsert.slice(i, i + chunkSize);
       const inserted = await db.insert(leadsTable).values(chunk).returning();
       finalLeads.push(...inserted);
+
+      // Phase 1.1: Dispatch background timezone enrichment
+      const { aiProcessingQueue } = await import('../core/queues.js');
+      if (aiProcessingQueue) {
+        const enrichmentJobs = inserted.map(lead => ({
+          name: 'timezone-enrichment',
+          data: {
+            type: 'timezone-enrichment',
+            userId,
+            leadId: lead.id,
+            data: { useAI: true }
+          }
+        }));
+        await aiProcessingQueue.addBulk(enrichmentJobs).catch(err => 
+          console.warn(`[Bulk Import] Failed to queue enrichment:`, err)
+        );
+      }
     }
 
     res.json({

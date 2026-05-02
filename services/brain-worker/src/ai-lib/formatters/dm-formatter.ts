@@ -127,7 +127,8 @@ export function generateBrandedEmail(
   message: string,
   button: DMButton,
   brandColors: BrandColors = {},
-  businessName: string = 'Our Team'
+  businessName: string = 'Our Team',
+  unsubscribeUrl?: string
 ): string {
   const primaryColor = brandColors.primary || '#6366f1';
   const accentColor = brandColors.accent || '#8b5cf6';
@@ -171,6 +172,9 @@ export function generateBrandedEmail(
     </div>
     <div class="footer">
       <p>Sent with care by ${sanitizedBusinessName}</p>
+      ${unsubscribeUrl ? `<p style="margin-top: 15px; font-size: 11px;">
+        Don't want to hear from us? <a href="${unsubscribeUrl}" style="color: ${primaryColor};">Unsubscribe here</a>
+      </p>` : ''}
     </div>
   </div>
 </body>

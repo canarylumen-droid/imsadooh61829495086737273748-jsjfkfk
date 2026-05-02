@@ -1,21 +1,17 @@
-import { db } from '@shared/lib/db/db.js';
-import { storage } from '@shared/lib/storage/storage.js';
-import { leadTimezoneProfiles, leads, users } from '@audnix/shared';
-import { eq } from 'drizzle-orm';
-import type { LeadTimezoneProfile } from '@audnix/shared';
-
 /**
  * Lead Timezone Intelligence Service
  *
  * Automatically infers a lead's timezone and preferred contact hours
  * from their city and niche — zero manual input required.
- *
- * This means the AI can say:
- *   "How does Thursday at 5pm your time work?"
- * without ever asking the lead to specify their timezone.
  */
 
+import { db } from '@shared/lib/db/db.js';
+import { leadTimezoneProfiles, leads, users, aiLearningPatterns } from '@audnix/shared';
+import { eq, and } from 'drizzle-orm';
+import type { LeadTimezoneProfile } from '@audnix/shared';
+
 // ─── City → IANA Timezone Map ────────────────────────────────────────────────
+// Expanded with more global business hubs
 const CITY_TIMEZONE_MAP: Record<string, string> = {
   // Nigeria
   lagos: 'Africa/Lagos', abuja: 'Africa/Lagos', kano: 'Africa/Lagos',
@@ -32,32 +28,54 @@ const CITY_TIMEZONE_MAP: Record<string, string> = {
   birmingham: 'Europe/London', leeds: 'Europe/London',
   // UAE
   dubai: 'Asia/Dubai', abu_dhabi: 'Asia/Dubai',
-  // USA East
+  // USA East (EST/EDT)
   new_york: 'America/New_York', miami: 'America/New_York',
   atlanta: 'America/New_York', boston: 'America/New_York',
   charlotte: 'America/New_York', philadelphia: 'America/New_York',
-  washington: 'America/New_York',
-  // USA Central
+  washington: 'America/New_York', orlando: 'America/New_York',
+  // USA Central (CST/CDT)
   chicago: 'America/Chicago', houston: 'America/Chicago',
   dallas: 'America/Chicago', san_antonio: 'America/Chicago',
-  austin: 'America/Chicago',
-  // USA Mountain
-  denver: 'America/Denver', phoenix: 'America/Phoenix',
-  // USA West
+  austin: 'America/Chicago', nashville: 'America/Chicago',
+  // USA Mountain (MST/MDT)
+  denver: 'America/Denver', salt_lake_city: 'America/Denver',
+  // USA Mountain (No DST)
+  phoenix: 'America/Phoenix',
+  // USA West (PST/PDT)
   los_angeles: 'America/Los_Angeles', san_francisco: 'America/Los_Angeles',
   seattle: 'America/Los_Angeles', san_diego: 'America/Los_Angeles',
-  las_vegas: 'America/Los_Angeles',
+  las_vegas: 'America/Los_Angeles', portland: 'America/Los_Angeles',
   // Canada
   toronto: 'America/Toronto', montreal: 'America/Toronto',
-  vancouver: 'America/Vancouver',
+  vancouver: 'America/Vancouver', ottawa: 'America/Toronto',
   // Australia
   sydney: 'Australia/Sydney', melbourne: 'Australia/Melbourne',
-  brisbane: 'Australia/Brisbane',
+  brisbane: 'Australia/Brisbane', perth: 'Australia/Perth',
   // India
   mumbai: 'Asia/Kolkata', delhi: 'Asia/Kolkata', bangalore: 'Asia/Kolkata',
   // Europe
   paris: 'Europe/Paris', berlin: 'Europe/Berlin', amsterdam: 'Europe/Amsterdam',
-  madrid: 'Europe/Madrid', rome: 'Europe/Rome',
+  madrid: 'Europe/Madrid', rome: 'Europe/Rome', brussels: 'Europe/Brussels',
+  vienna: 'Europe/Vienna', stockholm: 'Europe/Stockholm',
+  // Asia
+  singapore: 'Asia/Singapore', hong_kong: 'Asia/Hong_Kong', tokyo: 'Asia/Tokyo',
+  seoul: 'Asia/Seoul', shanghai: 'Asia/Shanghai', bangkok: 'Asia/Bangkok',
+  // Saudi Arabia
+  riyadh: 'Asia/Riyadh', jeddah: 'Asia/Riyadh',
+  // Israel
+  tel_aviv: 'Asia/Jerusalem', jerusalem: 'Asia/Jerusalem',
+  // Turkey
+  istanbul: 'Europe/Istanbul', ankara: 'Europe/Istanbul',
+  // Egypt
+  cairo: 'Africa/Cairo',
+  // Morocco
+  casablanca: 'Africa/Casablanca',
+  // Ethiopia
+  addis_ababa: 'Africa/Addis_Ababa',
+  // Global / Other
+  mexico_city: 'America/Mexico_City', sao_paulo: 'America/Sao_Paulo',
+  buenos_aires: 'America/Argentina/Buenos_Aires',
+  tel_aviv_yafo: 'Asia/Jerusalem',
 };
 
 // ─── Niche → Preferred Contact Window ────────────────────────────────────────
@@ -70,74 +88,62 @@ export interface NicheWindow {
 }
 
 const NICHE_WINDOWS: Record<string, NicheWindow> = {
-  // Trades
-  plumber:       { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Plumber' },
-  plumbing:      { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Plumbing' },
-  electrician:   { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Electrician' },
-  electrical:    { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Electrical' },
-  hvac:          { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'HVAC' },
-  contractor:    { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Contractor' },
-  roofer:        { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Roofer' },
-  roofing:       { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Roofing' },
-  landscaping:   { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Landscaping' },
+  // Trades (Early starts, finish early/mid-afternoon)
+  plumber:       { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Plumber' },
+  plumbing:      { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Plumbing' },
+  electrician:   { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Electrician' },
+  electrical:    { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Electrical' },
+  hvac:          { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'HVAC' },
+  contractor:    { start: 7, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Contractor' },
+  roofer:        { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Roofer' },
+  roofing:       { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Roofing' },
+  landscaping:   { start: 7, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'trades', displayName: 'Landscaping' },
   
-  // Healthcare
-  dentist:       { start: 19, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Dental' },
-  dentistry:     { start: 19, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Dentistry' },
-  doctor:        { start: 19, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Medical' },
-  medical:       { start: 19, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Medical' },
-  clinic:        { start: 19, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Clinic' },
-  chiropractor:  { start: 19, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Chiropractic' },
-  pharmacy:      { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'healthcare', displayName: 'Pharmacy' },
+  // Healthcare (Lunch break or after hours)
+  dentist:       { start: 12, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Dental' },
+  dentistry:     { start: 12, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Dentistry' },
+  doctor:        { start: 13, end: 15, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Medical' },
+  medical:       { start: 13, end: 15, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Medical' },
+  clinic:        { start: 13, end: 15, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'healthcare', displayName: 'Clinic' },
   
-  // Real Estate
-  real_estate:   { start: 18, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'real_estate', displayName: 'Real Estate' },
-  realtor:       { start: 18, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'real_estate', displayName: 'Real Estate' },
-  mortgage:      { start: 18, end: 21, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'real_estate', displayName: 'Mortgage' },
-  property:      { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'real_estate', displayName: 'Property' },
+  // Real Estate (Active late afternoon/evening and weekends)
+  real_estate:   { start: 16, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'real_estate', displayName: 'Real Estate' },
+  realtor:       { start: 16, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'real_estate', displayName: 'Real Estate' },
   
-  // Food & Beverage
-  restaurant:    { start: 14, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'food_beverage', displayName: 'Restaurant' },
+  // Food & Beverage (Avoid peak meal times)
+  restaurant:    { start: 14, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'food_beverage', displayName: 'Restaurant' },
   cafe:          { start: 14, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'food_beverage', displayName: 'Cafe' },
-  bakery:        { start: 13, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'food_beverage', displayName: 'Bakery' },
-  catering:      { start: 14, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday'], category: 'food_beverage', displayName: 'Catering' },
   
-  // Professional Services
-  lawyer:        { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Legal' },
-  attorney:      { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Legal' },
-  accountant:    { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Accounting' },
-  consultant:    { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Consulting' },
-  insurance:     { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Insurance' },
-  financial:     { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Financial' },
+  // Professional Services (Standard business hours)
+  lawyer:        { start: 9, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Legal' },
+  accountant:    { start: 9, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Accounting' },
+  consultant:    { start: 9, end: 18, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'professional_services', displayName: 'Consulting' },
   
-  // Tech / SaaS
-  saas:          { start: 10, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'SaaS' },
-  software:      { start: 10, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Software' },
-  technology:    { start: 10, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Technology' },
-  startup:       { start: 10, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Startup' },
-  marketing:     { start: 10, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Marketing' },
-  agency:        { start: 10, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Agency' },
-  ecommerce:     { start: 10, end: 14, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'E-Commerce' },
+  // Tech / SaaS (Mid-day is best)
+  saas:          { start: 10, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'SaaS' },
+  software:      { start: 10, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Software' },
+  marketing:     { start: 10, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Marketing' },
+  agency:        { start: 10, end: 16, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'technology', displayName: 'Agency' },
   
-  // Fitness / Wellness
-  gym:           { start: 18, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'wellness', displayName: 'Fitness' },
-  fitness:       { start: 18, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'wellness', displayName: 'Fitness' },
-  personal_trainer: { start: 18, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'wellness', displayName: 'Personal Training' },
-  coach:         { start: 17, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'wellness', displayName: 'Coaching' },
-  yoga:          { start: 18, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'wellness', displayName: 'Yoga' },
-  
-  // Retail
-  retail:        { start: 13, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'retail', displayName: 'Retail' },
-  salon:         { start: 13, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'retail', displayName: 'Salon' },
-  barbershop:    { start: 13, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'retail', displayName: 'Barbershop' },
-  
-  // Automotive
-  auto_repair:   { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'automotive', displayName: 'Auto Repair' },
-  car_dealer:    { start: 17, end: 19, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'automotive', displayName: 'Auto Sales' },
+  // Lifestyle & Wellness (Varies)
+  gym:           { start: 6, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'lifestyle', displayName: 'Gym' },
+  fitness:       { start: 6, end: 20, days: ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'lifestyle', displayName: 'Fitness' },
+  salon:         { start: 10, end: 18, days: ['Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'lifestyle', displayName: 'Salon' },
+  beauty:        { start: 10, end: 18, days: ['Tuesday','Wednesday','Thursday','Friday','Saturday'], category: 'lifestyle', displayName: 'Beauty' },
+  spa:           { start: 10, end: 19, days: ['Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'], category: 'lifestyle', displayName: 'Spa' },
+
+  // E-commerce & Retail
+  ecommerce:     { start: 11, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'retail', displayName: 'E-commerce' },
+  retail:        { start: 11, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'retail', displayName: 'Retail' },
+  shopify:       { start: 11, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'retail', displayName: 'Shopify' },
+
+  // Logistics & Supply Chain
+  trucking:      { start: 6, end: 15, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'logistics', displayName: 'Trucking' },
+  logistics:     { start: 8, end: 17, days: ['Monday','Tuesday','Wednesday','Thursday','Friday'], category: 'logistics', displayName: 'Logistics' },
 };
 
 const DEFAULT_WINDOW: NicheWindow = {
-  start: 10, end: 18,
+  start: 9, end: 18,
   days: ['Monday','Tuesday','Wednesday','Thursday','Friday'],
   category: 'general',
   displayName: 'General Business',
@@ -145,25 +151,15 @@ const DEFAULT_WINDOW: NicheWindow = {
 
 // ─── Public API ────────────────────────────────────────────────────────────────
 
-/**
- * Maps a city name to an IANA timezone string.
- * @param city City name
- * @param fallback Default timezone if city mapping fails (defaults to UTC)
- */
 export function inferTimezoneFromCity(city: string, fallback: string = 'UTC'): string {
   if (!city) return fallback;
-  const key = city.toLowerCase().replace(/[\s\-]/g, '_');
+  const key = city.toLowerCase().trim().replace(/[\s\-]/g, '_');
   return CITY_TIMEZONE_MAP[key] || fallback;
 }
 
-/**
- * Returns the preferred contact window for a given niche keyword.
- * Scans niche text for any known niche keywords.
- */
 export function inferPreferredWindowFromNiche(niche: string): NicheWindow {
   if (!niche) return DEFAULT_WINDOW;
   const lower = niche.toLowerCase();
-  // Direct key match
   for (const [key, window] of Object.entries(NICHE_WINDOWS)) {
     if (lower.includes(key)) return window;
   }
@@ -171,44 +167,69 @@ export function inferPreferredWindowFromNiche(niche: string): NicheWindow {
 }
 
 /**
- * Format a time for natural-language booking copy.
- * e.g. 17 → "5pm", 9 → "9am", 13 → "1pm"
+ * Autonomously retrieves the best contact window for a niche.
+ * Prioritizes learned patterns from episodic memory over hardcoded defaults.
  */
-export function formatLocalHour(hour: number): string {
-  if (hour === 0) return '12am';
-  if (hour === 12) return '12pm';
-  if (hour < 12) return `${hour}am`;
-  return `${hour - 12}pm`;
+export async function getDynamicNicheWindow(niche: string, userId: string): Promise<NicheWindow> {
+  try {
+    const patternKey = `niche_timing:${niche.toLowerCase()}`;
+    const [learned] = await db.select()
+      .from(aiLearningPatterns)
+      .where(and(
+        eq(aiLearningPatterns.userId, userId),
+        eq(aiLearningPatterns.patternKey, patternKey)
+      ))
+      .limit(1);
+
+    if (learned && (learned.metadata as any)?.window) {
+      console.log(`[Timezone] 🧠 Using learned window for ${niche}: ${(learned.metadata as any).window.displayName}`);
+      return (learned.metadata as any).window as NicheWindow;
+    }
+  } catch (err) {
+    console.warn('[Timezone] Failed to fetch learned window, falling back to defaults:', err);
+  }
+
+  return NICHE_WINDOWS[niche.toLowerCase()] || DEFAULT_WINDOW;
 }
 
 /**
- * Determines if a given UTC date falls within the lead's preferred contact window.
+ * Checks if the current local time for a lead is within their business engagement window.
+ * Now de-hardcoded: Uses dynamic windows derived from collective intelligence.
  */
-export function isWithinLeadPreferredWindow(
+export async function isWithinLeadPreferredWindow(
   utcDate: Date,
-  profile: { detectedTimezone: string | null; preferredContactStart: number | null; preferredContactEnd: number | null; preferredDays: string[] | null },
+  profile: { detectedTimezone: string | null; preferredContactStart: number | null; preferredContactEnd: number | null; preferredDays: string[] | null; niche?: string | null },
+  userId: string, // Required for dynamic lookup
   defaultTz: string = 'UTC'
-): boolean {
+): Promise<boolean> {
   const tz = profile.detectedTimezone || defaultTz;
-  const start = profile.preferredContactStart ?? 10;
-  const end = profile.preferredContactEnd ?? 18;
-  const days = profile.preferredDays || ['Monday','Tuesday','Wednesday','Thursday','Friday'];
+  
+  // 1. Dynamic Niche Check
+  const window = await getDynamicNicheWindow(profile.niche || 'unknown', userId);
+  
+  const start = profile.preferredContactStart ?? window.start;
+  const end = profile.preferredContactEnd ?? window.end;
+  const days = profile.preferredDays || window.days;
 
   try {
-    const localHour = parseInt(
-      new Intl.DateTimeFormat('en-US', { timeZone: tz, hour: 'numeric', hourCycle: 'h23' }).format(utcDate),
-      10
-    );
-    const localDay = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'long' }).format(utcDate);
-    return localHour >= start && localHour < end && days.includes(localDay);
+    const localTime = new Intl.DateTimeFormat('en-US', { 
+      timeZone: tz, 
+      hour: 'numeric', 
+      hourCycle: 'h23',
+      weekday: 'long'
+    }).formatToParts(utcDate);
+    
+    const localHour = parseInt(localTime.find(p => p.type === 'hour')?.value || '12', 10);
+    const localDay = localTime.find(p => p.type === 'weekday')?.value || 'Monday';
+
+    return localHour >= start && localHour < end && days.includes(localDay as any);
   } catch {
-    return true; // fail open
+    return true; // Fail open
   }
 }
 
 /**
- * Auto-populate or update a lead's timezone profile.
- * Called automatically on lead creation/import.
+ * Advanced population using AI fallback for ambiguous leads.
  */
 export async function populateLeadProfile(
   leadId: string,
@@ -216,22 +237,62 @@ export async function populateLeadProfile(
   options: {
     city?: string | null;
     niche?: string | null;
-    industry?: string | null;
     company?: string | null;
+    bio?: string | null;
+    useAI?: boolean;
   } = {}
 ): Promise<void> {
   if (!db) return;
 
-  const nicheInput = options.niche || options.industry || '';
-  const cityInput = options.city || '';
-
-  // Get user profile first to find their default timezone
   const [user] = await db.select({ timezone: users.timezone }).from(users).where(eq(users.id, userId)).limit(1);
   const userTz = user?.timezone || 'UTC';
 
-  const detectedTimezone = inferTimezoneFromCity(cityInput, userTz);
-  const window = inferPreferredWindowFromNiche(nicheInput);
-  const confidence = (cityInput ? 0.5 : 0) + (nicheInput ? 0.5 : 0);
+  // Scoped scanning: try multiple keys for city/location
+  const cityInput = options.city || null;
+  const nicheInput = options.niche || null;
+
+  let detectedTimezone = inferTimezoneFromCity(cityInput || '', userTz);
+  let window = inferPreferredWindowFromNiche(nicheInput || '');
+  let confidence = (cityInput && CITY_TIMEZONE_MAP[cityInput.toLowerCase().replace(/[\s\-]/g, '_')]) ? 0.9 : 0.2;
+  let source: "city_niche_inference" | "none" | "email_context" | "manual" = detectedTimezone !== userTz ? "city_niche_inference" : "none";
+
+  // Phase 1.1: AI Fallback
+  if (options.useAI && confidence < 0.5 && process.env.GEMINI_API_KEY) {
+    try {
+      const { generateReply } = await import('@services/brain-worker/src/ai-lib/core/ai-service.js');
+      const aiResponse = await generateReply(
+        'You are a timezone inference expert. Return only valid JSON.',
+        `Infer the most likely IANA timezone and business niche for this lead based on available data.
+Lead Data:
+- City/Location: ${cityInput || 'Unknown'}
+- Company: ${options.company || 'Unknown'}
+- Niche: ${nicheInput || 'Unknown'}
+- Bio: ${options.bio || 'None'}
+
+User Context:
+- User Timezone: ${userTz} (Use as anchor for disambiguation)
+
+Rules:
+1. Return a valid IANA timezone string (e.g. "America/Chicago").
+2. If city is provided, prioritize it.
+3. If city name is ambiguous (e.g. "Portland"), use User Context or Bio to disambiguate.
+4. Confidence: 0.9 if certain, 0.4 if guess.
+
+Return JSON: { "timezone": "string", "niche": "string", "confidence": number }`,
+        { jsonMode: true }
+      );
+
+      const aiResult = JSON.parse(aiResponse.text || '{}');
+      if (aiResult && aiResult.confidence > confidence) {
+        detectedTimezone = aiResult.timezone;
+        window = inferPreferredWindowFromNiche(aiResult.niche);
+        confidence = aiResult.confidence;
+        source = 'city_niche_inference';
+      }
+    } catch (err) {
+      console.warn(`[TimezoneAI] Fallback failed for lead ${leadId}:`, err);
+    }
+  }
 
   try {
     await db
@@ -240,41 +301,38 @@ export async function populateLeadProfile(
         leadId,
         userId,
         detectedTimezone,
-        detectedCity: cityInput || null,
-        niche: nicheInput || null,
+        detectedCity: options.city || null,
+        niche: options.niche || null,
         nicheCategory: window.category,
         preferredContactStart: window.start,
         preferredContactEnd: window.end,
         preferredDays: window.days,
         detectionConfidence: confidence,
-        detectionSource: confidence > 0 ? 'city_niche_inference' : 'none',
+        detectionSource: source,
         lastUpdatedAt: new Date(),
       })
       .onConflictDoUpdate({
         target: leadTimezoneProfiles.leadId,
         set: {
           detectedTimezone,
-          detectedCity: cityInput || null,
-          niche: nicheInput || null,
+          detectedCity: options.city || null,
+          niche: options.niche || null,
           nicheCategory: window.category,
           preferredContactStart: window.start,
           preferredContactEnd: window.end,
           preferredDays: window.days,
           detectionConfidence: confidence,
-          detectionSource: confidence > 0 ? 'city_niche_inference' : 'none',
+          detectionSource: source,
           lastUpdatedAt: new Date(),
         },
       });
 
-    console.log(`[LeadTimezoneIntelligence] Profile set for lead ${leadId}: TZ=${detectedTimezone}, Window=${window.start}:00-${window.end}:00 (${window.category})`);
+    console.log(`[Timezone] Lead ${leadId} profile updated: ${detectedTimezone} (${window.category})`);
   } catch (err) {
-    console.warn(`[LeadTimezoneIntelligence] Could not save profile for lead ${leadId}:`, err);
+    console.warn(`[Timezone] DB update failed for lead ${leadId}:`, err);
   }
 }
 
-/**
- * Retrieve the timezone profile for a lead (with smart fallback).
- */
 export async function getLeadProfile(leadId: string): Promise<LeadTimezoneProfile | null> {
   if (!db) return null;
   try {
@@ -289,10 +347,6 @@ export async function getLeadProfile(leadId: string): Promise<LeadTimezoneProfil
   }
 }
 
-/**
- * Update a lead's profile from context learned in conversation.
- * e.g. if lead says "I'm in Chicago" and we learn their niche is plumbing.
- */
 export async function updateLeadProfileFromContext(
   leadId: string,
   updates: {
@@ -325,9 +379,6 @@ export async function updateLeadProfileFromContext(
       })
       .where(eq(leadTimezoneProfiles.leadId, leadId));
   } catch (err) {
-    console.warn(`[LeadTimezoneIntelligence] Could not update profile for lead ${leadId}:`, err);
+    console.warn(`[Timezone] Context update failed for lead ${leadId}:`, err);
   }
 }
-
-
-

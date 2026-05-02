@@ -52,6 +52,7 @@ import notificationRoutes from "./notification-routes.js";
 import emailTrackingRoutes from "./email-tracking-routes.js";
 import { registerAnalyticsRoutes } from "./analytics-routes.js";
 import revenueWebhook from "../webhooks/revenue-webhook.js";
+import unsubscribeRoutes from "./unsubscribe-routes.js";
 
 export async function registerRoutes(app: Express): Promise<http.Server> {
   // 1. Static Assets & Public Manifests (Served before auth/rate limiting for common assets)
@@ -160,6 +161,7 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/admin", adminMigrationsRouter); // Admin-only migration controls
   app.use("/api/cron", (await import("./cron-routes.js")).default);
   app.use("/api/health", healthRoutes);
+  app.use("/api/unsubscribe", unsubscribeRoutes);
   registerAnalyticsRoutes(app); // Phase 14: KPI & Conversion Analytics
 
   // Create HTTP server

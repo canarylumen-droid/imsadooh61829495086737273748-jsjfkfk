@@ -30,6 +30,7 @@ import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { decryptToJSON } from '@shared/lib/crypto/encryption.js';
 import { mailboxHealthService } from '@services/email-service/src/email/mailbox-health-service.js';
 import { warmupService } from '@services/outreach-worker/src/outreach-lib/warmup-service.js';
+import { getLeadProfile, isWithinLeadPreferredWindow } from '../calendar/lead-timezone-intelligence.js';
 
 // ─── Job Type Definitions ─────────────────────────────────────────────────────
 
@@ -586,6 +587,28 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       .where(eq(campaignLeads.id, leadEntry.id));
   }
 
+  // --- PHASE 50: TIMEZONE INTELLIGENCE GATE ---
+  const tzProfile = await getLeadProfile(lead.id);
+  const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
+  
+  if (tzProfile && !isActivelyEngaged) {
+    const isAwake = await isWithinLeadPreferredWindow(new Date(), tzProfile, userId);
+    if (!isAwake) {
+      console.log(`[CampaignWorker] 😴 Lead ${lead.id.slice(-8)} is outside business window (${tzProfile.detectedTimezone}). Rescheduling.`);
+      
+      // Delay by 1 hour and put back in pool
+      const nextCheck = new Date(Date.now() + 60 * 60 * 1000);
+      await db.update(campaignLeads)
+        .set({ 
+          nextActionAt: nextCheck,
+          status: 'queued' // Return to pool so other mailboxes don't get stuck
+        })
+        .where(eq(campaignLeads.id, leadEntry.id));
+      
+      return; 
+    }
+  }
+
   // 7. FAULT-TOLERANT SEND: Wrap in try/catch to handle mailbox errors
   try {
     if (lead.channel === 'instagram') {
@@ -683,6 +706,28 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   // 3. Get lead details
   const [lead] = await db.select().from(leads).where(eq(leads.id, leadEntry.leadId));
   if (!lead?.email || lead.aiPaused) return;
+
+  // --- PHASE 50: TIMEZONE INTELLIGENCE GATE (FOLLOW-UP) ---
+  const tzProfile = await getLeadProfile(lead.id);
+  const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
+
+  if (tzProfile && !isActivelyEngaged) {
+    const isAwake = await isWithinLeadPreferredWindow(new Date(), tzProfile, userId);
+    if (!isAwake) {
+      console.log(`[CampaignWorker] 😴 Follow-up for ${lead.id.slice(-8)} outside window. Delaying.`);
+      
+      // Reschedule BullMQ job 1 hour later
+      await campaignQueueManager.scheduleFollowUp(
+        campaignId,
+        userId,
+        campaignLeadId,
+        integrationId,
+        stepIndex,
+        60 * 60 * 1000 // 1 hour jitter
+      );
+      return;
+    }
+  }
 
   // 4. Check if the lead has replied or unsubscribed since the follow-up was scheduled
   if (lead.status === 'replied' || lead.status === 'converted' || lead.status === 'booked' || lead.status === 'unsubscribed') {

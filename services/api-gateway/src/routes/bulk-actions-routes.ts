@@ -1,4 +1,4 @@
-﻿import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { generateAIReply } from '@services/brain-worker/src/ai-lib/core/conversation-ai.js';
@@ -74,6 +74,11 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
           }
           batchIdentifiers.add(batchKey);
 
+          const { SpamTrapDetector } = await import('@shared/lib/deliverability/spam-trap-detector.js');
+          
+          // Full deterministic + MX check
+          const spamCheck = email ? await SpamTrapDetector.verifyFull(email, leadData) : { isTrap: false, score: 0 };
+          
           batchToInsert.push({
             userId,
             name: name || 'Unknown',
@@ -82,14 +87,19 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
             company: metadata.company || leadData.company || null,
             channel: channel as any,
             integrationId: integrationId || null,
-            status: 'new',
-            aiPaused: aiPaused,
+            status: (spamCheck.isTrap || !spamCheck.hasMx) ? 'bouncy' : 'new',
+            aiPaused: aiPaused || spamCheck.isTrap || !spamCheck.hasMx,
             metadata: {
               ...leadData,
               ...metadata,
               imported_via: 'bulk_json',
-              import_date: new Date().toISOString()
-            }
+              import_date: new Date().toISOString(),
+              spam_check: spamCheck.isTrap ? 'detected' : 'clean',
+              spam_reason: spamCheck.reason,
+              is_disposable: spamCheck.isDisposable,
+              has_mx: spamCheck.hasMx
+            },
+            tags: spamCheck.isTrap ? ['spam_trap', 'spam_risk'] : []
           });
 
           if (email) emailMap.set(email, true);
@@ -102,6 +112,21 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
         const inserted = await storage.createLeadsBatch(batchToInsert, { suppressNotification: true });
         results.leads.push(...inserted);
         results.leadsImported += inserted.length;
+        
+        // Phase 1.1: Dispatch background timezone enrichment
+        const { aiProcessingQueue } = await import('../core/queues.js');
+        if (aiProcessingQueue) {
+          const enrichmentJobs = inserted.map(lead => ({
+            name: 'timezone-enrichment',
+            data: {
+              type: 'timezone-enrichment',
+              userId,
+              leadId: lead.id,
+              data: { useAI: true }
+            }
+          }));
+          await aiProcessingQueue.addBulk(enrichmentJobs);
+        }
         
         // Notify progress for large imports
         if (leadsData.length > BATCH_SIZE) {

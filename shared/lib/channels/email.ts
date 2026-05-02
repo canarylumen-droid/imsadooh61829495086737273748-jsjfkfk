@@ -631,14 +631,18 @@ export async function sendEmail(
     if (!integration.encryptedMeta) throw new Error('Email credentials missing');
     const credentials = JSON.parse(await decrypt(integration.encryptedMeta)) as EmailConfig;
 
+    const unsubscribeUrl = options.leadId 
+      ? `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${options.leadId}`
+      : undefined;
+
     let emailBody = content;
     if (!options.isRaw) {
       if (options.buttonUrl && options.buttonText) {
         emailBody = options.isMeetingInvite
           ? generateMeetingEmail(content, options.buttonUrl, brandColors, businessName)
-          : generateBrandedEmail(content, { text: options.buttonText, url: options.buttonUrl }, brandColors, businessName);
+          : generateBrandedEmail(content, { text: options.buttonText, url: options.buttonUrl }, brandColors, businessName, unsubscribeUrl);
       } else {
-        emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName);
+        emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl);
       }
     }
 
@@ -684,6 +688,10 @@ export async function sendEmail(
   const { generateEmailSubject } = await import('./email-subject-generator.js');
   const emailSubject = subject || await generateEmailSubject(userId, content);
 
+  const unsubscribeUrl = options.leadId 
+    ? `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${options.leadId}`
+    : undefined;
+
   let emailBody = content;
 
   if (!options.isRaw) {
@@ -700,12 +708,13 @@ export async function sendEmail(
           content,
           { text: options.buttonText, url: options.buttonUrl },
           brandColors,
-          businessName
+          businessName,
+          unsubscribeUrl
         );
       }
       options.isHtml = true;
     } else {
-      emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName);
+      emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl);
       options.isHtml = true;
     }
   } else {

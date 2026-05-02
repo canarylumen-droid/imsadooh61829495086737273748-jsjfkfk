@@ -162,19 +162,46 @@ export class MultiChannelOrchestrator {
   }) {
     console.log(`[Orchestrator] Dispatching ${options.channel} to lead ${leadId} (Autonomous: ${!!options.isAutonomous})`);
 
+    let finalContent = content;
+
+    // SYSTEM 4 & 9: Hallucination & Payment Guard
+    if (options.isAutonomous) {
+      const { HallucinationVerifier } = await import('@shared/lib/ai/hallucination-verifier.js');
+      const { PaymentSafetyGuard } = await import('@shared/lib/guards/payment-safety-guard.js');
+      
+      const lead = await storage.getLead(leadId);
+      const verification = HallucinationVerifier.verifyAgainstLead(content, lead);
+      const paymentCheck = await PaymentSafetyGuard.verify(userId, content);
+      
+      if (!verification.isSafe || !paymentCheck.isSafe) {
+        console.warn(`[Safety Guard] Blocked message for lead ${leadId}: ${verification.reason || paymentCheck.reason}`);
+        
+        // If we have a cleaned version, use it, otherwise use a safe fallback
+        if (verification.cleanedContent && paymentCheck.isSafe) {
+          finalContent = verification.cleanedContent;
+        } else {
+          // SAFE FALLBACK
+          finalContent = "Hi, just following up. Are you still interested in our chat? Looking forward to hearing from you.";
+        }
+      } else if (paymentCheck.injectedContent) {
+        console.log(`[Payment Guard] Autonomously injected payment link for lead ${leadId}`);
+        finalContent = paymentCheck.injectedContent;
+      }
+    }
+
     const lead = await storage.getLead(leadId);
     if (!lead) throw new Error(`Lead ${leadId} not found`);
 
     if (options.channel === 'email') {
       const { sendEmail } = await import('@shared/lib/channels/email.js');
-      return await sendEmail(userId, lead.email || '', content, options.subject || 'Follow up', {
+      return await sendEmail(userId, lead.email || '', finalContent, options.subject || 'Follow up', {
         leadId,
         isAutonomous: options.isAutonomous,
         ...options.metadata
       });
     } else if (options.channel === 'instagram') {
       const { sendInstagramOutreach } = await import('@shared/lib/channels/instagram.js');
-      return await sendInstagramOutreach(userId, leadId, content, {
+      return await sendInstagramOutreach(userId, leadId, finalContent, {
         isAutonomous: options.isAutonomous,
         metadata: options.metadata
       });

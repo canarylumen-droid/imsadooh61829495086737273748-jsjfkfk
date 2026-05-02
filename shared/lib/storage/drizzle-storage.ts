@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import process from 'process';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { getPlanCapabilities, getActivePlanId } from '../../../shared/plan-utils.js';
+import { episodicMemory } from '../memory/episodic-memory-service.js';
 
 // Function to check if the database connection is available
 function checkDatabase() {
@@ -656,7 +657,6 @@ export class DrizzleStorage implements IStorage {
           await populateLeadProfile(result[0].id, insertLead.userId, {
             city: (insertLead as any).city || meta?.city,
             niche: meta?.niche,
-            industry: meta?.industry,
             company: insertLead.company || null,
           });
         } catch { /* non-critical */ }
@@ -702,6 +702,11 @@ export class DrizzleStorage implements IStorage {
           message: `${result.name} moved from ${oldLead.status} to ${updates.status}.`,
           actionUrl: `/dashboard/leads/${result.id}`
         });
+
+        // System 2: Record episodic memory for autonomous learning
+        episodicMemory.onLeadStatusChange(id, oldLead.status, updates.status).catch(err => {
+          console.warn('[Memory] Failed to record status change episode:', err);
+        });
       }
     }
     return result;
@@ -746,7 +751,19 @@ export class DrizzleStorage implements IStorage {
       .where(and(eq(leads.id, id), eq(leads.userId, userId)))
       .returning();
 
-    if (result) {
+    if (result && archived) {
+      // Log as a "Raw" episode for resurrection distillation
+      // This de-hardcodes the "Lost" state by allowing the AI to autonomously plan a re-engagement date.
+      const { episodicMemory } = await import('../memory/episodic-memory-service.js');
+      await episodicMemory.recordEpisode({
+        userId,
+        leadId: id,
+        type: 'neutral',
+        action: 'lead_archived',
+        context: 'Lead manually archived or moved to lost pool',
+        outcome: 'Lead archived',
+        metadata: { needs_ai_distillation: true, trigger: 'manual_archive' }
+      });
       wsSync.notifyLeadsUpdated(userId, { event: 'UPDATE', lead: result });
     }
     return result;
@@ -754,10 +771,25 @@ export class DrizzleStorage implements IStorage {
 
   async deleteLead(id: string, userId: string): Promise<void> {
     checkDatabase();
+    // DESTRUCTIVE ACTION GATE: Convert delete to archive and trigger resurrection logic
     const [lead] = await db.select().from(leads).where(and(eq(leads.id, id), eq(leads.userId, userId))).limit(1);
     if (lead) {
-      await db.delete(leads).where(and(eq(leads.id, id), eq(leads.userId, userId)));
-      wsSync.notifyLeadsUpdated(userId, { event: 'DELETE', leadId: id });
+      await db.update(leads)
+        .set({ archived: true, updatedAt: new Date() })
+        .where(and(eq(leads.id, id), eq(leads.userId, userId)));
+      
+      const { episodicMemory } = await import('../memory/episodic-memory-service.js');
+      await episodicMemory.recordEpisode({
+        userId,
+        leadId: id,
+        type: 'neutral',
+        action: 'lead_deleted_intent',
+        context: 'Lead deletion attempted, diverted to archive for resurrection',
+        outcome: 'Lead archived',
+        metadata: { needs_ai_distillation: true, trigger: 'destructive_gate' }
+      });
+
+      wsSync.notifyLeadsUpdated(userId, { event: 'UPDATE', leadId: id });
     }
   }
 
@@ -772,8 +804,11 @@ export class DrizzleStorage implements IStorage {
 
   async deleteMultipleLeads(ids: string[], userId: string): Promise<void> {
     checkDatabase();
-    await db.delete(leads).where(and(eq(leads.userId, userId), sql`${leads.id} IN ${ids}`));
-    wsSync.notifyLeadsUpdated(userId, { event: 'BULK_DELETE', leadIds: ids });
+    // DESTRUCTIVE ACTION GATE: Convert bulk delete to bulk archive
+    await db.update(leads)
+      .set({ archived: true, updatedAt: new Date() })
+      .where(and(eq(leads.userId, userId), sql`${leads.id} IN ${ids}`));
+    wsSync.notifyLeadsUpdated(userId, { event: 'BULK_UPDATE', leadIds: ids, updates: { archived: true } });
   }
 
   // getAuditLogs with options is defined below in the Audit Trail section
@@ -866,6 +901,32 @@ export class DrizzleStorage implements IStorage {
           status: message.direction === 'inbound' ? 'replied' : undefined
         })
         .where(eq(leads.id, message.leadId));
+
+      // SYSTEM 4: Autonomous Opt-Out Detection
+      if (message.direction === 'inbound') {
+        const { OptOutDetector } = await import('../ai/opt-out-detector.js');
+        if (OptOutDetector.isLikelyOptOut(message.body)) {
+          console.log(`[Compliance] Opt-out detected for lead ${message.leadId}. Unsubscribing...`);
+          
+          await client.update(leads)
+            .set({ 
+              status: 'unsubscribed', 
+              aiPaused: true, 
+              updatedAt: new Date(),
+              metadata: sql`jsonb_set(metadata, '{unsubscribedAt}', ${JSON.stringify(new Date().toISOString())}::jsonb)`
+            })
+            .where(eq(leads.id, message.leadId));
+
+          // Log to Audit Trail
+          await client.insert(auditTrail).values({
+            userId: message.userId,
+            action: 'LEAD_UNSUBSCRIBED',
+            entityId: message.leadId,
+            entityType: 'lead',
+            metadata: { reason: 'Autonomous Opt-Out Detection', triggerMessage: message.body.substring(0, 100) }
+          });
+        }
+      }
 
       // Notify both updates
       wsSync.notifyMessagesUpdated(message.userId, { event: 'INSERT', message: result[0] });
@@ -2024,22 +2085,38 @@ export class DrizzleStorage implements IStorage {
   }
 
   // ========== AI Learning Patterns ==========
-  async getLearningPatterns(userId: string): Promise<any[]> {
+  async getLearningPatterns(userId: string, filters?: { industry?: string; persona?: string; strengthThreshold?: number }): Promise<any[]> {
     checkDatabase();
     try {
-      const results = await db
+      let conditions = [eq(aiLearningPatterns.userId, userId)];
+      
+      if (filters?.strengthThreshold !== undefined) {
+        conditions.push(gte(aiLearningPatterns.strength, filters.strengthThreshold));
+      }
+
+      let results = await db
         .select()
         .from(aiLearningPatterns)
-        .where(eq(aiLearningPatterns.userId, userId));
+        .where(and(...conditions))
+        .orderBy(desc(aiLearningPatterns.strength));
+
+      // Filter by metadata in-memory for JSONB safety across different Postgres versions
+      if (filters?.industry) {
+        results = results.filter(r => (r.metadata as any)?.industry === filters.industry);
+      }
+      if (filters?.persona) {
+        results = results.filter(r => (r.metadata as any)?.persona === filters.persona);
+      }
+
       return results;
     } catch (error) {
-      console.warn('getLearningPatterns: table may not exist, returning empty array');
+      console.warn('getLearningPatterns error:', error);
       return [];
     }
   }
 
 
-  async recordLearningPattern(userId: string, key: string, success: boolean): Promise<void> {
+  async recordLearningPattern(userId: string, key: string, success: boolean, metadata?: { industry?: string; persona?: string; insight?: string }): Promise<void> {
     checkDatabase();
     try {
       const existing = await db
@@ -2050,16 +2127,26 @@ export class DrizzleStorage implements IStorage {
 
       if (existing.length > 0) {
         const newStrength = success ? existing[0].strength + 1 : Math.max(0, existing[0].strength - 1);
+        const mergedMetadata = {
+          ...(existing[0].metadata as any || {}),
+          ...(metadata || {}),
+          last_update: new Date().toISOString()
+        };
+        
         await db
           .update(aiLearningPatterns)
-          .set({ strength: newStrength, lastUsedAt: new Date() })
+          .set({ 
+            strength: newStrength, 
+            lastUsedAt: new Date(),
+            metadata: mergedMetadata
+          })
           .where(eq(aiLearningPatterns.id, existing[0].id));
       } else {
         await db.insert(aiLearningPatterns).values({
           userId,
           patternKey: key,
           strength: success ? 1 : 0,
-          metadata: {},
+          metadata: metadata || {},
           lastUsedAt: new Date(),
         });
       }

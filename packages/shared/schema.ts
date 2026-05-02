@@ -859,7 +859,7 @@ export const aiActionLogs = pgTable("ai_action_logs", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   leadId: uuid("lead_id").references(() => leads.id, { onDelete: "set null" }),
-  actionType: text("action_type", { enum: ["calendar_booking", "video_sent", "dm_sent", "follow_up", "objection_handled"] }).notNull(),
+  actionType: text("action_type", { enum: ["calendar_booking", "video_sent", "dm_sent", "follow_up", "objection_handled", "observation"] }).notNull(),
   decision: text("decision", { enum: ["act", "wait", "skip", "escalate"] }).notNull(),
   intentScore: integer("intent_score"),
   timingScore: integer("timing_score"),

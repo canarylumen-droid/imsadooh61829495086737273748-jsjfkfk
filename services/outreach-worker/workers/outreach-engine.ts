@@ -125,6 +125,9 @@ export class OutreachEngine {
       }
 
       for (const integration of activeIntegrations) {
+        // System 9: Auto-Heal stuck/zombie leads for this user
+        await this.autonomouslyHealZombieLeads(integration.userId);
+
         const isAutonomous = uniqueUserMap.get(integration.id) ?? true;
         
         if (outreachQueue) {
@@ -777,7 +780,18 @@ export class OutreachEngine {
    * Helper to deliver campaign email
    */
   private async deliverCampaignEmail(userId: string, campaign: any, lead: any, leadEntry: any, integrationId: string): Promise<void> {
-    console.log(`[OutreachEngine] Delivering campaign "${campaign.name}" step ${leadEntry.currentStep} to ${lead.email} using mailbox ${integrationId}`);
+    // SYSTEM 8: Cluster Safety Lock
+    const { acquireLock, releaseLock } = await import('@shared/lib/redis/redis.js');
+    const lockKey = `outreach:lock:${lead.id}`;
+    const lockAcquired = await acquireLock(lockKey, 180); // 3-minute lock
+    
+    if (!lockAcquired) {
+      console.log(`[Safety] Lead ${lead.id} is already being processed by another worker. Skipping.`);
+      return;
+    }
+
+    try {
+      console.log(`[OutreachEngine] Delivering campaign "${campaign.name}" step ${leadEntry.currentStep} to ${lead.email} using mailbox ${integrationId}`);
 
     // Generate content
     let subject = (campaign.template as any).subject || "Contacting you";
@@ -813,6 +827,24 @@ export class OutreachEngine {
              console.error(`[OutreachEngine] AI Copy Adjustment failed for lead ${lead.id}:`, adjErr);
            }
         }
+      } else if (leadEntry.currentStep > (campaign.template as any)?.followups?.length) {
+        // SYSTEM 12: Dynamic AI Follow-up (Post-Template)
+        const { DynamicFollowUpEngine } = await import('@services/brain-worker/src/ai-lib/core/dynamic-followup.js');
+        const brandContext = await getBrandContext(userId);
+        const threadMessages = await storage.getMessagesByLeadId(lead.id);
+        const history = threadMessages.map(m => `${m.direction.toUpperCase()}: ${m.body}`).join('\n');
+        
+        const dynamicResult = await DynamicFollowUpEngine.generate({
+          leadName: lead.name || 'there',
+          companyName: lead.company || 'your company',
+          industry: (lead.metadata as any)?.industry,
+          history,
+          brandContext: typeof brandContext === 'string' ? brandContext : JSON.stringify(brandContext),
+          stepNumber: leadEntry.currentStep
+        });
+        
+        subject = dynamicResult.subject;
+        body = dynamicResult.body;
       }
     } else {
       // For initial step, use Context-Aware stateful generation
@@ -853,6 +885,17 @@ export class OutreachEngine {
     subject = subject
       .replace(/{{firstName}}/g, firstName)
       .replace(/{{lead_name}}/g, lead.name?.trim() || firstName);
+
+    // SYSTEM 8: Duplicate Send Guard
+    const { DuplicateSendGuard } = await import('@shared/lib/guards/duplicate-send-guard.js');
+    const dupCheck = await DuplicateSendGuard.isDuplicate(lead.id, subject, body);
+    if (dupCheck.isDuplicate) {
+      console.warn(`[OutreachEngine] 🛑 DUPLICATE BLOCKED for lead ${lead.id}: ${dupCheck.reason}`);
+      await db.update(campaignLeads)
+        .set({ status: 'failed', error: `[Duplicate Guard] ${dupCheck.reason}` })
+        .where(eq(campaignLeads.id, leadEntry.id));
+      return;
+    }
 
     // Generate a proper trackingId if not already present
     const trackingId = Math.random().toString(36).substring(2, 11);
@@ -1003,6 +1046,37 @@ export class OutreachEngine {
     wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
     wsSync.notifyCampaignStatsUpdated(userId, campaign.id);
     wsSync.notifyInsightsUpdated(userId);
+    } finally {
+      const { releaseLock } = await import('@shared/lib/redis/redis.js');
+      await releaseLock(lockKey);
+    }
+  }
+
+  /**
+   * System 9: Self-Healing Logic
+   * Finds leads that have been "Locked" for too long and resets them.
+   */
+  private async autonomouslyHealZombieLeads(userId: string): Promise<void> {
+    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+    
+    // Reset stuck campaign leads (join through leads table to filter by userId)
+    await db.execute(sql`
+      UPDATE campaign_leads cl
+      SET status = 'pending', error = '[Auto-Heal] Reset stuck processing state'
+      FROM leads l
+      WHERE cl.lead_id = l.id
+        AND l.user_id = ${userId}
+        AND cl.status = 'processing'
+        AND cl.next_action_at < ${fifteenMinutesAgo.toISOString()}::timestamp
+    `);
+
+    // Reset stuck autonomous leads
+    await db.execute(sql`
+      UPDATE leads 
+      SET metadata = metadata - 'processing_lock_at' - 'processing_worker'
+      WHERE user_id = ${userId}
+      AND (metadata->>'processing_lock_at')::timestamp < ${fifteenMinutesAgo.toISOString()}::timestamp
+    `);
   }
 
   /**
@@ -1335,6 +1409,52 @@ export class OutreachEngine {
       }
     } catch (error) {
       console.error("[Self-Healing] Redistribution error:", error);
+    }
+  }
+
+  /**
+   * System 10: Process a specific BullMQ job (Priority/Standard)
+   */
+  public async processJob(job: any): Promise<void> {
+    const { userId, leadId, integrationId, isAutonomous } = job.data;
+    if (!userId || !leadId) return;
+
+    console.log(`🚀 [Priority Processor] Processing ${job.name} for lead ${leadId}`);
+    
+    // Fetch integration if not provided
+    let targetIntegration = integrationId;
+    if (!targetIntegration) {
+      const lead = await storage.getLeadById(leadId);
+      targetIntegration = lead?.integrationId;
+    }
+
+    const integration = await storage.getIntegrationById(targetIntegration || '');
+    if (integration) {
+      await this.processUserOutreach(userId, integration as any, isAutonomous);
+    }
+  }
+
+  /**
+   * System 11: Global SLA Pulse Sweep
+   * Scans for leads that need a "High-Status" check-in after 14 days of silence.
+   */
+  public async performGlobalPulseSweep(): Promise<void> {
+    console.log("🌊 [Pulse Sweep] Starting global 12-hour background sweep...");
+    const fourteenDaysAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    
+    // Find leads in 'sent' status who haven't moved in 14 days
+    const staleLeads = await db.select().from(leads).where(and(
+      eq(leads.status, 'cold'),
+      lte(leads.updatedAt, fourteenDaysAgo)
+    ));
+
+    console.log(`🌊 [Pulse Sweep] Found ${staleLeads.length} stale leads. Triggering High-Status resurrections.`);
+
+    for (const lead of staleLeads) {
+      // Push back to the front of the queue for a Bespoke AI Pulse
+      await db.update(leads)
+        .set({ status: 'new', updatedAt: new Date() })
+        .where(eq(leads.id, lead.id));
     }
   }
 }
