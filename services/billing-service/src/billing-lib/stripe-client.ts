@@ -16,7 +16,7 @@ export async function getStripeClient(): Promise<Stripe | null> {
   if (!secretKey) {
     // Only warn once to prevent log spam
     if (!(global as any).__stripe_warned) {
-      console.warn('⚠️ Stripe Secret Key MISSING. Provide STRIPE_SECRET_KEY as an environment variable to enable billing features.');
+      console.log('ℹ️ Stripe Secret Key MISSING. Provide STRIPE_SECRET_KEY as an environment variable to enable billing features.');
       (global as any).__stripe_warned = true;
     }
     return null;

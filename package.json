@@ -8,7 +8,7 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "cross-env NODE_ENV=development tsx server/index.ts",
+    "dev": "cross-env NODE_ENV=development tsx --import ./instrument.ts server/index.ts",
     "build": "vite build",
     "build:client": "vite build",
     "db:migrate": "node scripts/migrate-manual.js",
@@ -18,12 +18,12 @@
     "setup": "npx tsx scripts/setup.ts",
     "verify": "npx tsx scripts/verify-setup.ts",
     "check": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit",
-    "start": "node --import tsx server/index.ts",
-    "start:api": "node --import tsx services/api-gateway/index.ts",
-    "start:worker:email": "node --import tsx services/email-service/index.ts",
-    "start:worker:outreach": "node --import tsx services/outreach-worker/index.ts",
-    "start:worker:rag": "node --import tsx services/rag-worker/index.ts",
-    "start:worker:vectordb": "node --import tsx services/vector-db-service/index.ts",
+    "start": "node --import tsx --import ./instrument.ts server/index.ts",
+    "start:api": "node --import tsx --import ./instrument.ts services/api-gateway/index.ts",
+    "start:worker:email": "node --import tsx --import ./instrument.ts services/email-service/index.ts",
+    "start:worker:outreach": "node --import tsx --import ./instrument.ts services/outreach-worker/index.ts",
+    "start:worker:rag": "node --import tsx --import ./instrument.ts services/rag-worker/index.ts",
+    "start:worker:vectordb": "node --import tsx --import ./instrument.ts services/vector-db-service/index.ts",
     "start:all": "concurrently \"npm run start:api\" \"npm run start:all-workers\"",
     "start:all-workers": "concurrently \"npm run start:worker:email\" \"npm run start:worker:outreach\" \"npm run start:worker:rag\" \"npm run start:worker:vectordb\""
   },

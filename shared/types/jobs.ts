@@ -9,10 +9,14 @@ export interface OutreachJobPayload {
 
 // RAG Job Payload
 export interface RagJobPayload {
-  documentId?: number;
-  content: string;
-  action: 'index' | 'delete' | 'update';
+  documentId?: string | number; // Changed to string | number because UUIDs are used
+  content?: string;
+  action: 'index' | 'delete' | 'update' | 'search';
   metadata?: Record<string, any>;
+  userId?: string;
+  fileName?: string;
+  query?: string;
+  topK?: number;
 }
 
 // Mail Sync Job Payload

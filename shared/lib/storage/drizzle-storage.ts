@@ -1504,7 +1504,7 @@ export class DrizzleStorage implements IStorage {
     let allDeals: any[] = [];
     try {
       const result = await db.execute(
-        sql`SELECT d.id, d.status, d.value, d.converted_at, d.metadata 
+        sql`SELECT d.id, d.status, d.value, d.converted_at, d.ai_analysis as metadata 
             FROM deals d
             LEFT JOIN leads l ON d.lead_id = l.id
             WHERE d.user_id = ${userId} ${integrationFilter}`

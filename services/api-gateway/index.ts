@@ -466,7 +466,7 @@ async function runMigrations() {
   }
 
   if (!process.env.GOOGLE_PUB_SUB_TOPIC) {
-    console.warn("âš ï¸ [Advanced Infra] GOOGLE_PUB_SUB_TOPIC not set. Real-time push notifications will be disabled.");
+    console.log("?? [Advanced Infra] GOOGLE_PUB_SUB_TOPIC not set. Real-time push notifications will be disabled.");
   }
   
   // Step 1: Register Service for Discovery (Senior Engineering)
@@ -684,4 +684,5 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 export default app;
+
 

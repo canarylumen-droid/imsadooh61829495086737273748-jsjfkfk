@@ -12,6 +12,7 @@ import { BookingProposer } from '@shared/lib/calendar/booking-proposer.js';
 import { analyzeLeadIntent, type IntentAnalysis } from '../analyzers/intent-analyzer.js';
 import { generateAutonomousObjectionResponse } from '../analyzers/autonomous-objection-responder.js';
 import { universalSalesAI } from "@services/brain-worker/src/orchestrator/agents/universal-sales-agent.js";
+import { billingAgent } from "@services/brain-worker/src/orchestrator/agents/billing-agent.js";
 import { evaluateAndLogDecision } from '../engines/decision-engine.js';
 import { formatReplyForChannel } from '../formatters/channel-reply-formatter.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
@@ -28,7 +29,7 @@ import { getLeadProfile } from '@shared/lib/calendar/lead-timezone-intelligence.
 import { calculateSimilarity } from '../utils/utils.js';
 import { getRegionalInstruction } from '../specialized/regional-norms.js';
 import { objectionService } from '../analyzers/objection-service.js';
-import { searchSimilarChunks } from '../context/vector-search.js';
+import { searchSimilarChunks } from '../context/vector-rpc.js';
 import { videoMonitors } from '@audnix/shared';
 
 const isDemoMode = false;
@@ -793,7 +794,8 @@ ${enrichedContext}`;
 
     const aiResponse = finalAiResponse!;
 
-    let responseText = aiResponse.text;
+    // Phase 22 & 23: Billing Agent check for payment intent
+    let responseText = await billingAgent.handlePaymentIntent(lead.id, aiResponse.text);
 
     // Phase 22 & 25: Post-generation persistence (Reset failures and track usage)
     try {

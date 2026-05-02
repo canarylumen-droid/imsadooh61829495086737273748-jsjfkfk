@@ -33,18 +33,8 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const cookies = req.headers.cookie || '';
     const sidCookie = cookies.split(';').find(c => c.trim().startsWith('audnix.sid='));
     
-    console.warn(`[AUTH] Rejected 401: No userId in session.
-      - Method: ${req.method}
-      - Path: ${req.path}
-      - SessionID: ${sessionID ? sessionID.slice(0, 8) + '...' : 'NONE'}
-      - Cookie Header Present: ${Boolean(req.headers.cookie)}
-      - audnix.sid Present: ${Boolean(sidCookie)}
-      - Session Object Valid: ${Boolean(req.session)}
-      - Session Store Type: ${req.sessionStore?.constructor?.name || 'Unknown'}
-      - Session Keys: ${req.session ? JSON.stringify(Object.keys(req.session)) : 'null'}
-      - Referer: ${req.get('referer')}
-      - Current Time: ${new Date().toISOString()}
-    `);
+    // Silenced verbose auth rejection logging to prevent log pollution on unauthenticated endpoints (like /status or /user/profile checks)
+    // console.debug(`[AUTH] Rejected 401: No userId for ${req.method} ${req.path}`);
 
     // Security: Add small delay to prevent timing attacks
     await new Promise(resolve => setTimeout(resolve, 100));

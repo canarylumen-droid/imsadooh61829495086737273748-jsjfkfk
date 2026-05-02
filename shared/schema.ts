@@ -146,7 +146,7 @@ export const leads = pgTable("leads", {
   lastMessagePreview: text("last_message_preview"),
   lastMessageAt: timestamp("last_message_at"),
   lastEnrichedAt: timestamp("last_enriched_at"),
-  aiPaused: boolean("ai_paused").notNull().default(true),
+  aiPaused: boolean("ai_paused").notNull().default(false),
   pdfConfidence: real("pdf_confidence"),
   archived: boolean("archived").notNull().default(false),
   tags: jsonb("tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
@@ -592,6 +592,7 @@ export const followUpQueue = pgTable("follow_up_queue", {
   followUpUserIdIdx: index("follow_up_user_id_idx").on(table.userId),
 }));
 
+
 export const emailWarmupSchedules = pgTable("email_warmup_schedules", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
@@ -633,6 +634,7 @@ export const insights = pgTable("insights", {
   }>>().notNull(),
   generatedAt: timestamp("generated_at").notNull().defaultNow(),
 });
+
 
 export const emailTracking = pgTable("email_tracking", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),

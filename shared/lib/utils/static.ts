@@ -18,26 +18,27 @@ export function log(message: string, source = "express") {
 }
 
 export function serveStatic(app: Express) {
-  let distPath = path.resolve(__dirname, "..", "dist", "public");
-  console.log(`[Static] Production static directory: ${distPath}`);
+  // Try paths in priority order: client/dist (dev/Railway fallback), dist/public (Vercel standard), and fallback
+  const possiblePaths = [
+    path.resolve(process.cwd(), "client", "dist"),
+    path.resolve(process.cwd(), "dist", "public"),
+    path.resolve(__dirname, "..", "dist", "public"),
+  ];
 
-  if (!fs.existsSync(distPath)) {
-    console.warn(`⚠️ [Static] Production directory ${distPath} does not exist!`);
-    const fallbackPath = path.resolve(process.cwd(), "dist", "public");
-    if (fs.existsSync(fallbackPath)) {
-      console.log(`[Static] Using fallback CWD path: ${fallbackPath}`);
-      distPath = fallbackPath;
-    } else {
-      const clientDistPath = path.resolve(process.cwd(), "client", "dist");
-      if (fs.existsSync(clientDistPath)) {
-         console.log(`[Static] Using client dist path: ${clientDistPath}`);
-         distPath = clientDistPath;
-      } else {
-         console.error(`❌ [Static] No valid static directory found at ${distPath} or ${fallbackPath}`);
-      }
+  let distPath = "";
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      distPath = p;
+      break;
     }
-  } else {
+  }
+
+  if (distPath) {
     console.log(`✅ [Static] Found production directory at ${distPath}`);
+  } else {
+    // Only warn if ALL fail
+    distPath = possiblePaths[0]; // set dummy to avoid crash
+    console.error(`❌ [Static] No valid static directory found!`);
   }
 
   // Optimized static serving for production

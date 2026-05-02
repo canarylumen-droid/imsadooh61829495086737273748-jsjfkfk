@@ -6,7 +6,7 @@ import { eq, desc, and } from 'drizzle-orm';
 import { calendlyOAuth } from "@services/api-gateway/src/oauth/calendly.js";
 import { availabilityService } from "@shared/lib/calendar/availability-service.js";
 import ObjectionHandler from "@services/outreach-worker/src/sales-engine/objection-handler.js";
-import { searchSimilarChunks, userHasChunks } from "@services/brain-worker/src/ai-lib/context/vector-search.js";
+import { searchSimilarChunks, userHasChunks } from "../../ai-lib/context/vector-rpc.js";
 
 export interface AgentActionDecision {
   action: 'send_payment_link' | 'send_invoice' | 'schedule_followup' | 'book_meeting' | 'request_info' | 'pause_nurture' | 'unknown';

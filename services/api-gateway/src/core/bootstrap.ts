@@ -34,16 +34,6 @@ const nativeResolve4 = dns.resolve4;
 import "dotenv/config";
 import * as Sentry from "@sentry/node";
 
-// Initialize Sentry before any other imports if possible
-if (process.env.OBSERVABILITY_SENTRY_DSN) {
-  Sentry.init({
-    dsn: process.env.OBSERVABILITY_SENTRY_DSN,
-    environment: process.env.NODE_ENV || "development",
-    tracesSampleRate: 1.0,
-  });
-  console.log("✅ Sentry initialized on server");
-}
-
 if (!process.env.NODE_ENV) {
   process.env.NODE_ENV = "development";
 }

@@ -8,7 +8,7 @@ import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service
 import { MODELS } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
 import crypto from "crypto";
 import { detectUVP, gatherCompetitorIntelligence } from "@services/brain-worker/src/orchestrator/agents/universal-sales-agent.js";
-import { indexPdfChunks, ensureVectorSetup } from "@services/brain-worker/src/ai-lib/context/vector-search.js";
+import { ragQueue } from "@shared/lib/queue.js";
 import { blobStorage } from "@shared/lib/storage/blob-storage.js";
 import { acquireLock, releaseLock } from "@shared/lib/redis/redis.js";
 import { refreshPdfTtl } from "@shared/lib/redis/brand-pdf-storage.js";
@@ -16,8 +16,7 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
 
-// Ensure vector infrastructure is ready on module load
-ensureVectorSetup().catch(e => console.warn('[AdminPdf] Vector setup warning:', e.message));
+// Phase 10: RAG Cutover — vector setup is now handled exclusively by rag-worker on startup
 
 const router = Router();
 
@@ -506,21 +505,26 @@ Only include fields you can confidently extract. Return valid JSON only.`,
         console.warn("Failed to trigger auto-outreach after upload:", triggerError);
       }
 
-      // PHASE 2: Index chunks into vector store for semantic RAG (CUMULATIVE VERSIONING)
+      // Phase 10 RAG Cutover: Dispatch indexing to rag-worker via BullMQ (fully decoupled)
       let chunksIndexed = 0;
       try {
         const cacheResult = await db.execute(sql`
           SELECT id FROM brand_pdf_cache WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 1
         `);
         const pdfId = (cacheResult.rows[0] as any)?.id || fileHash;
-        
-        // Pass options for cumulative memory (retain old, increment version)
-        chunksIndexed = await indexPdfChunks(pdfText, userId, pdfId, req.file.originalname, {
-          clearPrevious: false // RETAIN OLD MEMORY as per Level 10 requirement
+
+        await ragQueue.add('index', {
+          action: 'index',
+          content: pdfText,
+          userId,
+          documentId: pdfId,
+          fileName: req.file.originalname,
+          metadata: { clearPrevious: false }
         });
-        console.log(`🔍 [VectorSearch] Indexed ${chunksIndexed} semantic chunks (cumulative) for user ${userId}`);
+        console.log(`🔍 [RAGQueue] Dispatched indexing job for user ${userId} — rag-worker will embed asynchronously.`);
+        chunksIndexed = -1; // Async — count not immediately available
       } catch (vecError) {
-        console.warn('Vector indexing failed (non-critical):', (vecError as Error).message);
+        console.warn('RAG queue dispatch failed (non-critical):', (vecError as Error).message);
       }
 
       res.json({
@@ -853,14 +857,23 @@ router.patch(
       // Also update user's brandGuidelinePdfText
       await storage.updateUser(userId, { brandGuidelinePdfText: text });
 
-      // Re-index all vector chunks from the edited text
+      // Phase 10 RAG Cutover: Dispatch re-indexing to rag-worker via BullMQ
       let chunksIndexed = 0;
       try {
         const cacheRow = await db.execute(sql`SELECT file_name FROM brand_pdf_cache WHERE id = ${pdfId}`);
         const fileName = (cacheRow.rows[0] as any)?.file_name || 'Edited Document';
-        chunksIndexed = await indexPdfChunks(text, userId, pdfId, fileName);
+        await ragQueue.add('index', {
+          action: 'index',
+          content: text,
+          userId,
+          documentId: pdfId,
+          fileName,
+          metadata: { clearPrevious: true }
+        });
+        console.log(`🔍 [RAGQueue] Re-index job dispatched for PDF ${pdfId}`);
+        chunksIndexed = -1; // Async — count not immediately available
       } catch (vecError) {
-        console.warn('Re-indexing after edit failed:', (vecError as Error).message);
+        console.warn('RAG re-index queue dispatch failed:', (vecError as Error).message);
       }
 
       res.json({ success: true, chunksIndexed });

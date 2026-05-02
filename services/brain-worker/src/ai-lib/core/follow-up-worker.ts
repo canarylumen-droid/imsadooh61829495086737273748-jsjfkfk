@@ -23,7 +23,7 @@ import { getBrandPersonalization, formatChannelMessage, getContextAwareSystemPro
 import { multiProviderEmailFailover } from '@services/email-service/src/email/multi-provider-failover.js';
 import { decrypt, decryptToJSON } from '@shared/lib/crypto/encryption.js';
 import { shouldAskForFollow } from "../follow-request-handler.js";
-import { searchSimilarChunks, userHasChunks } from '../context/vector-search.js';
+import { searchSimilarChunks, userHasChunks } from '../context/vector-rpc.js';
 import { getLeadProfile } from '@shared/lib/calendar/lead-timezone-intelligence.js';
 import type {
   BrandContext,
@@ -59,6 +59,7 @@ interface LocalLead {
   warm?: boolean;
   createdAt?: Date;
   aiPaused?: boolean;
+  sentiment?: string;
   updatedAt?: Date;
 }
 
@@ -409,6 +410,7 @@ export class FollowUpWorker {
       const intent = (job.context as any)?.intent || 'nurture';
       const reasoning = (job.context as any)?.reasoning || '';
       let aiReply = '';
+      let suggestedSubject = (job.context as any)?.suggestedSubject;
 
       if (suggestedBody) {
         aiReply = suggestedBody;
@@ -475,7 +477,63 @@ export class FollowUpWorker {
         aiReply = aiResult.text || '';
       } else {
         // Generate AI reply with day-aware context and brand personalization
-        aiReply = await this.generateFollowUpMessage(lead, conversationHistory, brandContext, campaignDay, lead.createdAt || new Date(), job.userId, bookingContext);
+        const followUpResult = await this.generateFollowUpMessage(lead, conversationHistory, brandContext, campaignDay, lead.createdAt || new Date(), job.userId, bookingContext);
+        
+        if (followUpResult.action === 'pause') {
+          console.log(`[FOLLOW_UP_WORKER] ⏸️ AI decided to pause outreach for lead ${lead.id}. Reason: ${followUpResult.reasoning}`);
+          
+          await db.update(leads).set({ aiPaused: true }).where(eq(leads.id, job.leadId));
+          await db.update(followUpQueue).set({ status: 'completed', processedAt: new Date() }).where(eq(followUpQueue.id, job.id));
+
+          try {
+            const { aiActionLogs } = await import('@audnix/shared');
+            await db.insert(aiActionLogs).values({
+              userId: job.userId,
+              leadId: job.leadId,
+              actionType: 'follow_up',
+              decision: 'skip',
+              reasoning: followUpResult.reasoning,
+              outcome: 'AI Paused outreach'
+            });
+          } catch (e) {
+            console.error('[FOLLOW_UP_WORKER] Failed to log AI action:', e);
+          }
+          return;
+        }
+
+        if (followUpResult.action === 'schedule' && followUpResult.delayDays > 0) {
+          console.log(`[FOLLOW_UP_WORKER] 📅 AI decided to delay follow up for lead ${lead.id} by ${followUpResult.delayDays} days. Reason: ${followUpResult.reasoning}`);
+          
+          const nextScheduledAt = new Date();
+          nextScheduledAt.setDate(nextScheduledAt.getDate() + followUpResult.delayDays);
+          
+          await db.update(followUpQueue)
+            .set({ 
+              status: 'pending', 
+              scheduledAt: nextScheduledAt,
+              context: { ...(job.context as any || {}), reason: followUpResult.reasoning, suggestedBody: followUpResult.text, suggestedSubject: followUpResult.subject }
+            })
+            .where(eq(followUpQueue.id, job.id));
+
+          try {
+            const { aiActionLogs } = await import('@audnix/shared');
+            await db.insert(aiActionLogs).values({
+              userId: job.userId,
+              leadId: job.leadId,
+              actionType: 'follow_up',
+              decision: 'wait',
+              reasoning: followUpResult.reasoning,
+              outcome: `Rescheduled for ${followUpResult.delayDays} days later`,
+              metadata: { delayDays: followUpResult.delayDays }
+            });
+          } catch (e) {
+            console.error('[FOLLOW_UP_WORKER] Failed to log AI action:', e);
+          }
+          return;
+        }
+
+        aiReply = followUpResult.text;
+        suggestedSubject = followUpResult.subject || suggestedSubject;
       }
 
       // DEEP TRACKING: Generate unique ID for engagement detection
@@ -513,13 +571,35 @@ export class FollowUpWorker {
         sendOptions.buttonUrl = calendarLink;
       }
 
-      const suggestedSubject = (job.context as any)?.suggestedSubject;
-      const sent = await this.sendMessage(job.userId, lead, aiReply, job.channel, {
-        ...sendOptions,
-        subject: suggestedSubject || undefined
-      });
+      // --- PHASE 33: DRAFT VS SEND VERIFICATION LAYER ---
+      const isAutonomous = (userDetail?.metadata as any)?.isAutonomous !== false;
+      let sent = false;
 
-      console.log(`[FOLLOW_UP_WORKER] Message sent result: ${sent}`);
+      if (isAutonomous) {
+        sent = await this.sendMessage(job.userId, lead, aiReply, job.channel, {
+          ...sendOptions,
+          subject: suggestedSubject || undefined
+        });
+        console.log(`[FOLLOW_UP_WORKER] Message sent result: ${sent}`);
+      } else {
+        console.log(`[FOLLOW_UP_WORKER] User is NOT in autonomous mode. Message saved as DRAFT.`);
+        sent = true; // We pretend it sent so it saves in the DB as a message
+      }
+      
+      // Log the SEND action
+      try {
+        const { aiActionLogs } = await import('@audnix/shared');
+        await db.insert(aiActionLogs).values({
+          userId: job.userId,
+          leadId: job.leadId,
+          actionType: 'follow_up',
+          decision: 'act',
+          reasoning: 'Autonomous outreach dispatch triggered',
+          outcome: isAutonomous ? 'Message sent' : 'Saved as draft'
+        });
+      } catch (e) {
+        console.error('[FOLLOW_UP_WORKER] Failed to log AI action:', e);
+      }
 
       if (sent) {
         // Save message to database with tracking ID
@@ -532,25 +612,7 @@ export class FollowUpWorker {
         });
 
 
-        // UPDATE Dashboard Feed Outcome
-        try {
-          const { aiActionLogs } = await import('@audnix/shared');
-          const { desc } = await import('drizzle-orm');
-          
-          const recentLogs = await db.select()
-            .from(aiActionLogs)
-            .where(and(eq(aiActionLogs.leadId, lead.id), eq(aiActionLogs.userId, job.userId)))
-            .orderBy(desc(aiActionLogs.createdAt))
-            .limit(1);
 
-          if (recentLogs.length > 0) {
-            await db.update(aiActionLogs)
-              .set({ outcome: `Message sent via ${job.channel}` })
-              .where(eq(aiActionLogs.id, recentLogs[0].id));
-          }
-        } catch (logErr) {
-          console.warn('Failed to update AI action log outcome:', logErr);
-        }
 
         // UPDATE: Log to audit trail
         try {
@@ -647,7 +709,7 @@ export class FollowUpWorker {
     campaignDayCreated: Date = new Date(),
     userId?: string,
     bookingContext?: { calendarLink: string; isCalendlyConnected: boolean }
-  ): Promise<string> {
+  ): Promise<{ text: string; action: string; delayDays: number; reasoning: string; subject: string }> {
     // Get message script for this stage
     const script = getMessageScript(lead.channel as 'email' | 'instagram', campaignDay);
 
@@ -715,17 +777,33 @@ export class FollowUpWorker {
 
     const result = await generateReply(systemPrompt, userPrompt, {
       temperature: 0.7,
-      maxTokens: 200,
-      jsonMode: false
+      maxTokens: 400,
+      jsonMode: true
     });
 
+    let action = 'send';
+    let delayDays = 0;
+    let reasoning = 'Generated reply';
+    let finalMessage = '';
+    let subject = '';
+
+    try {
+      const parsed = JSON.parse(result.text || "{}");
+      action = parsed.action || 'send';
+      delayDays = parsed.delayDays || 0;
+      reasoning = parsed.reasoning || reasoning;
+      finalMessage = parsed.body || result.text;
+      subject = parsed.subject || '';
+    } catch (e) {
+      finalMessage = result.text || '';
+    }
+
     // Format with brand personalization
-    let finalMessage = result.text;
     if (personalizationContext) {
       finalMessage = await formatChannelMessage(finalMessage, lead.channel as 'email' | 'instagram', userId || '', lead.channel === 'email');
     }
 
-    return finalMessage;
+    return { text: finalMessage, action, delayDays, reasoning, subject };
   }
 
   /**
@@ -751,6 +829,14 @@ SCRIPT GUIDANCE (use as reference, not required):
 - Tone: ${script.tone || 'professional'}
 - Structure: ${script.structure || 'conversational'}`;
     }
+
+    // --- PHASE 29: INTENT SIGNAL PROCESSING ---
+    const engagementScore = ((lead.metadata as any)?.behavior_pattern?.engagementScore as number) || 0;
+    const intentGuidance = `
+LEAD INTENT & SIGNALS:
+- Current Sentiment: ${lead.sentiment || 'neutral'}
+- Engagement Score: ${engagementScore}
+(Adjust your follow-up tone: softer for negative/cold, direct/call-to-action for positive/hot).`;
 
     // Build conversation history string
     const historyStr = history
@@ -832,6 +918,7 @@ ${bookingContext?.calendarLink ? `BOOKING PROTOCOL (AI Specialist Mode):
 - Priority: If they ask for a time, give the Link instead of trying to manually coordinate.` : ''}
 
 ${channelContext}${scriptGuidance}
+${intentGuidance}
 
 RULES:
 1. ALWAYS address the lead by their first name (${firstName})
@@ -845,12 +932,20 @@ RULES:
 9. Match the tone to the channel (Instagram: casual, Email: professional).
 10. For emails, use the provided brand colors for styling (e.g., button backgrounds, links).
 ${growthHackInstruction}
-Generate a natural, high-converting follow-up message:
-- FOCUS: If they are interested, BOOK THEM using the link.
-- TONE: Professional but helpful.
-- LENGTH: Concise.
+Generate a strategic decision and response.
+You can choose to:
+1. send: Send the message now.
+2. schedule: Delay sending by a specific number of days.
+3. pause: Stop outreach for this lead.
 
-REPLY:`;
+Return ONLY a valid JSON object matching this structure:
+{
+  "action": "send" | "schedule" | "pause",
+  "delayDays": number (only if action is schedule, e.g. 14),
+  "reasoning": "Why you chose this action based on lead behavior",
+  "subject": "Email subject (if channel is email)",
+  "body": "The actual message content to send or draft"
+}`;
   }
 
   /**
@@ -1111,6 +1206,19 @@ REPLY:`;
     lead: Lead
   ): Promise<void> {
     if (!db) return;
+
+    // --- PHASE 27 & 34: BULLMQ STATE & CLASH CHECK ---
+    const pendingJobs = await db.select().from(followUpQueue).where(
+      and(
+        eq(followUpQueue.leadId, leadId),
+        eq(followUpQueue.status, 'pending')
+      )
+    ).limit(1);
+
+    if (pendingJobs.length > 0) {
+      console.log(`[FOLLOW_UP_WORKER] ⚠️ Clash prevented: Lead ${lead.name} already has a pending follow-up scheduled.`);
+      return;
+    }
 
     // Standard sequence relative to lead creation: Day 3, Day 7
     const followUpCount = (lead.metadata as Record<string, unknown>)?.follow_up_count as number || 0;

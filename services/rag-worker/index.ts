@@ -11,33 +11,39 @@ async function startRagService() {
 
   startWorkerHealthServer('rag-worker', parseInt(process.env.RAG_WORKER_PORT || process.env.PORT || '8083', 10));
 
-  // ── BullMQ Worker — processes RAG tasks (indexing, embedding) ────
+  // ── BullMQ Worker — processes RAG tasks (indexing, embedding, searching) ────
   createWorker(ragQueue.name, async (job) => {
-    const { action, documentId, content, metadata } = job.data;
+    const { action, documentId, content, metadata, userId, fileName, query, topK } = job.data;
     log.info('Processing RAG job', { action, documentId, jobId: job.id });
 
-    switch (action) {
-      case 'index':
-        // 1. Generate embeddings using AI service
-        // 2. Add job to vectorOpsQueue to store it
-        log.info(`Generating embeddings for document ${documentId}`);
-        await vectorOpsQueue.add('upsert', {
-          action: 'upsert',
-          documentId,
-          vector: [/* mock vector */],
-          metadata
-        });
-        break;
-      case 'delete':
-        await vectorOpsQueue.add('delete', {
-          action: 'delete',
-          documentId
-        });
-        break;
-      case 'update':
-        break;
-      default:
-        log.warn('Unknown RAG job action', { action });
+    try {
+      // Lazy load to avoid db connections until needed
+      const { indexPdfChunks, searchSimilarChunks } = await import('./src/lib/vector-store.js');
+      const { db } = await import('@shared/lib/db/db.js');
+      const { sql } = await import('drizzle-orm');
+
+      switch (action) {
+        case 'index':
+          log.info(`Generating embeddings for document ${documentId}`);
+          await indexPdfChunks(content, userId, documentId, fileName, metadata);
+          break;
+        case 'delete':
+          log.info(`Deleting document ${documentId}`);
+          await db.execute(sql`DELETE FROM brand_embeddings WHERE document_id = ${documentId} AND user_id = ${userId}`);
+          break;
+        case 'search':
+          log.info(`Searching chunks for user ${userId}`);
+          const results = await searchSimilarChunks(query, userId, topK);
+          // Return results via BullMQ job return value
+          return results;
+        case 'update':
+          break;
+        default:
+          log.warn('Unknown RAG job action', { action });
+      }
+    } catch (e: any) {
+      log.error(`RAG operation failed: ${e.message}`);
+      throw e;
     }
   });
 

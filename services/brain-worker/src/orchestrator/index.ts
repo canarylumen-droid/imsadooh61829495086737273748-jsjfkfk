@@ -44,6 +44,7 @@ async function startOrchestratorService() {
   // ── Load AI Agent logic ───────────────────────────────────────────────────
   const { MultiChannelOrchestrator } = await import("@shared/lib/multi-channel-orchestrator.js");
   const { universalSalesAgent } = await import('./agents/universal-sales-agent-integrated.js');
+  const { objectionAgent } = await import('./agents/objection-agent.js');
 
   await startWorker('Universal Sales Agent', () => (universalSalesAgent as any).start?.());
 
@@ -72,7 +73,7 @@ async function startOrchestratorService() {
             break;
           case 'handle-high-priority-objection':
             log.reasoning('High-priority objection detected. Formulating a strategic response to overcome the barrier.', { leadId: data.leadId, sentiment: data.sentiment });
-            // Logic to handle specific objections would go here
+            await objectionAgent.handleObjection(data.leadId, data.sentiment);
             break;
           default:
             log.warn('Unknown strategic job type', { type });

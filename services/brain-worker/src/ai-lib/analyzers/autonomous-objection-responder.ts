@@ -185,6 +185,11 @@ export async function generateAutonomousObjectionResponse(
     console.warn("ML Learning lookup failed", e);
   }
 
+  // Phase 15: Integrate historical "winning handles" via ObjectionService
+  const { objectionService } = await import('./objection-service.js');
+  const playbook = objectionService.formatPlaybookForPrompt(context.userId);
+  pastLearnings += "\n" + playbook;
+
   // Step 3: Generate tailored response using GPT-4
   const prompt = buildObjectionResponsePrompt(
     leadMessage,
