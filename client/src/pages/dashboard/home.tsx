@@ -376,8 +376,7 @@ export default function DashboardHome() {
         const minutes = seconds / 60;
         if (minutes < 60) return `${Math.floor(minutes)}m`;
         const hours = minutes / 60;
-        if (hours < 24) return `${Math.floor(hours)}h ${Math.round(minutes % 60)}m`;
-        return `${Math.floor(hours / 24)}d ${Math.round(hours % 24)}h`;
+        return `${Math.floor(hours)}h ${Math.round(minutes % 60)}m`;
       })(),
       icon: Clock,
       percentage: "—",
