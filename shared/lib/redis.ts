@@ -1,9 +1,15 @@
 import Redis from 'ioredis';
 import { logger } from './logger';
 
+const REDIS_URL = process.env.REDIS_URL;
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+if (!REDIS_URL && IS_PROD) {
+  throw new Error('❌ REDIS_URL is required in production environment');
+}
+
 // Shared Redis client for generic operations (caching, pub/sub)
-// Using a function/proxy to ensure it uses the latest process.env.REDIS_URL
-export const redisClient = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+export const redisClient = new Redis(REDIS_URL || 'redis://localhost:6379', {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
 });
@@ -24,13 +30,24 @@ redisClient.on('ready', () => {
 function getBullMQConnection() {
   const host = process.env.REDIS_HOST;
   const port = process.env.REDIS_PORT;
-  const urlStr = process.env.REDIS_URL || 'redis://localhost:6379';
+  const urlStr = REDIS_URL;
 
   if (host) {
     return {
       host,
       port: parseInt(port || '6379', 10),
       password: process.env.REDIS_PASSWORD,
+      maxRetriesPerRequest: null,
+    };
+  }
+
+  if (!urlStr) {
+    if (IS_PROD) {
+      throw new Error('❌ Missing REDIS_URL or REDIS_HOST for BullMQ connection in production');
+    }
+    return {
+      host: 'localhost',
+      port: 6379,
       maxRetriesPerRequest: null,
     };
   }
@@ -45,6 +62,9 @@ function getBullMQConnection() {
       maxRetriesPerRequest: null,
     };
   } catch (err) {
+    if (IS_PROD) {
+      throw new Error(`❌ Invalid REDIS_URL provided in production: ${urlStr}`);
+    }
     return {
       host: 'localhost',
       port: 6379,

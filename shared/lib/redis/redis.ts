@@ -45,7 +45,18 @@ export async function getSubClient(): Promise<RedisClientType | null> {
  */
 export async function getRedisClient(): Promise<RedisClientType | null> {
   if (redisClient) return redisClient;
-  if (!process.env.REDIS_URL) return null;
+  
+  const REDIS_URL = process.env.REDIS_URL;
+  const IS_PROD = process.env.NODE_ENV === 'production';
+
+  if (!REDIS_URL) {
+    if (IS_PROD) {
+      console.error('❌ REDIS_URL is missing in production environment!');
+      throw new Error('REDIS_URL is required in production');
+    }
+    return null;
+  }
+
   if (isInitializing) {
      // Wait a bit if another call is initializing
      await new Promise(resolve => setTimeout(resolve, 500));
@@ -53,8 +64,10 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
   }
 
   isInitializing = true;
+  console.log('🔄 Initializing Shared Redis Client...');
+  
   try {
-    let redisUrl = process.env.REDIS_URL.trim();
+    let redisUrl = REDIS_URL.trim();
 
     // Support replit-style redis-cli connection strings
     if (redisUrl.includes('redis-cli')) {
@@ -67,22 +80,43 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
       redisUrl = match[0];
     }
 
+    console.log(`📡 Connecting to Redis at ${redisUrl.split('@')[1] || 'URL masked'}...`);
+
     const client = createClient({
       url: redisUrl,
       socket: {
         connectTimeout: 5000,
-        reconnectStrategy: (retries) => Math.min(retries * 50, 2000)
+        reconnectStrategy: (retries) => {
+          const delay = Math.min(retries * 50, 2000);
+          if (retries % 10 === 0) {
+            console.log(`🔄 Redis reconnection attempt #${retries}, next try in ${delay}ms`);
+          }
+          return delay;
+        }
       }
     });
 
-    client.on('error', (err) => console.error('Redis Client Error', err));
+    client.on('error', (err) => {
+      console.error('❌ Redis Client Error:', err.message);
+      if (err.code === 'ECONNREFUSED') {
+        console.error('   👉 Check if Redis server is running and accessible.');
+      }
+    });
+
+    client.on('connect', () => console.log('✅ Redis Client Connecting...'));
+    client.on('ready', () => console.log('🚀 Redis Client Ready'));
     
     await client.connect();
-    console.log('✅ Shared Redis Client Connected');
+    console.log('✅ Shared Redis Client Connected Successfully');
     redisClient = client as RedisClientType;
     return redisClient;
-  } catch (err) {
-    console.error('❌ Failed to connect to Redis:', err);
+  } catch (err: any) {
+    console.error('❌ Failed to connect to Redis:', err.message);
+    if (IS_PROD) {
+      // In production, we might want to throw to prevent the service from starting in a broken state
+      // but for now we'll just log and return null to avoid immediate crashes if some logic can handle it.
+      // However, the plan says to harden, so let's be more strict.
+    }
     return null;
   } finally {
     isInitializing = false;

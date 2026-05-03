@@ -6,18 +6,31 @@ dns.setDefaultResultOrder("ipv4first");
 // Monkey-patch dns.lookup to strictly filter for IPv4
 const originalLookup = dns.lookup;
 const patchedLookup = ((hostname: string, options: any, callback: any) => {
-  const opt = typeof options === 'function' ? { family: 4 } : { ...options, family: 4 };
   const cb = typeof options === 'function' ? options : callback;
-  return originalLookup(hostname, opt, cb);
+  const originalOptions = typeof options === 'function' ? {} : options;
+
+  // Try IPv4 first for stability in cloud environments (Railway/Neon)
+  originalLookup(hostname, { ...originalOptions, family: 4 }, (err, address, family) => {
+    if (!err) {
+      return cb(null, address, family);
+    }
+    // Fallback to default behavior if IPv4 fails or is unavailable
+    originalLookup(hostname, originalOptions, cb);
+  });
 }) as any;
 dns.lookup = patchedLookup;
 
 // Also override promises.lookup
 if (dns.promises && dns.promises.lookup) {
     const originalPromisesLookup = dns.promises.lookup;
-    dns.promises.lookup = ((hostname: string, options: any) => {
-        const opt = typeof options === 'object' ? { ...options, family: 4 } : { family: 4 };
-        return originalPromisesLookup(hostname, opt);
+    dns.promises.lookup = (async (hostname: string, options: any) => {
+        try {
+            // Try IPv4 first
+            return await originalPromisesLookup(hostname, { ...options, family: 4 });
+        } catch (err) {
+            // Fallback to default
+            return await originalPromisesLookup(hostname, options);
+        }
     }) as any;
 }
 

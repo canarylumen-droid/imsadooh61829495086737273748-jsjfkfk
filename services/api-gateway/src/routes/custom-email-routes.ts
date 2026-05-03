@@ -66,7 +66,7 @@ router.post('/discover', requireAuth, async (req: Request, res: Response) => {
     res.json(settings);
   } catch (error) {
     console.error('[Email Discovery] Error:', error);
-    res.status(500).json({ error: 'Discovery failed' });
+    return res.status(500).json({ error: 'Discovery failed' });
   }
 });
 
@@ -414,8 +414,8 @@ router.post('/import', requireAuth, async (req: Request, res: Response): Promise
       }
     }
   } catch (error: unknown) {
-    console.error('Error importing custom emails:', error);
     res.status(500).json({ error: 'Failed to import emails' });
+    return;
   }
 });
 
@@ -526,8 +526,8 @@ router.post('/disconnect', requireAuth, async (req: Request, res: Response): Pro
       message: 'Email account disconnected'
     });
   } catch (error: unknown) {
-    console.error('Error disconnecting custom email:', error);
     res.status(500).json({ error: 'Failed to disconnect custom email' });
+    return;
   }
 });
 
@@ -568,8 +568,8 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
       email: mailboxes[0]?.email || null
     });
   } catch (error: unknown) {
-    console.error('Error getting email status:', error);
     res.status(500).json({ error: 'Failed to get email status' });
+    return;
   }
 });
 
@@ -637,8 +637,8 @@ router.get('/settings', requireAuth, async (req: Request, res: Response): Promis
     const settings = await storage.getSmtpSettings(userId);
     res.json(settings);
   } catch (error) {
-    console.error('[Email Settings] Error:', error);
     res.status(500).json({ error: 'Failed to fetch SMTP settings' });
+    return;
   }
 });
 
@@ -682,8 +682,8 @@ router.get('/folders', requireAuth, async (req: Request, res: Response): Promise
       isDiscovering: false
     });
   } catch (error) {
-    console.error('[Email Folders] Error:', error);
     res.status(500).json({ error: 'Failed to fetch folders' });
+    return;
   }
 });
 
@@ -704,8 +704,8 @@ router.post('/sync-now', requireAuth, async (req: Request, res: Response): Promi
       message: 'Sync triggered successfully'
     });
   } catch (error) {
-    console.error('[Email Sync] Error:', error);
     res.status(500).json({ error: 'Failed to trigger sync' });
+    return;
   }
 });
 
@@ -740,8 +740,8 @@ router.post('/sync-history', requireAuth, async (req: Request, res: Response): P
       message: `Historical sync started for last ${daysToSync} days. Check back in a few minutes.`
     });
   } catch (error) {
-    console.error('[Historical Sync] Error:', error);
     res.status(500).json({ error: 'Failed to trigger historical sync' });
+    return;
   }
 });
 

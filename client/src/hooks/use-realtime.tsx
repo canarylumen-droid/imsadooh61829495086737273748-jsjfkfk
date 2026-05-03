@@ -187,7 +187,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
         if (syncTimeout) clearTimeout(syncTimeout);
       }
 
-      if (payload.event === 'completed' && payload.count > 0) {
+      if (payload?.event === 'completed' && payload.count > 0) {
         queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
         queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       }
@@ -206,7 +206,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/activity'] });
 
       // Handle INSERT notifications
-      if (payload.event === 'INSERT' && payload.lead && payload.type !== 'bulk_import') {
+      if (payload?.event === 'INSERT' && payload.lead && payload.type !== 'bulk_import') {
         toast({
           title: '🎯 New Lead Captured',
           description: `${payload.lead.name} from ${payload.lead.channel}`,
@@ -219,7 +219,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       }
 
       // Handle UPDATE status changes
-      if (payload.event === 'UPDATE' && payload.lead?.status === 'converted') {
+      if (payload?.event === 'UPDATE' && payload.lead?.status === 'converted') {
         toast({
           title: '🎉 Conversion!',
           description: `${payload.lead.name} converted to customer`,
@@ -255,14 +255,14 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
       // Invalidate specific lead conversation if needed
-      if (payload.message?.leadId) {
+      if (payload?.message?.leadId) {
         queryClient.invalidateQueries({ queryKey: ["/api/messages", payload.message.leadId] });
       }
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/activity'] });
 
       // Notification for inbound messages
-      if (payload.message?.direction === 'inbound') {
+      if (payload?.message?.direction === 'inbound') {
         toast({
           title: '💬 New Message',
           description: 'You have a new message from a lead',
@@ -310,7 +310,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/oauth/google-calendar/events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/calendar'] });
 
-      if (payload.event === 'INSERT' && payload.eventData?.is_ai_booked) {
+      if (payload?.event === 'INSERT' && payload.eventData?.is_ai_booked) {
         toast({
           title: '📅 Meeting Booked',
           description: `AI scheduled: ${payload.eventData.title}`,

@@ -31,12 +31,20 @@ initRedis().catch(() => { });
 
 function createRedisStoreConfig(prefix: string): RedisStoreConfig | undefined {
   if (!redisClient) {
+    console.warn(`⚠️ Rate Limiter [${prefix}] falling back to in-memory storage (Redis not connected)`);
     return undefined;
   }
   const client = redisClient;
   const sendCommand: SendCommandFn = (async (...args: string[]) => {
-    return client.sendCommand(args);
+    try {
+      return await client.sendCommand(args);
+    } catch (err) {
+      console.error(`❌ Redis Command Error in Rate Limiter [${prefix}]:`, err);
+      throw err;
+    }
   }) as SendCommandFn;
+
+  console.log(`⚡ Rate Limiter [${prefix}] initialized with Redis storage`);
   return {
     store: new RedisStore({
       sendCommand,

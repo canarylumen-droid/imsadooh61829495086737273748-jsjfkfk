@@ -1,4 +1,5 @@
-
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 const Imap = require('imap');
 
 const config: any = {

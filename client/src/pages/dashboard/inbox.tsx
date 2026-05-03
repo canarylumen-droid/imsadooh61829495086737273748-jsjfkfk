@@ -326,7 +326,7 @@ export default function InboxPage() {
       }
 
       // Invalidate specific lead's messages for consistency
-      if (payload.event === 'DELETE' && payload.messageIds) {
+      if (payload?.event === 'DELETE' && payload.messageIds) {
         queryClient.setQueriesData(
           { queryKey: ["/api/messages", targetLeadId] },
           (oldData: any) => {
