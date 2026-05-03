@@ -184,7 +184,7 @@ Return strictly JSON:
       const intentResult = await generateReply(
         'You are an expert calendar coordination agent. Return only valid JSON.',
         intentPrompt,
-        { model: MODELS.sales_reasoning, jsonMode: true }
+        { model: MODELS.sales_reasoning, jsonMode: true, nga1Enforced: true }
       );
       const extraction = JSON.parse((intentResult.text || '{}').trim());
 
@@ -229,7 +229,7 @@ Return JSON: { "matches": ["ISO_STRING"] }`;
       const matchResult = await generateReply(
         'You are a precision slot matching assistant. Return only valid JSON.',
         matchPrompt,
-        { model: MODELS.sales_reasoning, jsonMode: true }
+        { model: MODELS.sales_reasoning, jsonMode: true, nga1Enforced: true }
       );
       const matches = JSON.parse((matchResult.text || '{}').trim());
       const rawMatches: string[] = (matches.matches || []).slice(0, 3);
@@ -328,7 +328,7 @@ Return JSON:
       const result = await generateReply(
         'You are a booking confirmation specialist. Return only valid JSON.',
         prompt,
-        { model: MODELS.sales_reasoning, jsonMode: true }
+        { model: MODELS.sales_reasoning, jsonMode: true, nga1Enforced: true }
       );
 
       const detection = JSON.parse((result.text || '{}').trim());

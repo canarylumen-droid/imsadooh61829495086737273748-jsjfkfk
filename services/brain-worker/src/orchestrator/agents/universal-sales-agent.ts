@@ -270,6 +270,7 @@ Be specific and actionable.`,
         model: MODELS.sales_reasoning,
         temperature: 0.7,
         maxTokens: 500,
+        nga1Enforced: true,
       }
     );
 
@@ -324,6 +325,7 @@ Make it compelling and specific to their business.`,
         model: MODELS.sales_reasoning,
         temperature: 0.8,
         maxTokens: 400,
+        nga1Enforced: true,
       }
     );
 
@@ -614,7 +616,8 @@ Return ONLY JSON:
         model: MODELS.sales_reasoning,
         temperature: 0.8,
         maxTokens: 500,
-        jsonMode: true
+        jsonMode: true,
+        nga1Enforced: true
       }
     );
 
@@ -739,6 +742,7 @@ Format: Return ONLY the strategy text, under 150 words.`;
         model: MODELS.sales_reasoning,
         temperature: 0.7,
         maxTokens: 400,
+        nga1Enforced: true,
       }
     );
     return response.text || "Focus on building trust through industry-specific value and clear ROI proof.";

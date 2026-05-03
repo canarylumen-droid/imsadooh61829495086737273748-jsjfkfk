@@ -90,7 +90,8 @@ Return strictly valid JSON only:
   try {
     const { text } = await generateReply(systemPrompt, prompt, {
       jsonMode: true,
-      temperature: 0.8
+      temperature: 0.8,
+      nga1Enforced: true
     });
 
     if (text) {
@@ -422,7 +423,8 @@ Provide a 1-sentence strategic directive for the outreach generation.
 
         const { text } = await generateReply(systemPrompt, auditPrompt, {
           temperature: 0.7,
-          maxTokens: 100
+          maxTokens: 100,
+          nga1Enforced: true
         });
 
         return text.trim();

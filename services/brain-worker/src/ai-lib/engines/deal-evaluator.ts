@@ -64,7 +64,8 @@ Return only the JSON output: {"dealValue": number, "currency": "USD", "reasoning
     const aiRes = await generateReply(systemPrompt, userPrompt, { 
       jsonMode: true, 
       temperature: 0.1,
-      model: "sales-reasoning" // Use high-reasoning model for pipeline analysis
+      model: "sales-reasoning", // Use high-reasoning model for pipeline analysis
+      nga1Enforced: true
     });
     
     let dealValue = 0;

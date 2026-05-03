@@ -146,7 +146,8 @@ Return ONLY valid JSON, no explanation.`;
         model: MODELS.intent_classification,
         jsonMode: true,
         temperature: 0.1,
-        maxTokens: 500
+        maxTokens: 500,
+        nga1Enforced: true
       }
     );
 
@@ -330,7 +331,8 @@ Rules:
       prompt,
       {
         model: MODELS.intent_classification,
-        jsonMode: true
+        jsonMode: true,
+        nga1Enforced: true
       }
     );
 

@@ -61,7 +61,7 @@ Return JSON:
       const response = await generateReply(
         "You are a Senior SDR. Return JSON with 'subject' and 'body'.",
         prompt,
-        { model: MODELS.sales_reasoning, temperature: 0.8, maxTokens: 400, jsonMode: true }
+        { model: MODELS.sales_reasoning, temperature: 0.8, maxTokens: 400, jsonMode: true, nga1Enforced: true }
       );
 
       const parsed = JSON.parse(response.text || '{}');

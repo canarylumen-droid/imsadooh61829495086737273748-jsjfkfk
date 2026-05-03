@@ -1248,7 +1248,7 @@ export class OutreachEngine {
                 const adjusted = await generateReply(
                    `STRICT GUARDRAIL: Only rewrite the planned message if the lead's reply contradicts or requires a direct acknowledgment (e.g., negative response, specific question, different intent). If the lead's reply is just a simple acknowledgment or doesn't necessitate changing the core message, return the original message exactly as is. DO NOT hallucinate a completely new follow-up or skip to a different topic. ONLY adjust the provided message: "${body}" to incorporate context from the lead's reply: "${recentInbound[0].body}". Keep it concise, professional, and matching the original tone.`,
                    "Rewrite the follow-up.",
-                   { temperature: 0.7 }
+                   { temperature: 0.7, nga1Enforced: true }
                 );
                 if (adjusted && adjusted.text) {
                    body = adjusted.text;

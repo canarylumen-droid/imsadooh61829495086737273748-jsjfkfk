@@ -128,7 +128,8 @@ export function generateBrandedEmail(
   button: DMButton,
   brandColors: BrandColors = {},
   businessName: string = 'Our Team',
-  unsubscribeUrl?: string
+  unsubscribeUrl?: string,
+  physicalAddress?: string
 ): string {
   const primaryColor = brandColors.primary || '#6366f1';
   const accentColor = brandColors.accent || '#8b5cf6';
@@ -141,6 +142,7 @@ export function generateBrandedEmail(
   const sanitizedBusinessName = escapeHtml(businessName);
   const sanitizedButtonText = escapeHtml(button.text);
   const sanitizedButtonUrl = escapeHtml(button.url);
+  const sanitizedAddress = physicalAddress ? escapeHtml(physicalAddress) : null;
 
   return `
 <!DOCTYPE html>
@@ -172,9 +174,10 @@ export function generateBrandedEmail(
     </div>
     <div class="footer">
       <p>Sent with care by ${sanitizedBusinessName}</p>
-      ${unsubscribeUrl ? `<p style="margin-top: 15px; font-size: 11px;">
-        Don't want to hear from us? <a href="${unsubscribeUrl}" style="color: ${primaryColor};">Unsubscribe here</a>
-      </p>` : ''}
+      ${sanitizedAddress ? `<p style="margin-top: 5px; font-size: 11px;">${sanitizedAddress}</p>` : ''}
+      <p style="margin-top: 15px; font-size: 11px;">
+        ${unsubscribeUrl ? `Don't want to hear from us? <a href="${unsubscribeUrl}" style="color: ${primaryColor};">Unsubscribe here</a>` : 'This is a transactional message.'}
+      </p>
     </div>
   </div>
 </body>
@@ -188,14 +191,16 @@ export function generateMeetingEmail(
   message: string,
   calendarLink: string,
   brandColors: BrandColors = {},
-  businessName: string = 'Our Team'
+  businessName: string = 'Our Team',
+  unsubscribeUrl?: string,
+  physicalAddress?: string
 ): string {
-  const primaryColor = brandColors.primary || '#6366f1';
-
   return generateBrandedEmail(
     message,
     { text: '📅 Schedule Your Meeting', url: calendarLink },
     brandColors,
-    businessName
+    businessName,
+    unsubscribeUrl,
+    physicalAddress
   );
 }

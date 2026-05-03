@@ -217,6 +217,10 @@ async function selectBestModelForBudget(userId: string, requestedModel: string):
   return requestedModel;
 }
 
+import { wrapWithNGA1 } from "./nga1-checklist.js";
+
+import { SafetyGuard } from "./safety-guard.js";
+
 /**
  * Generate AI reply using chat completion
  * prioritized by PREFERRED_PROVIDER with robust fallback
@@ -231,145 +235,163 @@ export async function generateReply(
     model?: string;
     userId?: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
+    nga1Enforced?: boolean;
   }
 ): Promise<{ text: string; tokensUsed: number }> {
+  // Apply NGA1 Checklist if enforced
+  const finalSystemPrompt = options?.nga1Enforced ? wrapWithNGA1(systemPrompt) : systemPrompt;
 
   const model = options?.userId ? await selectBestModelForBudget(options.userId, options?.model || AI_MODEL) : (options?.model || AI_MODEL);
 
-  const tryOpenAI = async () => {
-    if (!isProviderAvailable('openai')) return null;
-    try {
-      // Phase 25: Prevent model leakage. If requested model is Z-AI specific, use OpenAI default.
-      const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
-      const modelName = (requestedModel.startsWith('glm-') || requestedModel.startsWith('gemini-')) 
-        ? OPENAI_INTELLIGENCE_MODEL 
-        : requestedModel;
+  const getFinalResult = async () => {
+    const tryOpenAI = async () => {
+      if (!isProviderAvailable('openai')) return null;
+      try {
+        const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
+        const modelName = (requestedModel.startsWith('glm-') || requestedModel.startsWith('gemini-')) 
+          ? OPENAI_INTELLIGENCE_MODEL 
+          : requestedModel;
 
-      const response = await openai!.chat.completions.create({
-        model: modelName,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...(options?.history || []),
-          { role: "user", content: userPrompt },
-        ],
-        response_format: options?.jsonMode ? { type: "json_object" } : undefined,
-        max_completion_tokens: options?.maxTokens || 1000,
-        temperature: options?.temperature || 0.7
-      });
+        const response = await openai!.chat.completions.create({
+          model: modelName,
+          messages: [
+            { role: "system", content: finalSystemPrompt },
+            ...(options?.history || []),
+            { role: "user", content: userPrompt },
+          ],
+          response_format: options?.jsonMode ? { type: "json_object" } : undefined,
+          max_completion_tokens: options?.maxTokens || 1000,
+          temperature: options?.temperature || 0.7
+        });
 
-      updateProviderHealth('openai', true);
-      return {
-        text: response.choices[0].message.content || "",
-        tokensUsed: response.usage?.total_tokens || 0
-      };
-    } catch (error: any) {
-      console.error("[AI Service] OpenAI error:", error.message);
-      updateProviderHealth('openai', false, error);
-      return null;
+        updateProviderHealth('openai', true);
+        return {
+          text: response.choices[0].message.content || "",
+          tokensUsed: response.usage?.total_tokens || 0
+        };
+      } catch (error: any) {
+        console.error("[AI Service] OpenAI error:", error.message);
+        updateProviderHealth('openai', false, error);
+        return null;
+      }
+    };
+
+    const tryGenAI = async () => {
+      if (!isProviderAvailable('genai')) return null;
+      try {
+        const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
+        const modelName = requestedModel.includes("gemini") ? requestedModel : GENAI_STABLE_MODEL;
+        
+        const result = await genai!.models.generateContent({
+          model: modelName,
+          contents: options?.history 
+            ? options.history.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n") + "\n\nUSER: " + userPrompt
+            : userPrompt,
+          config: {
+            temperature: options?.temperature || 0.7,
+            maxOutputTokens: options?.maxTokens || 1000,
+            responseMimeType: options?.jsonMode ? "application/json" : "text/plain",
+            systemInstruction: finalSystemPrompt
+          }
+        });
+
+        updateProviderHealth('genai', true);
+        return {
+          text: result.text || "",
+          tokensUsed: result.usageMetadata?.totalTokenCount || 0
+        };
+      } catch (error: any) {
+        console.error("[AI Service] GenAI error:", error.message);
+        updateProviderHealth('genai', false, error);
+        return null;
+      }
+    };
+
+    const tryZAI = async () => {
+      if (!isProviderAvailable('zai')) return null;
+      try {
+        const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
+        const modelName = (requestedModel.startsWith('gpt-') || requestedModel.startsWith('gemini-'))
+          ? (MODELS.sales_reasoning || "glm-4")
+          : requestedModel;
+
+        const response = await zai!.chat.completions.create({
+          model: modelName,
+          messages: [
+            { role: "system", content: finalSystemPrompt },
+            ...(options?.history || []),
+            { role: "user", content: userPrompt },
+          ],
+          response_format: options?.jsonMode ? { type: "json_object" } : undefined,
+          max_completion_tokens: options?.maxTokens || 1000,
+          temperature: options?.temperature || 0.7
+        });
+
+        updateProviderHealth('zai', true);
+        return {
+          text: response.choices[0].message.content || "",
+          tokensUsed: response.usage?.total_tokens || 0
+        };
+      } catch (error: any) {
+        console.error("[AI Service] Z-AI error:", error.message);
+        updateProviderHealth('zai', false, error);
+        return null;
+      }
+    };
+
+    if (PREFERRED_PROVIDER === "zai") {
+      const res = await tryZAI();
+      if (res) return res;
+      const openaiRes = await tryOpenAI();
+      if (openaiRes) return openaiRes;
+      const genaiRes = await tryGenAI();
+      if (genaiRes) return genaiRes;
+    } else if (PREFERRED_PROVIDER === "openai") {
+      const res = await tryOpenAI();
+      if (res) return res;
+      const zaiRes = await tryZAI();
+      if (zaiRes) return zaiRes;
+      const genaiRes = await tryGenAI();
+      if (genaiRes) return genaiRes;
+    } else {
+      const res = await tryGenAI();
+      if (res) return res;
+      const zaiRes = await tryZAI();
+      if (zaiRes) return zaiRes;
+      const openaiRes = await tryOpenAI();
+      if (openaiRes) return openaiRes;
     }
+
+    const isJson = options?.jsonMode;
+    return {
+      text: isJson ? JSON.stringify({
+        subject: "Checking in",
+        body: "Thanks for reaching out. I'd love to discuss how we can help you achieve your goals.",
+        intent: "neutral",
+        confidence: 0.5,
+        metadata: { fallback: true }
+      }) : "Thanks for reaching out! I'd love to help you learn more about our platform.",
+      tokensUsed: 0
+    };
   };
 
-  const tryGenAI = async () => {
-    if (!isProviderAvailable('genai')) return null;
+  const result = await getFinalResult();
+
+  // Phase 50: Safety Guard Enforcement
+  if (options?.nga1Enforced && result.text) {
     try {
-      // Phase 25: Prevent model leakage. If requested model is not Gemini, use GenAI default.
-      const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
-      const modelName = requestedModel.includes("gemini") ? requestedModel : GENAI_STABLE_MODEL;
-      
-      const result = await genai!.models.generateContent({
-        model: modelName,
-        contents: options?.history 
-          ? options.history.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n") + "\n\nUSER: " + userPrompt
-          : userPrompt,
-        config: {
-          temperature: options?.temperature || 0.7,
-          maxOutputTokens: options?.maxTokens || 1000,
-          responseMimeType: options?.jsonMode ? "application/json" : "text/plain",
-          systemInstruction: systemPrompt
-        }
+      result.text = await SafetyGuard.sanitizeResponse(result.text, {
+        channel: 'email', // Default for now
+        isEmail: true
       });
-
-      updateProviderHealth('genai', true);
-      return {
-        text: result.text || "",
-        tokensUsed: result.usageMetadata?.totalTokenCount || 0
-      };
-    } catch (error: any) {
-      console.error("[AI Service] GenAI error:", error.message);
-      updateProviderHealth('genai', false, error);
-      return null;
+    } catch (err: any) {
+      console.error("[AI Service] Safety Guard Blocked Response:", err.message);
+      // NGA-1 says "Block send if any field unresolved."
+      throw err; 
     }
-  };
-
-  const tryZAI = async () => {
-    if (!isProviderAvailable('zai')) return null;
-    try {
-      // Phase 25: Prevent model leakage. If requested model is not GLM, use Z-AI default.
-      const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
-      const modelName = (requestedModel.startsWith('gpt-') || requestedModel.startsWith('gemini-'))
-        ? (MODELS.sales_reasoning || "glm-4")
-        : requestedModel;
-
-      const response = await zai!.chat.completions.create({
-        model: modelName,
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...(options?.history || []),
-          { role: "user", content: userPrompt },
-        ],
-        response_format: options?.jsonMode ? { type: "json_object" } : undefined,
-        max_completion_tokens: options?.maxTokens || 1000,
-        temperature: options?.temperature || 0.7
-      });
-
-      updateProviderHealth('zai', true);
-      return {
-        text: response.choices[0].message.content || "",
-        tokensUsed: response.usage?.total_tokens || 0
-      };
-    } catch (error: any) {
-      console.error("[AI Service] Z-AI error:", error.message);
-      updateProviderHealth('zai', false, error);
-      return null;
-    }
-  };
-
-  // Execution flow with circuit breaking availability
-  if (PREFERRED_PROVIDER === "zai") {
-    const res = await tryZAI();
-    if (res) return res;
-    const openaiRes = await tryOpenAI();
-    if (openaiRes) return openaiRes;
-    const genaiRes = await tryGenAI();
-    if (genaiRes) return genaiRes;
-  } else if (PREFERRED_PROVIDER === "openai") {
-    const res = await tryOpenAI();
-    if (res) return res;
-    const zaiRes = await tryZAI();
-    if (zaiRes) return zaiRes;
-    const genaiRes = await tryGenAI();
-    if (genaiRes) return genaiRes;
-  } else { // PREFERRED_PROVIDER === "genai" or "demo"
-    const res = await tryGenAI();
-    if (res) return res;
-    const zaiRes = await tryZAI();
-    if (zaiRes) return zaiRes;
-    const openaiRes = await tryOpenAI();
-    if (openaiRes) return openaiRes;
   }
 
-  // Resilient Fallback: If all providers fail, return a safe, non-mock neutral response
-  const isJson = options?.jsonMode;
-  return {
-    text: isJson ? JSON.stringify({
-      subject: "Checking in",
-      body: "Thanks for reaching out. I'd love to discuss how we can help you achieve your goals.",
-      intent: "neutral",
-      confidence: 0.5,
-      metadata: { fallback: true }
-    }) : "Thanks for reaching out! I'd love to help you learn more about our platform.",
-    tokensUsed: 0
-  };
+  return result;
 }
 
 /**

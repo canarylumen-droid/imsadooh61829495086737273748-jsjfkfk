@@ -529,6 +529,7 @@ export interface EmailOptions {
   trackingId?: string;
   brandColors?: BrandColors;
   businessName?: string;
+  physicalAddress?: string;
   buttonUrl?: string;
   buttonText?: string;
   isMeetingInvite?: boolean;
@@ -624,6 +625,7 @@ export async function sendEmail(
   const brandColors = options.brandColors || await getUserBrandColors(userId);
   const user = await storage.getUser(userId);
   const businessName = options.businessName || user?.businessName || user?.company || 'Our Team';
+  const physicalAddress = options.physicalAddress || (user?.metadata as any)?.physicalAddress || (user?.metadata as any)?.businessAddress;
 
   // --- PART 1: Custom SMTP ---
   if (integration.provider === 'custom_email') {
@@ -639,10 +641,10 @@ export async function sendEmail(
     if (!options.isRaw) {
       if (options.buttonUrl && options.buttonText) {
         emailBody = options.isMeetingInvite
-          ? generateMeetingEmail(content, options.buttonUrl, brandColors, businessName)
-          : generateBrandedEmail(content, { text: options.buttonText, url: options.buttonUrl }, brandColors, businessName, unsubscribeUrl);
+          ? generateMeetingEmail(content, options.buttonUrl, brandColors, businessName, unsubscribeUrl, physicalAddress)
+          : generateBrandedEmail(content, { text: options.buttonText, url: options.buttonUrl }, brandColors, businessName, unsubscribeUrl, physicalAddress);
       } else {
-        emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl);
+        emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl, physicalAddress);
       }
     }
 
@@ -701,7 +703,9 @@ export async function sendEmail(
           content,
           options.buttonUrl,
           brandColors,
-          businessName
+          businessName,
+          unsubscribeUrl,
+          physicalAddress
         );
       } else {
         emailBody = generateBrandedEmail(
@@ -709,12 +713,13 @@ export async function sendEmail(
           { text: options.buttonText, url: options.buttonUrl },
           brandColors,
           businessName,
-          unsubscribeUrl
+          unsubscribeUrl,
+          physicalAddress
         );
       }
       options.isHtml = true;
     } else {
-      emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl);
+      emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl, physicalAddress);
       options.isHtml = true;
     }
   } else {

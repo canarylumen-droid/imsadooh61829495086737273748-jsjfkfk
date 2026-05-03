@@ -80,7 +80,7 @@ Propose a "Pattern Interrupter" strategy specifically for ${industry}.
 What should we change? (e.g., Change hook from "Price" to "Peace of Mind").
 Keep it under 30 words.`;
 
-      const pivot = await generateReply("You are a Senior Strategic Analyst.", prompt, { model: MODELS.sales_reasoning });
+      const pivot = await generateReply("You are a Senior Strategic Analyst.", prompt, { model: MODELS.sales_reasoning, nga1Enforced: true });
       
       // Update ALL leads in this segment with a "Strategic Alert" note
       await db.update(leads)
@@ -124,7 +124,7 @@ Return ONLY the strategy text.`;
       const response = await generateReply(
         "You are a Senior SDR Strategist.",
         prompt,
-        { model: MODELS.sales_reasoning, temperature: 0.7, maxTokens: 150 }
+        { model: MODELS.sales_reasoning, temperature: 0.7, maxTokens: 150, nga1Enforced: true }
       );
 
       const strategy = response.text || 'Continue outreach focusing on ROI.';

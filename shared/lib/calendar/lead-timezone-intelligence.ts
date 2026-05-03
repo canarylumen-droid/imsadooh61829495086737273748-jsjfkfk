@@ -279,7 +279,7 @@ Rules:
 4. Confidence: 0.9 if certain, 0.4 if guess.
 
 Return JSON: { "timezone": "string", "niche": "string", "confidence": number }`,
-        { jsonMode: true }
+        { jsonMode: true, nga1Enforced: true }
       );
 
       const aiResult = JSON.parse(aiResponse.text || '{}');

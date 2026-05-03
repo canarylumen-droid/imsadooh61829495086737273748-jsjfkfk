@@ -73,7 +73,12 @@ export async function evaluateNextBestAction(leadId: string, summary: string): P
     ragSuggestion = `\n\n💡 TIP: You have not uploaded a Brand PDF yet. Upload one in Settings → Brand PDF to dramatically improve AI email quality and attach real case studies.`;
   }
 
-  const systemPrompt = `
+    // Fetch Deal Value for $5k Rule
+    const { deals } = await import('@audnix/shared');
+    const [deal] = await db.select().from(deals).where(eq(deals.leadId, lead.id)).limit(1);
+    const dealValue = deal?.value ? Number(deal.value) : (user?.metadata as any)?.offerValue || 0;
+
+    const systemPrompt = `
 You are an "Expert SDR Manager" AI at Audnix. You are NOT a dull assistant; you are a high-performing closer.
 Your goal: Determine the single Next Best Action (NBA) from a call summary and draft a "Level 5" autonomous email that moves the needle.
 
@@ -81,8 +86,14 @@ Your goal: Determine the single Next Best Action (NBA) from a call summary and d
 - Expert/Sender: ${user?.name || 'the team'}
 - Booking Link: ${bookingLink || 'Ask for availability'}
 - Real-Time Availability (SUGGEST THESE): ${formattedSlots}
+- Deal Value: $${dealValue}
 ${ragContext}
 ${strategicContext}
+
+### NGA-1 COMPLIANCE (STRICT)
+- **$5k Threshold Rule**: If the Deal Value is $5,000 or greater, YOU MUST NOT send a payment link. You MUST propose a human handoff / strategy call (action: "book_meeting").
+- **Zero Hallucination**: ONLY use facts from the sections provided.
+- **No Fake Facts**: Do NOT invent features or pricing.
 
 ### Objection Handling & Battle Cards (STRICT ANTI-HALLUCINATION)
 ${objectionContext}
@@ -104,9 +115,9 @@ If the lead has a specific objection/need, map it to one of these categories to 
 Return this category in \`attachedAssetCategory\` if applicable.
 
 ### Available Actions
-- send_payment_link: Ready for checkout.
+- send_payment_link: Ready for checkout (ONLY if deal < $5k).
 - send_invoice: Asked for formal billing.
-- book_meeting: Agreed to follow-up/demo. Propose specific times + Link.
+- book_meeting: Agreed to follow-up/demo or deal > $5k. Propose specific times + Link.
 - schedule_followup: "Cool down" required. 
 - request_info: Asked for pitch deck/case studies.
 - pause_nurture: Said "No" or requested DNC.
@@ -137,8 +148,16 @@ Return this category in \`attachedAssetCategory\` if applicable.
   };
 
   try {
-    const result = await generateReply(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1 });
+    const result = await generateReply(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1, nga1Enforced: true });
     const parsed = extractJson<any>(result.text);
+
+    // Hard Enforcement of $5k rule post-AI just in case
+    if (parsed.action === 'send_payment_link' && dealValue >= 5000) {
+        console.warn(`[NGA-1] AI proposed payment link for $${dealValue} deal. Overriding to book_meeting.`);
+        parsed.action = 'book_meeting';
+        parsed.reasoning += " (NGA-1 Override: High-ticket human handoff required)";
+    }
+
 
     // Real RAG: If AI identifies an objection category, find the best matching
     // chunk from the user's PDF via semantic search instead of a fake URL dict.

@@ -53,7 +53,8 @@ Return ONLY a JSON object:
         prompt,
         {
           temperature: 0.2,
-          model: MODELS.sales_reasoning // Fallback to sales_reasoning if intelligence is missing
+          model: MODELS.sales_reasoning, // Fallback to sales_reasoning if intelligence is missing
+          nga1Enforced: true
         }
       );
 

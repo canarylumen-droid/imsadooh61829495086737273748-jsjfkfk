@@ -602,7 +602,8 @@ ${enrichedContext}`;
       model: user?.metadata?.aiModel as string || 'gpt-4o',
       temperature: 0.7,
       maxTokens: 500,
-      history: messageContext
+      history: messageContext,
+      nga1Enforced: true
     });
 
     return {
@@ -770,7 +771,8 @@ ${enrichedContext}`;
         model: MODELS.sales_reasoning,
         temperature: retryCount === 0 ? 0.8 : 0.95, // Increase temperature on retry
         maxTokens: platform === 'email' ? 300 : 150,
-        history: messageContext
+        history: messageContext,
+        nga1Enforced: true
       });
 
       similarity = calculateSimilarity(finalAiResponse.text, lastOutboundBody);
@@ -822,7 +824,8 @@ ONLY use the following links if necessary: ${allowedLinks.join(', ')}.`;
         model: MODELS.sales_reasoning,
         temperature: 0.5, // Lower temperature for more focused compliance
         maxTokens: platform === 'email' ? 300 : 150,
-        history: messageContext
+        history: messageContext,
+        nga1Enforced: true
       });
 
       // Second-pass verification
@@ -1000,6 +1003,7 @@ Script:`;
         model: MODELS.sales_reasoning,
         temperature: 0.8,
         maxTokens: 120,
+        nga1Enforced: true,
       }
     );
 
@@ -1209,7 +1213,8 @@ export async function generateExpertOutreach(
 
     const aiResponse = await generateReply(systemPrompt, `Craft the opening disruption for ${lead.name} (${leadRole}) at ${lead.company || "their company"}. Use the brand offer to bridge their ${industry} gap and set up the bridge to a booked call.`, {
       model: MODELS.sales_reasoning,
-      jsonMode: true
+      jsonMode: true,
+      nga1Enforced: true
     });
 
     const rawText = aiResponse.text || '{}';
@@ -1341,7 +1346,8 @@ export async function generateCampaignTemplateSequence(
 
     const aiResponse = await generateReply(systemPrompt, "Draft the 4-part master sequence now.", {
       model: MODELS.sales_reasoning,
-      jsonMode: true
+      jsonMode: true,
+      nga1Enforced: true
     });
 
     const result = JSON.parse(aiResponse.text || '{}');

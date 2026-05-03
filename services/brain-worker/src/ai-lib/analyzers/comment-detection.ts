@@ -57,7 +57,8 @@ Return JSON only: { "wantsDM": boolean, "intent": string, "confidence": number }
         model: MODELS.intent_classification,
         jsonMode: true,
         maxTokens: 150,
-        temperature: 0.3
+        temperature: 0.3,
+        nga1Enforced: true
       }
     );
 
@@ -127,7 +128,8 @@ Generate the DM:`;
       {
         model: MODELS.intent_classification,
         maxTokens: 150,
-        temperature: 0.8
+        temperature: 0.8,
+        nga1Enforced: true
       }
     );
 
@@ -202,7 +204,8 @@ Generate the follow-up:`;
       {
         model: MODELS.intent_classification,
         maxTokens: 180,
-        temperature: 0.8
+        temperature: 0.8,
+        nga1Enforced: true
       }
     );
 

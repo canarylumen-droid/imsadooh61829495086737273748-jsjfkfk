@@ -78,7 +78,7 @@ export async function runDemoOutreach(userId: string) {
       Address the pain point: Overwhelmed with calls, missing revenue because calls go to voicemail.
       Return JSON: { "subject": "...", "body": "..." }`;
 
-      const aiRes = await generateReply(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.8 });
+      const aiRes = await generateReply(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.8, nga1Enforced: true });
       const emailContent = JSON.parse(aiRes.text);
 
       // Send the email

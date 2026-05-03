@@ -89,7 +89,7 @@ export async function detectCompetitorMention(message: string): Promise<Competit
     const aiDetection = await generateReply(
       `Analyze this message. Is the user mentioning a specific software competitor or automation tool? Return a JSON object: { "mentioned": boolean, "competitorName": string | null, "sentiment": number }`,
       message,
-      { model: "gpt-4-mini", jsonMode: true }
+      { model: "gpt-4-mini", jsonMode: true, nga1Enforced: true }
     ).catch(() => null);
     
     try {
@@ -147,7 +147,7 @@ Focus on 1 specific advantage of Audnix over ${competitorName} (e.g. better AI, 
 Tone: Respectful but confident. 
 Do NOT mention you are an AI.`;
 
-  const reply = await generateReply("You are an expert sales representative.", prompt, { model: "gpt-4" });
+  const reply = await generateReply("You are an expert sales representative.", prompt, { model: "gpt-4", nga1Enforced: true });
   return reply?.text || `Interesting! We actually handle things a bit differently than ${competitorName} by focusing on deep AI personalization and multi-channel outreach. Would you like to see how we compare?`;
 }
 
