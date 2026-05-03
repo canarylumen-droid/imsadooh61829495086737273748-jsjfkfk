@@ -9,6 +9,15 @@ import process from 'process';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { getPlanCapabilities, getActivePlanId } from '../../../shared/plan-utils.js';
 import { episodicMemory } from '../memory/episodic-memory-service.js';
+// Time Saved Benchmarks (in seconds)
+export const TIME_SAVED_BENCHMARKS = {
+  OUTBOUND_MESSAGE: 120,    // 2m
+  AI_REPLY_HANDLING: 600,   // 10m
+  LEAD_RESEARCH: 300,       // 5m
+  MEETING_BOOKED: 1800,     // 30m
+  FATHOM_ANALYSIS: 1800,    // 30m
+  DEAL_WON: 3600            // 60m
+};
 
 // Function to check if the database connection is available
 function checkDatabase() {
@@ -2359,21 +2368,13 @@ export class DrizzleStorage implements IStorage {
       db.select({ count: sql<number>`count(*)` }).from(fathomCalls).where(and(eq(fathomCalls.userId, userId), gte(fathomCalls.occurredAt, options?.start || sevenDaysAgo)))
     ]);
 
-    // Industry Benchmarks (in seconds)
-    // 1. Sending an outbound email (copy, personalization, scheduling): 120s
-    // 2. Handling a reply/objection (AI context analysis + response): 600s
-    // 3. Lead Enrichment & Research: 300s
-    // 4. Meeting Coordination (Back and forth saved): 1800s
-    // 5. Fathom Call Analysis & Summary: 1800s
-    // 6. Deal Closing Admin: 3600s
-
     const timeSaved = 
-      (Number(combinedStats.totalSent || 0) * 120) + 
-      (Number(combinedStats.aiReplies || 0) * 600) + 
-      (Number(combinedStats.totalLeads || 0) * 300) + 
-      (Number(bookingStats[0].count || 0) * 1800) + 
-      (Number(fathomStats[0].count || 0) * 1800) + 
-      (Number(combinedStats.wonCount || 0) * 3600);
+      (Number(combinedStats.totalSent || 0) * TIME_SAVED_BENCHMARKS.OUTBOUND_MESSAGE) + 
+      (Number(combinedStats.aiReplies || 0) * TIME_SAVED_BENCHMARKS.AI_REPLY_HANDLING) + 
+      (Number(combinedStats.outreachedLeads || 0) * TIME_SAVED_BENCHMARKS.LEAD_RESEARCH) + 
+      (Number(bookingStats[0].count || 0) * TIME_SAVED_BENCHMARKS.MEETING_BOOKED) + 
+      (Number(fathomStats[0].count || 0) * TIME_SAVED_BENCHMARKS.FATHOM_ANALYSIS) + 
+      (Number(combinedStats.wonCount || 0) * TIME_SAVED_BENCHMARKS.DEAL_WON);
 
     // Calculate predicted deal value from leads without explicit deals
     const [predictedStats] = await db.select({
