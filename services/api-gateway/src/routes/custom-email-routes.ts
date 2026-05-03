@@ -592,10 +592,39 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
       return;
     }
 
+    // ── Pre-flight: check if the target mailbox is in a cooldown pause ──────
+    // This avoids a 15s hang on Railway (which times out at 15s) while SMTP
+    // tries to connect to an infrastructure-paused mailbox.
+    try {
+      let integration: any = null;
+      if (integrationId) {
+        integration = await storage.getIntegrationById(integrationId);
+      } else {
+        const integrations = await storage.getIntegrations(userId);
+        integration = integrations.find((i: any) =>
+          ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected
+        );
+      }
+
+      if (integration?.mailboxPauseUntil && new Date(integration.mailboxPauseUntil) > new Date()) {
+        const resumeAt = new Date(integration.mailboxPauseUntil).toLocaleTimeString();
+        res.status(503).json({
+          error: 'Mailbox temporarily paused',
+          details: `This mailbox is in a cooldown period until ${resumeAt} due to a previous network issue (TIMEOUT/ENETUNREACH). It will automatically resume.`,
+          tip: 'Wait for the cooldown to expire, or disconnect and reconnect the mailbox to force a reset.',
+          pauseUntil: integration.mailboxPauseUntil
+        });
+        return;
+      }
+    } catch (preflightErr: any) {
+      // Non-fatal — continue and let sendEmail() handle it
+      console.warn('[Email Send Test] Pre-flight check failed (continuing):', preflightErr?.message);
+    }
+
     const { sendEmail } = await import('@shared/lib/channels/email.js');
 
-    // Increase timeout for custom SMTP handshakes (e.g. Privatemail, Hostinger)
-    // to prevent premature 503 Gateway Timeout from frontend
+    // Manual timeout wrapper — set to 14s (1s under Railway's 15s gateway limit)
+    // to ensure we always respond before the load balancer cuts the connection.
     const sendPromise = sendEmail(
       userId,
       recipientEmail,
@@ -604,10 +633,9 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
       { isHtml: false, isRaw: true, integrationId: integrationId || undefined }
     );
 
-    // Manual timeout wrapper to ensure we don't hang the worker
     const result = await Promise.race([
       sendPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP Handshake Timeout (60s)')), 60000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('[TIMEOUT] POST /send-test timed out after 14s')), 14000))
     ]);
 
     if (res.headersSent) return;
@@ -618,7 +646,7 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
     });
   } catch (error: any) {
     if (res.headersSent) return;
-    
+
     const errorMsg = error?.message || 'Send failed';
     console.error('[Email Send Test] Failed:', error);
     res.status(500).json({

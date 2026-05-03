@@ -236,6 +236,9 @@ export async function generateReply(
     userId?: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     nga1Enforced?: boolean;
+    /** Set to true ONLY when generating a live outbound email body (enables NGA-1 unsubscribe check) */
+    isEmailBody?: boolean;
+    channel?: string;
   }
 ): Promise<{ text: string; tokensUsed: number }> {
   // Apply NGA1 Checklist if enforced
@@ -378,16 +381,18 @@ export async function generateReply(
   const result = await getFinalResult();
 
   // Phase 50: Safety Guard Enforcement
+  // IMPORTANT: isEmail must only be true when generating a LIVE outbound email body —
+  // NOT for JSON template generation, conversation-ai classification, or intent detection.
+  // Caller must explicitly pass `isEmailBody: true` in options to trigger the unsubscribe check.
   if (options?.nga1Enforced && result.text) {
     try {
       result.text = await SafetyGuard.sanitizeResponse(result.text, {
-        channel: 'email', // Default for now
-        isEmail: true
+        channel: (options as any)?.channel || 'email',
+        isEmail: (options as any)?.isEmailBody === true // Only for live sent emails
       });
     } catch (err: any) {
       console.error("[AI Service] Safety Guard Blocked Response:", err.message);
-      // NGA-1 says "Block send if any field unresolved."
-      throw err; 
+      throw err;
     }
   }
 

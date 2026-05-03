@@ -769,10 +769,12 @@ ${enrichedContext}`;
 
       finalAiResponse = await generateReply(currentSystemPrompt, lastMessage.body, {
         model: MODELS.sales_reasoning,
-        temperature: retryCount === 0 ? 0.8 : 0.95, // Increase temperature on retry
+        temperature: retryCount === 0 ? 0.8 : 0.95,
         maxTokens: platform === 'email' ? 300 : 150,
         history: messageContext,
-        nga1Enforced: true
+        nga1Enforced: true,
+        isEmailBody: platform === 'email', // Enable unsubscribe check for email outreach only
+        channel: platform
       });
 
       similarity = calculateSimilarity(finalAiResponse.text, lastOutboundBody);
@@ -822,10 +824,12 @@ ONLY use the following links if necessary: ${allowedLinks.join(', ')}.`;
 
       aiResponse = await generateReply(strictSystemPrompt, lastMessage.body, {
         model: MODELS.sales_reasoning,
-        temperature: 0.5, // Lower temperature for more focused compliance
+        temperature: 0.5,
         maxTokens: platform === 'email' ? 300 : 150,
         history: messageContext,
-        nga1Enforced: true
+        nga1Enforced: true,
+        isEmailBody: platform === 'email',
+        channel: platform
       });
 
       // Second-pass verification

@@ -176,34 +176,33 @@ async function sendCustomSMTP(
   const emailBody = body;
 
   const cacheKey = integrationId || `${config.smtp_host}:${config.smtp_user}`;
-  let transporter = smtpPools.get(cacheKey);
 
-  if (!transporter) {
+  const createTransporterPool = () => nodemailer.createTransport({
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100,
+    host: config.smtp_host,
+    port: config.smtp_port || 587,
+    secure: config.smtp_port === 465,
+    auth: {
+      user: config.smtp_user,
+      pass: config.smtp_pass,
+    },
+    // Forced IPv4 at the library level for extra safety
+    family: 4,
+    lookup: (hostname: string, options: any, callback: any) => {
+      return dns.lookup(hostname, { family: 4 }, callback);
+    },
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 60000,
+  } as any);
+
+  // Initialize pool if not cached; re-acquired per-attempt to pick up ENETUNREACH evictions
+  if (!smtpPools.has(cacheKey)) {
     console.log(`[CustomSMTP] Creating new persistent connection pool for ${cacheKey}`);
-    transporter = nodemailer.createTransport({
-      pool: true,
-      maxConnections: 5,
-      maxMessages: 100,
-      host: config.smtp_host,
-      port: config.smtp_port || 587,
-      secure: config.smtp_port === 465,
-      auth: {
-        user: config.smtp_user,
-        pass: config.smtp_pass,
-      },
-      // Forced IPv4 at the library level for extra safety
-      family: 4,
-      lookup: (hostname: string, options: any, callback: any) => {
-        return dns.lookup(hostname, { family: 4 }, callback);
-      },
-      tls: {
-        rejectUnauthorized: false
-      },
-      connectionTimeout: 30000,
-      greetingTimeout: 30000,
-      socketTimeout: 60000,
-    } as any);
-    smtpPools.set(cacheKey, transporter);
+    smtpPools.set(cacheKey, createTransporterPool());
   }
 
   const messageId = `<${import.meta.url ? (await import('crypto')).randomUUID() : Date.now() + Math.random()}@audnixai.com>`;
@@ -222,6 +221,14 @@ async function sendCustomSMTP(
         const delay = Math.pow(2, attempt) * 1000;
         console.log(`[CustomSMTP] Retry attempt ${attempt} for`, to, `after ${delay}ms...`);
         await new Promise(res => setTimeout(res, delay));
+      }
+
+      // Re-acquire each iteration — pool may have been evicted by ENETUNREACH handler
+      let transporter = smtpPools.get(cacheKey);
+      if (!transporter) {
+        console.log(`[CustomSMTP] Re-creating connection pool for ${cacheKey} (attempt ${attempt + 1})`);
+        transporter = createTransporterPool();
+        smtpPools.set(cacheKey, transporter);
       }
 
       const info = await transporter.sendMail({
@@ -262,7 +269,17 @@ async function sendCustomSMTP(
       return { messageId: info.messageId }; // Exit function successfully
     } catch (error: any) {
       lastError = error;
-      const isTransient = error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT' || error.responseCode >= 400 && error.responseCode < 500;
+      // ENETUNREACH: IPv6 route missing on Railway/cloud infra — treat as transient.
+      // Evict the pool so the next retry builds a fresh IPv4-only connection.
+      const isNetworkUnreachable = error.code === 'ENETUNREACH' || error.code === 'EHOSTUNREACH';
+      if (isNetworkUnreachable) {
+        console.warn(`[CustomSMTP] ⚠️ ENETUNREACH on attempt ${attempt + 1} — purging stale pool for ${cacheKey} and retrying with fresh IPv4 pool...`);
+        // Close via pool map lookup (transporter is scoped inside the try block)
+        try { smtpPools.get(cacheKey)?.close(); } catch (_) {}
+        smtpPools.delete(cacheKey); // Next iteration will rebuild with IPv4
+      }
+
+      const isTransient = isNetworkUnreachable || error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || (error.responseCode >= 400 && error.responseCode < 500);
 
       if (!isTransient || attempt === MAX_RETRIES) {
         console.error(`[CustomSMTP] ❌ Permanent failure sending to`, to, ':', error.message);

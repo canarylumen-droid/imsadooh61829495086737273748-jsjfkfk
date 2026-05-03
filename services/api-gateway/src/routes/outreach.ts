@@ -51,15 +51,20 @@ router.post('/generate-template', requireAuth, async (req, res) => {
   try {
     const userId = req.session?.userId!;
     const { focus } = req.body;
-    
-    // Will use the user's uploaded PDF & Brand Guide context natively inside conversation-ai
-    const sequence = await generateCampaignTemplateSequence(userId, focus);
-    
-    return res.json({
-      success: true,
-      sequence
-    });
+
+    // Wrap with 14s timeout to beat Railway's 15s gateway cutoff.
+    // generateCampaignTemplateSequence is slow (3 AI providers + RAG) and may exceed 15s.
+    const sequence = await Promise.race([
+      generateCampaignTemplateSequence(userId, focus),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('[TIMEOUT] POST /generate-template timed out after 14s')), 14000)
+      )
+    ]);
+
+    if (res.headersSent) return;
+    return res.json({ success: true, sequence });
   } catch (error: any) {
+    if (res.headersSent) return; // Railway already closed socket — do not double-respond
     res.status(500).json({ error: 'Failed to generate campaign sequence', details: error.message });
   }
 });

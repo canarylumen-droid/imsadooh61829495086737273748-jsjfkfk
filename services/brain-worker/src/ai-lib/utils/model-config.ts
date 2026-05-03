@@ -10,9 +10,9 @@ export const GENAI_STABLE_MODEL = "gemini-2.0-flash";
 export const OPENAI_INTELLIGENCE_MODEL = "gpt-4o";     // Flagship for complex sales reasoning
 export const OPENAI_FAST_MODEL = "gpt-4o-mini";        // Fast/Cheap for simple classification/tasks
 
-// Z-AI (GLM) Models
-export const Z_AI_STABLE_MODEL = "glm-4-0520";       // Use versioned GLM-4 for stability
-export const Z_AI_LATEST_MODEL = "glm-4-0520";        // Stable GLM-4-0520 (User's 4.6 equivalent)
+// Z-AI (GLM) Models — verify at https://open.bigmodel.cn/dev/api#language-model
+export const Z_AI_STABLE_MODEL = "glm-4-plus";        // Current stable GLM-4 variant
+export const Z_AI_LATEST_MODEL = "glm-4-plus";        // Same — glm-4-0520 is retired
 export const Z_AI_FAST_MODEL = "glm-4-flash";         // Ultra-fast GLM-4-Flash
 
 // Default active models based on service
