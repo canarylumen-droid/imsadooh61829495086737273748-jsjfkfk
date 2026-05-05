@@ -6,7 +6,7 @@ import { generateReply, generateEmailSubject } from './ai-service.js';
 import { InstagramOAuth } from '@services/api-gateway/src/oauth/instagram.js';
 import { sendInstagramMessage } from "@shared/lib/channels/instagram.js";
 
-import { sendEmail, MailboxPausedError } from "@shared/lib/channels/email.js";
+import { sendEmail } from "@shared/lib/channels/email.js";
 import { executeCommentFollowUps } from '../analyzers/comment-detection.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
@@ -331,8 +331,8 @@ export class FollowUpWorker {
       }
 
       // CHECK 2: Lead-level opt-out
-      if (lead.aiPaused) {
-        console.log(`⏸️  Skipping follow-up for lead ${lead.name} (AI paused for this lead)`);
+      if (lead.aiPaused || lead.status === 'unsubscribed' || lead.status === 'bounced') {
+        console.log(`⏸️  Skipping follow-up for lead ${lead.name} (Status: ${lead.status}${lead.aiPaused ? ', AI paused' : ''})`);
         await db.update(followUpQueue).set({ status: 'completed', processedAt: new Date() }).where(eq(followUpQueue.id, job.id));
         return;
       }
@@ -352,18 +352,7 @@ export class FollowUpWorker {
            return;
         }
 
-        // Infrastructure-level pause check (ENETUNREACH cooldown)
-        if (integration.mailboxPauseUntil && new Date(integration.mailboxPauseUntil) > new Date()) {
-          console.warn(`⏳ [FOLLOW_UP] Mailbox for ${job.channel} is paused until ${integration.mailboxPauseUntil}. Rescheduling.`);
-          const nextTry = new Date(new Date(integration.mailboxPauseUntil).getTime() + 5 * 60 * 1000);
-          await db.update(followUpQueue)
-            .set({ 
-              status: 'pending', 
-              scheduledAt: nextTry 
-            })
-            .where(eq(followUpQueue.id, job.id));
-          return;
-        }
+        // 24/7 Autonomous Mode: We no longer pause follow-ups due to infrastructure cooldowns
       }
 
       // 3. Active Campaign Protection
@@ -659,20 +648,6 @@ export class FollowUpWorker {
         throw new Error('Failed to send message');
       }
     } catch (error) {
-      if (error instanceof MailboxPausedError) {
-        console.warn(`⏳ [FOLLOW_UP] Mailbox paused until ${error.pauseUntil}. Rescheduling job ${job.id}.`);
-        const nextTry = new Date(error.pauseUntil.getTime() + 5 * 60 * 1000);
-        if (db) {
-          await db.update(followUpQueue)
-            .set({ 
-              status: 'pending', 
-              scheduledAt: nextTry,
-              errorMessage: 'Mailbox temporarily paused (infrastructure cooldown)'
-            })
-            .where(eq(followUpQueue.id, job.id));
-        }
-        return;
-      }
 
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error(`Error processing job ${job.id}:`, error);
@@ -1109,9 +1084,23 @@ Return ONLY a valid JSON object matching this structure:
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         console.error(`Failed to send via ${channel}:`, error);
-        // Error handling
+        
+        // --- PHASE 52: AUTONOMOUS FAILURE ADVISORY ---
+        // Route through health service to apply non-blocking advisory/throttling
+        try {
+          const { mailboxHealthService } = await import("@services/email-service/src/email/mailbox-health-service.js");
+          const matchingIntegrations = await db.select()
+            .from(integrations)
+            .where(and(eq(integrations.userId, userId), eq(integrations.provider, channel as any)))
+            .limit(1);
+          
+          if (matchingIntegrations[0]) {
+            await mailboxHealthService.handleMailboxFailure(matchingIntegrations[0], errorMessage);
+          }
+        } catch (healthErr) {
+          console.error('[FollowUpWorker] Failed to report health advisory:', healthErr);
+        }
 
-        // Re-throw other errors to mark the job as failed after retries
         throw error;
       }
     }

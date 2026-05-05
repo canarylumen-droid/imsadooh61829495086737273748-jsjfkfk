@@ -13,7 +13,7 @@
 import { generateReply } from './ai-service.js';
 import { MODELS } from '../utils/model-config.js';
 
-const isAIConfigured = !!(process.env.Z_AI_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY);
+const isAIConfigured = !!(process.env.ZAI_API_KEY || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY);
 import { storage } from '@shared/lib/storage/storage.js';
 import type { Lead, Message } from "@audnix/shared";
 import type { MessageDirection } from '@shared/types.js';
@@ -370,7 +370,7 @@ export async function completeConversationalQualification(lead: Lead): Promise<C
 
   try {
     if (!isAIConfigured) {
-      throw new Error("OpenAI not initialized");
+      throw new Error("AI Providers not initialized");
     }
 
     // Fetch conversation history

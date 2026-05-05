@@ -1177,6 +1177,17 @@ export class DrizzleStorage implements IStorage {
       .where(eq(integrations.provider, provider as any));
   }
 
+  async getActiveImapIntegrations(): Promise<Integration[]> {
+    checkDatabase();
+    return await db
+      .select()
+      .from(integrations)
+      .where(and(
+        eq(integrations.connected, true),
+        inArray(integrations.provider, ['gmail', 'outlook', 'custom_email'])
+      ));
+  }
+
   async getOAuthAccountsByProvider(provider: string): Promise<OAuthAccount[]> {
     checkDatabase();
     // Normalize provider name for OAuth table (gmail -> google, custom_email -> custom, etc.)

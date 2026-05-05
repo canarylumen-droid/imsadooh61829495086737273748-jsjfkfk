@@ -109,8 +109,11 @@ export async function calculateReputationScore(integrationId: string): Promise<n
         }
       }
     }
-  }const { storage } = await import('@shared/lib/storage/storage.js');
+  }
+
+  const { storage } = await import('@shared/lib/storage/storage.js');
   const stats = await storage.getDashboardStats(mailbox.userId, { integrationId });
+  
   if (stats.totalMessages > 30 && stats.openRate < 12) {
     const spamPenalty = 40; // Heavy hit
     score -= spamPenalty;
@@ -153,22 +156,22 @@ export async function calculateReputationScore(integrationId: string): Promise<n
   let newWarmupStatus = mailbox.warmupStatus || 'active';
   let healthLevel: 'healthy' | 'cautious' | 'poor' | 'critical' = 'healthy';
   let gracefulDailyLimit: number | null = null;
-  // 4-TIER PRECISE REPUTATION SYSTEM
+  // 4-TIER PRECISE REPUTATION SYSTEM (Advisory Only - No Pausing)
   if (score < 40) {
-    // 🔴 Critical: Reputation below 40% -> Action: PAUSE
-    healthLevel = 'critical';
-    newWarmupStatus = 'paused';
-    gracefulDailyLimit = 5; 
-    console.warn(`🔴 [Reputation Monitor] Mailbox ${mailbox.id} is CRITICAL (${score}/100). Outreach PAUSED.`);
+    // 🔴 Critical: Reputation below 40% -> Action: Strict Throttle but NOT Paused
+    healthLevel = 'poor';
+    newWarmupStatus = 'active'; 
+    gracefulDailyLimit = 10; // Extreme throttle
+    console.warn(`🔴 [Reputation Monitor] Mailbox ${mailbox.id} is CRITICAL (${score}/100). Throttling to 10/day.`);
   } else if (score < 65) {
     // 🟠 Poor: Reputation below 65% -> 50% Throttling
     healthLevel = 'poor';
-    gracefulDailyLimit = Math.max(10, Math.floor(newDailyLimit * 0.5));
+    gracefulDailyLimit = Math.max(15, Math.floor(newDailyLimit * 0.5));
     console.warn(`🟠 [Reputation Monitor] Mailbox ${mailbox.id} is POOR: Throttling to 50% (${gracefulDailyLimit}) due to reputation dip (${score}/100).`);
   } else if (score < 85) {
     // 🟡 Cautious: Reputation below 85% -> 80% Throttling
     healthLevel = 'cautious';
-    gracefulDailyLimit = Math.max(15, Math.floor(newDailyLimit * 0.8));
+    gracefulDailyLimit = Math.max(25, Math.floor(newDailyLimit * 0.8));
     console.warn(`🟡 [Reputation Monitor] Mailbox ${mailbox.id} is CAUTIOUS: Throttling to 80% (${gracefulDailyLimit}) due to reputation dip (${score}/100).`);
   } else {
     // 🟢 Healthy: Normal operation
@@ -179,10 +182,9 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     }
   }
 
-  // Auto-recovery: Unpause if health improves to Caution or better
-  if (score >= 60 && newWarmupStatus === 'paused') {
+  // Recovery: Ensure warmupStatus remains active if it was accidentally paused
+  if (newWarmupStatus === 'paused') {
     newWarmupStatus = 'active';
-    console.log(`🟢 [Reputation Monitor] Mailbox ${mailbox.id} recovered to ${healthLevel} (${score}/100). Resuming outreach.`);
   }
 
   await db.update(integrations).set({

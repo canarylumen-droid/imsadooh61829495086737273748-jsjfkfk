@@ -2,8 +2,7 @@ import { getDatabase } from "@shared/lib/db/db.js";
 import { prospects } from "../shared/schema.js";
 import { eq } from "drizzle-orm";
 import { EmailVerifier } from "@shared/lib/scraping/email-verifier.js";
-import { GoogleGenAI } from "@google/genai";
-import { GENAI_STABLE_MODEL } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
+import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
 import 'dotenv/config';
 
 async function performIntensiveCleanup() {
@@ -15,7 +14,6 @@ async function performIntensiveCleanup() {
     }
 
     const verifier = new EmailVerifier();
-    const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
 
     // 1. Fetch all leads
     const allLeads = await db.select().from(prospects);
@@ -49,7 +47,11 @@ async function performIntensiveCleanup() {
                 `;
 
                 try {
-                    const recoveryResult = await genAI.models.generateContent({ model: GENAI_STABLE_MODEL, contents: recoveryPrompt });
+                    const recoveryResult = await generateReply(
+                      "You are a lead recovery specialist.",
+                      recoveryPrompt,
+                      { model: "gemini-1.5-flash", temperature: 0.1 }
+                    );
                     const correctedEmail = (recoveryResult.text || "").trim();
 
                     if (correctedEmail !== 'NONE' && correctedEmail !== lead.email && correctedEmail.includes('@')) {
@@ -93,7 +95,11 @@ async function performIntensiveCleanup() {
                 // ... same domain audit logic but update status to 'hardened'
                 const auditPrompt = `ENTITY: ${lead.entity}\nWEBSITE: ${lead.website}\nCorrect? Return JSON: {"is_correct": boolean, "suggested": "string|null"}`;
                 try {
-                    const auditRes = await genAI.models.generateContent({ model: GENAI_STABLE_MODEL, contents: auditPrompt });
+                    const auditRes = await generateReply(
+                      "Verify entity and website relationship.",
+                      auditPrompt,
+                      { model: "gemini-1.5-flash", jsonMode: true, temperature: 0.1 }
+                    );
                     const audit = JSON.parse((auditRes.text || "").replace(/```json|```/g, "").trim());
                     if (!audit.is_correct && audit.suggested) {
                         console.log(`   🛠️ Updating Domain: ${lead.website} -> ${audit.suggested}`);

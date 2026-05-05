@@ -111,11 +111,7 @@ export class OutreachEngine {
       }).from(integrations)
         .innerJoin(users, eq(integrations.userId, users.id))
         .where(
-          and(
-            eq(integrations.connected, true),
-            notInArray(integrations.provider, ['google_calendar', 'calendly']),
-            isNull(integrations.mailboxPauseUntil)
-          )
+            notInArray(integrations.provider, ['google_calendar', 'calendly'])
         );
 
       // Create a map for quick user configuration lookup during tick()
@@ -647,21 +643,9 @@ export class OutreachEngine {
           return result && result.overallStatus !== 'excellent' && result.overallStatus !== 'good';
         }).length;
         
-        // Cruise Control: Phase 6
-        // Stop completely if the reputation monitor strictly paused the mailbox
-        if (integration.warmupStatus === 'paused') {
-            console.warn(`[OutreachEngine] 🛑 Mailbox ${integration.id} is PAUSED by the autonomous engine due to poor reputation.`);
-            return false;
-        }
-
-        // [PHASE 47] 4-Tier Health Graceful Throttling
+        // [PHASE 47] 4-Tier Health Graceful Throttling (Advisory Only)
         const healthLevel = (integration as any).healthLevel || 'healthy';
         const gracefulLimit = (integration as any).gracefulDailyLimit;
-
-        if (healthLevel === 'critical') {
-           console.log(`[OutreachEngine] 🛑 CRITICAL HEALTH for ${integration.id}. Blocking all outbound for recovery.`);
-           return false;
-        }
 
         if (gracefulLimit !== null && gracefulLimit !== undefined) {
            effectiveLimit = Math.min(effectiveLimit, gracefulLimit);

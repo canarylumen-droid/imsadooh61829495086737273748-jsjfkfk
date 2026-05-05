@@ -101,8 +101,8 @@ export default function InsightsPage() {
   const insights = insightsData?.summary || null;
   const channelData = insightsData?.channels || [];
   const conversionFunnel = insightsData?.funnel || [];
-  const hasData = !!insightsData && (insightsData.hasData || (channelData.length > 0 || conversionFunnel.length > 0) || !!insights);
   const timeSeriesData = insightsData?.timeSeries || [];
+  const hasData = !!insightsData && (insightsData.hasData || (channelData.length > 0 || conversionFunnel.length > 0) || !!insights || timeSeriesData.length > 0);
 
   const PIE_COLORS = [
     "hsl(var(--primary))",

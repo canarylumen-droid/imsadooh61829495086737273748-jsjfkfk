@@ -148,13 +148,6 @@ class MailboxHealthService {
   async checkMailbox(integration: any): Promise<HealthCheckResult> {
     const result: HealthCheckResult = { healthy: true };
 
-    // --- Skip check for paused mailboxes to prevent notification spam ---
-    if (integration.mailboxPauseUntil && new Date(integration.mailboxPauseUntil) > new Date()) {
-      const resumeAt = new Date(integration.mailboxPauseUntil).toLocaleTimeString();
-      console.log(`[MailboxHealth] ⏸ Skipping check for ${integration.id} — paused until ${resumeAt}`);
-      return result; // Silently skip
-    }
-
     // --- Skip check for already-failed mailboxes (avoid re-notifying) ---
     if (integration.healthStatus === 'failed') {
       console.log(`[MailboxHealth] ⏸ Skipping check for ${integration.id} — already marked failed`);
@@ -229,19 +222,17 @@ class MailboxHealthService {
     this.failureBurstTracking.set(integration.id, recentFailures);
 
     if (recentFailures.length >= this.TOXIC_BURST_THRESHOLD) {
-      const pauseUntil = new Date(now + this.TOXIC_PAUSE_DURATION_MS);
-      console.error(`[MailboxHealth] ☣️ Toxic burst detected for ${integration.id} (${recentFailures.length} f/10m). Pausing for 1 hour.`);
+      console.error(`[MailboxHealth] ☣️ Toxic burst detected for ${integration.id} (${recentFailures.length} f/10m).`);
       
       await db.update(integrations)
         .set({
           healthStatus: 'warning',
-          mailboxPauseUntil: pauseUntil,
-          lastHealthError: `Toxic failure burst detected: ${recentFailures.length} errors in 10m. System-level pause active.`,
+          lastHealthError: `Toxic failure burst detected: ${recentFailures.length} errors in 10m.`,
           updatedAt: new Date(),
         })
         .where(eq(integrations.id, integration.id));
 
-      // Reset tracking after pause
+      // Reset tracking
       this.failureBurstTracking.delete(integration.id);
     }
   }
@@ -376,12 +367,10 @@ class MailboxHealthService {
     const isRateLimited = lowerError.includes('429') || lowerError.includes('rate limit') || lowerError.includes('quota exceeded') || lowerError.includes('too many requests');
 
     if (isRateLimited) {
-      console.warn(`[MailboxHealth] ⏳ Rate Limit detected for ${integration.id} (${integration.provider}). Cooling down for 15m.`);
-      const cooldownUntil = new Date(Date.now() + 15 * 60 * 1000); // 15 minute cooldown
+      console.warn(`[MailboxHealth] ⏳ Rate Limit detected for ${integration.id} (${integration.provider}).`);
       
       await db.update(integrations)
         .set({
-          mailboxPauseUntil: cooldownUntil,
           lastHealthError: `Rate Limited: ${errorMessage}`,
           updatedAt: new Date()
         })
@@ -390,116 +379,72 @@ class MailboxHealthService {
       wsSync.notifyActivityUpdated(integration.userId, {
         type: 'mailbox_warning',
         integrationId: integration.id,
-        message: `Mailbox rate limited. Cooling down until ${cooldownUntil.toLocaleTimeString()}`
+        message: `Mailbox rate limited.`
       });
-      return; // Do not increment failureCount for transient rate limits
-    }
-
-    // --- Fast-pause ENETUNREACH/TIMEOUT: always an infrastructure or provider issue ---
-    // Applying a silent pause immediately to stop notification storms.
-    const isNetworkUnreachable = lowerError.includes('enetunreach') || lowerError.includes('timed out') || lowerError.includes('etimedout');
-    if (isNetworkUnreachable) {
-      const alreadyPaused = integration.mailboxPauseUntil && new Date(integration.mailboxPauseUntil) > new Date();
-      if (alreadyPaused) return; // Already silenced — do nothing
-
-      const isTimeout = lowerError.includes('timed out') || lowerError.includes('etimedout');
-      const pauseDuration = isTimeout ? 5 * 60 * 1000 : 2 * 60 * 60 * 1000; // 5m for timeout, 2h for unreachable
-      
-      console.warn(`[MailboxHealth] 🌐 ${isTimeout ? 'TIMEOUT' : 'ENETUNREACH'} for ${integration.id}. Applying ${isTimeout ? '5m' : '2h'} silent pause.`);
-      const pauseUntil = new Date(Date.now() + pauseDuration);
-
-      await db.update(integrations)
-        .set({
-          mailboxPauseUntil: pauseUntil,
-          lastHealthError: isTimeout ? `Connection timed out: ${errorMessage}` : `Network unreachable (IPv6 route missing): ${errorMessage}`,
-          updatedAt: new Date(),
-        })
-        .where(eq(integrations.id, integration.id));
-
-      // Notification for network issues
-      if (!isTimeout) {
-          await storage.createNotification({
-            userId: integration.userId,
-            type: 'mailbox_warning',
-            title: '🌐 Mailbox Network Issue',
-            message: `Your mailbox could not connect: network unreachable. It has been paused for 2 hours while we retry. This is typically a temporary DNS/IPv6 issue.`,
-            metadata: {
-              integrationId: integration.id,
-              provider: integration.provider,
-              error: errorMessage,
-              pauseUntil: pauseUntil.toISOString(),
-              activityType: 'mailbox_network_pause'
-            }
-          });
-      }
-      return;
+      return; 
     }
 
     const currentFailures = (integration.failureCount || 0) + 1;
     const failureThreshold = integration.provider === 'custom_email' ? 3 : this.MAX_FAILURES_BEFORE_REMOVE;
 
     if (currentFailures >= failureThreshold) {
-      // CRITICAL: Mark as FAILED and remove from sending pool
-      // Note: We NEVER set connected: false automatically for custom_email to ensure persistence.
-      // It stays in the database until the user manually disconnects.
-      console.error(`[MailboxHealth] 🚨 Mailbox ${integration.id} (${integration.provider}) FAILED after ${currentFailures} failures: ${errorMessage}`);
+      // ADVISORY: Mark as WARNING but KEEP IN POOL for autonomous recovery
+      console.warn(`[MailboxHealth] ⚠️ Mailbox ${integration.id} (${integration.provider}) reported ${currentFailures} failures: ${errorMessage}. Outreach continues.`);
 
       await db.update(integrations)
         .set({
-          healthStatus: 'failed',
-          lastHealthError: errorMessage,
+          healthStatus: 'warning',
+          lastHealthError: `Autonomous Recovery: ${errorMessage}`,
           lastHealthCheckAt: new Date(),
           failureCount: currentFailures,
           updatedAt: new Date(),
-          // connected remains true to allow background reconnect attempts
+          // connected remains true to allow background outreach attempts
         })
         .where(eq(integrations.id, integration.id));
 
-      // Notify user via in-app notification
+      // Notify user via in-app notification (Advisory only)
       await storage.createNotification({
         userId: integration.userId,
-        type: 'mailbox_failure',
-        title: '🚨 Mailbox Failed',
-        message: `Your mailbox has failed: ${errorMessage}. It has been removed from the sending pool. Unsent leads will be redistributed in 24h.`,
+        type: 'mailbox_warning',
+        title: '⚠️ Outreach Alert: Network/DNS Jitter',
+        message: `Your mailbox reported an issue: ${errorMessage}. Audnix AI is maintaining outreach while attempting to resolve this automatically.`,
         metadata: {
           integrationId: integration.id,
           provider: integration.provider,
           error: errorMessage,
           failedAt: new Date().toISOString(),
-          activityType: 'mailbox_failure'
+          activityType: 'mailbox_warning'
         }
       });
 
-      // --- ADVANCED: Email Alert ---
+      // --- ADVISORY: Email Alert ---
       const user = await storage.getUser(integration.userId);
       if (user?.email) {
         await sendSystemEmail(
           user.email,
-          `🚨 Audnix AI: Mailbox Failure Alert`,
+          `⚠️ Audnix AI: Autonomous Recovery Active`,
           `<p>Hello,</p>
-           <p>Your mailbox <b>${integration.provider}</b> has encountered a fatal error: <i>${errorMessage}</i>.</p>
-           <p>We have automatically removed it from the active sending pool to protect your sender reputation. Unsent leads will be automatically redistributed across your other active mailboxes after 24 hours of inactivity.</p>
-           <p>Please log in to your dashboard to reconnect your mailbox.</p>`
+           <p>Your mailbox <b>${integration.provider}</b> encountered a network issue: <i>${errorMessage}</i>.</p>
+           <p><b>No action is required.</b> Our autonomous engine is keeping this mailbox active and will continue attempting to send your outreach. This typically resolves once DNS/Provider jitter stabilizes.</p>`
         );
       }
 
       // Push real-time notification
       wsSync.notifyActivityUpdated(integration.userId, {
-        type: 'mailbox_failure',
+        type: 'mailbox_warning',
         integrationId: integration.id,
-        message: `Mailbox failed: ${errorMessage}`
+        message: `Autonomous recovery active for: ${errorMessage}`
       });
 
-      // Phase 5 Fix: Push dedicated integration_error payload so the UI can pop a toast
+      // Phase 5 Fix: Push dedicated integration_warning payload
       wsSync.notifyIntegrationError(integration.userId, {
         integrationId: integration.id,
         provider: integration.provider,
-        errorType: errorMessage.toLowerCase().includes('auth') || errorMessage.toLowerCase().includes('credential') ? 'auth_failure' : 'connection_lost',
-        message: `Mailbox failed: ${errorMessage}`
+        errorType: 'connection_jitter',
+        message: `Network jitter detected. AI is managing recovery.`
       });
 
-      // Return unsent leads to the queue pool (set integrationId to null for pending leads)
-      await this.returnLeadsToPool(integration.id);
+      // DO NOT returnLeadsToPool — we keep them assigned so outreach resumes instantly
 
     } else {
       // WARNING: Increment failure count
@@ -678,8 +623,6 @@ class MailboxHealthService {
 
           if (sentCount === 0) continue;
 
-          if (sentCount === 0) continue;
-
           // Phase 5: Use unified Reputation Monitor for all health & throttling calculations
           const { calculateReputationScore } = await import('./reputation-monitor.js');
           const finalScore = await calculateReputationScore(integration.id);
@@ -693,17 +636,13 @@ class MailboxHealthService {
           const normalFail = sentCount >= this.MIN_SENDS_FOR_RATE_CALC && bounceRate >= this.SPAM_BOUNCE_CRITICAL;
 
           if (finalScore < 45 || earlyFail || normalFail) {
-            // Unpause handled by reputation-monitor itself or we can force it here
-            const pauseUntil = new Date();
-            pauseUntil.setHours(pauseUntil.getHours() + 24);
-
+            
             await db.update(integrations)
               .set({
-                mailboxPauseUntil: pauseUntil,
                 healthStatus: 'warning',
                 lastHealthError: finalScore < 45 
-                  ? `Reputation critical: ${finalScore}/100. Autonomous pause active.`
-                  : `Bounce rate critical: ${(bounceRate * 100).toFixed(2)}%. Autonomous pause active.`,
+                  ? `Reputation critical: ${finalScore}/100.`
+                  : `Bounce rate critical: ${(bounceRate * 100).toFixed(2)}%.`,
                 updatedAt: new Date(),
               })
               .where(eq(integrations.id, integration.id));
@@ -711,17 +650,16 @@ class MailboxHealthService {
             await storage.createNotification({
               userId: integration.userId,
               type: 'mailbox_warning',
-              title: '🚫 Mailbox Paused (Spam Risk)',
-              message: `Your mailbox has been paused for 24h due to an excessive bounce rate (${(bounceRate * 100).toFixed(2)}%). This protects your sender reputation from Google bans.`,
+              title: '🚫 Mailbox High Spam Risk',
+              message: `Your mailbox has an excessive bounce rate (${(bounceRate * 100).toFixed(2)}%). This may result in Google bans.`,
               metadata: {
                 integrationId: integration.id,
                 bounceRate,
-                pauseUntil: pauseUntil.toISOString(),
                 activityType: 'spam_risk_pause'
               }
             });
 
-            console.warn(`[MailboxHealth] 🚫 Paused mailbox ${integration.id} for 24h due to ${(bounceRate * 100).toFixed(2)}% bounce rate or early failure (${bounceCount}/${sentCount} bounces)`);
+            console.warn(`[MailboxHealth] 🚫 High risk mailbox ${integration.id} due to ${(bounceRate * 100).toFixed(2)}% bounce rate or early failure (${bounceCount}/${sentCount} bounces)`);
 
             // Return leads to pool
             await this.returnLeadsToPool(integration.id);
@@ -760,7 +698,6 @@ class MailboxHealthService {
       healthStatus: i.healthStatus,
       lastHealthError: i.lastHealthError,
       lastHealthCheckAt: i.lastHealthCheckAt,
-      mailboxPauseUntil: i.mailboxPauseUntil,
       failureCount: i.failureCount,
       spamRiskScore: i.spamRiskScore,
     }));
@@ -770,17 +707,12 @@ class MailboxHealthService {
    * Get active (healthy + not paused) mailboxes for a user
    */
   async getActiveMailboxes(userId: string): Promise<any[]> {
-    const now = new Date();
     const userIntegrations = await db.select()
       .from(integrations)
       .where(and(
         eq(integrations.userId, userId),
         eq(integrations.connected, true),
-        ne(integrations.healthStatus, 'failed'),
-        or(
-          isNull(integrations.mailboxPauseUntil),
-          lte(integrations.mailboxPauseUntil, now)
-        )
+        ne(integrations.healthStatus, 'failed')
       ));
 
     return userIntegrations.filter((i: any) =>
@@ -907,13 +839,10 @@ class MailboxHealthService {
     console.log(`[MailboxHealth] 📊 Mailbox ${integrationId} bounce rate: ${currentSpamPct.toFixed(2)}% (${bounces}/${total})`);
 
     if (bounceRate > 0.15) {
-      // PAUSE for 24 hours
-      const pauseUntil = new Date();
-      pauseUntil.setHours(pauseUntil.getHours() + 24);
-
-      console.warn(`[MailboxHealth] 🚫 High bounce rate detector triggered for ${integrationId}. Pausing for 24h.`);
-
-      // Apply smoothing even here
+      // Advisory Mode: Update score and notify but DO NOT pause
+      console.warn(`[MailboxHealth] 🛡️ High bounce rate detector triggered for ${integrationId}. Advisory alert sent.`);
+      
+      // Apply smoothing
       const [existing] = await db.select().from(integrations).where(eq(integrations.id, integrationId));
       const oldScore = Number(existing?.spamRiskScore || 0);
       const newScore = (oldScore * 0.7) + (currentSpamPct * 0.3);
@@ -921,9 +850,8 @@ class MailboxHealthService {
       await db.update(integrations)
         .set({
           healthStatus: 'warning',
-          mailboxPauseUntil: pauseUntil,
           spamRiskScore: parseFloat(newScore.toFixed(2)),
-          lastHealthError: `High bounce rate detected: ${currentSpamPct.toFixed(2)}%`,
+          lastHealthError: `Advisory: High bounce rate detected: ${currentSpamPct.toFixed(2)}%`,
           updatedAt: new Date(),
         })
         .where(eq(integrations.id, integrationId));
@@ -932,13 +860,13 @@ class MailboxHealthService {
       if (integration) {
         await storage.createNotification({
           userId: integration.userId,
-          type: 'mailbox_failure',
-          title: '⚠️ Mailbox Paused: High Bounce Rate',
-          message: `Your mailbox ${integration.provider} has been paused for 24h because its bounce rate (${(bounceRate * 100).toFixed(1)}%) exceeded the 15% safety threshold.`,
-          metadata: { integrationId, bounceRate, activityType: 'spam_risk_pause' }
+          type: 'mailbox_warning',
+          title: '⚠️ High Bounce Rate Alert',
+          message: `Your mailbox ${integration.provider} is experiencing a high bounce rate (${(bounceRate * 100).toFixed(1)}%). We recommend reviewing your lead list quality. Outreach continues autonomously.`,
+          metadata: { integrationId, bounceRate, activityType: 'spam_risk_advisory' }
         });
       }
-      return true;
+      return false; // Changed to false because we didn't pause
     }
 
     return false;
@@ -952,42 +880,33 @@ class MailboxHealthService {
     if (!email.includes('@')) return { valid: true, details: { spf: true, dkim: true, dmarc: true }, missing: [] };
 
     const domain = email.split('@')[1];
-    const dns = await import('dns/promises');
-    const details = { spf: false, dkim: false, dmarc: false };
+    const { verifyDomainDns } = await import('./dns-verification.js');
+    
+    // Extract selector if available
+    const dkimSelector = meta.dkim_selector || meta.dkimSelector || undefined;
+    
+    const result = await verifyDomainDns(domain, dkimSelector, true);
+    
+    // Persist results for Reputation Monitor
+    await storage.createDomainVerification(integration.userId, {
+      domain,
+      verificationResult: result
+    });
+
+    const details = {
+      spf: result.spf.valid,
+      dkim: result.dkim.valid,
+      dmarc: result.dmarc.valid,
+      blacklist: result.blacklist.isBlacklisted
+    };
+
     const missing = [];
-
-    try {
-      // 1. Check SPF
-      const txtRecords = await dns.resolveTxt(domain);
-      details.spf = txtRecords.some(r => r.join(' ').includes('v=spf1'));
-      if (!details.spf) missing.push('SPF');
-
-      // 2. Check DMARC
-      try {
-        const dmarcRecords = await dns.resolveTxt(`_dmarc.${domain}`);
-        details.dmarc = dmarcRecords.some(r => r.join(' ').includes('v=DMARC1'));
-      } catch (e) {
-        details.dmarc = false;
-      }
-      if (!details.dmarc) missing.push('DMARC');
-
-      // 3. Check DKIM (Checking common selectors like 'default', 'google', 'mandrill')
-      const commonSelectors = ['default', 'google', 'mandrill', 'mail', 'k1'];
-      for (const selector of commonSelectors) {
-        try {
-          await dns.resolveTxt(`${selector}._domainkey.${domain}`);
-          details.dkim = true;
-          break;
-        } catch (e) {}
-      }
-      if (!details.dkim) missing.push('DKIM');
-
-    } catch (err) {
-      console.error(`[MailboxHealth] DNS check failed for ${domain}:`, err);
-    }
+    if (!result.spf.found) missing.push('SPF');
+    if (!result.dkim.found) missing.push('DKIM');
+    if (!result.dmarc.found) missing.push('DMARC');
 
     return {
-      valid: details.spf && details.dmarc, // DKIM is harder to verify without selector, so we mark valid if SPF/DMARC pass
+      valid: result.spf.valid && result.dmarc.valid, // Keep valid check as SPF + DMARC for connectivity
       details,
       missing
     };

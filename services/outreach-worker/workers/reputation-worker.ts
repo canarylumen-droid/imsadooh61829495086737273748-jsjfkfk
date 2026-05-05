@@ -57,15 +57,24 @@ export class ReputationWorker {
                     const domain = email.split('@')[1];
                     if (!domain) continue;
 
-                    console.log(`📡 Autonomous DNS Check for ${domain} (${user.email})`);
-                    const result = await verifyDomainDns(domain, undefined, true);
+                    // Extract DKIM selector if available in metadata
+                    const dkimSelector = meta.dkim_selector || meta.dkimSelector || undefined;
+
+                    console.log(`📡 Autonomous DNS Check for ${domain} (${user.email}) selector: ${dkimSelector || 'default'}`);
+                    const result = await verifyDomainDns(domain, dkimSelector, true);
+
+                    // Persist for Reputation Monitor to pick up
+                    await storage.createDomainVerification(user.id, { 
+                        domain, 
+                        verificationResult: result 
+                    });
 
                     await storage.createAuditLog({
                         userId: user.id,
                         leadId: undefined,
                         integrationId: integration.id,
                         action: 'domain_reputation_check',
-                        details: { domain, result, autonomous: true },
+                        details: { domain, result, selector: dkimSelector, autonomous: true },
                         createdAt: new Date()
                     });
 
@@ -79,6 +88,14 @@ export class ReputationWorker {
                         await mailboxHealthService.handleMailboxFailure(integration, `Reputation check failed: ${innerError.message}`);
                     }
                 }
+            }
+
+            // Phase 22: Autonomous Spam Folder Discovery
+            try {
+                const { spamMonitorService } = await import("@services/email-service/src/email/spam-monitor.js");
+                await spamMonitorService.scanAllSpamFolders();
+            } catch (spamErr) {
+                console.error('[ReputationWorker] Spam monitor sweep failed:', spamErr);
             }
         } catch (error: any) {
             console.error('[ReputationWorker] Fatal loop error:', error);

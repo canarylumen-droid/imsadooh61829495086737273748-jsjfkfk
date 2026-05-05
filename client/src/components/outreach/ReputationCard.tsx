@@ -27,6 +27,12 @@ interface ReputationCardProps {
     spam: number;
     total: number;
   };
+  dns?: {
+    spf: boolean;
+    dkim: boolean;
+    dmarc: boolean;
+    ptr: boolean;
+  };
   isLoading?: boolean;
 }
 
@@ -34,6 +40,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
   score, 
   status, 
   bounces, 
+  dns,
   isLoading 
 }) => {
   const getStatusColor = (s: string) => {
@@ -100,16 +107,35 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
                animate={{ width: `${score}%` }}
                transition={{ duration: 1, ease: "easeOut" }}
                className={cn(
-                 "absolute h-full rounded-full transition-all duration-1000",
-                 score >= 80 ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" : 
-                 score >= 60 ? "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.5)]" : 
-                 "bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]"
+                 "absolute top-0 left-0 h-full rounded-full",
+                 score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-amber-500" : "bg-rose-500"
                )}
              />
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
+        {/* DNS Status Grid */}
+        <div className="grid grid-cols-4 gap-2">
+          {['SPF', 'DKIM', 'DMARC', 'PTR'].map((type) => {
+            const isValid = dns ? (dns as any)[type.toLowerCase()] !== false : true;
+            return (
+              <div key={type} className="flex flex-col items-center gap-1">
+                <div className={cn(
+                  "w-full h-1 rounded-full",
+                  isValid ? "bg-emerald-500/40" : "bg-rose-500/40"
+                )} />
+                <span className={cn(
+                  "text-[8px] font-black uppercase tracking-tighter",
+                  isValid ? "text-emerald-500/60" : "text-rose-500"
+                )}>
+                  {type}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
           <div className="space-y-1 p-3 rounded-xl bg-muted/10 border border-border/5 hover:bg-muted/20 transition-colors">
             <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest">Hard Bounce</p>
             <div className="flex items-center justify-between">
@@ -141,11 +167,13 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
           <p className="text-[11px] text-muted-foreground/80 leading-relaxed font-medium">
             {score >= 90 
               ? "Reputation is solid. Autonomous engine is in cruise control at maximum safe volume." 
-              : score >= 70 
-              ? "Minor health degradation detected. AI has automatically applied a 15% volume throttle." 
-              : score >= 40 
-              ? "Significant bounce risk. AI has applied a 50% safety throttle. Review lead verification." 
-              : "Reputation CRITICAL. Autonomous engine has PAUSED outreach to prevent domain blacklisting."}
+              : score >= 85 
+              ? "Healthy signals. AI is maintaining standard outreach velocity." 
+              : score >= 60 
+              ? "Minor reputation dip. AI has applied a 20% safety throttle to protect domain health." 
+              : score >= 45 
+              ? "Significant bounce risk. AI has applied a 50% safety throttle. Outreach remains active but restricted." 
+              : "Reputation CRITICAL. AI is strictly throttling volume to minimum levels to recover health while remaining active."}
           </p>
         </div>
       </CardContent>

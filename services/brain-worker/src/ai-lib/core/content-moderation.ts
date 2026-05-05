@@ -148,32 +148,67 @@ export class ContentModerationService {
   }
 
   /**
-   * Enhanced moderation using OpenAI (if available)
+   * Enhanced moderation using AI (with failover)
    */
   public async moderateWithAI(content: string): Promise<ModerationResult> {
-    if (!process.env.OPENAI_API_KEY) {
-      return this.moderateContent(content);
-    }
-
     try {
-      const response = await fetch('https://api.openai.com/v1/moderations', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({ input: content })
-      });
+      const tryOpenAIModeration = async () => {
+        if (!process.env.OPENAI_API_KEY) return null;
+        try {
+          const response = await fetch('https://api.openai.com/v1/moderations', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+            },
+            body: JSON.stringify({ input: content })
+          });
 
-      if (!response.ok) {
-        throw new Error('OpenAI moderation failed');
-      }
+          if (!response.ok) throw new Error('OpenAI moderation failed');
+          const data = await response.json() as OpenAIModerationResponse;
+          return data.results?.[0];
+        } catch (e) {
+          console.warn('OpenAI moderation API failed, trying chat fallback...');
+          return null;
+        }
+      };
 
-      const data = await response.json() as OpenAIModerationResponse;
+      const tryChatModeration = async () => {
+        try {
+          const { generateReply } = await import('./ai-service.js');
+          const prompt = `Moderate this content for safety, spam, and appropriateness.
+        
+Content: "${content}"
 
-      const result = data.results?.[0];
+Return JSON:
+{
+  "flagged": boolean,
+  "categories": {
+    "sexual": boolean,
+    "hate": boolean,
+    "violence": boolean,
+    "harassment": boolean,
+    "self-harm": boolean
+  },
+  "category_scores": {
+    "sexual": number,
+    "hate": number,
+    "violence": number,
+    "harassment": number,
+    "self-harm": number
+  }
+}`;
+          const res = await generateReply("You are a content safety moderator.", prompt, { jsonMode: true, temperature: 0 });
+          return JSON.parse(res.text);
+        } catch (e) {
+          return null;
+        }
+      };
+
+      const result = await tryOpenAIModeration() || await tryChatModeration();
+
       if (!result) {
-        throw new Error('No moderation result returned');
+        return this.moderateContent(content);
       }
 
       const flags: string[] = [];
@@ -198,15 +233,15 @@ export class ContentModerationService {
 
       const scores = result.category_scores;
       const scoreValues: number[] = [
-        scores.sexual,
-        scores.hate,
-        scores.harassment,
-        scores['self-harm'],
-        scores['sexual/minors'],
-        scores['hate/threatening'],
-        scores['violence/graphic'],
-        scores.violence,
-        scores['harassment/threatening']
+        scores.sexual || 0,
+        scores.hate || 0,
+        scores.harassment || 0,
+        scores['self-harm'] || 0,
+        scores['sexual/minors'] || 0,
+        scores['hate/threatening'] || 0,
+        scores['violence/graphic'] || 0,
+        scores.violence || 0,
+        scores['harassment/threatening'] || 0
       ];
       const maxScore = Math.max(...scoreValues);
 

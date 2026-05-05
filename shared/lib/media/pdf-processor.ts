@@ -278,22 +278,7 @@ async function extractOfferAndBrandWithAI(text: string, userId: string): Promise
   // First, extract colors using regex (works without OpenAI)
   const extractedColors = extractColorsFromText(text);
 
-  if (!process.env.OPENAI_API_KEY) {
-    console.warn('⚠️ OpenAI API key not configured - using regex-based brand extraction only');
-    // Return regex-based colors if OpenAI not available
-    return {
-      offer: null,
-      brand: {
-        colors: {
-          primary: extractedColors.primary,
-          secondary: extractedColors.secondary,
-          accent: extractedColors.accent
-        },
-        allColors: extractedColors.all
-      }
-    };
-  }
-
+  // Always try AI extraction first, generateReply handles failover internally
   try {
     const response = await generateReply(
       `You are an elite brand and product analyst. Extract exhaustive product/service and brand identity data from this document. 
@@ -469,10 +454,7 @@ async function extractLeadsWithAI(text: string): Promise<Array<{
   company?: string;
   role?: string;
 }>> {
-  if (!process.env.OPENAI_API_KEY) {
-    return [];
-  }
-
+  // generateReply handles failover internally
   try {
     const response = await generateReply(
       `You are a world-class lead data extraction engine. Your task is to identify and extract every single lead and contact point from the source text.

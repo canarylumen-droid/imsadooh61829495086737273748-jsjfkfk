@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import http from 'http';
 
-type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error';
+type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error' | 'new_mail' | 'mailbox_status';
 
 interface SyncMessage {
   type: MessageType;
@@ -86,7 +86,8 @@ class WebSocketSyncServer {
     // Phase 18: Adaptive Throttling & Debouncing
     const throttleEvents = ['leads_updated', 'messages_updated', 'activity_updated', 'sync_status'];
     const debounceEvents = ['stats_updated', 'insights_updated', 'campaign_stats_updated', 'campaigns_updated'];
-    const priorityEvents = ['notification', 'TERMINATE_SESSION', 'integration_error', 'SECURITY_ALERT'];
+    // new_mail and mailbox_status must NEVER be throttled — inbox freshness depends on it
+    const priorityEvents = ['notification', 'TERMINATE_SESSION', 'integration_error', 'SECURITY_ALERT', 'new_mail', 'mailbox_status'];
 
     // 1. Priority events: Always fire immediately
     if (priorityEvents.includes(event)) {
@@ -215,6 +216,42 @@ class WebSocketSyncServer {
    * Called by background workers when a mailbox or social connection fails,
    * so the user sees an actionable toast in the dashboard immediately.
    */
+  /**
+   * Real-time new mail push — fires immediately, no throttle.
+   * Called by email-sync-queue after process-new-mail job completes.
+   */
+  notifyNewMail(userId: string, data: {
+    integrationId: string;
+    messageId?: string;
+    subject?: string;
+    from?: string;
+    snippet?: string;
+    date?: string;
+    isNew?: boolean;
+    refresh?: boolean;
+    timestamp?: string;
+  }) {
+    this.emitToUser(userId, 'new_mail', {
+      ...data,
+      timestamp: data.timestamp || new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Silent mailbox status update (reconnecting, paused etc).
+   * Does NOT show an error toast — only updates the indicator icon.
+   */
+  notifyMailboxStatus(userId: string, data: {
+    integrationId: string;
+    status: 'connected' | 'reconnecting' | 'needs_reauth' | 'paused';
+    message?: string;
+  }) {
+    this.emitToUser(userId, 'mailbox_status', {
+      ...data,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   notifyIntegrationError(userId: string, data: {
     integrationId: string;
     provider?: string;

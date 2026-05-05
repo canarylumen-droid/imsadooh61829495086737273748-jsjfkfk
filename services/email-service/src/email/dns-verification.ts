@@ -1,6 +1,9 @@
 import dns from 'dns';
 import { promisify } from 'util';
 
+// Hardened: Force use of primary high-reliability DNS resolvers to bypass local/ISP caching
+dns.setServers(['1.1.1.1', '8.8.8.8', '208.67.222.222']);
+
 const resolveTxt = promisify(dns.resolveTxt);
 const resolveMx = promisify(dns.resolveMx);
 

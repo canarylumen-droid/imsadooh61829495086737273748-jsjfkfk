@@ -592,34 +592,7 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
       return;
     }
 
-    // ── Pre-flight: check if the target mailbox is in a cooldown pause ──────
-    // This avoids a 15s hang on Railway (which times out at 15s) while SMTP
-    // tries to connect to an infrastructure-paused mailbox.
-    try {
-      let integration: any = null;
-      if (integrationId) {
-        integration = await storage.getIntegrationById(integrationId);
-      } else {
-        const integrations = await storage.getIntegrations(userId);
-        integration = integrations.find((i: any) =>
-          ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected
-        );
-      }
-
-      if (integration?.mailboxPauseUntil && new Date(integration.mailboxPauseUntil) > new Date()) {
-        const resumeAt = new Date(integration.mailboxPauseUntil).toLocaleTimeString();
-        res.status(503).json({
-          error: 'Mailbox temporarily paused',
-          details: `This mailbox is in a cooldown period until ${resumeAt} due to a previous network issue (TIMEOUT/ENETUNREACH). It will automatically resume.`,
-          tip: 'Wait for the cooldown to expire, or disconnect and reconnect the mailbox to force a reset.',
-          pauseUntil: integration.mailboxPauseUntil
-        });
-        return;
-      }
-    } catch (preflightErr: any) {
-      // Non-fatal — continue and let sendEmail() handle it
-      console.warn('[Email Send Test] Pre-flight check failed (continuing):', preflightErr?.message);
-    }
+    // ── Pre-flight check removed for 24/7 autonomous deployment ──────────────
 
     const { sendEmail } = await import('@shared/lib/channels/email.js');
 

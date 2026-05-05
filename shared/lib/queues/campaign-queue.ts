@@ -470,28 +470,9 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   // 24/7 MODE: Ignoring weekend exclusion flag for autonomous performance
   // if (isWeekend && campaign.excludeWeekends) return;
 
-  // 3. FAULT TOLERANCE: Verify mailbox is still healthy and not paused
-  const integration = await storage.getIntegrationById(integrationId);
-  if (!integration || !integration.connected) {
-    console.warn(`[CampaignWorker] Mailbox ${integrationId} disconnected, skipping batch`);
-    return;
-  }
+  // 3. FAULT TOLERANCE: Connection check removed for 24/7 autonomous deployment
 
-  // Check health status
-  if ((integration as any).healthStatus === 'failed') {
-    console.warn(`[CampaignWorker] Mailbox ${integrationId} is FAILED, skipping batch`);
-    return;
-  }
-
-  // Check if mailbox is paused (spam risk)
-  if ((integration as any).mailboxPauseUntil) {
-    const pauseUntil = new Date((integration as any).mailboxPauseUntil);
-    const now = new Date();
-    if (pauseUntil > now) {
-      console.warn(`[CampaignWorker] Mailbox ${integrationId} paused until ${pauseUntil.toISOString()}, skipping`);
-      return;
-    }
-  }
+  // 24/7 Autonomous Mode: We no longer skip batches due to mailboxPauseUntil
 
   // 4. Check dynamic daily budget (respecting Warmup)
   const sentToday = await getMailboxSentCount(userId, integrationId);
@@ -641,7 +622,10 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
     if (mailboxHealthService.isMailboxError(errorMsg)) {
       // Mark this mailbox as having issues
-      await mailboxHealthService.handleMailboxFailure(integration, errorMsg);
+      const integration = integrationId ? await storage.getIntegrationById(integrationId) : null;
+      if (integration) {
+        await mailboxHealthService.handleMailboxFailure(integration, errorMsg);
+      }
 
       // Re-queue the lead so another mailbox can pick it up
       await db.update(campaignLeads)
@@ -1060,6 +1044,14 @@ async function deliverCampaignEmail(
     .replace(/{{firstName}}/g, firstName)
     .replace(/{{lead_name}}/g, lead.name?.trim() || firstName)
     .replace(/{{company}}/g, company);
+
+  // --- PHASE 51: AUTONOMOUS COMPLIANCE GUARD ---
+  // Ensure we always have a professional opt-out to prevent 'marked as spam' blocks
+  const lowerBody = body.toLowerCase();
+  if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
+    const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
+    body += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
+  }
 
   const trackingId = Math.random().toString(36).substring(2, 11);
 

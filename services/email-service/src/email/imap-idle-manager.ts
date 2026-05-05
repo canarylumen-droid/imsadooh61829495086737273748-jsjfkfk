@@ -11,7 +11,8 @@ import { gmailOAuth } from '@services/api-gateway/src/oauth/gmail.js';
 import { outlookOAuth } from '@services/api-gateway/src/oauth/outlook.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import dns from 'dns';
-import { acquireDistributedLock, extendLock, isLockOwner, releaseLock } from '@shared/lib/redis/redis.js';
+import { acquireDistributedLock, extendLock, isLockOwner, releaseLock, getRedisClient } from '@shared/lib/redis/redis.js';
+import { IMAP_KEYS, IMAP_TTL } from '@shared/lib/redis/imap-keys.js';
 
 
 interface EmailConfig {
@@ -223,6 +224,37 @@ class ImapIdleManager {
         }
     }
 
+
+    /**
+     * Helper to execute IMAP commands safely by stopping IDLE if active, 
+     * running the command, and then restarting IDLE if appropriate.
+     */
+    private async executeImapCommand<T>(imap: Imap, commandFn: (cb: (err: any, result: T) => void) => void): Promise<T | undefined> {
+        if (!imap || imap.state === 'disconnected') return undefined;
+
+        return new Promise((resolve, reject) => {
+            const wasIdling = !!(imap as any)._idleWaiter;
+            
+            const runCommand = () => {
+                commandFn((err, result) => {
+                    if (wasIdling && imap.state === 'authenticated') {
+                        try { (imap as any).idle(); } catch (e) {}
+                    }
+                    if (err) return reject(err);
+                    resolve(result);
+                });
+            };
+
+            if (wasIdling && imap.state === 'authenticated') {
+                imap.once('update', () => { /* wait for idle stop */ });
+                (imap as any).stopIdle();
+                setTimeout(runCommand, 20); // Give it a moment to stop
+            } else {
+                runCommand();
+            }
+        });
+    }
+
     /**
      * Discover special folders (Inbox, Sent) using IMAP attributes
      */
@@ -308,47 +340,28 @@ class ImapIdleManager {
     }
 
     /**
-     * Helper to execute IMAP commands safely by stopping IDLE if active, 
-     * running the command, and then restarting IDLE if appropriate.
-     */
-    private async executeImapCommand<T>(imap: Imap, commandFn: (cb: (err: any, result: T) => void) => void): Promise<T | undefined> {
-        if (!imap || imap.state === 'disconnected') return undefined;
-
-        return new Promise((resolve, reject) => {
-            const wasIdling = !!(imap as any)._idleWaiter;
-            
-            const runCommand = () => {
-                commandFn((err, result) => {
-                    if (wasIdling && imap.state === 'authenticated') {
-                        try { (imap as any).idle(); } catch (e) {}
-                    }
-                    if (err) return reject(err);
-                    resolve(result);
-                });
-            };
-
-            if (wasIdling && imap.state === 'authenticated') {
-                imap.once('update', () => { /* wait for idle stop */ });
-                (imap as any).stopIdle();
-                setTimeout(runCommand, 20); // Give it a moment to stop
-            } else {
-                runCommand();
-            }
-        });
-    }
-
-    /**
      * Setup a persistent IMAP connection with IDLE support
      */
     private async setupConnection(integrationId: string, integration: Integration): Promise<void> {
         if (this.connections.has(integrationId)) return;
 
         // Phase 25 Scaling: Distributed Connection Lock
-        // Only one worker node should manage a specific integration at a time.
+        // SYNC: Check if this integration is already handled by a 24/7 worker replica.
+        const activeKey = IMAP_KEYS.active(integrationId);
+        const redis = await getRedisClient();
+        if (redis) {
+            const isWorkerActive = await redis.exists(activeKey);
+            if (isWorkerActive) {
+                console.log(`[IMAP] 🤖 ${integrationId} is managed by the autonomous worker cluster. Skipping local connection.`);
+                return;
+            }
+        }
+
+        // Fallback/Legacy Lock
         const lockKey = `imap:conn:${integrationId}`;
         const hasLock = await acquireDistributedLock(lockKey, 300); // 5 minute initial lock
         if (!hasLock) {
-            console.log(`[IMAP] 🔒 Integration ${integrationId} is managed by another worker. Skipping setup.`);
+            console.log(`[IMAP] 🔒 Integration ${integrationId} is managed by another service node. Skipping setup.`);
             return;
         }
 
@@ -1521,8 +1534,293 @@ class ImapIdleManager {
             }
         }
     }
+
+    /**
+     * Get available folders for an integration
+     */
+    async getAvailableFolders(integrationId: string): Promise<string[]> {
+        return new Promise(async (resolve, reject) => {
+            const integration = await storage.getIntegrationById(integrationId);
+            if (!integration) return reject(new Error('Integration not found'));
+
+            const config = JSON.parse(decrypt(integration.encryptedMeta));
+            const imap = new Imap({
+                user: config.smtp_user || config.user,
+                password: config.smtp_pass || config.password,
+                host: config.imap_host,
+                port: config.imap_port,
+                tls: true,
+                tlsOptions: { rejectUnauthorized: false },
+                connTimeout: 10000, // 10s TCP timeout
+                authTimeout: 10000 // 10s Auth timeout
+            });
+
+            // Safety Guard: Force end after 30s total
+            const safetyTimer = setTimeout(() => {
+                console.warn(`[IMAP] getAvailableFolders timed out for ${integrationId}. Force closing.`);
+                imap.end();
+                reject(new Error('IMAP operation timed out (30s)'));
+            }, 30000);
+
+            imap.once('ready', () => {
+                imap.getBoxes((err, boxes) => {
+                    clearTimeout(safetyTimer);
+                    if (err) {
+                        imap.end();
+                        return reject(err);
+                    }
+                    const folderList: string[] = [];
+                    const parseBoxes = (obj: any, prefix = '') => {
+                        for (const key in obj) {
+                            const name = prefix + key;
+                            folderList.push(name);
+                            if (obj[key].children) parseBoxes(obj[key].children, name + obj[key].delimiter);
+                        }
+                    };
+                    parseBoxes(boxes);
+                    imap.end();
+                    resolve(folderList);
+                });
+            });
+
+            imap.once('error', (err) => {
+                clearTimeout(safetyTimer);
+                imap.end();
+                reject(err);
+            });
+
+            imap.connect();
+        });
+    }
+
+    /**
+     * Get recent messages from a specific folder
+     */
+    async getRecentMessages(integrationId: string, folderName: string, hours = 24): Promise<any[]> {
+        return new Promise(async (resolve, reject) => {
+            const integration = await storage.getIntegrationById(integrationId);
+            if (!integration) return reject(new Error('Integration not found'));
+
+            const config = JSON.parse(decrypt(integration.encryptedMeta));
+            const imap = new Imap({
+                user: config.smtp_user || config.user,
+                password: config.smtp_pass || config.password,
+                host: config.imap_host,
+                port: config.imap_port,
+                tls: true,
+                tlsOptions: { rejectUnauthorized: false },
+                connTimeout: 15000,
+                authTimeout: 15000
+            });
+
+            // Safety Guard: Force end after 45s total
+            const safetyTimer = setTimeout(() => {
+                console.warn(`[IMAP] getRecentMessages timed out for ${integrationId} (${folderName}). Force closing.`);
+                imap.end();
+                reject(new Error('IMAP message retrieval timed out (45s)'));
+            }, 45000);
+
+            imap.once('ready', () => {
+                imap.openBox(folderName, true, (err, box) => {
+                    if (err) {
+                        clearTimeout(safetyTimer);
+                        imap.end();
+                        return reject(err);
+                    }
+
+                    if (box.messages.total === 0) {
+                        clearTimeout(safetyTimer);
+                        imap.end();
+                        return resolve([]);
+                    }
+
+                    const sinceDate = new Date();
+                    sinceDate.setHours(sinceDate.getHours() - hours);
+                    
+                    imap.search([['SINCE', sinceDate]], (err2, results) => {
+                        if (err2 || !results || results.length === 0) {
+                            clearTimeout(safetyTimer);
+                            imap.end();
+                            return resolve([]);
+                        }
+
+                        const fetch = imap.fetch(results, { bodies: '', struct: true });
+                        const messages: any[] = [];
+
+                        fetch.on('message', (msg) => {
+                            msg.on('body', (stream) => {
+                                simpleParser(stream as any, (err3, parsed) => {
+                                    if (!err3 && parsed) {
+                                        messages.push({
+                                            subject: parsed.subject,
+                                            body: parsed.text || parsed.html || '',
+                                            headers: parsed.headers,
+                                            date: parsed.date
+                                        });
+                                    }
+                                });
+                            });
+                        });
+
+                        fetch.once('error', (err4) => {
+                            clearTimeout(safetyTimer);
+                            imap.end();
+                            reject(err4);
+                        });
+
+                        fetch.once('end', () => {
+                            clearTimeout(safetyTimer);
+                            imap.end();
+                            // Give simpleParser a tiny bit of time to finish the last few streams
+                            setTimeout(() => resolve(messages), 500);
+                        });
+                    });
+                });
+            });
+
+            imap.once('error', (err) => {
+                clearTimeout(safetyTimer);
+                imap.end();
+                reject(err);
+            });
+
+            imap.connect();
+        });
+    }
+
+    /**
+     * Fetch envelope + snippet for the newest `count` messages in INBOX for a given integrationId.
+     * Called by email-sync-queue's `process-new-mail` handler.
+     * Uses a transient IMAP connection to avoid conflicting with the persistent IDLE session.
+     */
+    async fetchNewMessages(
+        userId: string,
+        integrationId: string,
+        count: number = 1
+    ): Promise<Array<{
+        uid: number;
+        messageId: string;
+        subject: string;
+        from: string;
+        to: string;
+        date: string;
+        snippet: string;
+    }>> {
+        try {
+            const integration = await storage.getIntegrationById(integrationId);
+            if (!integration || !integration.connected) return [];
+
+            const isOAuth = integration.provider === 'gmail' || integration.provider === 'outlook';
+            let config: EmailConfig = {};
+
+            if (!isOAuth) {
+                if (!integration.encryptedMeta) return [];
+                try { config = JSON.parse(await decrypt(integration.encryptedMeta)) as EmailConfig; }
+                catch { return []; }
+            }
+
+            let imapHost = config.imap_host || (config.smtp_host || '').replace('smtp', 'imap');
+            const imapPort = config.imap_port || 993;
+
+            if (!imapHost) {
+                if (integration.provider === 'gmail') imapHost = 'imap.gmail.com';
+                else if (integration.provider === 'outlook') imapHost = 'outlook.office365.com';
+            }
+            if (!imapHost) return [];
+
+            const imapOptions: any = {
+                user: config.smtp_user || integration.accountType || '',
+                host: imapHost,
+                port: imapPort,
+                tls: imapPort === 993,
+                family: 4,
+                tlsOptions: { rejectUnauthorized: false },
+                connTimeout: 20000,
+                authTimeout: 20000,
+                keepalive: false,
+            };
+
+            if (isOAuth) {
+                const token = integration.provider === 'gmail'
+                    ? await gmailOAuth.getValidToken(userId, integration.accountType || undefined)
+                    : await outlookOAuth.getValidToken(userId);
+                if (!token) return [];
+                imapOptions.xoauth2 = Buffer.from(
+                    `user=${imapOptions.user}\x01auth=Bearer ${token}\x01\x01`
+                ).toString('base64');
+            } else {
+                imapOptions.password = config.smtp_pass!;
+            }
+
+            const { simpleParser } = await import('mailparser');
+
+            return await new Promise((resolve) => {
+                const imap = new Imap(imapOptions);
+                const messages: any[] = [];
+                const safeEnd = () => { try { if (imap.state !== 'disconnected') imap.end(); } catch {} };
+
+                imap.once('ready', () => {
+                    imap.openBox('INBOX', true, (err: any, box: any) => {
+                        if (err || !box || box.messages.total === 0) { safeEnd(); resolve(messages); return; }
+
+                        const total = box.messages.total;
+                        const fetchCount = Math.min(count, total);
+                        const fetchRange = `${total - fetchCount + 1}:${total}`;
+
+                        const f = imap.seq.fetch(fetchRange, { bodies: ['HEADER', 'TEXT'], struct: true });
+
+                        f.on('message', (msg: any) => {
+                            const item: any = {};
+
+                            msg.on('body', (stream: any) => {
+                                let raw = '';
+                                stream.on('data', (chunk: Buffer) => { raw += chunk.toString('utf8'); });
+                                stream.once('end', async () => {
+                                    try {
+                                        const parsed = await simpleParser(raw);
+                                        item.subject  = parsed.subject || '(no subject)';
+                                        item.from     = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
+                                        item.to       = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
+                                        item.date     = parsed.date?.toISOString() || new Date().toISOString();
+                                        item.snippet  = (parsed.text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+                                    } catch {}
+                                });
+                            });
+
+                            msg.once('attributes', (attrs: any) => {
+                                item.uid       = attrs.uid;
+                                item.messageId = attrs.envelope?.messageId || `imap-${integrationId}-${attrs.uid}`;
+                            });
+
+                            msg.once('end', () => messages.push(item));
+                        });
+
+                        f.once('error', () => { safeEnd(); resolve(messages); });
+                        f.once('end', () => safeEnd());
+                    });
+                });
+
+                imap.once('error', () => resolve(messages));
+                imap.once('end',   () => resolve(messages));
+                imap.connect();
+            });
+        } catch (err: any) {
+            console.error(`[ImapIdleManager] fetchNewMessages failed for ${integrationId}:`, err.message);
+            return [];
+        }
+    }
 }
 
+
+// ── Graceful Shutdown ──────────────────────────────────────────────────────────
+process.on('SIGTERM', async () => {
+    console.log('[ImapIdleManager] SIGTERM received. Cleaning up connections...');
+    try {
+        await imapIdleManager.stop();
+    } catch (err: any) {
+        console.error('[ImapIdleManager] Shutdown error:', err.message);
+    }
+});
 
 export const imapIdleManager = new ImapIdleManager();
 

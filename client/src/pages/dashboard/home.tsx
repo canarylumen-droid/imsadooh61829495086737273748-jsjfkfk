@@ -95,6 +95,12 @@ interface DashboardStats {
       spam: number;
       total: number;
     };
+    dns?: {
+      spf: boolean;
+      dkim: boolean;
+      dmarc: boolean;
+      ptr: boolean;
+    };
   };
   benchmarks?: {
     avgLeadScore: number;
@@ -449,7 +455,7 @@ export default function DashboardHome() {
             animate={{ opacity: 1, scale: 1 }}
             className="relative overflow-hidden group bg-primary/10 border border-primary/20 rounded-[2rem] p-6 shadow-lg shadow-primary/5 mb-8"
           >
-            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 blur-[80px] rounded-full translate-x-1/2 -translate-y-1/2 group-hover:bg-primary/20 transition-all duration-700" />
+            <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 blur-[40px] md:blur-[80px] rounded-full translate-x-1/2 -translate-y-1/2 group-hover:bg-primary/20 transition-all duration-700" />
             <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
               <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shrink-0 animate-pulse">
                 <Brain className="h-6 w-6" />
@@ -597,6 +603,7 @@ export default function DashboardHome() {
               score={stats?.health?.score ?? 100}
               status={(stats?.health?.status === 'warning' ? 'fair' : (stats?.health?.status || 'healthy')) as any}
               bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
+              dns={stats?.health?.dns}
               isLoading={statsLoading}
             />
 
@@ -617,7 +624,7 @@ export default function DashboardHome() {
                   <Badge variant="secondary" className={cn("border-0 text-[10px] uppercase font-bold tracking-tighter",
                     (stats?.engineStatus === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
                   )}>
-                    {(stats?.engineStatus === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "Active" : "Idle"}
+                    {(stats?.engineStatus === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "Active" : (stats?.engineStatus === "Autonomous" ? "Monitoring" : "Idle")}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">

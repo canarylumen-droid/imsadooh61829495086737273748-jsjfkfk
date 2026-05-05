@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { GoogleGenAI } from "@google/genai";
-import { MODELS, OPENAI_INTELLIGENCE_MODEL, GENAI_STABLE_MODEL, OPENAI_FAST_MODEL } from "../utils/model-config.js";
+import { MODELS, OPENAI_INTELLIGENCE_MODEL, GENAI_STABLE_MODEL, OPENAI_FAST_MODEL, Z_AI_FAST_MODEL, LLM_FAILOVER_ORDER } from "../utils/model-config.js";
 import { storage } from '@shared/lib/storage/storage.js';
 
 // Initialize OpenAI conditionally
@@ -236,24 +236,20 @@ export async function generateReply(
     userId?: string;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
     nga1Enforced?: boolean;
-    /** Set to true ONLY when generating a live outbound email body (enables NGA-1 unsubscribe check) */
     isEmailBody?: boolean;
     channel?: string;
   }
 ): Promise<{ text: string; tokensUsed: number }> {
-  // Apply NGA1 Checklist if enforced
   const finalSystemPrompt = options?.nga1Enforced ? wrapWithNGA1(systemPrompt) : systemPrompt;
-
-  const model = options?.userId ? await selectBestModelForBudget(options.userId, options?.model || AI_MODEL) : (options?.model || AI_MODEL);
-
-  const getFinalResult = async () => {
-    const tryOpenAI = async () => {
+  const baseModel = options?.model || AI_MODEL;
+  
+  const providers = {
+    openai: async () => {
       if (!isProviderAvailable('openai')) return null;
       try {
-        const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
-        const modelName = (requestedModel.startsWith('glm-') || requestedModel.startsWith('gemini-')) 
+        const modelName = (baseModel.startsWith('glm-') || baseModel.startsWith('gemini-')) 
           ? OPENAI_INTELLIGENCE_MODEL 
-          : requestedModel;
+          : baseModel;
 
         const response = await openai!.chat.completions.create({
           model: modelName,
@@ -277,13 +273,11 @@ export async function generateReply(
         updateProviderHealth('openai', false, error);
         return null;
       }
-    };
-
-    const tryGenAI = async () => {
+    },
+    genai: async () => {
       if (!isProviderAvailable('genai')) return null;
       try {
-        const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
-        const modelName = requestedModel.includes("gemini") ? requestedModel : GENAI_STABLE_MODEL;
+        const modelName = baseModel.includes("gemini") ? baseModel : GENAI_STABLE_MODEL;
         
         const result = await genai!.models.generateContent({
           model: modelName,
@@ -308,15 +302,13 @@ export async function generateReply(
         updateProviderHealth('genai', false, error);
         return null;
       }
-    };
-
-    const tryZAI = async () => {
+    },
+    zai: async () => {
       if (!isProviderAvailable('zai')) return null;
       try {
-        const requestedModel = options?.model || MODELS.sales_reasoning || AI_MODEL;
-        const modelName = (requestedModel.startsWith('gpt-') || requestedModel.startsWith('gemini-'))
-          ? (MODELS.sales_reasoning || "glm-4")
-          : requestedModel;
+        const modelName = (baseModel.startsWith('gpt-') || baseModel.startsWith('gemini-'))
+          ? "glm-4-flash"
+          : baseModel;
 
         const response = await zai!.chat.completions.create({
           model: modelName,
@@ -340,63 +332,39 @@ export async function generateReply(
         updateProviderHealth('zai', false, error);
         return null;
       }
-    };
-
-    if (PREFERRED_PROVIDER === "zai") {
-      const res = await tryZAI();
-      if (res) return res;
-      const openaiRes = await tryOpenAI();
-      if (openaiRes) return openaiRes;
-      const genaiRes = await tryGenAI();
-      if (genaiRes) return genaiRes;
-    } else if (PREFERRED_PROVIDER === "openai") {
-      const res = await tryOpenAI();
-      if (res) return res;
-      const zaiRes = await tryZAI();
-      if (zaiRes) return zaiRes;
-      const genaiRes = await tryGenAI();
-      if (genaiRes) return genaiRes;
-    } else {
-      const res = await tryGenAI();
-      if (res) return res;
-      const zaiRes = await tryZAI();
-      if (zaiRes) return zaiRes;
-      const openaiRes = await tryOpenAI();
-      if (openaiRes) return openaiRes;
     }
-
-    const isJson = options?.jsonMode;
-    return {
-      text: isJson ? JSON.stringify({
-        subject: "Checking in",
-        body: "Thanks for reaching out. I'd love to discuss how we can help you achieve your goals.",
-        intent: "neutral",
-        confidence: 0.5,
-        metadata: { fallback: true }
-      }) : "Thanks for reaching out! I'd love to help you learn more about our platform.",
-      tokensUsed: 0
-    };
   };
 
-  const result = await getFinalResult();
-
-  // Phase 50: Safety Guard Enforcement
-  // IMPORTANT: isEmail must only be true when generating a LIVE outbound email body —
-  // NOT for JSON template generation, conversation-ai classification, or intent detection.
-  // Caller must explicitly pass `isEmailBody: true` in options to trigger the unsubscribe check.
-  if (options?.nga1Enforced && result.text) {
-    try {
-      result.text = await SafetyGuard.sanitizeResponse(result.text, {
-        channel: (options as any)?.channel || 'email',
-        isEmail: (options as any)?.isEmailBody === true // Only for live sent emails
-      });
-    } catch (err: any) {
-      console.error("[AI Service] Safety Guard Blocked Response:", err.message);
-      throw err;
+  // Execute in defined failover order
+  for (const providerKey of LLM_FAILOVER_ORDER) {
+    const result = await providers[providerKey]();
+    if (result) {
+      if (options?.nga1Enforced && result.text) {
+        try {
+          result.text = await SafetyGuard.sanitizeResponse(result.text, {
+            channel: options?.channel || 'email',
+            isEmail: options?.isEmailBody === true
+          });
+        } catch (err: any) {
+          console.error("[AI Service] Safety Guard Blocked Response:", err.message);
+          throw err;
+        }
+      }
+      return result;
     }
   }
 
-  return result;
+  // Final static fallback
+  return {
+    text: options?.jsonMode ? JSON.stringify({
+      subject: "Checking in",
+      body: "Thanks for reaching out. I'd love to discuss how we can help you achieve your goals.",
+      intent: "neutral",
+      confidence: 0.5,
+      metadata: { fallback: true }
+    }) : "Thanks for reaching out! I'd love to help you learn more about our platform.",
+    tokensUsed: 0
+  };
 }
 
 /**
@@ -408,62 +376,64 @@ export async function classify(
 ): Promise<{ category: string; confidence: number }> {
   const systemPrompt = `Classify text into: ${categories.join(", ")}. Respond JSON: { "category": "...", "confidence": 0.0-1.0 }`;
 
-  const genaiClassify = async () => {
-    if (!isProviderAvailable('genai')) return null;
-    try {
-      const result = await genai!.models.generateContent({
-        model: MODELS.intent_classification?.includes("gemini") ? MODELS.intent_classification : "gemini-1.5-flash",
-        contents: text,
-        config: {
-          responseMimeType: "application/json",
-          systemInstruction: systemPrompt
-        }
-      });
-      updateProviderHealth('genai', true);
-      return JSON.parse(result.text || "{}");
-    } catch (e) {
-      updateProviderHealth('genai', false);
-      return null;
+  const providers = {
+    genai: async () => {
+      if (!isProviderAvailable('genai')) return null;
+      try {
+        const result = await genai!.models.generateContent({
+          model: GENAI_STABLE_MODEL,
+          contents: text,
+          config: {
+            responseMimeType: "application/json",
+            systemInstruction: systemPrompt
+          }
+        });
+        updateProviderHealth('genai', true);
+        return JSON.parse(result.text || "{}");
+      } catch (e) {
+        updateProviderHealth('genai', false);
+        return null;
+      }
+    },
+    openai: async () => {
+      if (!isProviderAvailable('openai')) return null;
+      try {
+        const response = await openai!.chat.completions.create({
+          model: OPENAI_FAST_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
+          response_format: { type: "json_object" },
+          max_completion_tokens: 100,
+        });
+        updateProviderHealth('openai', true);
+        return JSON.parse(response.choices[0].message.content || "{}");
+      } catch (e: any) {
+        updateProviderHealth('openai', false, e.status);
+        return null;
+      }
+    },
+    zai: async () => {
+      if (!isProviderAvailable('zai')) return null;
+      try {
+        const response = await zai!.chat.completions.create({
+          model: Z_AI_FAST_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
+          response_format: { type: "json_object" },
+          max_completion_tokens: 100,
+        });
+        updateProviderHealth('zai', true);
+        return JSON.parse(response.choices[0].message.content || "{}");
+      } catch (e: any) {
+        updateProviderHealth('zai', false, e.status);
+        return null;
+      }
     }
   };
 
-  const openaiClassify = async () => {
-    if (!isProviderAvailable('openai')) return null;
-    try {
-      const response = await openai!.chat.completions.create({
-        model: MODELS.intent_classification || "gpt-4o-mini",
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 100,
-      });
-      updateProviderHealth('openai', true);
-      return JSON.parse(response.choices[0].message.content || "{}");
-    } catch (e: any) {
-      updateProviderHealth('openai', false, e.status);
-      return null;
-    }
-  };
-
-  const zaiClassify = async () => {
-    if (!isProviderAvailable('zai')) return null;
-    try {
-      const response = await zai!.chat.completions.create({
-        model: MODELS.intent_classification || "glm-4-flash",
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
-        response_format: { type: "json_object" },
-        max_completion_tokens: 100,
-      });
-      updateProviderHealth('zai', true);
-      return JSON.parse(response.choices[0].message.content || "{}");
-    } catch (e: any) {
-      updateProviderHealth('zai', false, e.status);
-      return null;
-    }
-  };
-
-  const result = PREFERRED_PROVIDER === "zai" ? (await zaiClassify() || await openaiClassify() || await genaiClassify()) :
-    (PREFERRED_PROVIDER === "genai" ? (await genaiClassify() || await zaiClassify() || await openaiClassify()) :
-      (await openaiClassify() || await zaiClassify() || await genaiClassify()));
+  let result = null;
+  for (const providerKey of LLM_FAILOVER_ORDER) {
+    result = await providers[providerKey]();
+    if (result) break;
+  }
 
   return {
     category: result?.category || categories[0] || "unknown",
@@ -478,55 +448,62 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
   const fullPrompt = `${prompt}\n\nData: ${JSON.stringify(data)}`;
   const systemPrompt = "Analyze data and generate concise, actionable insights.";
 
-  const genaiInsights = async () => {
-    if (!isProviderAvailable('genai')) return null;
-    try {
-      const result = await genai!.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: fullPrompt,
-        config: {
-          systemInstruction: systemPrompt
-        }
-      });
-      updateProviderHealth('genai', true);
-      return result.text || "";
-    } catch (e) {
-      updateProviderHealth('genai', false);
-      return null;
+  const providers = {
+    genai: async () => {
+      if (!isProviderAvailable('genai')) return null;
+      try {
+        const result = await genai!.models.generateContent({
+          model: GENAI_STABLE_MODEL,
+          contents: fullPrompt,
+          config: {
+            systemInstruction: systemPrompt
+          }
+        });
+        updateProviderHealth('genai', true);
+        return result.text || "";
+      } catch (e) {
+        updateProviderHealth('genai', false);
+        return null;
+      }
+    },
+    openai: async () => {
+      if (!isProviderAvailable('openai')) return null;
+      try {
+        const response = await openai!.chat.completions.create({
+          model: OPENAI_FAST_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullPrompt }],
+          max_completion_tokens: 500,
+        });
+        updateProviderHealth('openai', true);
+        return response.choices[0].message.content || "";
+      } catch (e: any) {
+        updateProviderHealth('openai', false, e.status);
+        return null;
+      }
+    },
+    zai: async () => {
+      if (!isProviderAvailable('zai')) return null;
+      try {
+        const response = await zai!.chat.completions.create({
+          model: Z_AI_FAST_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullPrompt }],
+          max_completion_tokens: 500,
+        });
+        updateProviderHealth('zai', true);
+        return response.choices[0].message.content || "";
+      } catch (e: any) {
+        updateProviderHealth('zai', false, e.status);
+        return null;
+      }
     }
   };
 
-  const openaiInsights = async () => {
-    if (!isProviderAvailable('openai')) return null;
-    try {
-      const response = await openai!.chat.completions.create({
-        model: AI_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullPrompt }],
-        max_completion_tokens: 500,
-      });
-      updateProviderHealth('openai', true);
-      return response.choices[0].message.content || "";
-    } catch (e: any) {
-      updateProviderHealth('openai', false, e.status);
-      return null;
-    }
-  };
+  for (const providerKey of LLM_FAILOVER_ORDER) {
+    const res = await providers[providerKey]();
+    if (res) return res;
+  }
 
-  return (PREFERRED_PROVIDER === "zai" ? (await (async () => {
-    if (!isProviderAvailable('zai')) return null;
-    try {
-      const response = await zai!.chat.completions.create({
-        model: AI_MODEL,
-        messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullPrompt }],
-        max_completion_tokens: 500,
-      });
-      updateProviderHealth('zai', true);
-      return response.choices[0].message.content || "";
-    } catch (e: any) {
-      updateProviderHealth('zai', false, e.status);
-      return null;
-    }
-  })() || await openaiInsights() || await genaiInsights()) : (PREFERRED_PROVIDER === "genai" ? await genaiInsights() : await openaiInsights())) || "Analysis complete. System metrics are within normal operational parameters.";
+  return "Analysis complete. System metrics are within normal operational parameters.";
 }
 
 /**

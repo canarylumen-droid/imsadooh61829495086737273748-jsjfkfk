@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useCanAccessVoiceNotes } from "@/hooks/use-access-gate";
 import { useMailbox } from "@/hooks/use-mailbox";
+import { useRealtime } from "@/hooks/use-realtime";
 import {
   Instagram,
   Mail,
@@ -178,6 +179,7 @@ const CircularProgress = ({ value, label, sublabel, color = "primary" }: { value
 );
 
 export default function IntegrationsPage() {
+  const { socket } = useRealtime();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { selectedMailboxId } = useMailbox();
@@ -284,6 +286,27 @@ export default function IntegrationsPage() {
       }
     }
   }, [customEmailStatus?.connected, customEmailStatus?.email, stats?.domainHealth, selectedMailboxId, queryClient]);
+
+  // Real-time listener for reputation and health updates
+  useEffect(() => {
+    const handleStatsUpdated = () => {
+      console.log("[Realtime] Health stats updated, refetching...");
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+    };
+
+    if (socket) {
+      socket.on('stats_updated', handleStatsUpdated);
+      socket.on('integration_health_updated', handleStatsUpdated);
+    }
+
+    return () => {
+      if (socket) {
+        socket.off('stats_updated', handleStatsUpdated);
+        socket.off('integration_health_updated', handleStatsUpdated);
+      }
+    };
+  }, [queryClient, socket]);
 
   const integrations = Array.isArray(integrationsData) ? integrationsData : (integrationsData as any)?.integrations ?? [];
   const allMailboxes = customEmailStatus?.integrations || [];
@@ -984,7 +1007,9 @@ export default function IntegrationsPage() {
                                   (mailbox.reputationScore ?? 100) >= 80 ? "text-emerald-500" :
                                   (mailbox.reputationScore ?? 100) >= 50 ? "text-amber-500" : "text-destructive"
                                 )}>
-                                  {mailbox.reputationScore ?? 100}/100
+                                  {mailbox.reputationScore !== undefined && mailbox.reputationScore !== null 
+                                    ? `${mailbox.reputationScore}/100` 
+                                    : "Initializing..."}
                                 </span>
                               </div>
                               <div className="w-px bg-border/50" />
@@ -1024,18 +1049,30 @@ export default function IntegrationsPage() {
                       <div className="absolute top-0 right-0 w-32 h-32 blur-[60px] opacity-10 bg-primary rounded-full" />
                       <CircularProgress
                         value={stats?.messagesToday ? (stats.messagesToday / getDailyLimit()) * 100 : 0}
-                        label={stats?.messagesToday || "0"}
+                        label={stats ? (stats.messagesToday || "0") : "..."}
                         sublabel="Sent Today"
                       />
                       <CircularProgress
                         value={stats?.messagesYesterday ? (stats.messagesYesterday / getDailyLimit()) * 100 : 0}
-                        label={stats?.messagesYesterday || "0"}
+                        label={stats ? (stats.messagesYesterday || "0") : "..."}
                         sublabel="Sent Yesterday"
                         color="secondary"
                       />
-                      <div className="absolute bottom-3 right-4 flex items-center gap-1.5">
-                        <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        <span className="text-[9px] font-black text-emerald-500/80 uppercase tracking-widest">Real-time Feed</span>
+                      <div className="absolute bottom-3 right-4 flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                          <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Autonomous Sync Online</span>
+                        </div>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Activity className="w-3 h-3 text-muted-foreground/40" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-[10px] font-bold">24/7 Reputation Worker is active.</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </div>
 
@@ -1081,8 +1118,15 @@ export default function IntegrationsPage() {
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-0.5">
                           <p className="text-[9px] font-bold text-muted-foreground/60 uppercase">Domain Grade</p>
-                          <div className="text-3xl font-black tracking-tighter text-foreground h-9 flex items-center">
-                            {calculateReputation() !== null ? `${calculateReputation()}%` : <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />}
+                          <div className="text-3xl font-black tracking-tighter text-foreground h-9 flex items-center gap-2">
+                            {calculateReputation() !== null ? (
+                              <>
+                                {calculateReputation()}%
+                                {parseFloat(calculateReputation()!) === 100 && (
+                                  <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[7px] font-black uppercase tracking-widest px-1 py-0 h-3">Verified</Badge>
+                                )}
+                              </>
+                            ) : <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />}
                           </div>
                         </div>
                         <div className="space-y-0.5">

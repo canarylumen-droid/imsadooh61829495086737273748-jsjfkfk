@@ -173,6 +173,7 @@ export interface IStorage {
   createEmailMessage(message: InsertEmailMessage): Promise<EmailMessage>;
   getEmailMessages(userId: string): Promise<EmailMessage[]>;
   getEmailMessageByMessageId(messageId: string): Promise<EmailMessage | undefined>;
+  getActiveImapIntegrations(): Promise<Integration[]>;
 
   // Calendar Events
   createCalendarEvent(data: InsertCalendarEvent): Promise<CalendarEvent>;
@@ -1090,7 +1091,13 @@ export class MemStorage implements IStorage {
   }
 
   async getEmailMessageByMessageId(messageId: string): Promise<EmailMessage | undefined> {
-    return undefined;
+    return Array.from(this.emailMessages.values()).find(m => m.messageId === messageId);
+  }
+
+  async getActiveImapIntegrations(): Promise<Integration[]> {
+    return Array.from(this.integrations.values()).filter(i => 
+      i.connected && (i.provider === 'gmail' || i.provider === 'outlook' || i.provider === 'custom_email')
+    );
   }
 
   async getDashboardStats(userId: string, options?: { start?: Date; end?: Date; integrationId?: string }): Promise<{

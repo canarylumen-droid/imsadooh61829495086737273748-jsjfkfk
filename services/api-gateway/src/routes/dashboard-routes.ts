@@ -282,6 +282,14 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     .orderBy(dDesc(aiActionSchema.createdAt))
     .limit(10);
 
+    // Aggregate DNS results for the UI
+    const dnsStatus = {
+      spf: mappedVerifications.some(v => v.result?.spf?.valid),
+      dkim: mappedVerifications.some(v => v.result?.dkim?.valid),
+      dmarc: mappedVerifications.some(v => v.result?.dmarc?.valid),
+      blacklist: mappedVerifications.some(v => v.result?.blacklist?.isBlacklisted)
+    };
+
     const responseData = {
       ...stats,
       domainHealth,
@@ -291,6 +299,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
         score: domainHealth,
         status: domainHealth >= 70 ? 'healthy' : (domainHealth >= 55 ? 'fair' : (domainHealth >= 40 ? 'poor' : 'critical')),
         reputation: reputationScore,
+        dns: dnsStatus,
         bounces: {
           hard: hardBounces,
           soft: softBounces,
