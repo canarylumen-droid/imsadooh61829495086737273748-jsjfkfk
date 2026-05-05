@@ -635,7 +635,7 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
 
     const result = await Promise.race([
       sendPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('[TIMEOUT] POST /send-test timed out after 14s')), 14000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('[TIMEOUT] POST /send-test timed out after 25s')), 25000))
     ]);
 
     if (res.headersSent) return;

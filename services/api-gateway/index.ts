@@ -198,12 +198,12 @@ app.use((req, res, next) => {
 // Phase 9: Global Request Timeout Middleware (15s)
 // Prevents slow DB queries or hanging AI streams from exhausting active sockets
 app.use((req, res, next) => {
-  res.setTimeout(15000, () => {
+  res.setTimeout(30000, () => {
     if (!res.headersSent) {
-      console.warn(`[TIMEOUT] ${req.method} ${req.path} timed out after 15s`);
+      console.warn(`[TIMEOUT] ${req.method} ${req.path} timed out after 30s`);
       res.status(503).json({
         error: "Service Temporarily Unavailable",
-        message: "The request took too long to complete. This may be due to high database load.",
+        message: "The request took too long to complete. This may be due to high system load or slow provider response.",
         code: "GATEWAY_TIMEOUT"
       });
     }
