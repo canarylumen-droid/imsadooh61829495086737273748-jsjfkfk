@@ -552,14 +552,17 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       )
     )
     .orderBy(campaignLeads.nextActionAt)
-    .limit(1);
+    .limit(5); // Fetch up to 5 so a timezone-blocked lead doesn't stall the whole mailbox
 
   if (nextLeadResult.length === 0) return; // No more leads for this mailbox
 
-  const leadEntry = (nextLeadResult[0] as any).campaignLead;
-  const lead = (nextLeadResult[0] as any).lead;
+  // BUG #10 FIX: Iterate up to 5 leads so a timezone-gated lead
+  // doesn't stall the entire mailbox queue.
+  for (const row of nextLeadResult) {
+  const leadEntry = (row as any).campaignLead;
+  const lead = (row as any).lead;
 
-  if (!lead?.email) return;
+  if (!lead?.email) continue;
 
   // Claim the lead for this mailbox (assign integrationId)
   if (!leadEntry.integrationId || leadEntry.status === 'queued') {
@@ -586,7 +589,8 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
         })
         .where(eq(campaignLeads.id, leadEntry.id));
       
-      return; 
+      // BUG #10 FIX: Use 'continue' instead of 'return' so we check the rest of the batch
+      continue; 
     }
   }
 
@@ -606,6 +610,11 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
     const errorMsg = sendError.message || 'Unknown send error';
     console.error(`[CampaignWorker] ❌ Send failed for ${lead.email} via ${integrationId}: ${errorMsg}`);
 
+    // BUG #6 FIX: Distinguish transient network errors from fatal mailbox failures.
+    // Transient errors (ETIMEDOUT, ECONNRESET, etc.) should only re-queue the lead.
+    // Fatal errors (bad credentials, EAUTH) should trigger handleMailboxFailure.
+    const isTransient = mailboxHealthService.isTransientNetworkError(errorMsg);
+
     // Phase 19: Dead-Lead Circuit Breaker
     const metadata = { ...(leadEntry.metadata as Record<string, any> || {}) };
     const failCount = (metadata.failCount || 0) + 1;
@@ -617,14 +626,16 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       await db.update(campaignLeads)
         .set({ status: 'failed', error: `Max failures (3) exceeded: ${errorMsg}`, metadata })
         .where(eq(campaignLeads.id, leadEntry.id));
-      return;
+      continue; // next lead in batch
     }
 
-    if (mailboxHealthService.isMailboxError(errorMsg)) {
-      // Mark this mailbox as having issues
-      const integration = integrationId ? await storage.getIntegrationById(integrationId) : null;
-      if (integration) {
-        await mailboxHealthService.handleMailboxFailure(integration, errorMsg);
+    if (isTransient || mailboxHealthService.isMailboxError(errorMsg)) {
+      if (!isTransient) {
+        // Only trigger mailbox health failure for auth/credential errors, not network blips
+        const integration = integrationId ? await storage.getIntegrationById(integrationId) : null;
+        if (integration) {
+          await mailboxHealthService.handleMailboxFailure(integration, errorMsg);
+        }
       }
 
       // Re-queue the lead so another mailbox can pick it up
@@ -632,14 +643,14 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
         .set({ integrationId: null, status: 'queued', error: errorMsg, metadata })
         .where(eq(campaignLeads.id, leadEntry.id));
 
-      console.warn(`[CampaignWorker] 🔄 Lead ${lead.email} re-queued after mailbox failure (Attempt ${failCount}/3)`);
+      console.warn(`[CampaignWorker] 🔄 Lead ${lead.email} re-queued after ${isTransient ? 'transient network' : 'mailbox'} failure (Attempt ${failCount}/3)`);
     } else {
       // Non-mailbox error (e.g. invalid recipient) — mark lead as failed
       await db.update(campaignLeads)
         .set({ status: 'failed', error: errorMsg, metadata })
         .where(eq(campaignLeads.id, leadEntry.id));
     }
-    return; // Don't schedule follow-ups on failure
+    continue; // Don't schedule follow-ups on failure
   }
 
   // 8. Schedule follow-up if there's a next step
@@ -665,6 +676,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
   wsSync.notifyCampaignStatsUpdated(userId, campaignId);
   wsSync.notifyStatsUpdated(userId);
+  } // end for-loop (Bug #10 fix)
 }
 
 /**
@@ -999,7 +1011,8 @@ async function deliverCampaignEmail(
     const followups = (campaign.template as any)?.followups || [];
     const fuConfig = followups[leadEntry.currentStep - 1];
     if (fuConfig) {
-      body = fuConfig.body;
+      body = fuConfig.body || body; // BUG #4 FIX: guard against missing follow-up body
+      // BUG #5 FIX: use initial subject as fallback, not the generic 'Contacting you'
       const fuSubject = fuConfig.subject || subject;
       subject = fuSubject.toLowerCase().startsWith('re:') ? fuSubject : `Re: ${fuSubject}`;
     }
@@ -1012,6 +1025,11 @@ async function deliverCampaignEmail(
     } catch (e) {
       console.warn(`[CampaignWorker] AI generation failed, using template fallback`);
     }
+  }
+
+  // BUG #4/#9 FIX: Hard guard — if body is still empty/undefined, abort with a clear error
+  if (!body) {
+    throw new Error(`Campaign "${campaign.name}" has no email body for step ${leadEntry.currentStep}. Please edit the campaign template.`);
   }
 
   // AI Adjustment Toggle: Check campaign config (for follow-ups specifically)
@@ -1059,7 +1077,9 @@ async function deliverCampaignEmail(
   // Prevents duplicate sends if a job is retried by BullMQ after a partial timeout
   const { acquireLock, releaseLock } = await import('@shared/lib/redis/redis.js');
   const lockKey = `send_guard:${campaign.id}:${lead.id}:${leadEntry.currentStep}`;
-  const hasLock = await acquireLock(lockKey, 300); // 5 minute guard
+  // BUG #3 FIX: Pass failOpen:true so sends proceed when Redis is unavailable.
+  // Without this, a Redis outage silently aborts every single outreach job.
+  const hasLock = await acquireLock(lockKey, 300, true);
 
   if (!hasLock) {
     console.warn(`[CampaignWorker] 🛡️ Send Guard triggered for campaign ${campaign.id}, lead ${lead.id}. Already sending...`);
@@ -1076,11 +1096,14 @@ async function deliverCampaignEmail(
       integrationId,
     });
   } catch (err) {
-    // Release lock only on error if we want to allow immediate retry
-    // Actually, BullMQ handles retries. If we release the lock, the retry will work.
+    // Release lock on error so BullMQ retry can re-acquire it
     await releaseLock(lockKey);
     throw err;
   }
+
+  // BUG #8 FIX: Release lock after successful send so future jobs aren't blocked
+  // by an expired but still-held 5-minute lock from the previous successful send.
+  await releaseLock(lockKey);
 
   // Phase 17: Atomic Post-Send Transaction
   // Ensures that message creation, lead status update, and stats all succeed together
@@ -1092,7 +1115,7 @@ async function deliverCampaignEmail(
         .where(eq(leads.id, lead.id));
     }
 
-    // Save message
+    // Save message — BUG #7 FIX: use consistent 'integrationId' key name everywhere
     await storage.createMessage({
       userId,
       leadId: lead.id,
@@ -1100,8 +1123,9 @@ async function deliverCampaignEmail(
       direction: 'outbound',
       subject,
       body,
+      integrationId,
       trackingId,
-      metadata: { campaignId: campaign.id, step: leadEntry.currentStep, integrationId }
+      metadata: { campaignId: campaign.id, step: leadEntry.currentStep, integrationId, integration_id: integrationId }
     }, tx as any); // Pass transaction client to storage
 
     // Detailed campaign email tracking

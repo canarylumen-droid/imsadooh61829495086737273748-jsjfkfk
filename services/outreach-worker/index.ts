@@ -21,7 +21,7 @@ async function startOutreachService() {
   startWorkerHealthServer('outreach-worker', parseInt(process.env.OUTREACH_WORKER_PORT || process.env.PORT || '8082', 10));
 
   // ── Register workers with the health monitor ──────────────────────────────
-  ['Outreach Engine', 'Meeting Reminders', 'Lead Governance', 'Emoji Follow-up', 'Reputation Monitor']
+  ['Outreach Engine', 'Autonomous Outreach', 'Meeting Reminders', 'Lead Governance', 'Emoji Follow-up', 'Reputation Monitor']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorkerModule = async (name: string, startFn: () => any) => {
@@ -45,17 +45,20 @@ async function startOutreachService() {
     { leadGovernanceWorker },
     { emojiFollowupWorker },
     { reputationWorker },
+    { autonomousOutreachWorker },
   ] = await Promise.all([
     import('./workers/outreach-engine.js').catch(() => ({ outreachEngine: null as any })),
     import('./workers/meeting-reminder-worker.js').catch(() => ({ meetingReminderWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/lead-governance-worker.js').catch(() => ({ leadGovernanceWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/emoji-followup-worker.js').catch(() => ({ emojiFollowupWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/reputation-worker.js').catch(() => ({ reputationWorker: { start: () => {}, stop: () => {} } })),
+    import('./workers/outreach-worker.js').catch(() => ({ autonomousOutreachWorker: { start: () => {}, stop: () => {} } })),
   ]);
 
   const outreachEngine = outreachEngineModule.outreachEngine;
 
   await startWorkerModule('Outreach Engine',       () => outreachEngine.start());
+  await startWorkerModule('Autonomous Outreach',   () => autonomousOutreachWorker.start());
   await startWorkerModule('Meeting Reminders',     () => meetingReminderWorker.start());
   await startWorkerModule('Lead Governance',       () => leadGovernanceWorker.start());
   await startWorkerModule('Emoji Follow-up',       () => emojiFollowupWorker.start());
@@ -92,8 +95,9 @@ async function startOutreachService() {
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Outreach Worker service...`);
-    try { outreachEngine.stop(); }         catch (_e) {}
-    try { meetingReminderWorker.stop(); }  catch (_e) {}
+    try { outreachEngine.stop(); }             catch (_e) {}
+    try { autonomousOutreachWorker.stop(); }   catch (_e) {}
+    try { meetingReminderWorker.stop(); }      catch (_e) {}
     setTimeout(() => process.exit(0), 5000);
   };
   process.on('SIGTERM', async () => {

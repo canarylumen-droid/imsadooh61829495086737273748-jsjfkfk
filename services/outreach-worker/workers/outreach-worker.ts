@@ -158,6 +158,18 @@ export class AutonomousOutreachWorker {
     this.checkAndProcessUsers();
   }
 
+  /**
+   * Stop the autonomous outreach worker
+   */
+  stop(): void {
+    this.isRunning = false;
+    if (this.pollingInterval) {
+      clearInterval(this.pollingInterval);
+      this.pollingInterval = null;
+    }
+    console.log('🛑 Autonomous outreach worker stopped');
+  }
+
   // Placeholder to avoid breaking other parts while refactoring
   private async processUserOutreach(userId: string, integrationId: string, isAutonomous: boolean) {
     // This will call the logic in outreach-engine.ts or processLeadsWithPriority
@@ -517,11 +529,14 @@ Provide a 1-sentence strategic directive for the outreach generation.
       provider: 'email',
       direction: 'outbound',
       body: emailContent.body,
+      integrationId: (lead as any).integrationId || null,
       metadata: {
         subject: emailContent.subject,
         ai_generated: true,
         outreach_type: 'cold_email',
-        sent_at: new Date().toISOString()
+        sent_at: new Date().toISOString(),
+        integrationId: (lead as any).integrationId || null,
+        integration_id: (lead as any).integrationId || null
       }
     });
 

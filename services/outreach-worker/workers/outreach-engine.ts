@@ -493,7 +493,10 @@ export class OutreachEngine {
       ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected
     );
 
-    if (mailboxes.length === 0) return undefined;
+    if (mailboxes.length === 0) {
+      console.warn(`[OutreachEngine] No connected email mailboxes found for user ${userId}`);
+      return undefined;
+    }
 
     // Plan-based limit check
     let activeMailboxes = await this.getAvailableMailboxes(userId);

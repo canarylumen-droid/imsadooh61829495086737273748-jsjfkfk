@@ -2,15 +2,13 @@
  * Multi-Provider Email Failover System
  * 
  * Automatically tries multiple email providers in order:
- * 1. Mailgun (bulletproof, industry standard)
- * 2. Custom SMTP (user's own server)
- * 3. Gmail API fallback
- * 4. Outlook API fallback
+ * 1. Custom SMTP (user's own server)
+ * 2. Gmail API fallback
+ * 3. Outlook API fallback
  * 
  * NOTE: Using Twilio SendGrid for OTP emails (auth@audnixai.com)
  */
 
-import FormData from 'form-data';
 import nodemailer from 'nodemailer';
 import type { SentMessageInfo } from 'nodemailer';
 import { storage } from '@shared/lib/storage/storage.js';
@@ -43,10 +41,6 @@ interface OAuthCredentials {
   refresh_token?: string;
 }
 
-interface MailgunErrorResponse {
-  message?: string;
-}
-
 interface ApiErrorResponse {
   error?: {
     message?: string;
@@ -54,29 +48,12 @@ interface ApiErrorResponse {
 }
 
 class MultiProviderEmailFailover {
-  private mailgunKey: string | null = null;
-  private mailgunDomain: string | null = null;
-
-  constructor() {
-    if (process.env.MAILGUN_API_KEY && process.env.MAILGUN_DOMAIN) {
-      this.mailgunKey = process.env.MAILGUN_API_KEY;
-      this.mailgunDomain = process.env.MAILGUN_DOMAIN;
-    }
-  }
-
   async send(
     email: EmailPayload,
     userId?: string,
     customSmtpConfig?: SmtpConfig
   ): Promise<FailoverResult> {
     const providers: Array<{ name: string; fn: () => Promise<void> }> = [];
-
-    if (this.mailgunKey && this.mailgunDomain) {
-      providers.push({
-        name: 'Mailgun',
-        fn: () => this.sendViaMailgun(email)
-      });
-    }
 
     if (customSmtpConfig || userId) {
       providers.push({
@@ -116,40 +93,6 @@ class MultiProviderEmailFailover {
       provider: 'none',
       error: `All email providers failed. Last tried: ${lastError?.name || 'unknown'}`
     };
-  }
-
-  private async sendViaMailgun(email: EmailPayload): Promise<void> {
-    if (!this.mailgunKey || !this.mailgunDomain) {
-      throw new Error('Mailgun not configured');
-    }
-
-    const form = new FormData();
-    form.append('from', email.from || `noreply@${this.mailgunDomain}`);
-    form.append('to', email.to);
-    form.append('subject', email.subject);
-    form.append('html', email.html);
-    if (email.replyTo) {
-      form.append('h:Reply-To', email.replyTo);
-    }
-
-    const authHeader = Buffer.from(`api:${this.mailgunKey}`).toString('base64');
-
-    const response = await fetch(
-      `https://api.mailgun.net/v3/${this.mailgunDomain}/messages`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Basic ${authHeader}`,
-          ...form.getHeaders()
-        },
-        body: form as any
-      }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json() as MailgunErrorResponse;
-      throw new Error(`Mailgun error: ${errorData.message || 'Unknown error'}`);
-    }
   }
 
   private async sendViaSMTP(
@@ -358,8 +301,3 @@ ${html}
 }
 
 export const multiProviderEmailFailover = new MultiProviderEmailFailover();
-
-
-
-
-

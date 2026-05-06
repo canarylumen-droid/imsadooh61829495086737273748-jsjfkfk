@@ -283,10 +283,16 @@ export async function generateReply(
     genai: async () => {
       if (!isProviderAvailable('genai')) return null;
       try {
-        // If the baseModel is one of our stable aliases or an old model name, normalize it
+        // Normalize model name: if caller passes a bare/unpinned gemini-1.5-flash,
+        // remap it to the stable pinned version to avoid 404s on the v1beta API.
         let modelName = GENAI_STABLE_MODEL;
-        if (baseModel.includes("gemini") && !baseModel.includes("1.5-flash")) {
+        if (baseModel.includes("gemini")) {
+          const isUnpinnedFlash = baseModel === "gemini-1.5-flash" || baseModel === "gemini-1.5-flash-latest";
+          if (!isUnpinnedFlash) {
+            // Caller explicitly requested a specific pinned model (e.g. gemini-2.0-flash, gemini-1.5-flash-002)
             modelName = baseModel;
+          }
+          // Otherwise fall through and use GENAI_STABLE_MODEL
         }
         
         const result = await genai!.models.generateContent({

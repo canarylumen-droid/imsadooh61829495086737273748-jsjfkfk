@@ -833,7 +833,7 @@ export async function sendEmail(
     }
     return result;
   } else {
-    throw new Error('Unsupported email provider');
+    throw new Error(`Unsupported email provider: ${integration.provider}`);
   }
 }
 
