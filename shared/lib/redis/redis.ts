@@ -1,5 +1,4 @@
 import { createClient, type RedisClientType } from 'redis';
-import os from 'os';
 
 let redisClient: RedisClientType | null = null;
 let pubClient: RedisClientType | null = null;
@@ -127,9 +126,9 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
  * Simple Distributed Lock
  * Tries to acquire a lock for a specific key
  */
-export async function acquireLock(key: string, ttlSeconds: number = 30): Promise<boolean> {
+export async function acquireLock(key: string, ttlSeconds: number = 30, failOpen: boolean = false): Promise<boolean> {
   const client = await getRedisClient();
-  if (!client) return true; // Fail open (safe for refreshing as DB will still be update target)
+  if (!client) return failOpen; // Default to fail closed for safety
 
   try {
     const result = await client.set(`lock:${key}`, 'locked', {
@@ -138,7 +137,7 @@ export async function acquireLock(key: string, ttlSeconds: number = 30): Promise
     });
     return result === 'OK';
   } catch (err) {
-    return true; // Fail open
+    return failOpen; // Default to fail closed
   }
 }
 
@@ -159,15 +158,21 @@ export async function releaseLock(key: string): Promise<void> {
  * Get a unique identifier for this process/worker
  */
 export function getWorkerId(): string {
-  return process.env.APP_WORKER_ID || os.hostname() || 'unknown-worker';
+  try {
+    // Use dynamic require so it doesn't break in ESM/Vite envs
+    const osModule = typeof require !== 'undefined' ? require('os') : null;
+    return process.env.APP_WORKER_ID || (osModule ? osModule.hostname() : `worker-${Math.random().toString(36).substring(2, 9)}`);
+  } catch (e) {
+    return process.env.APP_WORKER_ID || `worker-${Math.random().toString(36).substring(2, 9)}`;
+  }
 }
 
 /**
  * Advanced Distributed Lock with Ownership
  */
-export async function acquireDistributedLock(key: string, ttlSeconds: number = 60): Promise<boolean> {
+export async function acquireDistributedLock(key: string, ttlSeconds: number = 60, failOpen: boolean = false): Promise<boolean> {
   const client = await getRedisClient();
-  if (!client) return true;
+  if (!client) return failOpen;
 
   const workerId = getWorkerId();
   try {
@@ -177,31 +182,31 @@ export async function acquireDistributedLock(key: string, ttlSeconds: number = 6
     });
     return result === 'OK';
   } catch (err) {
-    return true;
+    return failOpen;
   }
 }
 
 /**
  * Check if current worker owns the lock
  */
-export async function isLockOwner(key: string): Promise<boolean> {
+export async function isLockOwner(key: string, failOpen: boolean = false): Promise<boolean> {
   const client = await getRedisClient();
-  if (!client) return true;
+  if (!client) return failOpen;
 
   try {
     const owner = await client.get(`lock:${key}`);
     return owner === getWorkerId();
   } catch (err) {
-    return true;
+    return failOpen;
   }
 }
 
 /**
  * Extend lock TTL if owned
  */
-export async function extendLock(key: string, ttlSeconds: number = 60): Promise<boolean> {
+export async function extendLock(key: string, ttlSeconds: number = 60, failOpen: boolean = false): Promise<boolean> {
   const client = await getRedisClient();
-  if (!client) return true;
+  if (!client) return failOpen;
 
   try {
     const workerId = getWorkerId();

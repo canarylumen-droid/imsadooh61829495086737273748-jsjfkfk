@@ -171,13 +171,17 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
       });
     }
 
-    res.json({
-      message,
-      leadStatus: updatedLead.status,
-    });
+    if (!res.headersSent) {
+      res.json({
+        message,
+        leadStatus: updatedLead.status,
+      });
+    }
   } catch (error: unknown) {
     console.error("Send message error:", error);
-    res.status(500).json({ error: "Failed to send message" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to send message" });
+    }
   }
 });
 

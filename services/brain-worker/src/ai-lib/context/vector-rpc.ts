@@ -12,6 +12,7 @@ export async function searchSimilarChunks(
   topK = 5
 ): Promise<{ content: string; similarity: number; fileName: string; version: number }[]> {
   try {
+    console.log(`[VectorRPC] 🔍 Adding RAG search job for user ${userId} (TopK: ${topK})`);
     const job = await ragQueue.add('search', {
       action: 'search',
       query,
@@ -19,10 +20,12 @@ export async function searchSimilarChunks(
       topK
     });
 
-    const result = await job.waitUntilFinished(ragQueueEvents, 10000); // 10s timeout
+    console.log(`[VectorRPC] ⏳ Waiting for RAG job ${job.id}...`);
+    const result = await job.waitUntilFinished(ragQueueEvents, 30000); // 30s timeout
+    console.log(`[VectorRPC] ✅ RAG job ${job.id} completed. Found ${result?.length || 0} chunks.`);
     return result || [];
   } catch (error) {
-    console.warn('[VectorRPC] Search failed via RAG worker:', error);
+    console.warn('[VectorRPC] ❌ Search failed or timed out via RAG worker:', error);
     return [];
   }
 }

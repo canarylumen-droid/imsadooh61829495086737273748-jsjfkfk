@@ -48,22 +48,27 @@ router.post('/preview', requireAuth, async (req, res) => {
  * Generate a complete AI-driven sequence using Brand PDF context
  */
 router.post('/generate-template', requireAuth, async (req, res) => {
+  let timeoutId: NodeJS.Timeout;
   try {
     const userId = req.session?.userId!;
     const { focus } = req.body;
 
     // Wrap with 14s timeout to beat Railway's 15s gateway cutoff.
     // generateCampaignTemplateSequence is slow (3 AI providers + RAG) and may exceed 15s.
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('[TIMEOUT] POST /generate-template timed out after 14s')), 14000);
+    });
+
     const sequence = await Promise.race([
       generateCampaignTemplateSequence(userId, focus),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('[TIMEOUT] POST /generate-template timed out after 14s')), 14000)
-      )
+      timeoutPromise
     ]);
 
+    clearTimeout(timeoutId!);
     if (res.headersSent) return;
     return res.json({ success: true, sequence });
   } catch (error: any) {
+    clearTimeout(timeoutId!);
     if (res.headersSent) return; // Railway already closed socket — do not double-respond
     res.status(500).json({ error: 'Failed to generate campaign sequence', details: error.message });
   }

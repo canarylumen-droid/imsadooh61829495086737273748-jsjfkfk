@@ -1343,6 +1343,12 @@ export class OutreachEngine {
    * Re-assigns leads from unhealthy or paused mailboxes to healthy ones.
    */
   private async selfHealMailboxDistribution(userId: string): Promise<void> {
+    const { acquireLock, releaseLock } = await import('@shared/lib/redis/redis.js');
+    const lockKey = `self-healing:user:${userId}`;
+    const lockAcquired = await acquireLock(lockKey, 300); // 5-minute lock
+    
+    if (!lockAcquired) return;
+
     try {
       const integrationsList = await storage.getIntegrations(userId);
       const unhealthyMailboxes = integrationsList.filter(i => 
@@ -1393,6 +1399,8 @@ export class OutreachEngine {
       }
     } catch (error) {
       console.error("[Self-Healing] Redistribution error:", error);
+    } finally {
+      await releaseLock(lockKey);
     }
   }
 

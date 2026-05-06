@@ -107,6 +107,9 @@ export async function searchSimilarChunks(
 
     if (embedding.length > 0) {
       const embeddingStr = `[${embedding.join(',')}]`;
+      // Set a statement timeout to prevent hanging the worker (25s)
+      await db.execute(sql`SET statement_timeout = 25000`);
+      
       const result = await db.execute(sql`
         SELECT 
           snippet as content, 
@@ -118,6 +121,9 @@ export async function searchSimilarChunks(
         ORDER BY (1 - (embedding <=> ${embeddingStr}::vector)) * (1 + (version * 0.05)) DESC
         LIMIT ${topK}
       `);
+      
+      // Reset timeout
+      await db.execute(sql`SET statement_timeout = 0`);
 
       return result.rows.map((row: any) => ({
         content: row.content,

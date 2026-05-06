@@ -93,6 +93,7 @@ router.get("/", requireAuth, async (req: Request, res: Response): Promise<void> 
     });
   } catch (error: unknown) {
     console.error("Get leads error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: "Failed to fetch leads" });
   }
 });
@@ -116,6 +117,7 @@ router.get("/insights", requireAuth, async (req: Request, res: Response): Promis
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to generate insights";
     console.error("Advanced insights error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -195,6 +197,7 @@ router.get("/analytics", requireAuth, async (req: Request, res: Response): Promi
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to generate analytics";
     console.error("Analytics error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -228,6 +231,7 @@ router.get("/weekly-report", requireAuth, async (req: Request, res: Response): P
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to generate weekly report";
     console.error("Weekly report error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -249,6 +253,7 @@ router.post("/score-all", requireAuth, async (req: Request, res: Response): Prom
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to score leads";
     console.error("Bulk scoring error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -265,7 +270,9 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
     const aiPaused = req.body.aiPaused === 'true';
 
     if (!file) {
-      res.status(400).json({ error: "No CSV file uploaded" });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "No CSV file uploaded" });
+      }
       return;
     }
 
@@ -278,7 +285,9 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
       .on('end', async () => {
         try {
           if (results.length === 0) {
-            res.status(400).json({ error: "CSV file is empty" });
+            if (!res.headersSent) {
+              res.status(400).json({ error: "CSV file is empty" });
+            }
             return;
           }
 
@@ -335,7 +344,9 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
             : (user?.subscriptionTier === 'pro' || user?.plan === 'pro' ? 100000 : 10000);
 
           if (existingLeadsCount >= limit) {
-            res.status(400).json({ error: `Lead limit reached (${limit} leads). Please upgrade your plan.` });
+            if (!res.headersSent) {
+              res.status(400).json({ error: `Lead limit reached (${limit} leads). Please upgrade your plan.` });
+            }
             return;
           }
 
@@ -553,12 +564,15 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
 
         } catch (error: any) {
           console.error("CSV Processing Error:", error);
-          res.status(500).json({ error: "Failed to process CSV rows" });
+          if (!res.headersSent) {
+            res.status(500).json({ error: "Failed to process CSV rows" });
+          }
         }
       });
 
   } catch (error: any) {
     console.error("CSV Import API Error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: error.message });
   }
 });
@@ -574,7 +588,9 @@ router.patch("/:leadId", requireAuth, async (req: Request, res: Response): Promi
 
     const lead = await storage.getLeadById(leadId as string);
     if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -588,7 +604,9 @@ router.patch("/:leadId", requireAuth, async (req: Request, res: Response): Promi
     if (updates.metadata) allowedUpdates.metadata = updates.metadata;
 
     if (Object.keys(allowedUpdates).length === 0) {
-      res.status(400).json({ error: "No valid updates provided" });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "No valid updates provided" });
+      }
       return;
     }
 
@@ -609,6 +627,7 @@ router.patch("/:leadId", requireAuth, async (req: Request, res: Response): Promi
     res.json(updatedLead);
   } catch (error: unknown) {
     console.error("Update lead error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: "Failed to update lead" });
   }
 });
@@ -624,13 +643,16 @@ router.get("/:leadId", requireAuth, async (req: Request, res: Response): Promise
 
     const lead = await storage.getLeadById(leadId as string);
     if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
     res.json(lead);
   } catch (error: unknown) {
     console.error("Get lead error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: "Failed to fetch lead" });
   }
 });
@@ -646,7 +668,9 @@ router.post("/:leadId/research", requireAuth, async (req: Request, res: Response
 
     const lead = await storage.getLeadById(leadId as string);
     if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -663,6 +687,7 @@ router.post("/:leadId/research", requireAuth, async (req: Request, res: Response
     });
   } catch (error: unknown) {
     console.error("Lead research error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: "Failed to perform lead research" });
   }
 });
@@ -681,7 +706,9 @@ router.post("/reply/:leadId", requireAuth, async (req: Request, res: Response): 
     const lead = await storage.getLeadById(leadId as string);
     if (!lead) {
       console.warn(`[AI-Reply] Lead not found: ${leadId}`);
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -695,7 +722,9 @@ router.post("/reply/:leadId", requireAuth, async (req: Request, res: Response): 
       if (!isAdmin) {
         if (!lead.organizationId) {
           console.warn(`[AI-Reply] 403 Unauthorized: User ${userId} is not lead owner and lead has no organization.`);
-          res.status(403).json({ error: "Unauthorized (No Org)" });
+          if (!res.headersSent) {
+            res.status(403).json({ error: "Unauthorized (No Org)" });
+          }
           return;
         }
 
@@ -704,7 +733,9 @@ router.post("/reply/:leadId", requireAuth, async (req: Request, res: Response): 
 
         if (!isMember) {
           console.warn(`[AI-Reply] 403 Unauthorized: User ${userId} is not lead owner, admin, or org member for lead ${leadId}`);
-          res.status(403).json({ error: "Unauthorized (Not in Org)" });
+          if (!res.headersSent) {
+            res.status(403).json({ error: "Unauthorized (Not in Org)" });
+          }
           return;
         }
       }
@@ -825,6 +856,7 @@ router.post("/reply/:leadId", requireAuth, async (req: Request, res: Response): 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to generate reply";
     console.error("AI reply error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -840,7 +872,9 @@ router.post("/draft-reply/:leadId", requireAuth, async (req: Request, res: Respo
 
     const lead = await storage.getLeadById(leadId as string);
     if (!lead) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -849,7 +883,9 @@ router.post("/draft-reply/:leadId", requireAuth, async (req: Request, res: Respo
       const user = await storage.getUserById(userId);
       const isAdmin = user?.role?.toLowerCase() === 'admin';
       if (!isAdmin) {
-        res.status(403).json({ error: "Unauthorized" });
+        if (!res.headersSent) {
+          res.status(403).json({ error: "Unauthorized" });
+        }
         return;
       }
     }
@@ -882,6 +918,7 @@ router.post("/draft-reply/:leadId", requireAuth, async (req: Request, res: Respo
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to generate draft";
     console.error("AI draft generation error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -897,7 +934,9 @@ router.post("/voice/:leadId", requireAuth, async (req: Request, res: Response): 
 
     const lead = await storage.getLeadById(leadId);
     if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -913,6 +952,7 @@ router.post("/voice/:leadId", requireAuth, async (req: Request, res: Response): 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to generate voice script";
     console.error("Voice generation error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -940,7 +980,9 @@ router.post("/import/:provider", requireAuth, async (req: Request, res: Response
         results = await importManychatLeads(userId);
         break;
       default:
-        res.status(400).json({ error: "Invalid provider" });
+        if (!res.headersSent) {
+          res.status(400).json({ error: "Invalid provider" });
+        }
         return;
     }
 
@@ -977,6 +1019,7 @@ router.post("/import/:provider", requireAuth, async (req: Request, res: Response
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to import leads";
     console.error("Import error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -996,7 +1039,9 @@ router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Pr
     };
 
     if (!Array.isArray(leadsData) || leadsData.length === 0) {
-      res.status(400).json({ error: "No leads data provided" });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "No leads data provided" });
+      }
       return;
     }
 
@@ -1136,6 +1181,7 @@ router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Pr
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to import leads";
     console.error("CSV Import error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1148,7 +1194,9 @@ router.post("/parse-body", requireAuth, async (req: Request, res: Response): Pro
   try {
     const { body } = req.body;
     if (!body) {
-      res.status(400).json({ error: "No email body provided" });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "No email body provided" });
+      }
       return;
     }
 
@@ -1156,6 +1204,7 @@ router.post("/parse-body", requireAuth, async (req: Request, res: Response): Pro
     res.json(parsedData);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to parse email body";
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1172,7 +1221,9 @@ router.post("/calendar/:leadId", requireAuth, async (req: Request, res: Response
 
     const lead = await storage.getLeadById(leadId);
     if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -1284,6 +1335,7 @@ router.post("/calendar/:leadId", requireAuth, async (req: Request, res: Response
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to create booking link";
     console.error("Calendar booking error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1299,7 +1351,9 @@ router.get("/smart-replies/:leadId", requireAuth, async (req: Request, res: Resp
 
     const lead = await storage.getLeadById(leadId);
     if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -1307,7 +1361,9 @@ router.get("/smart-replies/:leadId", requireAuth, async (req: Request, res: Resp
     const lastMessage = messages[messages.length - 1];
 
     if (!lastMessage || lastMessage.direction !== 'inbound') {
-      res.status(400).json({ error: "No inbound message to reply to" });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "No inbound message to reply to" });
+      }
       return;
     }
 
@@ -1322,6 +1378,7 @@ router.get("/smart-replies/:leadId", requireAuth, async (req: Request, res: Resp
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to generate smart replies";
     console.error("Smart replies error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1337,7 +1394,9 @@ router.get("/score/:leadId", requireAuth, async (req: Request, res: Response): P
 
     const lead = await storage.getLeadById(leadId);
     if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
+      if (!res.headersSent) {
+        res.status(404).json({ error: "Lead not found" });
+      }
       return;
     }
 
@@ -1351,6 +1410,7 @@ router.get("/score/:leadId", requireAuth, async (req: Request, res: Response): P
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to calculate lead score";
     console.error("Lead scoring error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1369,6 +1429,7 @@ router.get("/competitor-analytics", requireAuth, async (req: Request, res: Respo
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to get competitor analytics";
     console.error("Competitor analytics error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1390,6 +1451,7 @@ router.get("/optimal-discount", requireAuth, async (req: Request, res: Response)
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to calculate optimal discount";
     console.error("Optimal discount error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1404,7 +1466,9 @@ router.post("/brand-info", requireAuth, async (req: Request, res: Response): Pro
     const { brandSnippets, promotions, siteUrl } = req.body;
 
     if (!brandSnippets || !Array.isArray(brandSnippets)) {
-      res.status(400).json({ error: "brandSnippets array required" });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "brandSnippets array required" });
+      }
       return;
     }
 
@@ -1437,6 +1501,7 @@ router.post("/brand-info", requireAuth, async (req: Request, res: Response): Pro
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to update brand info";
     console.error("Brand info update error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1450,7 +1515,9 @@ router.post("/import-pdf", requireAuth, upload.single("pdf"), async (req: Reques
     const userId = getCurrentUserId(req)!;
 
     if (!req.file) {
-      res.status(400).json({ error: "No PDF file provided" });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "No PDF file provided" });
+      }
       return;
     }
 
@@ -1468,10 +1535,12 @@ router.post("/import-pdf", requireAuth, upload.single("pdf"), async (req: Reques
     const maxLeads = planLimits[user?.subscriptionTier || user?.plan || 'trial'] || 10000;
 
     if (currentLeadCount >= maxLeads) {
-      res.status(400).json({
-        error: `You've reached your plan's limit of ${maxLeads} leads. Delete some leads or upgrade your plan to add more.`,
-        limitReached: true
-      });
+      if (!res.headersSent) {
+        res.status(400).json({
+          error: `You've reached your plan's limit of ${maxLeads} leads. Delete some leads or upgrade your plan to add more.`,
+          limitReached: true
+        });
+      }
       return;
     }
 
@@ -1502,6 +1571,7 @@ router.post("/import-pdf", requireAuth, upload.single("pdf"), async (req: Reques
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : "Failed to import leads from PDF";
     console.error("PDF import error:", error);
+    if (res.headersSent) return;
     res.status(500).json({ error: errorMessage });
   }
 });
@@ -1519,12 +1589,16 @@ router.post("/run-outreach", requireAuth, async (req: Request, res: Response): P
     const { leads, brandContext, runDemo = false } = req.body;
 
     if (!leads || !Array.isArray(leads) || leads.length === 0) {
-      res.status(400).json({ error: "No leads provided." });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "No leads provided." });
+      }
       return;
     }
 
     if (!brandContext || !brandContext.serviceName) {
-      res.status(400).json({ error: "Brand context (serviceName, valueProposition) is required." });
+      if (!res.headersSent) {
+        res.status(400).json({ error: "Brand context (serviceName, valueProposition) is required." });
+      }
       return;
     }
 
@@ -1588,6 +1662,7 @@ router.post("/run-outreach", requireAuth, async (req: Request, res: Response): P
 
   } catch (error: any) {
     console.error("[API] Outreach Dispatch Failure:", error.message);
+    if (res.headersSent) return;
     res.status(500).json({ error: error.message || "Failed to initiate outreach." });
   }
 });

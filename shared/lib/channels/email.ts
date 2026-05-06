@@ -188,9 +188,9 @@ async function sendCustomSMTP(
       return dns.lookup(hostname, { family: 4 }, callback);
     },
     tls: { rejectUnauthorized: false },
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 60000,
+    connectionTimeout: 60000,
+    greetingTimeout: 60000,
+    socketTimeout: 90000,
   } as any);
 
   // Initialize pool if not cached; re-acquired per-attempt to pick up ENETUNREACH evictions
@@ -266,20 +266,21 @@ async function sendCustomSMTP(
       // ENETUNREACH: IPv6 route missing on Railway/cloud infra — treat as transient.
       // Evict the pool so the next retry builds a fresh IPv4-only connection.
       const isNetworkUnreachable = error.code === 'ENETUNREACH' || error.code === 'EHOSTUNREACH';
-      if (isNetworkUnreachable) {
-        console.warn(`[CustomSMTP] ⚠️ ENETUNREACH on attempt ${attempt + 1} — purging stale pool for ${cacheKey} and retrying with fresh IPv4 pool...`);
-        // Close via pool map lookup (transporter is scoped inside the try block)
+      const isTimeout = error.code === 'ETIMEDOUT' || error.message?.includes('timeout') || error.code === 'ECONNRESET';
+      
+      if (isNetworkUnreachable || isTimeout) {
+        console.warn(`[CustomSMTP] ⚠️ ${error.code || 'Timeout'} on attempt ${attempt + 1} — purging stale pool for ${cacheKey} and retrying...`);
         try { smtpPools.get(cacheKey)?.close(); } catch (_) {}
-        smtpPools.delete(cacheKey); // Next iteration will rebuild with IPv4
+        smtpPools.delete(cacheKey); 
       }
 
-      const isTransient = isNetworkUnreachable || error.code === 'ECONNECTION' || error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET' || (error.responseCode >= 400 && error.responseCode < 500);
-
-      if (!isTransient || attempt === MAX_RETRIES) {
+      if (attempt === MAX_RETRIES) {
         console.error(`[CustomSMTP] ❌ Permanent failure sending to`, to, ':', error.message);
         throw error;
       }
+      
       console.warn(`[CustomSMTP] ⚠️ Transient failure (Attempt ${attempt + 1}):`, error.message);
+      lastError = error;
     }
   }
 

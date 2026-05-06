@@ -125,7 +125,7 @@ export class LeadEnrichmentWorker {
    */
   private async synthesizeIntelligence(lead: any, searchSnippets: string[]): Promise<any> {
     const { generateReply } = await import("@services/brain-worker/src/ai-lib/core/ai-service.js");
-    const { MODELS } = await import("@services/brain-worker/src/ai-lib/utils/model-config.js");
+    const { MODELS, GENAI_STABLE_MODEL } = await import("@services/brain-worker/src/ai-lib/utils/model-config.js");
 
     const snippetsContext = searchSnippets.length > 0
       ? `\nReal-time search results about their company:\n${searchSnippets.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
@@ -154,7 +154,7 @@ Return ONLY this JSON structure:
 
     const res = await generateReply(systemPrompt, userPrompt, {
       jsonMode: true,
-      model: MODELS.intelligence_synthesis || 'gemini-1.5-flash',
+      model: MODELS.intelligence_synthesis || GENAI_STABLE_MODEL,
       temperature: 0.2
     });
 

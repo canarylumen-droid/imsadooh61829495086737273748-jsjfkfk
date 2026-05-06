@@ -126,7 +126,7 @@ async function runVerification() {
           topK: 3,
         });
 
-        const results = await searchJob.waitUntilFinished(ragQueueEvents, 10000);
+        const results = await searchJob.waitUntilFinished(ragQueueEvents, 30000);
 
         if (results && results.length > 0) {
           console.log(`   ${PASS} Got ${results.length} result(s). Top similarity: ${results[0].similarity.toFixed(3)}`);

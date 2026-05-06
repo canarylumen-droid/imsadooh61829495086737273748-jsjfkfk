@@ -254,9 +254,10 @@ class MailboxHealthService {
   isMailboxError(errorMessage: string): boolean {
     if (!errorMessage) return false;
     
-    // Ignore transient network events to prevent false-positive failures
+    // We MUST return true for transient network events so campaign queues know
+    // it was a network issue (re-queue) and not a lead/recipient issue (permanently fail lead).
     if (this.isTransientNetworkError(errorMessage)) {
-      return false;
+      return true;
     }
 
     const patterns = [
@@ -399,6 +400,12 @@ class MailboxHealthService {
         message: `Mailbox rate limited.`
       });
       return; 
+    }
+
+    // Phase 14b: Ignore transient network errors so they don't increment failure count
+    if (this.isTransientNetworkError(errorMessage)) {
+      console.warn(`[MailboxHealth] ⏳ Transient network event for ${integration.id}: ${errorMessage}. Ignoring failure increment.`);
+      return;
     }
 
     const currentFailures = (integration.failureCount || 0) + 1;

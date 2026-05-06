@@ -50,10 +50,16 @@ function updateProviderHealth(provider: 'openai' | 'genai' | 'zai', isSuccess: b
     status.consecutiveErrors++;
     const status_code = error?.status || error?.response?.status;
     const isRateLimit = status_code === 429;
+    const isTransient = status_code >= 500 || !status_code; // 5xx or Network Error
     
     // Phase 24: Adaptive Exponential Backoff
     let delay = Math.min(COOLDOWN_BASE_MS * Math.pow(2, status.consecutiveErrors - 1), MAX_COOLDOWN_MS);
     
+    // Transient errors get shorter initial backoff
+    if (isTransient && status.consecutiveErrors === 1) {
+      delay = 5000; // 5s for first transient failure
+    }
+
     // Honor Retry-After if provided in headers
     const retryAfterHeader = error?.headers?.['retry-after'];
     if (isRateLimit && retryAfterHeader) {
@@ -71,7 +77,7 @@ function updateProviderHealth(provider: 'openai' | 'genai' | 'zai', isSuccess: b
     }
 
     status.cooldownUntil = Date.now() + delay;
-    console.warn(`[AI Service] ⚠️ Provider ${provider} failed (${status_code || 'Error'}). Backing off for ${Math.round(delay/1000)}s. Errors: ${status.consecutiveErrors}`);
+    console.warn(`[AI Service] ⚠️ Provider ${provider} failed (${status_code || 'Network/Transient'}). Backing off for ${Math.round(delay/1000)}s. Errors: ${status.consecutiveErrors}`);
   }
 }
 
@@ -277,7 +283,11 @@ export async function generateReply(
     genai: async () => {
       if (!isProviderAvailable('genai')) return null;
       try {
-        const modelName = baseModel.includes("gemini") ? baseModel : GENAI_STABLE_MODEL;
+        // If the baseModel is one of our stable aliases or an old model name, normalize it
+        let modelName = GENAI_STABLE_MODEL;
+        if (baseModel.includes("gemini") && !baseModel.includes("1.5-flash")) {
+            modelName = baseModel;
+        }
         
         const result = await genai!.models.generateContent({
           model: modelName,
