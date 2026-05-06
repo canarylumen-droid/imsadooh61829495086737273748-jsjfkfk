@@ -87,6 +87,8 @@ const LUA_CLAIM = `
     )
     redis.call("EXPIRE", KEYS[1], ${IMAP_TTL.active})
     redis.call("SADD", KEYS[2], ARGV[5])
+    -- Legacy Sync: Grab legacy lock so email-service backs off
+    redis.call("SET", KEYS[3], ARGV[1], "EX", 300)
     return 1
   else
     return 0
@@ -597,7 +599,7 @@ export class ImapConnectionManager {
       const result = await (redis as any).eval(
         LUA_CLAIM,
         {
-          keys: [activeKey, workerSetKey],
+          keys: [activeKey, workerSetKey, `lock:imap:conn:${integration.id}`],
           arguments: [WORKER_ID, integration.userId, host, now, integration.id],
         }
       );
@@ -629,7 +631,10 @@ export class ImapConnectionManager {
 
       const key = IMAP_KEYS.active(integrationId);
       await redis.hSet(key, 'lastHeartbeat', Date.now().toString());
-      await redis.expire(key, IMAP_TTL.active); // Renew TTL every 5 min
+      await redis.expire(key, IMAP_TTL.active); // Renew TTL every 35 min
+      
+      // Renew legacy lock
+      await redis.set(`lock:imap:conn:${integrationId}`, WORKER_ID, { EX: 300 });
     } catch { /* non-critical */ }
   }
 
@@ -641,6 +646,7 @@ export class ImapConnectionManager {
       await Promise.allSettled([
         redis.del(IMAP_KEYS.active(integrationId)),
         redis.sRem(IMAP_KEYS.workerSet(WORKER_ID), integrationId),
+        redis.del(`lock:imap:conn:${integrationId}`),
       ]);
     } catch { /* ignore on disconnect/shutdown */ }
   }

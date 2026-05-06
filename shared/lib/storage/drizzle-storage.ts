@@ -2212,11 +2212,15 @@ export class DrizzleStorage implements IStorage {
       const result = await db.execute(sql`
         INSERT INTO domain_verifications (user_id, domain, verification_result)
         VALUES (${userId}, ${data.domain}, ${JSON.stringify(data.verificationResult)}::jsonb)
+        ON CONFLICT (user_id, domain) 
+        DO UPDATE SET 
+          verification_result = EXCLUDED.verification_result,
+          created_at = NOW()
         RETURNING *
       `);
       return result.rows[0];
     } catch (e) {
-      console.error('Failed to create domain verification', e);
+      console.error('Failed to create/update domain verification', e);
       return null;
     }
   }

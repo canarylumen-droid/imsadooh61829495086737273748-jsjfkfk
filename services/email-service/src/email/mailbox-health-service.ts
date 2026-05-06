@@ -238,16 +238,33 @@ class MailboxHealthService {
   }
 
   /**
+   * Determine if an error message indicates a transient network issue
+   */
+  isTransientNetworkError(errorMessage: string): boolean {
+    if (!errorMessage) return false;
+    const patterns = [
+      'ETIMEDOUT', 'ECONNRESET', 'socket hang up', 'ENOTFOUND', 'ENETUNREACH', 'EHOSTUNREACH', 'timeout', 'unknown'
+    ];
+    return patterns.some(p => errorMessage.toLowerCase().includes(p.toLowerCase()));
+  }
+
+  /**
    * Determine if an error message indicates a fatal mailbox/connection issue
    */
   isMailboxError(errorMessage: string): boolean {
     if (!errorMessage) return false;
+    
+    // Ignore transient network events to prevent false-positive failures
+    if (this.isTransientNetworkError(errorMessage)) {
+      return false;
+    }
+
     const patterns = [
-      'EAUTH', 'ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ECONNRESET',
+      'EAUTH', 'ECONNREFUSED',
       'Invalid login', 'authentication failed', 'token expired', 'token invalid',
-      'Invalid credentials', 'socket hang up', 'credentials missing',
+      'Invalid credentials', 'credentials missing',
       'Unauthorized', '401', 'Rate limit exceeded', 'bad decrypt', 'decryption failed',
-      'invalid encrypted data format', 'ENETUNREACH'
+      'invalid encrypted data format'
     ];
     return patterns.some(p => errorMessage.toLowerCase().includes(p.toLowerCase()));
   }
