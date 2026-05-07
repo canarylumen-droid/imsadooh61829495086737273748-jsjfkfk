@@ -4,14 +4,14 @@
  */
 
 // GenAI Models - Use base name for maximum compatibility with v1/v1beta
-export const GENAI_STABLE_MODEL = "gemini-1.5-flash";
+export const GENAI_STABLE_MODEL = "gemini-1.5-flash-latest";
 
 // OpenAI Models
 export const OPENAI_INTELLIGENCE_MODEL = "gpt-4o";     // Flagship for complex sales reasoning
 export const OPENAI_FAST_MODEL = "gpt-4o-mini";        // Fast/Cheap for simple classification/tasks
 
-// Z-AI (GLM) Models — use glm-4-flash for maximum availability
-export const Z_AI_STABLE_MODEL = "glm-4-flash";             // Standard GLM-4
+// Z-AI (GLM) Models — use standard glm-4 for maximum compatibility
+export const Z_AI_STABLE_MODEL = "glm-4";             // Standard GLM-4
 export const Z_AI_FAST_MODEL = "glm-4-flash";         // Flash version
 
 // Failover Priority: OpenAI -> Gemini -> GLM (Gemini is more reliable for embeddings)

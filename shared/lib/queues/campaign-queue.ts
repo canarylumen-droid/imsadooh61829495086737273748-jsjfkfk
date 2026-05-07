@@ -122,7 +122,7 @@ export class CampaignQueueManager {
       const businessHours = 24; 
       const repeatMs = Math.max(60_000, Math.floor((businessHours * 60 * 60 * 1000) / dailyLimit));
       const jitteredRepeatMs = repeatMs + Math.floor(Math.random() * 30_000);
-      const jobKey = `send-batch:${campaign.id}:${mbId}`;
+      const jobKey = `send-batch_${campaign.id}_${mbId}`;
 
       if (campaignQueue) {
         await campaignQueue.add(jobKey, {

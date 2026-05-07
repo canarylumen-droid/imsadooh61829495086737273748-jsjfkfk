@@ -291,31 +291,35 @@ export async function generateReply(
     },
     genai: async () => {
       if (!isProviderAvailable('genai')) return null;
-      try {
-        let modelName = GENAI_STABLE_MODEL;
-        if (baseModel.includes("gemini")) {
-          modelName = baseModel;
-        }
-        
+      
+      const tryGenerate = async (mName: string, useSystemInstruction: boolean = true) => {
         const model = genai!.getGenerativeModel({ 
-          model: modelName,
-          systemInstruction: finalSystemPrompt
+          model: mName,
+          ...(useSystemInstruction ? { systemInstruction: finalSystemPrompt } : {})
         });
 
-        const result = await withTimeout(model.generateContent({
+        return await withTimeout(model.generateContent({
           contents: options?.history 
             ? options.history.map(m => ({
                 role: m.role === 'user' ? 'user' : 'model',
                 parts: [{ text: m.content }]
               }))
-            : [{ role: 'user', parts: [{ text: userPrompt }] }],
+            : [{ role: 'user', parts: [{ text: userPrompt + (useSystemInstruction ? "" : `\n\nSYSTEM INSTRUCTION: ${finalSystemPrompt}`) }] }],
           generationConfig: {
             temperature: options?.temperature || 0.7,
             maxOutputTokens: options?.maxTokens || 1000,
             responseMimeType: options?.jsonMode ? "application/json" : "text/plain",
           }
         }));
+      };
 
+      try {
+        let modelName = GENAI_STABLE_MODEL;
+        if (baseModel.includes("gemini")) {
+          modelName = baseModel;
+        }
+        
+        const result = await tryGenerate(modelName);
         updateProviderHealth('genai', true);
         const response = await result.response;
         return {
@@ -323,6 +327,23 @@ export async function generateReply(
           tokensUsed: response.usageMetadata?.totalTokenCount || 0
         };
       } catch (error: any) {
+        // Model 404 or System Instruction error? Retry with standard model and/or no system instruction
+        if (error.message?.includes('404') || error.message?.includes('not found') || error.message?.includes('400')) {
+          console.warn(`[AI Service] GenAI Primary Model Failed (${baseModel}), retrying with fallback...`);
+          try {
+            const fallbackModel = "gemini-1.5-flash";
+            const result = await tryGenerate(fallbackModel, false); // Try without system instruction for max compat
+            updateProviderHealth('genai', true);
+            const response = await result.response;
+            return {
+              text: response.text() || "",
+              tokensUsed: response.usageMetadata?.totalTokenCount || 0
+            };
+          } catch (retryErr: any) {
+            console.error("[AI Service] GenAI Fallback failed too:", retryErr.message);
+          }
+        }
+        
         console.error("[AI Service] GenAI error:", error.message);
         updateProviderHealth('genai', false, error);
         return null;
@@ -330,13 +351,10 @@ export async function generateReply(
     },
     zai: async () => {
       if (!isProviderAvailable('zai')) return null;
-      try {
-        const modelName = (baseModel.startsWith('gpt-') || baseModel.startsWith('gemini-'))
-          ? "glm-4-flash"
-          : baseModel;
 
-        const response = await withTimeout(zai!.chat.completions.create({
-          model: modelName,
+      const tryZai = async (mName: string) => {
+        return await withTimeout(zai!.chat.completions.create({
+          model: mName,
           messages: [
             { role: "system", content: finalSystemPrompt },
             ...(options?.history || []),
@@ -346,13 +364,31 @@ export async function generateReply(
           max_completion_tokens: options?.maxTokens || 1000,
           temperature: options?.temperature || 0.7
         }));
+      };
 
+      try {
+        let modelName = (baseModel.startsWith('gpt-') || baseModel.startsWith('gemini-'))
+          ? "glm-4"
+          : baseModel;
+
+        const response = await tryZai(modelName);
         updateProviderHealth('zai', true);
         return {
           text: response.choices[0].message.content || "",
           tokensUsed: response.usage?.total_tokens || 0
         };
       } catch (error: any) {
+        if (error.status === 400 || error.message?.includes('exists') || error.message?.includes('不存在')) {
+          console.warn(`[AI Service] Z-AI Model failed, retrying with flash...`);
+          try {
+            const response = await tryZai("glm-4-flash");
+            updateProviderHealth('zai', true);
+            return {
+              text: response.choices[0].message.content || "",
+              tokensUsed: response.usage?.total_tokens || 0
+            };
+          } catch (e) {}
+        }
         console.error("[AI Service] Z-AI error:", error.message);
         updateProviderHealth('zai', false, error);
         return null;
