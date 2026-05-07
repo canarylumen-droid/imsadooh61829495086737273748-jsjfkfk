@@ -447,7 +447,7 @@ export async function classify(
 
   let result = null;
   for (const providerKey of LLM_FAILOVER_ORDER) {
-    result = await providers[providerKey]();
+    result = await providers[providerKey as keyof typeof providers]();
     if (result) break;
   }
 

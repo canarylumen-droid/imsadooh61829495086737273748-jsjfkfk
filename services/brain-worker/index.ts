@@ -68,6 +68,7 @@ async function startAIService() {
     { startVideoCommentMonitoring },
     { aiBudgetWorker },
     { objectionService },
+    { ragWorker },
   ] = await Promise.all([
     import('./workers/lead-enrichment-worker.js'),
     import('./workers/closing-worker.js'),
@@ -77,6 +78,7 @@ async function startAIService() {
     import('@services/brain-worker/src/ai-lib/specialized/video-comment-monitor.js'),
     import('./workers/ai-budget-worker.js'),
     import('@services/brain-worker/src/ai-lib/analyzers/objection-service.js'),
+    import('./workers/rag-worker.js'),
   ]);
 
   await startWorker('Lead Enrichment',    () => leadEnrichmentWorker.start());
@@ -85,6 +87,7 @@ async function startAIService() {
   await startWorker('Follow-up',          () => followUpWorker.start());
   await startWorker('Video Comment',      () => startVideoCommentMonitoring());
   await startWorker('AI Budget Monitor',  () => aiBudgetWorker.start());
+  await startWorker('RAG Search Engine',  () => { /* RagWorker starts automatically on import */ });
 
   // Post-mortem: run now, then hourly
   postMortemWorker.tick();
@@ -185,6 +188,7 @@ async function startAIService() {
     try { leadEnrichmentWorker.stop(); } catch (_e) {}
     try { reEngagementWorker.stop(); }   catch (_e) {}
     try { followUpWorker.stop(); }       catch (_e) {}
+    try { ragWorker.stop(); }           catch (_e) {}
     setTimeout(() => process.exit(0), 5000);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));

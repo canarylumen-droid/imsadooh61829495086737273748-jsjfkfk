@@ -54,12 +54,15 @@ function getBullMQConnection() {
 
   try {
     const url = new URL(urlStr);
+    const isTls = url.protocol === 'rediss:';
+
     return {
       host: url.hostname,
       port: parseInt(url.port || '6379', 10),
       password: url.password ? decodeURIComponent(url.password) : undefined,
       username: url.username ? decodeURIComponent(url.username) : undefined,
       maxRetriesPerRequest: null,
+      tls: isTls ? { rejectUnauthorized: false } : undefined,
     };
   } catch (err) {
     if (IS_PROD) {

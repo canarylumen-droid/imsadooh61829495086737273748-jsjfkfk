@@ -198,12 +198,13 @@ class MailboxHealthService {
       result.error = err.message;
       
       // Only handle as fatal mailbox failure if it matches known patterns
-      if (this.isMailboxError(err.message)) {
+      // Only handle as fatal mailbox failure if it matches known patterns
+      if (this.isMailboxError(err.message) && !this.isTransientNetworkError(err.message)) {
         await this.handleMailboxFailure(integration, err.message);
         await this.trackFailureBurst(integration);
       } else {
         const meta = decryptToJSON(integration.encryptedMeta) || {};
-        console.warn(`[MailboxHealth] Non-fatal check error for ${integration.id} (Host: ${meta.smtp_host || 'unknown'}):`, err.message);
+        console.warn(`[MailboxHealth] Transient or non-fatal check error for ${integration.id} (Host: ${meta.smtp_host || 'unknown'}):`, err.message);
       }
     }
 
@@ -243,7 +244,7 @@ class MailboxHealthService {
   isTransientNetworkError(errorMessage: string): boolean {
     if (!errorMessage) return false;
     const patterns = [
-      'ETIMEDOUT', 'ECONNRESET', 'socket hang up', 'ENOTFOUND', 'ENETUNREACH', 'EHOSTUNREACH', 'timeout', 'unknown'
+      'ETIMEDOUT', 'ECONNRESET', 'socket hang up', 'ENOTFOUND', 'ENETUNREACH', 'EHOSTUNREACH', 'timeout', 'unknown', 'greeting'
     ];
     return patterns.some(p => errorMessage.toLowerCase().includes(p.toLowerCase()));
   }
@@ -254,12 +255,6 @@ class MailboxHealthService {
   isMailboxError(errorMessage: string): boolean {
     if (!errorMessage) return false;
     
-    // We MUST return true for transient network events so campaign queues know
-    // it was a network issue (re-queue) and not a lead/recipient issue (permanently fail lead).
-    if (this.isTransientNetworkError(errorMessage)) {
-      return true;
-    }
-
     const patterns = [
       'EAUTH', 'ECONNREFUSED',
       'Invalid login', 'authentication failed', 'token expired', 'token invalid',
