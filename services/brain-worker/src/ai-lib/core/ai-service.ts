@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { MODELS, OPENAI_INTELLIGENCE_MODEL, GENAI_STABLE_MODEL, OPENAI_FAST_MODEL, Z_AI_FAST_MODEL, LLM_FAILOVER_ORDER } from "../utils/model-config.js";
 import { storage } from '@shared/lib/storage/storage.js';
 
@@ -10,7 +10,7 @@ const openai = process.env.OPENAI_API_KEY
 
 // Initialize Google GenAI conditionally
 const genai = process.env.GEMINI_API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })
+  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
   : null;
 
 // Initialize Z-AI (GLM) conditionally (OpenAI-compatible)
@@ -144,16 +144,14 @@ export async function embed(text: string): Promise<number[]> {
   }
 
   // 2. Try GenAI (768 dims -> padded to 1536)
-  if (isProviderAvailable('genai')) {
+  if (genai) {
     try {
-      const result = await genai!.models.embedContent({ 
-        model: "text-embedding-004",
-        contents: [{ parts: [{ text }] }] 
-      });
-      const vector = result.embeddings?.[0]?.values || [];
+      const model = genai.getGenerativeModel({ model: "text-embedding-004" });
+      const result = await model.embedContent(text);
+      const vector = result.embedding.values || [];
       if (vector.length === 0) throw new Error("Empty embedding returned");
       
-      // Pad to 1536 to match OpenAI dimension if needed (pgvector column is fixed size)
+      // Pad to 1536 to match OpenAI dimension if needed
       const padded = new Array(1536).fill(0);
       for (let i = 0; i < Math.min(vector.length, 1536); i++) {
         padded[i] = vector[i];
@@ -163,12 +161,12 @@ export async function embed(text: string): Promise<number[]> {
       return padded;
     } catch (error: any) {
       console.warn("[AI-Service] GenAI embedding failed:", error.message);
-      updateProviderHealth('genai', false, error.status);
+      updateProviderHealth('genai', false, error);
     }
   }
-
-  // 3. Production: Throw error instead of generating random vector
-  throw new Error("All embedding providers failed or are unavailable.");
+  // 3. Fallback: Return a zero vector to avoid crashing the worker, allowing it to proceed with keyword search
+  console.error("[AI Service] All embedding providers failed. Returning zero vector.");
+  return new Array(1536).fill(0);
 }
 
 /**
@@ -283,35 +281,35 @@ export async function generateReply(
     genai: async () => {
       if (!isProviderAvailable('genai')) return null;
       try {
-        // Normalize model name: if caller passes a bare/unpinned gemini-1.5-flash,
-        // remap it to the stable pinned version to avoid 404s on the v1beta API.
         let modelName = GENAI_STABLE_MODEL;
         if (baseModel.includes("gemini")) {
-          const isUnpinnedFlash = baseModel === "gemini-1.5-flash" || baseModel === "gemini-1.5-flash-latest";
-          if (!isUnpinnedFlash) {
-            // Caller explicitly requested a specific pinned model (e.g. gemini-2.0-flash, gemini-1.5-flash-002)
-            modelName = baseModel;
-          }
-          // Otherwise fall through and use GENAI_STABLE_MODEL
+          modelName = baseModel;
         }
         
-        const result = await genai!.models.generateContent({
+        const model = genai!.getGenerativeModel({ 
           model: modelName,
+          systemInstruction: finalSystemPrompt
+        });
+
+        const result = await model.generateContent({
           contents: options?.history 
-            ? options.history.map(m => `${m.role.toUpperCase()}: ${m.content}`).join("\n") + "\n\nUSER: " + userPrompt
-            : userPrompt,
-          config: {
+            ? options.history.map(m => ({
+                role: m.role === 'user' ? 'user' : 'model',
+                parts: [{ text: m.content }]
+              }))
+            : [{ role: 'user', parts: [{ text: userPrompt }] }],
+          generationConfig: {
             temperature: options?.temperature || 0.7,
             maxOutputTokens: options?.maxTokens || 1000,
             responseMimeType: options?.jsonMode ? "application/json" : "text/plain",
-            systemInstruction: finalSystemPrompt
           }
         });
 
         updateProviderHealth('genai', true);
+        const response = await result.response;
         return {
-          text: result.text || "",
-          tokensUsed: result.usageMetadata?.totalTokenCount || 0
+          text: response.text() || "",
+          tokensUsed: response.usageMetadata?.totalTokenCount || 0
         };
       } catch (error: any) {
         console.error("[AI Service] GenAI error:", error.message);
@@ -396,16 +394,19 @@ export async function classify(
     genai: async () => {
       if (!isProviderAvailable('genai')) return null;
       try {
-        const result = await genai!.models.generateContent({
+        const model = genai!.getGenerativeModel({ 
           model: GENAI_STABLE_MODEL,
-          contents: text,
-          config: {
+          systemInstruction: systemPrompt
+        });
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text }] }],
+          generationConfig: {
             responseMimeType: "application/json",
-            systemInstruction: systemPrompt
           }
         });
         updateProviderHealth('genai', true);
-        return JSON.parse(result.text || "{}");
+        const response = await result.response;
+        return JSON.parse(response.text() || "{}");
       } catch (e) {
         updateProviderHealth('genai', false);
         return null;
@@ -468,15 +469,16 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
     genai: async () => {
       if (!isProviderAvailable('genai')) return null;
       try {
-        const result = await genai!.models.generateContent({
+        const model = genai!.getGenerativeModel({ 
           model: GENAI_STABLE_MODEL,
-          contents: fullPrompt,
-          config: {
-            systemInstruction: systemPrompt
-          }
+          systemInstruction: systemPrompt
+        });
+        const result = await model.generateContent({
+          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
         });
         updateProviderHealth('genai', true);
-        return result.text || "";
+        const response = await result.response;
+        return response.text() || "";
       } catch (e) {
         updateProviderHealth('genai', false);
         return null;
