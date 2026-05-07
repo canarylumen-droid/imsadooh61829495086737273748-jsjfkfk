@@ -36,7 +36,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1036.0",
     "@google-cloud/local-auth": "^3.0.1",
     "@google-cloud/pubsub": "^5.3.0",
-    "@google/genai": "^1.44.0",
+    "@google/generative-ai": "^0.21.0",
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",

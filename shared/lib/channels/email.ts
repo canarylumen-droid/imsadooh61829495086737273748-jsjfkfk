@@ -269,13 +269,15 @@ async function sendCustomSMTP(
       const isTimeout = error.code === 'ETIMEDOUT' || error.message?.includes('timeout') || error.code === 'ECONNRESET';
       
       if (isNetworkUnreachable || isTimeout) {
-        console.warn(`[CustomSMTP] ⚠️ ${error.code || 'Timeout'} on attempt ${attempt + 1} — purging stale pool for ${cacheKey} and retrying...`);
+        const diagnostic = isTimeout ? "Check if port 25/587 is blocked by your hosting provider (Railway often blocks port 25)." : "Check network connectivity.";
+        console.warn(`[CustomSMTP] ⚠️ ${error.code || 'Timeout'} on attempt ${attempt + 1} — purging stale pool for ${cacheKey} and retrying... (${diagnostic})`);
         try { smtpPools.get(cacheKey)?.close(); } catch (_) {}
         smtpPools.delete(cacheKey); 
       }
 
       if (attempt === MAX_RETRIES) {
         console.error(`[CustomSMTP] ❌ Permanent failure sending to`, to, ':', error.message);
+        if (isTimeout) console.error(`[CustomSMTP] 💡 TIP: This is likely a firewall block. Try port 465 if using 587, or ask support to unblock port 587.`);
         throw error;
       }
       

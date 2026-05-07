@@ -3,6 +3,17 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import { MODELS, OPENAI_INTELLIGENCE_MODEL, GENAI_STABLE_MODEL, OPENAI_FAST_MODEL, Z_AI_FAST_MODEL, LLM_FAILOVER_ORDER } from "../utils/model-config.js";
 import { storage } from '@shared/lib/storage/storage.js';
 
+// Global timeout for AI requests (15 seconds) to prevent worker hangs
+const AI_TIMEOUT = 15000;
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = AI_TIMEOUT): Promise<T> {
+  let timeoutHandle: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => reject(new Error(`AI Request timed out after ${timeoutMs}ms`)), timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutHandle));
+}
+
 // Initialize OpenAI conditionally
 const openai = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
@@ -131,10 +142,10 @@ export async function embed(text: string): Promise<number[]> {
   // 1. Try OpenAI (Native 1536 dims)
   if (isProviderAvailable('openai')) {
     try {
-      const response = await openai!.embeddings.create({
+      const response = await withTimeout(openai!.embeddings.create({
         model: "text-embedding-3-small",
         input: text.replace(/\n/g, " "),
-      });
+      }));
       updateProviderHealth('openai', true);
       return response.data[0].embedding;
     } catch (error: any) {
@@ -147,7 +158,7 @@ export async function embed(text: string): Promise<number[]> {
   if (genai) {
     try {
       const model = genai.getGenerativeModel({ model: "text-embedding-004" });
-      const result = await model.embedContent(text);
+      const result = await withTimeout(model.embedContent(text));
       const vector = result.embedding.values || [];
       if (vector.length === 0) throw new Error("Empty embedding returned");
       
@@ -255,7 +266,7 @@ export async function generateReply(
           ? OPENAI_INTELLIGENCE_MODEL 
           : baseModel;
 
-        const response = await openai!.chat.completions.create({
+        const response = await withTimeout(openai!.chat.completions.create({
           model: modelName,
           messages: [
             { role: "system", content: finalSystemPrompt },
@@ -265,7 +276,7 @@ export async function generateReply(
           response_format: options?.jsonMode ? { type: "json_object" } : undefined,
           max_completion_tokens: options?.maxTokens || 1000,
           temperature: options?.temperature || 0.7
-        });
+        }));
 
         updateProviderHealth('openai', true);
         return {
@@ -291,7 +302,7 @@ export async function generateReply(
           systemInstruction: finalSystemPrompt
         });
 
-        const result = await model.generateContent({
+        const result = await withTimeout(model.generateContent({
           contents: options?.history 
             ? options.history.map(m => ({
                 role: m.role === 'user' ? 'user' : 'model',
@@ -303,7 +314,7 @@ export async function generateReply(
             maxOutputTokens: options?.maxTokens || 1000,
             responseMimeType: options?.jsonMode ? "application/json" : "text/plain",
           }
-        });
+        }));
 
         updateProviderHealth('genai', true);
         const response = await result.response;
@@ -324,7 +335,7 @@ export async function generateReply(
           ? "glm-4-flash"
           : baseModel;
 
-        const response = await zai!.chat.completions.create({
+        const response = await withTimeout(zai!.chat.completions.create({
           model: modelName,
           messages: [
             { role: "system", content: finalSystemPrompt },
@@ -334,7 +345,7 @@ export async function generateReply(
           response_format: options?.jsonMode ? { type: "json_object" } : undefined,
           max_completion_tokens: options?.maxTokens || 1000,
           temperature: options?.temperature || 0.7
-        });
+        }));
 
         updateProviderHealth('zai', true);
         return {
@@ -398,12 +409,12 @@ export async function classify(
           model: GENAI_STABLE_MODEL,
           systemInstruction: systemPrompt
         });
-        const result = await model.generateContent({
+        const result = await withTimeout(model.generateContent({
           contents: [{ role: 'user', parts: [{ text }] }],
           generationConfig: {
             responseMimeType: "application/json",
           }
-        });
+        }));
         updateProviderHealth('genai', true);
         const response = await result.response;
         return JSON.parse(response.text() || "{}");
@@ -415,12 +426,12 @@ export async function classify(
     openai: async () => {
       if (!isProviderAvailable('openai')) return null;
       try {
-        const response = await openai!.chat.completions.create({
+        const response = await withTimeout(openai!.chat.completions.create({
           model: OPENAI_FAST_MODEL,
           messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
           response_format: { type: "json_object" },
           max_completion_tokens: 100,
-        });
+        }));
         updateProviderHealth('openai', true);
         return JSON.parse(response.choices[0].message.content || "{}");
       } catch (e: any) {
@@ -431,12 +442,12 @@ export async function classify(
     zai: async () => {
       if (!isProviderAvailable('zai')) return null;
       try {
-        const response = await zai!.chat.completions.create({
+        const response = await withTimeout(zai!.chat.completions.create({
           model: Z_AI_FAST_MODEL,
           messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
           response_format: { type: "json_object" },
           max_completion_tokens: 100,
-        });
+        }));
         updateProviderHealth('zai', true);
         return JSON.parse(response.choices[0].message.content || "{}");
       } catch (e: any) {
