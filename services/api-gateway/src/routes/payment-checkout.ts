@@ -47,29 +47,75 @@ router.post("/checkout-session", requireAuth, async (req: Request, res: Response
       return;
     }
 
-    // For development: return a simulated session ID
-    // In production with real Stripe SDK, this would call stripe.checkout.sessions.create()
-    const sessionId = `cs_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-    const subscriptionId = `sub_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+    // REAL STRIPE INTEGRATION
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+    if (!stripeSecretKey) {
+      console.warn("⚠️ STRIPE_SECRET_KEY not set. Falling back to mock session for development.");
+      const sessionId = `cs_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      const subscriptionId = `sub_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+      
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      await db.execute(sql`
+        INSERT INTO payment_sessions 
+        (user_id, stripe_session_id, plan, amount, expires_at, subscription_id, status)
+        VALUES (${userId}, ${sessionId}, ${plan}, ${PLAN_AMOUNTS[plan] / 100}, ${expiresAt.toISOString()}, ${subscriptionId}, 'pending')
+      `);
 
-    // Create payment session in database using parameterized query
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      res.json({
+        success: true,
+        sessionId,
+        subscriptionId,
+        plan,
+        amount: PLAN_AMOUNTS[plan] / 100,
+        checkoutUrl: `https://checkout.stripe.com/pay/${sessionId}`,
+      });
+      return;
+    }
+
+    const stripe = new (await import('stripe')).default(stripeSecretKey);
     
+    // Create Stripe Checkout Session
+    const session = await (stripe as any).checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `Audnix ${plan.charAt(0).toUpperCase() + plan.slice(1)} Plan`,
+              description: `Autonomous outreach and lead intelligence`,
+            },
+            unit_amount: PLAN_AMOUNTS[plan],
+            recurring: { interval: 'month' },
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'subscription',
+      success_url: `${process.env.PUBLIC_URL || 'http://localhost:5000'}/dashboard/billing?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.PUBLIC_URL || 'http://localhost:5000'}/dashboard/pricing`,
+      customer_email: user.email,
+      metadata: {
+        userId,
+        plan,
+      },
+    });
+
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
     await db.execute(sql`
       INSERT INTO payment_sessions 
       (user_id, stripe_session_id, plan, amount, expires_at, subscription_id, status)
-      VALUES (${userId}, ${sessionId}, ${plan}, ${PLAN_AMOUNTS[plan] / 100}, ${expiresAt.toISOString()}, ${subscriptionId}, 'pending')
+      VALUES (${userId}, ${session.id}, ${plan}, ${PLAN_AMOUNTS[plan] / 100}, ${expiresAt.toISOString()}, ${session.subscription || 'pending'}, 'pending')
     `);
 
-    console.log(`💳 Payment session created: ${sessionId} for ${user.email} (${plan})`);
+    console.log(`💳 Real Stripe session created: ${session.id} for ${user.email} (${plan})`);
 
     res.json({
       success: true,
-      sessionId,
-      subscriptionId,
+      sessionId: session.id,
+      checkoutUrl: session.url,
       plan,
       amount: PLAN_AMOUNTS[plan] / 100,
-      checkoutUrl: `https://checkout.stripe.com/pay/${sessionId}`,
     });
   } catch (error: unknown) {
     console.error("Error creating checkout session:", error);

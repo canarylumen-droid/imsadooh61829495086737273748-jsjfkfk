@@ -1280,7 +1280,8 @@ export async function generateExpertOutreach(
 export async function generateCampaignTemplateSequence(
   userId: string,
   followupCount: number = 3,
-  focus?: string // Optional specific instruction from user
+  focus?: string, // Optional specific instruction from user
+  delayDaysArr?: number[] // Array of days to wait between followups
 ): Promise<{
   subject: string;
   body: string;
@@ -1309,15 +1310,36 @@ export async function generateCampaignTemplateSequence(
   const offer = brandContext.offer || "your premium solution";
   const customFocus = focus ? `USER REQUESTED FOCUS: ${focus}` : "";
 
+  // Prepare the explicit sequence strategy
+  let sequenceStrategy = `Step 1 (Initial Email): Curiosity-driven pattern break. High impact, blunt.`;
+  
+  if (followupCount > 0) {
+    let currentStep = 2;
+    for (let i = 0; i < followupCount; i++) {
+      const delayDays = delayDaysArr ? delayDaysArr[i] : 3;
+      const isLast = i === followupCount - 1;
+      const isSecond = i === 0;
+      
+      let stepStrategy = "";
+      if (isLast) {
+        stepStrategy = `The "Takeaway" approach (Polite, high-status breakup). Frame it around assuming they are too busy and pulling the offer away.`;
+      } else if (isSecond) {
+        stepStrategy = `Value-led insight. Provide a quick resource or industry observation.`;
+      } else {
+        stepStrategy = `Social proof or disruptive theory.`;
+      }
+      
+      sequenceStrategy += `\n    Step ${currentStep} (Follow-Up ${i + 1}): [Sent ${delayDays} days later] - ${stepStrategy}`;
+      currentStep++;
+    }
+  }
+
   try {
     const systemPrompt = `You are an elite high-ticket B2B sales copywriter. You are building out a ${1 + followupCount}-step Cold Email Sequence plus an active Auto-Reply template.
     Your objective is to generate highly disruptive, pattern-breaking B2B outreach.
     
-    SEQUENCE STRATEGY:
-    Step 1: Curiosity-driven pattern break.
-    Step 2-3: Social proof & case studies.
-    Step 4-6: Value-led insights (free audits, PDFs, or advice).
-    Step 7-10: Persistence & 'Take-away' approach (polite breakup).
+    SEQUENCE STRATEGY (EXACT TIMELINE AND PACING):
+    ${sequenceStrategy}
 
     BRAND INTEL:
     Offer: ${JSON.stringify(offer)}
@@ -1333,12 +1355,12 @@ export async function generateCampaignTemplateSequence(
     
     ${customFocus}
 
-    RULES & FORMATTING:
-    1. USE THESE EXACT PLACEHOLDERS: {{firstName}}, {{company}}, {{industry}}.
-    2. THE CURIOSITY GAP: Start the first email bluntly. "Is {{company}} prepared for the shift in {{industry}}?"
-    3. NO FLUFF: No "Hope you are doing well" or "My name is...".
-    4. FOLLOW-UPS: Generate EXACTLY ${followupCount} follow-up steps. Each step should have a subject (often starts with "Re:"), a body, and a delayDays (e.g. 3, 7, 14).
-    5. AUTO-REPLY: A conversational message that gets sent immediately after they reply, pushing to a meeting.
+    STRICT COPYWRITING RULES & BANNED PHRASES:
+    1. ZERO FLUFF: Do NOT use phrases like "Just checking in", "Touching base", "Hope this finds you well", or "I know you're busy". These are instantly flagged as AI spam by prospects.
+    2. THE CURIOSITY GAP: Start the first email bluntly. Focus on the core problem they are likely facing.
+    3. TIME AWARENESS: Use the "Sent X days later" context in the strategy above to naturally pace the follow-ups (e.g. if 14 days later, acknowledge the time gap implicitly).
+    4. FOLLOW-UPS COUNT: You MUST generate EXACTLY ${followupCount} follow-up steps in the array. No more, no less.
+    5. PLACEHOLDERS: Use EXACTLY these placeholders: {{firstName}}, {{company}}, {{industry}}. You can also use advanced placeholders like {{competitor_name}} or {{recent_news}} if it fits the strategy.
     
     OUTPUT JSON FORMAT EXACTLY:
     {
@@ -1348,7 +1370,7 @@ export async function generateCampaignTemplateSequence(
         { "subject": "Re: Email 1 Subject", "body": "Follow up body...", "delayDays": 3 }
       ],
       "autoReplyBody": "Auto-Reply Body"
-    } (The followups array MUST have length ${followupCount})`;
+    } (The followups array MUST have EXACTLY length ${followupCount})`;
 
     const aiResponse = await generateReply(systemPrompt, "Draft the 4-part master sequence now.", {
       model: MODELS.sales_reasoning,
@@ -1363,10 +1385,10 @@ export async function generateCampaignTemplateSequence(
     return {
       subject: result.subject || "quick question about {{company}}",
       body: result.body,
-      followups: (result.followups || []).map((f: any) => ({
+      followups: (result.followups || []).slice(0, followupCount).map((f: any, index: number) => ({
         subject: f.subject || `Re: ${result.subject}`,
         body: f.body || "",
-        delayDays: parseInt(f.delayDays) || 3
+        delayDays: delayDaysArr ? delayDaysArr[index] : (parseInt(f.delayDays) || 3)
       })),
       autoReplyBody: result.autoReplyBody || ""
     };

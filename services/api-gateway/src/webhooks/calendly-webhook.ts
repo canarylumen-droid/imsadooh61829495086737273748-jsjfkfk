@@ -125,7 +125,7 @@ async function handleMeetingBooked(event: CalendlyWebhookEvent): Promise<void> {
     let userId: string | null = null;
     
     // Attempt 1: Match by direct Calendly User URI if available in payload
-    const eventOwnerUri = (scheduledEvent as any).event_memberships?.[0]?.user;
+    const eventOwnerUri = (scheduledEvent as any).event_memberships?.[0]?.user || (scheduledEvent as any).user;
     if (eventOwnerUri) {
       const [user] = await db.select().from(users).where(eq(users.calendlyUserUri, eventOwnerUri)).limit(1);
       if (user) userId = user.id;
@@ -144,9 +144,14 @@ async function handleMeetingBooked(event: CalendlyWebhookEvent): Promise<void> {
     }
 
     const attendeeEmail = invitee.email;
+    
+    // STRONGER MATCHING: Check for leadId in Calendly tracking parameters (utm_content or custom)
+    const tracking = (payload as any).tracking || {};
+    const leadIdFromTracking = tracking.utm_content || tracking.salesforce_uuid;
 
     const [booking] = await db.insert(calendarEvents).values({
       userId,
+      leadId: leadIdFromTracking || null, // Priority tracking leadId
       provider: 'calendly',
       externalId: scheduledEvent.uri,
       title: scheduledEvent.name || 'Discovery Call',
@@ -161,18 +166,30 @@ async function handleMeetingBooked(event: CalendlyWebhookEvent): Promise<void> {
 
     // PHASE 14: Update Lead status to 'booked' 
     const { leads } = await import("@audnix/shared");
+    
+    // Priority 1: Match by leadId from tracking
+    // Priority 2: Fallback to email + userId
     const [updatedLead] = await db.update(leads)
       .set({ 
         status: 'booked', 
         updatedAt: new Date(),
         metadata: booking ? sql`jsonb_set(coalesce(${leads.metadata}, '{}'::jsonb), '{lastBooking}', ${JSON.stringify(booking)}::jsonb)` : sql`${leads.metadata}`
       })
-      .where(and(eq(leads.userId, userId), eq(leads.email, attendeeEmail)))
+      .where(
+        leadIdFromTracking 
+          ? eq(leads.id, leadIdFromTracking) 
+          : and(eq(leads.userId, userId), eq(leads.email, attendeeEmail))
+      )
       .returning();
 
     if (updatedLead) {
       console.log(`✓ Lead ${updatedLead.id} (${attendeeEmail}) status updated to 'booked' via Calendly webhook`);
       
+      // Update the booking record with the found leadId if it was missing
+      if (!booking.leadId) {
+        await db.update(calendarEvents).set({ leadId: updatedLead.id }).where(eq(calendarEvents.id, booking.id));
+      }
+
       // PHASE 3: Stop all follow-ups immediately
       await storage.clearFollowUpQueue(updatedLead.id);
       console.log(`✓ Follow-up queue cleared for lead: ${updatedLead.id}`);

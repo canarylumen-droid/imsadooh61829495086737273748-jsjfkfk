@@ -51,7 +51,7 @@ router.post('/generate-template', requireAuth, async (req, res) => {
   let timeoutId: NodeJS.Timeout;
   try {
     const userId = req.session?.userId!;
-    const { focus, count } = req.body;
+    const { focus, count, delayDays } = req.body;
 
     // Wrap with 14s timeout to beat Railway's 15s gateway cutoff.
     const timeoutPromise = new Promise<never>((_, reject) => {
@@ -59,7 +59,7 @@ router.post('/generate-template', requireAuth, async (req, res) => {
     });
 
     const sequence = await Promise.race([
-      generateCampaignTemplateSequence(userId, count || 3, focus),
+      generateCampaignTemplateSequence(userId, count || 3, focus, delayDays),
       timeoutPromise
     ]);
 

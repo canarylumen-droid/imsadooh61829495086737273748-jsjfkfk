@@ -47,6 +47,7 @@ async function startOutreachService() {
     { reputationWorker },
     { autonomousOutreachWorker },
     campaignQueueModule,
+    autonomousScalerModule,
   ] = await Promise.all([
     import('./workers/outreach-engine.js').catch(() => ({ outreachEngine: null as any })),
     import('./workers/meeting-reminder-worker.js').catch(() => ({ meetingReminderWorker: { start: () => {}, stop: () => {} } })),
@@ -58,7 +59,10 @@ async function startOutreachService() {
       log.error('Failed to load Campaign Queue', { error: err.message });
       return null;
     }),
+    import('./src/outreach-lib/autonomous-scaler.js').catch(() => ({ AutonomousScalerService: null as any })),
   ]);
+
+  const { AutonomousScalerService } = autonomousScalerModule;
 
   const outreachEngine = outreachEngineModule.outreachEngine;
 
@@ -71,6 +75,16 @@ async function startOutreachService() {
 
   if (campaignQueueModule) {
     log.info('Campaign Engine BullMQ Worker ✅ Initialized');
+  }
+
+  // ── Activate Autonomous Neural Scaler ──────────────────────────────
+  if (AutonomousScalerService) {
+    log.info('Autonomous Scaler ✅ Active (Cycle: 12h)');
+    // Run once on startup, then every 12 hours
+    AutonomousScalerService.runOptimizationCycle().catch((err: any) => log.error('Initial Scaler Cycle failed', { error: err.message }));
+    setInterval(() => {
+      AutonomousScalerService.runOptimizationCycle().catch((err: any) => log.error('Daily Scaler Cycle failed', { error: err.message }));
+    }, 12 * 60 * 60 * 1000); 
   }
 
   // ── BullMQ Worker — processes queue-dispatched jobs with retry support ────

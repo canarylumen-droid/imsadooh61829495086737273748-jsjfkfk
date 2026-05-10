@@ -21,7 +21,7 @@ import {
   campaignEmails,
   integrations,
 } from '@audnix/shared';
-import { eq, and, or, sql, lte, isNull, ne } from 'drizzle-orm';
+import { eq, and, or, sql, lte, isNull, ne, asc } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from '../channels/email.js';
 import { adjustCopyIfNecessary } from "../ai/copy-adjuster.js";
@@ -133,7 +133,7 @@ export class CampaignQueueManager {
           dailyLimit,
         }, {
           repeat: { every: jitteredRepeatMs },
-          jobId: jobKey,
+          jobId: jobKey.replace(/:/g, '-'),
           priority: 2
         });
       } else {
@@ -164,7 +164,7 @@ export class CampaignQueueManager {
       userId: campaign.userId,
     }, {
       repeat: { every: 60_000 }, // Reduced from 30s to 60s for DB sanity
-      jobId: `stats:${campaign.id}`,
+      jobId: `stats-${campaign.id}`,
     });
 
     console.log(`[CampaignQueue] ✅ Campaign "${campaign.name}" fully registered`);
@@ -487,9 +487,13 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   // 24/7 MODE: Ignoring weekend exclusion flag for autonomous performance
   // if (isWeekend && campaign.excludeWeekends) return;
 
-  // 3. FAULT TOLERANCE: Connection check removed for 24/7 autonomous deployment
-
-  // 24/7 Autonomous Mode: We no longer skip batches due to mailboxPauseUntil
+  // 3. FAULT TOLERANCE: Check mailbox health (Smart Recovery aware)
+  const { MailboxHealthMonitor } = await import('@shared/lib/monitoring/health-monitor.js');
+  const healthy = await MailboxHealthMonitor.isHealthy(integrationId, userId);
+  if (!healthy) {
+    console.log(`[CampaignWorker] ⏳ Mailbox ${integrationId.slice(-8)} is cooling down or requires reconnection. Skipping batch.`);
+    return;
+  }
 
   // 4. Check dynamic daily budget (respecting Warmup & Neural Brain)
   const sentToday = await getMailboxSentCount(userId, integrationId);
@@ -555,6 +559,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
     .where(
       and(
         eq(campaignLeads.campaignId, campaignId),
+        eq(leads.userId, userId), // MULTI-TENANT ENFORCEMENT
         or(
           // Leads assigned to this mailbox
           and(
@@ -887,12 +892,13 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
 
   const { campaignId, userId, campaignLeadId, integrationId, leadId } = data;
 
-  const [campaign] = await db.select().from(outreachCampaigns)
-    .where(eq(outreachCampaigns.id, campaignId));
-  if (!campaign) return;
+  // 2. Fetch campaign and verify status
+  const [campaign] = await db.select().from(outreachCampaigns).where(eq(outreachCampaigns.id, campaignId));
+  if (!campaign || campaign.status === 'aborted' || campaign.status === 'paused') return;
 
+  // 3. Get lead details
   const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));
-  if (!lead?.email) return;
+  if (!lead?.email || lead.aiPaused) return;
 
   const [leadEntry] = await db.select().from(campaignLeads)
     .where(eq(campaignLeads.id, campaignLeadId));
@@ -928,12 +934,18 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
 
       const isSubsequentReply = previousAutoReplies.length > 0;
 
+      const pastEmails = await db.select({ subject: campaignEmails.subject, body: campaignEmails.body, sentAt: campaignEmails.sentAt })
+        .from(campaignEmails)
+        .where(and(eq(campaignEmails.campaignId, campaign.id), eq(campaignEmails.leadId, lead.id)))
+        .orderBy(asc(campaignEmails.stepIndex));
+
       const adjustment = await adjustCopyIfNecessary({
         userId,
         leadId: lead.id,
         originalBody: body,
         originalSubject: subject,
-        isSubsequentReply // Pass hint to AI for better brainstorming
+        isSubsequentReply, // Pass hint to AI for better brainstorming
+        sequenceHistory: pastEmails as any
       });
       if (adjustment.adjusted) {
         body = adjustment.body;
@@ -1005,7 +1017,7 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
   const [campaign] = await db.select().from(outreachCampaigns)
     .where(eq(outreachCampaigns.id, campaignId));
 
-  if (!campaign || campaign.status === 'aborted') return;
+  if (!campaign || campaign.status === 'aborted' || campaign.status === 'paused') return;
 
   // Aggregate live stats
   const leadStats = await db.select({
@@ -1111,11 +1123,21 @@ async function deliverCampaignEmail(
   // AI Adjustment Toggle: Check campaign config (for follow-ups specifically)
   if (leadEntry.currentStep > 0 && (campaign.config as any)?.aiAdjustCopy) {
     try {
+      const pastEmails = await db!.select({ subject: campaignEmails.subject, body: campaignEmails.body, sentAt: campaignEmails.sentAt })
+        .from(campaignEmails)
+        .where(and(eq(campaignEmails.campaignId, campaign.id), eq(campaignEmails.leadId, lead.id)))
+        .orderBy(asc(campaignEmails.stepIndex));
+
+      const totalSteps = ((campaign.template as any)?.followups?.length || 0) + 1;
+
       const adjustment = await adjustCopyIfNecessary({
         userId,
         leadId: lead.id,
         originalBody: body,
         originalSubject: subject,
+        currentStepIndex: leadEntry.currentStep,
+        totalSteps,
+        sequenceHistory: pastEmails as any
       });
       if (adjustment.adjusted) {
         body = adjustment.body;
@@ -1140,6 +1162,20 @@ async function deliverCampaignEmail(
     .replace(/{{company}}/g, company);
 
   // --- PHASE 51: AUTONOMOUS COMPLIANCE GUARD ---
+  // Universal SafetyGuard: Catch hallucinations, placeholders, and tone issues in ALL outreach
+  try {
+    const { SafetyGuard } = await import('@shared/lib/monitoring/safety-guard.js');
+    const safetyResult = await SafetyGuard.sanitizeResponse(body, subject);
+    body = safetyResult.body;
+    subject = safetyResult.subject;
+
+    if (safetyResult.wasFlagged) {
+      console.log(`[CampaignWorker] 🛡️ SafetyGuard sanitized outreach for lead ${lead.id}: ${safetyResult.flagReasons?.join(', ')}`);
+    }
+  } catch (safetyErr) {
+    console.warn(`[CampaignWorker] SafetyGuard scan skipped due to error:`, safetyErr);
+  }
+
   // Ensure we always have a professional opt-out to prevent 'marked as spam' blocks
   const lowerBody = body.toLowerCase();
   if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
@@ -1285,11 +1321,37 @@ async function deliverCampaignInstagram(
 ): Promise<void> {
   const { sendInstagramOutreach } = await import('../channels/instagram.js');
   
-  let body = (campaign.template as any).body;
+  let body = (campaign.template as any).body || "";
   if (leadEntry.currentStep > 0) {
     const followups = (campaign.template as any)?.followups || [];
     const fuConfig = followups[leadEntry.currentStep - 1];
     if (fuConfig) body = fuConfig.body;
+  }
+
+  // AI Adjustment Toggle: Check campaign config (for follow-ups specifically)
+  if (leadEntry.currentStep > 0 && (campaign.config as any)?.aiAdjustCopy) {
+    try {
+      const pastMessages = await db!.select({ subject: campaignEmails.subject, body: campaignEmails.body, sentAt: campaignEmails.sentAt })
+        .from(campaignEmails)
+        .where(and(eq(campaignEmails.campaignId, campaign.id), eq(campaignEmails.leadId, lead.id)))
+        .orderBy(asc(campaignEmails.stepIndex));
+
+      const totalSteps = ((campaign.template as any)?.followups?.length || 0) + 1;
+
+      const adjustment = await adjustCopyIfNecessary({
+        userId,
+        leadId: lead.id,
+        originalBody: body,
+        currentStepIndex: leadEntry.currentStep,
+        totalSteps,
+        sequenceHistory: pastMessages as any
+      });
+      if (adjustment.adjusted) {
+        body = adjustment.body;
+      }
+    } catch (err) {
+      console.error(`[CampaignWorker] IG AI Adjustment failed for lead ${lead.id}:`, err);
+    }
   }
 
   // Personalization
@@ -1499,10 +1561,10 @@ if (campaignWorker) {
   const scalerPath = '../../../services/outreach-worker/src/outreach-lib/autonomous-scaler.js';
   import(scalerPath).then(({ AutonomousScalerService }) => {
     // Run immediately on start, then every 24 hours
-    AutonomousScalerService.runOptimizationCycle().catch((e: any) => console.error('Scaler failed on init:', e));
+    AutonomousScalerService.runOptimizationCycle().catch((err: any) => console.error('Initial Scaler Cycle failed:', err.message));
     setInterval(() => {
-      AutonomousScalerService.runOptimizationCycle().catch((e: any) => console.error('Scaler failed in cycle:', e));
-    }, 24 * 60 * 60 * 1000);
+      AutonomousScalerService.runOptimizationCycle().catch((err: any) => console.error('Daily Scaler Cycle failed:', err.message));
+    }, 12 * 60 * 60 * 1000); 
   }).catch((err: any) => {
     console.error('Failed to load AutonomousScalerService:', err.message);
   });

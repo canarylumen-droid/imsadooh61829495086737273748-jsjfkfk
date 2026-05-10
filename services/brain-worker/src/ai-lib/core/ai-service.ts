@@ -145,7 +145,7 @@ export async function embed(text: string): Promise<number[]> {
       const response = await withTimeout(openai!.embeddings.create({
         model: "text-embedding-3-small",
         input: text.replace(/\n/g, " "),
-      }));
+      }), 5000); // Shorter timeout for embeddings
       updateProviderHealth('openai', true);
       return response.data[0].embedding;
     } catch (error: any) {
@@ -155,10 +155,10 @@ export async function embed(text: string): Promise<number[]> {
   }
 
   // 2. Try GenAI (768 dims -> padded to 1536)
-  if (genai) {
+  if (isProviderAvailable('genai')) {
     try {
-      const model = genai.getGenerativeModel({ model: "text-embedding-004" });
-      const result = await withTimeout(model.embedContent(text));
+      const model = genai!.getGenerativeModel({ model: "text-embedding-004" }, { apiVersion: 'v1' });
+      const result = await withTimeout(model.embedContent(text), 5000);
       const vector = result.embedding.values || [];
       if (vector.length === 0) throw new Error("Empty embedding returned");
       
@@ -175,9 +175,9 @@ export async function embed(text: string): Promise<number[]> {
       updateProviderHealth('genai', false, error);
     }
   }
-  // 3. Fallback: Return a zero vector to avoid crashing the worker, allowing it to proceed with keyword search
-  console.error("[AI Service] All embedding providers failed. Returning zero vector.");
-  return new Array(1536).fill(0);
+  // 3. Fallback: Return empty to trigger keyword search
+  console.error("[AI Service] All embedding providers failed.");
+  return [];
 }
 
 /**
@@ -296,7 +296,7 @@ export async function generateReply(
         const model = genai!.getGenerativeModel({ 
           model: mName,
           ...(useSystemInstruction ? { systemInstruction: finalSystemPrompt } : {})
-        });
+        }, { apiVersion: 'v1' });
 
         return await withTimeout(model.generateContent({
           contents: options?.history 
@@ -329,9 +329,9 @@ export async function generateReply(
       } catch (error: any) {
         // Model 404 or System Instruction error? Retry with standard model and/or no system instruction
         if (error.message?.includes('404') || error.message?.includes('not found') || error.message?.includes('400')) {
-          console.warn(`[AI Service] GenAI Primary Model Failed (${baseModel}), retrying with fallback...`);
+          console.warn(`[AI Service] GenAI Primary Model Failed (${baseModel}), retrying with standard flash...`);
           try {
-            const fallbackModel = "gemini-1.5-flash";
+            const fallbackModel = "gemini-1.5-flash"; // Use stable name for fallback
             const result = await tryGenerate(fallbackModel, false); // Try without system instruction for max compat
             updateProviderHealth('genai', true);
             const response = await result.response;
@@ -418,8 +418,7 @@ export async function generateReply(
   // Final static fallback
   return {
     text: options?.jsonMode ? JSON.stringify({
-      subject: "Checking in",
-      body: "Thanks for reaching out. I'd love to discuss how we can help you achieve your goals.",
+      variants: [{ type: "standard", subject: "Checking in", body: "Thanks for reaching out. I'd love to discuss how we can help you achieve your goals." }],
       intent: "neutral",
       confidence: 0.5,
       metadata: { fallback: true }
@@ -444,7 +443,7 @@ export async function classify(
         const model = genai!.getGenerativeModel({ 
           model: GENAI_STABLE_MODEL,
           systemInstruction: systemPrompt
-        });
+        }, { apiVersion: 'v1' });
         const result = await withTimeout(model.generateContent({
           contents: [{ role: 'user', parts: [{ text }] }],
           generationConfig: {
@@ -519,7 +518,7 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
         const model = genai!.getGenerativeModel({ 
           model: GENAI_STABLE_MODEL,
           systemInstruction: systemPrompt
-        });
+        }, { apiVersion: 'v1' });
         const result = await withTimeout(model.generateContent({
           contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
         }));

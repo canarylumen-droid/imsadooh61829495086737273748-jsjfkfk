@@ -272,11 +272,13 @@ function generateDefaultSlots(
 }
 
 /**
- * Validate Calendly API token
+ * Validate Calendly API token and return user details
  */
 export async function validateCalendlyToken(apiToken: string): Promise<{
   valid: boolean;
   userName?: string;
+  userUri?: string;
+  organizationUri?: string;
   error?: string;
 }> {
   try {
@@ -298,12 +300,64 @@ export async function validateCalendlyToken(apiToken: string): Promise<{
     
     return {
       valid: true,
-      userName: data.resource.name
+      userName: data.resource.name,
+      userUri: data.resource.uri,
+      organizationUri: data.resource.current_organization
     };
   } catch (error: any) {
     return {
       valid: false,
       error: error.message
     };
+  }
+}
+
+/**
+ * Register webhook with Calendly automatically
+ */
+export async function setupCalendlyWebhook(apiToken: string, organizationUri: string, userUri: string): Promise<boolean> {
+  try {
+    const webhookUrl = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/webhook/calendly`;
+    
+    // First, check if webhook already exists to avoid duplicates
+    const listResponse = await fetch(`https://api.calendly.com/webhook_subscriptions?organization=${organizationUri}&user=${userUri}&scope=user`, {
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (listResponse.ok) {
+      const listData = await listResponse.json();
+      const existing = listData.collection.find((sub: any) => sub.callback_url === webhookUrl && sub.state === 'active');
+      if (existing) return true; // Already registered
+    }
+
+    const response = await fetch('https://api.calendly.com/webhook_subscriptions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        url: webhookUrl,
+        events: ['invitee.created', 'invitee.canceled'],
+        organization: organizationUri,
+        user: userUri,
+        scope: 'user'
+      })
+    });
+
+    if (!response.ok) {
+      const err = await response.json();
+      console.error('[Calendly] Webhook registration failed:', err);
+      return false;
+    }
+
+    console.log('[Calendly] Webhook registered successfully for:', userUri);
+    return true;
+  } catch (error) {
+    console.error('[Calendly] Error setting up webhook:', error);
+    return false;
   }
 }

@@ -208,14 +208,14 @@ async function sendCustomSMTP(
 
   const resolvedHost = config.smtp_host ? await resolveSmtpHost(config.smtp_host) : undefined;
 
-  const createTransporterPool = () => {
+  const createTransporterPool = (forcedPort?: number, forcedSecure?: boolean) => {
     const transporter = nodemailer.createTransport({
       pool: true,
       maxConnections: 5,
       maxMessages: 500, // Increased for warmed pools
       host: resolvedHost,
-      port: config.smtp_port || 587,
-      secure: config.smtp_port === 465,
+      port: forcedPort || config.smtp_port || 587,
+      secure: forcedSecure !== undefined ? forcedSecure : (config.smtp_port === 465),
       auth: {
         user: config.smtp_user,
         pass: config.smtp_pass,
@@ -256,6 +256,8 @@ async function sendCustomSMTP(
 
   const MAX_RETRIES = 3;
   let lastError: any = null;
+  let currentForcedPort: number | undefined;
+  let currentForcedSecure: boolean | undefined;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -268,9 +270,9 @@ async function sendCustomSMTP(
 
       // Re-acquire each iteration — pool may have been evicted by ENETUNREACH handler
       let transporter = smtpPools.get(cacheKey);
-      if (!transporter) {
-        console.log(`[CustomSMTP] Re-creating connection pool for ${cacheKey} (attempt ${attempt + 1})`);
-        transporter = createTransporterPool();
+      if (!transporter || (currentForcedPort && (transporter as any).options?.port !== currentForcedPort)) {
+        console.log(`[CustomSMTP] ${currentForcedPort ? `Switching to port ${currentForcedPort}` : 'Re-creating'} connection pool for ${cacheKey} (attempt ${attempt + 1})`);
+        transporter = createTransporterPool(currentForcedPort, currentForcedSecure);
         smtpPools.set(cacheKey, transporter);
       }
 
@@ -320,6 +322,14 @@ async function sendCustomSMTP(
       if (isNetworkUnreachable || isTimeout) {
         const diagnostic = isTimeout ? "Check if port 25/587 is blocked by your hosting provider (Railway often blocks port 25)." : "Check network connectivity.";
         console.warn(`[CustomSMTP] ⚠️ ${error.code || 'Timeout'} on attempt ${attempt + 1} — purging stale pool for ${cacheKey} and retrying... (${diagnostic})`);
+        
+        // Phase 25: Auto-switch to Port 465 (SSL) if 587 (TLS) fails via timeout
+        if (isTimeout && (config.smtp_port === 587 || !config.smtp_port) && !currentForcedPort) {
+          console.info(`[CustomSMTP] 🛡️ Timeout detected on port 587. Attempting automatic failover to Port 465 (SSL) for next retry...`);
+          currentForcedPort = 465;
+          currentForcedSecure = true;
+        }
+
         try { smtpPools.get(cacheKey)?.close(); } catch (_) {}
         smtpPools.delete(cacheKey); 
       }
@@ -832,62 +842,75 @@ export async function sendEmail(
     email: fromEmail || ''
   };
 
-  if (integration.provider === 'gmail') {
-    const result = await sendGmailMessage(
-      credentials,
-      recipientEmail,
-      emailSubject,
-      emailBody,
-      options.isHtml,
-      trackingId
-    );
-    if (result && result.messageId) {
-      await storage.createEmailMessage({
-        userId,
-        leadId: options.leadId || null,
-        campaignId: options.campaignId || null,
-        messageId: result.messageId,
-        subject: emailSubject,
-        from: credentials.email || '',
-        to: recipientEmail,
-        body: emailBody,
-        direction: 'outbound',
-        provider: 'gmail',
-        sentAt: new Date(),
-        targetUrl: firstUrl,
-        metadata: { trackingId, integrationId: integration.id }
-      });
+  const { MailboxHealthMonitor } = await import('@shared/lib/monitoring/health-monitor.js');
+
+  try {
+    let result;
+    if (integration.provider === 'gmail') {
+      result = await sendGmailMessage(
+        credentials,
+        recipientEmail,
+        emailSubject,
+        emailBody,
+        options.isHtml,
+        trackingId
+      );
+      if (result && result.messageId) {
+        await storage.createEmailMessage({
+          userId,
+          leadId: options.leadId || null,
+          campaignId: options.campaignId || null,
+          messageId: result.messageId,
+          subject: emailSubject,
+          from: credentials.email || '',
+          to: recipientEmail,
+          body: emailBody,
+          direction: 'outbound',
+          provider: 'gmail',
+          sentAt: new Date(),
+          targetUrl: firstUrl,
+          metadata: { trackingId, integrationId: integration.id }
+        });
+      }
+    } else if (integration.provider === 'outlook') {
+      result = await sendOutlookMessage(
+        credentials,
+        recipientEmail,
+        emailSubject,
+        emailBody,
+        options.isHtml,
+        trackingId
+      );
+      if (result && result.messageId) {
+        await storage.createEmailMessage({
+          userId,
+          leadId: options.leadId || null,
+          campaignId: options.campaignId || null,
+          messageId: result.messageId || `outlook-${Date.now()}`,
+          subject: emailSubject,
+          from: credentials.email || '',
+          to: recipientEmail,
+          body: emailBody,
+          direction: 'outbound',
+          provider: 'outlook',
+          sentAt: new Date(),
+          targetUrl: firstUrl,
+          metadata: { trackingId, integrationId: integration.id }
+        });
+      }
+    } else {
+      throw new Error(`Unsupported email provider: ${integration.provider}`);
     }
+
+    // Success: Reset health monitor
+    await MailboxHealthMonitor.recordSuccess(integration.id);
     return result;
-  } else if (integration.provider === 'outlook') {
-    const result = await sendOutlookMessage(
-      credentials,
-      recipientEmail,
-      emailSubject,
-      emailBody,
-      options.isHtml,
-      trackingId
-    );
-    if (result && result.messageId) {
-      await storage.createEmailMessage({
-        userId,
-        leadId: options.leadId || null,
-        campaignId: options.campaignId || null,
-        messageId: result.messageId || `outlook-${Date.now()}`,
-        subject: emailSubject,
-        from: credentials.email || '',
-        to: recipientEmail,
-        body: emailBody,
-        direction: 'outbound',
-        provider: 'outlook',
-        sentAt: new Date(),
-        targetUrl: firstUrl,
-        metadata: { trackingId, integrationId: integration.id }
-      });
-    }
-    return result;
-  } else {
-    throw new Error(`Unsupported email provider: ${integration.provider}`);
+
+  } catch (error: any) {
+    // Failure: Record in health monitor
+    console.error(`[EmailService] Send failure for ${integration.id}:`, error.message);
+    await MailboxHealthMonitor.recordFailure(integration.id, error.message);
+    throw error;
   }
 }
 

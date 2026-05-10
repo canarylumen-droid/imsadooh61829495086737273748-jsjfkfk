@@ -1,4 +1,4 @@
-﻿import { Router, Request, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import {
   getAvailableTimeSlots,
@@ -161,15 +161,17 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
     }
 
     const validation = await validateCalendlyToken(token);
-    if (!validation.valid) {
-      res.status(400).json({ error: validation.error || 'Invalid token' });
+    if (!validation.valid || !validation.userUri || !validation.organizationUri) {
+      res.status(400).json({ error: validation.error || 'Invalid token or missing user/org data' });
       return;
     }
 
     const { encrypt } = await import('@shared/lib/crypto/encryption.js');
     const encrypted = await encrypt(JSON.stringify({
       api_token: token,
-      username: validation.userName
+      username: validation.userName,
+      user_uri: validation.userUri,
+      organization_uri: validation.organizationUri
     }));
 
     const existingIntegrations = await storage.getIntegrations(userId);
@@ -179,15 +181,40 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
       await storage.deleteIntegration(userId, 'calendly');
     }
 
+    // Register webhook automatically with Calendly
+    const { setupCalendlyWebhook } = await import('@shared/lib/calendar/calendly.js');
+    const webhookSuccess = await setupCalendlyWebhook(token, validation.organizationUri, validation.userUri);
+    
+    if (!webhookSuccess) {
+      console.warn(`[Calendly] Webhook registration failed for user ${userId}, but continuing integration.`);
+    }
+
     await storage.createIntegration({
       userId,
       provider: 'calendly',
       connected: true,
       encryptedMeta: encrypted,
-      accountType: 'personal'
+      accountType: 'personal',
+      syncMetadata: {
+        userUri: validation.userUri,
+        organizationUri: validation.organizationUri,
+        webhookActive: webhookSuccess
+      }
     });
 
-    res.json({ success: true, username: validation.userName });
+    // Also update the user record for direct matching
+    await storage.updateUser(userId, {
+      calendlyUserUri: validation.userUri,
+      updatedAt: new Date()
+    });
+
+    console.log(`✓ Calendly connected and webhooks registered for user: ${userId} (${validation.userName})`);
+
+    res.json({ 
+      success: true, 
+      username: validation.userName,
+      webhookActive: webhookSuccess 
+    });
   } catch (error: any) {
     console.error('Error connecting Calendly:', error.message);
     res.status(500).json({ error: 'Failed to connect' });
@@ -246,15 +273,16 @@ router.get('/slots', requireAuth, async (req: Request, res: Response): Promise<v
 router.post('/send-link', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
-    const { leadEmail, leadName, campaignId, duration } = req.body as {
+    const { leadEmail, leadName, leadId, campaignId, duration } = req.body as {
       leadEmail?: string;
       leadName?: string;
+      leadId?: string;
       campaignId?: string;
       duration?: number;
     };
 
-    if (!leadEmail || !leadName) {
-      res.status(400).json({ error: 'Lead email and name required' });
+    if (!leadEmail || !leadName || !leadId) {
+      res.status(400).json({ error: 'Lead email, name, and leadId required' });
       return;
     }
 
@@ -262,6 +290,7 @@ router.post('/send-link', requireAuth, async (req: Request, res: Response): Prom
       leadEmail,
       leadName,
       userId,
+      leadId,
       campaignId: campaignId || '',
       duration: duration || 30
     });

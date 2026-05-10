@@ -12,8 +12,11 @@ export async function adjustCopyIfNecessary(params: {
   originalBody: string;
   originalSubject?: string;
   isSubsequentReply?: boolean;
+  currentStepIndex?: number;
+  totalSteps?: number;
+  sequenceHistory?: { subject: string; body: string; sentAt: Date }[];
 }): Promise<{ body: string; subject?: string; adjusted: boolean }> {
-  const { userId, leadId, originalBody, originalSubject, isSubsequentReply } = params;
+  const { userId, leadId, originalBody, originalSubject, isSubsequentReply, currentStepIndex, totalSteps, sequenceHistory } = params;
 
   try {
     // 1. Fetch the lead's last inbound message
@@ -30,17 +33,26 @@ export async function adjustCopyIfNecessary(params: {
     // 2. Import Brain worker AI lib
     const { generateReply } = await import("@services/brain-worker/src/ai-lib/core/ai-service.js");
 
+    const historyContext = sequenceHistory && sequenceHistory.length > 0
+      ? `\nPREVIOUS MESSAGES SENT TO THIS LEAD:\n${sequenceHistory.map((msg, i) => `[Step ${i}] ${msg.sentAt.toISOString()}: ${msg.subject} - ${msg.body}`).join('\n')}`
+      : '';
+
+    const stepContext = currentStepIndex !== undefined && totalSteps !== undefined
+      ? `\nSEQUENCE PACING: This is Follow-Up Step ${currentStepIndex} out of ${totalSteps}. Ensure the tone naturally fits this stage of the sequence without repeating past angles.`
+      : '';
+
     const modePrompt = isSubsequentReply 
       ? `BRAINSTORM MODE: This is NOT the first reply. The lead has replied again. 
          Instead of the standard template: "${originalBody}", brainstorm a fresh, personalized response that continues the conversation naturally based on their new reply: "${lastInbound.body}".`
-      : `ADAPT MODE: Only rewrite the planned message: "${originalBody}" if the lead's reply requires direct acknowledgment. 
-         Lead's reply: "${lastInbound.body}".`;
+      : `ADAPT MODE: You are an elite, contextual rewriter. 
+         Rewrite the planned message: "${originalBody}" to directly acknowledge the lead's reply and their specific context. 
+         Lead's reply: "${lastInbound.body}".${stepContext}${historyContext}`;
 
     const prompt = `
 STRICT GUARDRAIL: ${modePrompt}
 If the lead's reply is just a simple acknowledgment or doesn't necessitate changing the core message, and it's NOT a brainstorming case, return the original message exactly as is. 
 DO NOT hallucinate a completely new follow-up or skip to a different topic. 
-Keep it concise, professional, and matching the original tone. 
+Keep it concise, professional, zero-fluff, and matching the original tone. 
 The goal is to book a call or move the deal forward based on the campaign intent.
 `;
 

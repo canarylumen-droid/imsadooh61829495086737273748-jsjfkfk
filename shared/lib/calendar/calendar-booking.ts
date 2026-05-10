@@ -21,6 +21,7 @@ interface CalendarBookingRequest {
   leadEmail: string;
   leadName: string;
   userId: string;
+  leadId: string;
   campaignId: string;
   duration?: number;
 }
@@ -212,7 +213,7 @@ export async function sendBookingLinkToLead(
     }
 
     // Generate Calendly-style shareable link
-    const bookingLink = `${process.env.APP_URL || 'https://audnixai.com'}/book/${userId}?leadEmail=${encodeURIComponent(leadEmail)}&leadName=${encodeURIComponent(leadName)}`;
+    const bookingLink = `${process.env.APP_URL || 'https://audnixai.com'}/book/${userId}?leadEmail=${encodeURIComponent(leadEmail)}&leadName=${encodeURIComponent(leadName)}&leadId=${request.leadId}`;
 
     return {
       success: true,

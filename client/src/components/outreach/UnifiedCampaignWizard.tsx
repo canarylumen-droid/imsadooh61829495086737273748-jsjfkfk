@@ -292,7 +292,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     try {
       const res = await apiRequest("POST", "/api/outreach/generate-template", { 
         focus: "high-conversion",
-        count: followups.length
+        count: followups.length,
+        delayDays: followups.map(f => parseInt(f.delayDays) || 3)
       });
       const { sequence } = await res.json();
       if (sequence) {
