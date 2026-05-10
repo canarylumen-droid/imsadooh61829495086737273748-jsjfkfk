@@ -148,6 +148,41 @@ export function autoDiscoverSettings(email: string): Partial<EmailConfig> {
  */
 
 const smtpPools = new Map<string, any>();
+const dnsCache = new Map<string, { ip: string, expires: number }>();
+
+async function resolveSmtpHost(hostname: string): Promise<string> {
+  // If it's already an IP address, return it
+  if (/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/.test(hostname)) return hostname;
+
+  const now = Date.now();
+  const cached = dnsCache.get(hostname);
+  if (cached && cached.expires > now) return cached.ip;
+
+  try {
+    const dnsPromises = await import('dns/promises');
+    const records = await dnsPromises.resolve4(hostname);
+    if (records && records.length > 0) {
+      dnsCache.set(hostname, { ip: records[0], expires: now + 5 * 60 * 1000 });
+      return records[0];
+    }
+  } catch (err: any) {
+    console.warn(`[CustomSMTP] DNS resolve4 failed for ${hostname}:`, err.message, `- falling back to hostname`);
+  }
+  return hostname;
+}
+
+// Keep connections warm and evict dead ones
+setInterval(() => {
+  smtpPools.forEach((pool, key) => {
+    if (pool.isIdle && pool.isIdle()) {
+      pool.verify().catch(() => {
+        console.log(`[CustomSMTP] Evicting dead pool ${key} during health check`);
+        try { pool.close(); } catch (e) {}
+        smtpPools.delete(key);
+      });
+    }
+  });
+}, 5 * 60 * 1000);
 
 /**
  * Send email via custom SMTP (for custom domain emails)
@@ -171,31 +206,45 @@ async function sendCustomSMTP(
 
   const cacheKey = integrationId || `${config.smtp_host}:${config.smtp_user}`;
 
-  const createTransporterPool = () => nodemailer.createTransport({
-    pool: true,
-    maxConnections: 5,
-    maxMessages: 100,
-    host: config.smtp_host,
-    port: config.smtp_port || 587,
-    secure: config.smtp_port === 465,
-    auth: {
-      user: config.smtp_user,
-      pass: config.smtp_pass,
-    },
-    // Forced IPv4 at the library level for extra safety
-    family: 4,
-    lookup: (hostname: string, options: any, callback: any) => {
-      return dns.lookup(hostname, { family: 4 }, callback);
-    },
-    tls: { rejectUnauthorized: false },
-    connectionTimeout: 60000,
-    greetingTimeout: 60000,
-    socketTimeout: 90000,
-  } as any);
+  const resolvedHost = config.smtp_host ? await resolveSmtpHost(config.smtp_host) : undefined;
+
+  const createTransporterPool = () => {
+    const transporter = nodemailer.createTransport({
+      pool: true,
+      maxConnections: 5,
+      maxMessages: 500, // Increased for warmed pools
+      host: resolvedHost,
+      port: config.smtp_port || 587,
+      secure: config.smtp_port === 465,
+      auth: {
+        user: config.smtp_user,
+        pass: config.smtp_pass,
+      },
+      // Forced IPv4 at the library level for extra safety
+      family: 4,
+      lookup: (hostname: string, options: any, callback: any) => {
+        return dns.lookup(hostname, { family: 4 }, callback);
+      },
+      tls: { 
+        rejectUnauthorized: false,
+        servername: config.smtp_host, // SNI must use the original hostname, not the IP
+      },
+      connectionTimeout: 60000,
+      greetingTimeout: 60000,
+      socketTimeout: 90000,
+    } as any);
+
+    transporter.on('error', (err: any) => {
+      console.error(`[CustomSMTP] Pool error for ${cacheKey}:`, err.message);
+      smtpPools.delete(cacheKey);
+    });
+
+    return transporter;
+  };
 
   // Initialize pool if not cached; re-acquired per-attempt to pick up ENETUNREACH evictions
   if (!smtpPools.has(cacheKey)) {
-    console.log(`[CustomSMTP] Creating new persistent connection pool for ${cacheKey}`);
+    console.log(`[CustomSMTP] Creating new persistent connection pool for ${cacheKey} via ${resolvedHost || config.smtp_host}`);
     smtpPools.set(cacheKey, createTransporterPool());
   }
 
@@ -551,6 +600,7 @@ export interface EmailOptions {
   campaignId?: string;
   leadId?: string;
   integrationId?: string;
+  isPriorityReply?: boolean; // If true, bypasses daily limits and restrictions
 }
 
 /**
@@ -622,9 +672,11 @@ export async function sendEmail(
 
     const currentSent = Number(sentToday?.count || 0);
     
-    if (currentSent >= dailyLimit) {
+    if (currentSent >= dailyLimit && !options.isPriorityReply) {
       console.warn(`[EmailService] 🛑 Daily limit reached for ${integration.provider} (${currentSent}/${dailyLimit}). Skipping send to ${recipientEmail}.`);
       throw new Error(`Daily sending limit reached (${dailyLimit}).`);
+    } else if (currentSent >= dailyLimit && options.isPriorityReply) {
+      console.log(`[EmailService] 🚀 Priority reply allowed to bypass daily limit for ${integration.provider} (${currentSent}/${dailyLimit}).`);
     }
   } catch (limitErr: any) {
     if (limitErr.message.includes('limit reached')) throw limitErr;

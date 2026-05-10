@@ -23,10 +23,10 @@ export const Logo = ({ className = "h-10 w-10", textClassName = "text-2xl font-b
                     xmlns="http://www.w3.org/2000/svg"
                     className="w-full h-full drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]"
                     role="img"
-                    aria-label="Audnix AI Logo - Autonomous Sales Representative"
+                    aria-label="Audnix AI - Official Brand Logo"
                 >
-                    <title>Audnix AI Logo</title>
-                    <desc>Official logo of Audnix AI, representing autonomous sales intelligence.</desc>
+                    <title>Audnix AI - #1 Autonomous AI Sales Closer</title>
+                    <desc>Official brand mark for Audnix AI, the world's most advanced autonomous outbound sales infrastructure.</desc>
                     <defs>
                         <linearGradient id="logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
                             <stop offset="0%" stopColor="#06b6d4" />

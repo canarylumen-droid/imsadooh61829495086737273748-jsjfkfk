@@ -1279,14 +1279,12 @@ export async function generateExpertOutreach(
  */
 export async function generateCampaignTemplateSequence(
   userId: string,
+  followupCount: number = 3,
   focus?: string // Optional specific instruction from user
 ): Promise<{
   subject: string;
   body: string;
-  followUpSubject: string;
-  followUpBody: string;
-  followUpSubject2: string;
-  followUpBody2: string;
+  followups: Array<{ subject: string, body: string, delayDays: number }>;
   autoReplyBody: string;
 }> {
   const brandContext = await getBrandContext(userId);
@@ -1312,8 +1310,14 @@ export async function generateCampaignTemplateSequence(
   const customFocus = focus ? `USER REQUESTED FOCUS: ${focus}` : "";
 
   try {
-    const systemPrompt = `You are an elite high-ticket B2B sales copywriter. You are building out a 3-step Cold Email Sequence plus an active Auto-Reply template.
-    Your objective is to generate highly disruptive, clickbait-style (but professional), curiosity-driven copy that breaks patterns.
+    const systemPrompt = `You are an elite high-ticket B2B sales copywriter. You are building out a ${1 + followupCount}-step Cold Email Sequence plus an active Auto-Reply template.
+    Your objective is to generate highly disruptive, pattern-breaking B2B outreach.
+    
+    SEQUENCE STRATEGY:
+    Step 1: Curiosity-driven pattern break.
+    Step 2-3: Social proof & case studies.
+    Step 4-6: Value-led insights (free audits, PDFs, or advice).
+    Step 7-10: Persistence & 'Take-away' approach (polite breakup).
 
     BRAND INTEL:
     Offer: ${JSON.stringify(offer)}
@@ -1333,20 +1337,18 @@ export async function generateCampaignTemplateSequence(
     1. USE THESE EXACT PLACEHOLDERS: {{firstName}}, {{company}}, {{industry}}.
     2. THE CURIOSITY GAP: Start the first email bluntly. "Is {{company}} prepared for the shift in {{industry}}?"
     3. NO FLUFF: No "Hope you are doing well" or "My name is...".
-    4. FOLLOW UP 1: Short, value-add bump. 
-    5. FOLLOW UP 2: The break-up/final chance. Provocative but polite.
-    6. AUTO-REPLY: A conversational message that gets sent immediately after they reply, pushing to a meeting.
+    4. FOLLOW-UPS: Generate EXACTLY ${followupCount} follow-up steps. Each step should have a subject (often starts with "Re:"), a body, and a delayDays (e.g. 3, 7, 14).
+    5. AUTO-REPLY: A conversational message that gets sent immediately after they reply, pushing to a meeting.
     
     OUTPUT JSON FORMAT EXACTLY:
     {
-      "subject": "Email 1 Subject (short, lowercase, FOMO)",
+      "subject": "Email 1 Subject",
       "body": "Email 1 Body",
-      "followUpSubject": "Re: Email 1 Subject",
-      "followUpBody": "Follow Up 1 Body",
-      "followUpSubject2": "Re: Email 1 Subject",
-      "followUpBody2": "Follow Up 2 Body (break up)",
-      "autoReplyBody": "Auto-Reply Body (when they reply)"
-    }`;
+      "followups": [
+        { "subject": "Re: Email 1 Subject", "body": "Follow up body...", "delayDays": 3 }
+      ],
+      "autoReplyBody": "Auto-Reply Body"
+    } (The followups array MUST have length ${followupCount})`;
 
     const aiResponse = await generateReply(systemPrompt, "Draft the 4-part master sequence now.", {
       model: MODELS.sales_reasoning,
@@ -1361,11 +1363,12 @@ export async function generateCampaignTemplateSequence(
     return {
       subject: result.subject || "quick question about {{company}}",
       body: result.body,
-      followUpSubject: result.followUpSubject || `Re: ${result.subject}`,
-      followUpBody: result.followUpBody,
-      followUpSubject2: result.followUpSubject2 || `Re: ${result.subject}`,
-      followUpBody2: result.followUpBody2,
-      autoReplyBody: result.autoReplyBody
+      followups: (result.followups || []).map((f: any) => ({
+        subject: f.subject || `Re: ${result.subject}`,
+        body: f.body || "",
+        delayDays: parseInt(f.delayDays) || 3
+      })),
+      autoReplyBody: result.autoReplyBody || ""
     };
   } catch (error: any) {
     console.error("Template Sequence Generation Error:", error);
@@ -1374,10 +1377,18 @@ export async function generateCampaignTemplateSequence(
     return {
       subject: `{{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
       body: `Hey {{firstName}},\n\nNoticed {{company}} is scaling in the {{industry}} space. Most teams miss the 20% shift that drives 80% of revenue right now.\n\nWe deployed a system using ${typeof offer === 'string' ? offer.substring(0, 50) : 'high-velocity optimization'} that fixes this.\n\nOpen to a quick framework overview next week?`,
-      followUpSubject: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
-      followUpBody: `Hey {{firstName}},\n\nJust bumping this. If efficiency is a focus for {{company}} this quarter, this would be highly relevant.\n\nLet me know if you're open to the 5-min breakdown.`,
-      followUpSubject2: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
-      followUpBody2: `Hey {{firstName}} - guessing this isn't a priority right now.\n\nI'll stop reaching out. If you ever want to scale your operations without adding headcount, feel free to reach back out.\n\nCheers,`,
+      followups: [
+        { 
+          subject: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`, 
+          body: `Hey {{firstName}},\n\nJust bumping this. If efficiency is a focus for {{company}} this quarter, this would be highly relevant.`,
+          delayDays: 3
+        },
+        {
+          subject: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
+          body: `Hey {{firstName}} - guessing this isn't a priority right now.\n\nI'll stop reaching out.`,
+          delayDays: 7
+        }
+      ],
       autoReplyBody: `Hey {{firstName}}! Thanks for getting back to me.\n\nI'd love to jump on a quick call to show you exactly how this works for {{company}}.\n\nDo you have 10 mins this week? Let me know a time that works for you.`
     };
   }

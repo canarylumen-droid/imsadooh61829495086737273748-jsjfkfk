@@ -186,10 +186,10 @@ export async function embed(text: string): Promise<number[]> {
 export async function embedBatch(texts: string[]): Promise<number[][]> {
   if (isProviderAvailable('openai')) {
     try {
-      const response = await openai!.embeddings.create({
+      const response = await withTimeout(openai!.embeddings.create({
         model: "text-embedding-3-small",
         input: texts.map(t => t.replace(/\n/g, " ")),
-      });
+      }));
       updateProviderHealth('openai', true);
       return response.data.map((d) => d.embedding);
     } catch (error: any) {
@@ -520,9 +520,9 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
           model: GENAI_STABLE_MODEL,
           systemInstruction: systemPrompt
         });
-        const result = await model.generateContent({
+        const result = await withTimeout(model.generateContent({
           contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
-        });
+        }));
         updateProviderHealth('genai', true);
         const response = await result.response;
         return response.text() || "";
@@ -534,11 +534,11 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
     openai: async () => {
       if (!isProviderAvailable('openai')) return null;
       try {
-        const response = await openai!.chat.completions.create({
+        const response = await withTimeout(openai!.chat.completions.create({
           model: OPENAI_FAST_MODEL,
           messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullPrompt }],
           max_completion_tokens: 500,
-        });
+        }));
         updateProviderHealth('openai', true);
         return response.choices[0].message.content || "";
       } catch (e: any) {
@@ -549,11 +549,11 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
     zai: async () => {
       if (!isProviderAvailable('zai')) return null;
       try {
-        const response = await zai!.chat.completions.create({
+        const response = await withTimeout(zai!.chat.completions.create({
           model: Z_AI_FAST_MODEL,
           messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullPrompt }],
           max_completion_tokens: 500,
-        });
+        }));
         updateProviderHealth('zai', true);
         return response.choices[0].message.content || "";
       } catch (e: any) {

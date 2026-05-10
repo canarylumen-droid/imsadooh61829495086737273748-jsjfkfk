@@ -194,9 +194,9 @@ export function HeroSection() {
                 transition={{ delay: 0.2, duration: 1, ease: [0.16, 1, 0.3, 1] }}
                 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black tracking-tighter leading-[0.9] mb-4 text-foreground break-words sm:break-normal"
               >
-                AUTONOMOUS<br />
+                AUDNIX AI<br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-primary to-blue-600 uppercase drop-shadow-[0_0_30px_rgba(var(--primary),0.3)]">
-                  OUTBOUND.
+                  SALES CLOSER.
                 </span>
               </motion.h1>
 

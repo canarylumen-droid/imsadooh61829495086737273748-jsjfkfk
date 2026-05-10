@@ -107,8 +107,8 @@ export async function searchSimilarChunks(
 
     if (embedding.length > 0) {
       const embeddingStr = `[${embedding.join(',')}]`;
-      // Set a statement timeout to prevent hanging the worker (25s)
-      await db.execute(sql`SET statement_timeout = 25000`);
+      // Set a statement timeout to prevent hanging the worker (10s)
+      await db.execute(sql`SET statement_timeout = 10000`);
       
       const result = await db.execute(sql`
         SELECT 

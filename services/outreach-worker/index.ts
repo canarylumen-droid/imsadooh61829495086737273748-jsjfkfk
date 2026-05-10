@@ -21,7 +21,7 @@ async function startOutreachService() {
   startWorkerHealthServer('outreach-worker', parseInt(process.env.OUTREACH_WORKER_PORT || process.env.PORT || '8082', 10));
 
   // ── Register workers with the health monitor ──────────────────────────────
-  ['Outreach Engine', 'Autonomous Outreach', 'Meeting Reminders', 'Lead Governance', 'Emoji Follow-up', 'Reputation Monitor']
+  ['Outreach Engine', 'Autonomous Outreach', 'Campaign Engine', 'Meeting Reminders', 'Lead Governance', 'Emoji Follow-up', 'Reputation Monitor']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorkerModule = async (name: string, startFn: () => any) => {
@@ -46,6 +46,7 @@ async function startOutreachService() {
     { emojiFollowupWorker },
     { reputationWorker },
     { autonomousOutreachWorker },
+    campaignQueueModule,
   ] = await Promise.all([
     import('./workers/outreach-engine.js').catch(() => ({ outreachEngine: null as any })),
     import('./workers/meeting-reminder-worker.js').catch(() => ({ meetingReminderWorker: { start: () => {}, stop: () => {} } })),
@@ -53,6 +54,10 @@ async function startOutreachService() {
     import('./workers/emoji-followup-worker.js').catch(() => ({ emojiFollowupWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/reputation-worker.js').catch(() => ({ reputationWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/outreach-worker.js').catch(() => ({ autonomousOutreachWorker: { start: () => {}, stop: () => {} } })),
+    import('@shared/lib/queues/campaign-queue.js').catch((err) => {
+      log.error('Failed to load Campaign Queue', { error: err.message });
+      return null;
+    }),
   ]);
 
   const outreachEngine = outreachEngineModule.outreachEngine;
@@ -63,6 +68,10 @@ async function startOutreachService() {
   await startWorkerModule('Lead Governance',       () => leadGovernanceWorker.start());
   await startWorkerModule('Emoji Follow-up',       () => emojiFollowupWorker.start());
   await startWorkerModule('Reputation Monitor',    () => reputationWorker.start());
+
+  if (campaignQueueModule) {
+    log.info('Campaign Engine BullMQ Worker ✅ Initialized');
+  }
 
   // ── BullMQ Worker — processes queue-dispatched jobs with retry support ────
   createWorker(outreachQueue.name, async (job) => {

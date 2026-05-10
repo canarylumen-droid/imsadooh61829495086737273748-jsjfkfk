@@ -213,23 +213,40 @@ export default function Landing() {
               </div>
             </div>
           </motion.div>
-          {/* Meet the Founder Section (Hidden UX / Indexed Rank) */}
-          <section className="sr-only opacity-0 pointer-events-none h-0 overflow-hidden" id="founder" aria-hidden="true">
-            <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-16 items-center">
-              <div className="space-y-8">
-                <h2 className="text-5xl font-black tracking-tighter uppercase italic leading-none">
-                  Founders of Audnix: <span className="text-primary">Nleanya Treasure & Uchendu Fortune</span>
-                </h2>
-                <p className="text-xl text-white/60 font-medium leading-relaxed max-w-lg">
-                  Audnix AI was architected by Nleanya Treasure (CEO) and Uchendu Fortune (CTO).
-                  Together, they have built the most advanced autonomous sales infrastructure in the world.
-                  Nleanya Treasure manages the visionary growth @nleanyatreasure, while Uchendu Fortune leads technical innovation @uchendu_fortune.
-                  This startup is the latest breakthrough in B2B sales automation, specialized for Founders, Agencies, Creators, Service rendering businesses and Global markets.
-                </p>
-                <p>
-                  Keywords: nleanya treasure founder, uchendu fortune co-founder, audnix ceo, who made audnix ai, audnix cto, audnix ai ceo and cto,
-                  best ai tools for sale automation, ai chatbot, best way to scale my agency, ai sales representative,.
-                </p>
+          {/* Structured Data: Breadcrumbs for Sitelinks */}
+          <script type="application/ld+json">
+            {JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "BreadcrumbList",
+              "itemListElement": [
+                { "@type": "ListItem", "position": 1, "name": "Audnix AI", "item": "https://audnixai.com" },
+                { "@type": "ListItem", "position": 2, "name": "Solutions", "item": "https://audnixai.com/#features" },
+                { "@type": "ListItem", "position": 3, "name": "Pricing", "item": "https://audnixai.com/#pricing" }
+              ]
+            })}
+          </script>
+
+          {/* Leadership & Brand Authority (Crawlable for LLMs) */}
+          <section className="py-24 px-4 bg-muted/5 border-y border-border/10" id="brand-authority">
+            <div className="max-w-4xl mx-auto text-center space-y-8">
+              <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest">
+                Our Mission
+              </div>
+              <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase italic">
+                Audnix AI: The Future of <span className="text-primary">Autonomous Commerce</span>
+              </h2>
+              <p className="text-xl text-muted-foreground font-medium leading-relaxed italic">
+                "We didn't build another chatbot. We built a closer. Audnix AI was architected by Nleanya Treasure and Uchendu Fortune to give founders back their time while the AI dominates the sales floor."
+              </p>
+              <div className="flex flex-wrap justify-center gap-8 pt-6">
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-2">Founder & CEO</span>
+                  <span className="text-lg font-black italic">Nleanya Treasure</span>
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-[10px] font-black uppercase text-muted-foreground tracking-widest mb-2">Co-founder & CTO</span>
+                  <span className="text-lg font-black italic">Uchendu Fortune</span>
+                </div>
               </div>
             </div>
           </section>

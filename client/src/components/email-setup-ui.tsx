@@ -48,6 +48,8 @@ export function EmailSetupUI() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [lastDetectedDomain, setLastDetectedDomain] = useState('');
   const [connectionStep, setConnectionStep] = useState<string>('');
+  const [dnsWarnings, setDnsWarnings] = useState<string[]>([]);
+  const [testingConnection, setTestingConnection] = useState(false);
 
   useEffect(() => {
     fetchStatus();
@@ -119,12 +121,51 @@ export function EmailSetupUI() {
     }
   };
 
-  const handleShowFilterInfo = () => {
+  const handleShowFilterInfo = async () => {
     if (!config.smtpHost || !config.imapHost || !config.email || !config.password) {
       toast({ title: 'Error', description: 'Please fill all required fields', variant: 'destructive' });
       return;
     }
-    setShowFilterInfo(true);
+
+    setTestingConnection(true);
+    setConnectionStep('Testing connection and verifying DNS...');
+    setDnsWarnings([]);
+
+    try {
+      const res = await fetch('/api/custom-email/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          smtpHost: config.smtpHost,
+          smtpPort: config.smtpPort,
+          email: config.email,
+          password: config.password,
+        })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const description = data.tip ? `${data.error}\n\n💡 ${data.tip}` : data.error;
+        toast({ title: 'Connection Test Failed', description, variant: 'destructive' });
+        return;
+      }
+
+      if (data.port && data.port !== config.smtpPort) {
+        setConfig(prev => ({ ...prev, smtpPort: data.port }));
+      }
+
+      if (data.dnsHealth?.warnings?.length > 0) {
+        setDnsWarnings(data.dnsHealth.warnings);
+      }
+
+      setShowFilterInfo(true);
+    } catch (error) {
+      toast({ title: 'Error', description: 'Failed to test connection. Please try again.', variant: 'destructive' });
+    } finally {
+      setTestingConnection(false);
+      setConnectionStep('');
+    }
   };
 
   const handleConnect = async () => {
@@ -439,6 +480,22 @@ export function EmailSetupUI() {
               )}
             </div>
 
+            {/* DNS Warnings */}
+            {dnsWarnings.length > 0 && (
+              <div className="bg-red-500/10 border border-red-500/30 rounded p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-red-500" />
+                  <p className="text-sm font-bold text-red-700 dark:text-red-400">DNS Configuration Warning</p>
+                </div>
+                <ul className="text-xs text-red-600 dark:text-red-300 list-disc list-inside ml-1">
+                  {dnsWarnings.map((warning, i) => (
+                    <li key={i}>{warning}</li>
+                  ))}
+                </ul>
+                <p className="text-[11px] text-red-600/80 mt-1">Your emails are highly likely to be marked as spam. Please configure your domain's DNS records.</p>
+              </div>
+            )}
+
             {/* Import Progress */}
             {importing && (
               <div className="bg-amber-500/5 border border-amber-500/20 rounded p-3 space-y-2">
@@ -485,11 +542,11 @@ export function EmailSetupUI() {
             <div className="flex gap-2 pt-2">
               <Button
                 onClick={handleShowFilterInfo}
-                disabled={connecting || importing}
+                disabled={connecting || importing || testingConnection}
                 className="flex-1 bg-cyan-600 hover:bg-cyan-700"
               >
-                {connecting || importing ? (
-                  <>⏳ Connecting...</>
+                {connecting || importing || testingConnection ? (
+                  <>⏳ {testingConnection ? 'Testing...' : 'Connecting...'}</>
                 ) : (
                   <>
                     <Mail className="w-4 h-4 mr-2" />

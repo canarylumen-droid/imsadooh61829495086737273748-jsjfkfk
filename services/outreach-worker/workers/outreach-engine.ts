@@ -549,6 +549,11 @@ export class OutreachEngine {
     const tier = (user?.subscriptionTier || user?.plan || 'starter').toLowerCase();
     const isEnterprise = tier === 'enterprise';
 
+    if (isUnmeteredReply) {
+       console.log(`[OutreachEngine] ⚡ Unmetered Reply for mailbox ${integration.id.slice(-8)}. Bypassing daily limits.`);
+       return true;
+    }
+
     // Default safe limits by provider type
     let defaultLimit = isEnterprise ? 10000 : 50;
     if (integration.provider === 'custom_email') defaultLimit = isEnterprise ? 10000 : 250;
@@ -577,6 +582,15 @@ export class OutreachEngine {
 
     // --- Autonomous Adaptive Reputation Limits ---
     let effectiveLimit = baseEffectiveLimit;
+    
+    // --- Neural Brain Smart Capping ---
+    if (!isEnterprise) {
+      const createdAt = new Date((integration as any).createdAt || Date.now());
+      const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
+      const smartCap = isWarmed ? 60 : 45 + Math.floor(Math.random() * 6); // 45-50
+      effectiveLimit = Math.min(effectiveLimit, smartCap);
+      console.log(`[OutreachEngine] 🧠 NEURAL BRAIN: Mailbox ${integration.id.slice(-8)} capped at ${effectiveLimit} (Warmed: ${isWarmed})`);
+    }
     
     // --- EMERGENCY SUSPENSION CHECK: Instagram ---
     if (integration.provider === 'instagram' && process.env.SUSPEND_INSTAGRAM === 'true') {
@@ -911,13 +925,17 @@ export class OutreachEngine {
     }
 
     try {
+      // Determine if this is a priority reply (auto-reply, or responding to an already engaged lead)
+      const isPriorityReply = !!leadEntry.metadata?.pendingAutoReply || lead.status === 'replied' || lead.status === 'interested';
+
       await sendEmail(userId, lead.email, body, subject, {
         isRaw: true,
         isHtml: true, // Force HTML for tracking pixel/links
         trackingId: campaign.config?.isManual ? undefined : trackingId,
         campaignId: campaign.id,
         leadId: lead.id,
-        integrationId // Use the rotated mailbox
+        integrationId, // Use the rotated mailbox
+        isPriorityReply
       });
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
@@ -995,6 +1013,11 @@ export class OutreachEngine {
     const newMetadata = { ...(leadEntry.metadata || {}) };
     if (isAutoReply) delete newMetadata.pendingAutoReply;
 
+    // Track initial send date for relative follow-up scheduling
+    if (leadEntry.currentStep === 0 && !isAutoReply && !newMetadata.initialSentAt) {
+      newMetadata.initialSentAt = new Date().toISOString();
+    }
+
     const nextStep = isAutoReply ? leadEntry.currentStep : leadEntry.currentStep + 1;
     const followupsArr = (campaign.template as any)?.followups || [];
     const hasMore = nextStep <= followupsArr.length;
@@ -1002,8 +1025,13 @@ export class OutreachEngine {
 
     if (hasMore && !isAutoReply) {
       const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
-      nextActionAt = new Date();
-      nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+      if (newMetadata.initialSentAt) {
+        nextActionAt = new Date(newMetadata.initialSentAt);
+        nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+      } else {
+        nextActionAt = new Date();
+        nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+      }
     }
 
     await db.update(campaignLeads)

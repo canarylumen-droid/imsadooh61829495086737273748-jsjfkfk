@@ -6,6 +6,7 @@ import { pagedEmailImport } from '@shared/lib/imports/paged-email-importer.js';
 import { smtpAbuseProtection } from '@services/email-service/src/email/smtp-abuse-protection.js';
 import { bounceHandler } from '@services/email-service/src/email/bounce-handler.js';
 import { EmailDiscoveryService } from '@services/email-service/src/email/email-discovery.js';
+import { checkDomainHealth } from '@shared/lib/deliverability/dns-health-checker.js';
 import validator from 'validator';
 
 const router = Router();
@@ -267,6 +268,17 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       return;
     }
 
+    // Attempt DNS Health Check
+    let dnsHealth = undefined;
+    try {
+      const emailDomain = email.split('@')[1];
+      if (emailDomain) {
+        dnsHealth = await checkDomainHealth(emailDomain);
+      }
+    } catch (e) {
+      console.warn('[Email Connect] DNS Health Check failed', e);
+    }
+
     try {
       await storage.createIntegration({
         userId,
@@ -328,7 +340,8 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       message: `${email} connected successfully. Your first outbound email will confirm the credentials are working.`,
       leadsImported: 0,
       leadsSkipped: 0,
-      backgroundImport: true
+      backgroundImport: true,
+      dnsHealth
     });
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
@@ -433,35 +446,53 @@ router.post('/test', requireAuth, async (req: Request, res: Response): Promise<v
 
     console.log(`[Email Test] Testing SMTP connection to ${smtpHost}:${smtpPort || 587}`);
 
-    // Import nodemailer to test connection
     const nodemailer = await import('nodemailer');
+    const portsToTry = smtpPort ? [parseInt(smtpPort)] : [587, 465, 2525];
+    let lastError: any;
+    let successfulPort = null;
 
-    const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: parseInt(smtpPort) || 587,
-      secure: parseInt(smtpPort) === 465,
-      auth: {
-        user: email,
-        pass: password,
-      },
-      // Force IPv4 to avoid EDNS / EAI_AGAIN DNS failures in cloud environments
-      family: 4,
-      tls: {
-        rejectUnauthorized: false
-      },
-      connectionTimeout: 45000,
-      greetingTimeout: 45000,
-      socketTimeout: 50000
-    } as any);
+    for (const port of portsToTry) {
+      console.log(`[Email Test] Trying port ${port}...`);
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: port,
+          secure: port === 465,
+          auth: {
+            user: email,
+            pass: password,
+          },
+          family: 4,
+          tls: {
+            rejectUnauthorized: false
+          },
+          connectionTimeout: 10000,
+          greetingTimeout: 10000,
+          socketTimeout: 10000
+        } as any);
 
-    // Verify connection
-    await transporter.verify();
+        await transporter.verify();
+        successfulPort = port;
+        break; // Stop trying if successful
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[Email Test] Port ${port} failed:`, err.message || err);
+      }
+    }
 
-    console.log(`[Email Test] SMTP connection successful for ${email}`);
+    if (!successfulPort) {
+      throw lastError; // Throw the last error if all ports failed
+    }
+
+    console.log(`[Email Test] SMTP connection successful for ${email} on port ${successfulPort}`);
+
+    const dnsHealth = await checkDomainHealth(email.split('@')[1]);
 
     res.json({
       success: true,
-      message: 'SMTP connection verified successfully'
+      message: 'SMTP connection verified successfully',
+      port: successfulPort,
+      dnsHealth
     });
   } catch (error: any) {
     console.error(`[Email Test] Connection failed:`, error?.message || error);

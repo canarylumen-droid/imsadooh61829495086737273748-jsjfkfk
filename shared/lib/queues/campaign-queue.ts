@@ -83,7 +83,7 @@ export const campaignQueue = hasRedis ? new Queue<CampaignJobData>('campaign-eng
     attempts: 3,
     backoff: {
       type: 'exponential',
-      delay: 10000,
+      delay: 300000, // 5 minutes (5min -> 15min -> 60min backoff for transient issues)
     },
     removeOnComplete: { count: 500 },
     removeOnFail: { count: 1000 },
@@ -410,7 +410,20 @@ export async function mailboxHasPendingReply(integrationId: string): Promise<boo
  * In this mode, intervals are multiplied by 10-15x to ensure
  * extremely low volume (approx 1-2 emails per mailbox per hour).
  */
-function calcMailboxInterval(sentToday: number, dailyLimit: number): number {
+function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?: any): number {
+  let effectiveDailyLimit = dailyLimit;
+
+  // Neural Brain Smart Capping (applied to interval calculation)
+  if (integration) {
+    const tier = integration.tier || 'starter';
+    if (tier !== 'enterprise') {
+      const createdAt = new Date(integration.createdAt || Date.now());
+      const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
+      const smartCap = isWarmed ? 60 : 45; // Use conservative 45 for interval spreading
+      effectiveDailyLimit = Math.min(effectiveDailyLimit, smartCap);
+    }
+  }
+
   const now = new Date();
   const currentHour = now.getHours(); // Local server time
   
@@ -421,7 +434,7 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number): number {
   endOfDay.setHours(23, 59, 59, 999);
   const remainingHours = Math.max(0.25, (endOfDay.getTime() - now.getTime()) / (3600 * 1000));
 
-  const remainingSends = Math.max(1, dailyLimit - sentToday);
+  const remainingSends = Math.max(1, effectiveDailyLimit - sentToday);
   let baseIntervalMs = (remainingHours * 3600 * 1000) / remainingSends;
 
   // Apply Night Watch multiplier if active
@@ -460,7 +473,11 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
   // 1. Verify campaign is still active
   const [campaign] = await db.select().from(outreachCampaigns)
-    .where(and(eq(outreachCampaigns.id, campaignId), eq(outreachCampaigns.status, 'active')));
+    .where(and(
+      eq(outreachCampaigns.id, campaignId),
+      eq(outreachCampaigns.userId, userId),
+      eq(outreachCampaigns.status, 'active')
+    ));
 
   if (!campaign) {
     // Campaign was paused/aborted while job was in queue — skip silently
@@ -474,7 +491,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
   // 24/7 Autonomous Mode: We no longer skip batches due to mailboxPauseUntil
 
-  // 4. Check dynamic daily budget (respecting Warmup)
+  // 4. Check dynamic daily budget (respecting Warmup & Neural Brain)
   const sentToday = await getMailboxSentCount(userId, integrationId);
   
   // Refetch current integration to get latest warmup status
@@ -483,15 +500,22 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   
   if (currentIntegration) {
     const warmup = warmupService.getWarmupStatus(currentIntegration as any, dailyLimit);
-    if (warmup.isWarmingUp) {
+    if (warmup.isWarmingUp && warmup.dailyLimit < effectiveLimit) {
       effectiveLimit = warmup.dailyLimit;
-      // console.log(`[CampaignWorker] 🌡️ Warmup active for ${integrationId.slice(-8)}: Limit capped at ${effectiveLimit}`);
+    }
+
+    // Neural Brain Smart Capping
+    const tier = (currentIntegration as any).tier || 'starter';
+    const isEnterprise = tier.toLowerCase() === 'enterprise';
+    if (!isEnterprise) {
+      const createdAt = new Date((currentIntegration as any).createdAt || Date.now());
+      const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
+      const smartCap = isWarmed ? 60 : 45 + Math.floor(Math.random() * 6); // 45-50
+      effectiveLimit = Math.min(effectiveLimit, smartCap);
     }
   }
 
-  // For initial outreach (send-batch), we strictly respect the effective limit
   if (sentToday >= effectiveLimit) {
-    // Daily limit reached - outreach pauses until tomorrow
     return;
   }
 
@@ -516,7 +540,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   if (lastSentResult.rows.length > 0) {
     const lastSentAt = new Date(lastSentResult.rows[0].created_at as string).getTime();
     // Dynamically compute minimum spacing based on remaining budget & business time
-    const minDelayMs = calcMailboxInterval(sentToday, dailyLimit);
+    const minDelayMs = calcMailboxInterval(sentToday, dailyLimit, currentIntegration);
     if (Date.now() - lastSentAt < minDelayMs) return;
   }
 
@@ -589,8 +613,25 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
         })
         .where(eq(campaignLeads.id, leadEntry.id));
       
-      // BUG #10 FIX: Use 'continue' instead of 'return' so we check the rest of the batch
       continue; 
+    }
+
+    // STAGGERED DELIVERY: Add niche-specific jitter to avoid clustering sends at the start of the window
+    const nicheWindow = tzProfile.nicheCategory || 'general';
+    const staggerDelayMs = Math.floor(Math.random() * 30 * 60 * 1000); // Up to 30 min jitter
+    const now = new Date();
+    const localHour = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: tzProfile.detectedTimezone || 'UTC', hour: 'numeric', hourCycle: 'h23' }).format(now));
+    
+    if (localHour === tzProfile.preferredContactStart && now.getMinutes() < 15) {
+      // If it's the very start of their day, push some leads further into the hour
+      console.log(`[CampaignWorker] ⏳ Staggering lead ${lead.id.slice(-8)} for ${nicheWindow} niche.`);
+      await db.update(campaignLeads)
+        .set({ 
+          nextActionAt: new Date(Date.now() + staggerDelayMs),
+          metadata: { ...leadEntry.metadata, staggeredAt: new Date().toISOString() }
+        })
+        .where(eq(campaignLeads.id, leadEntry.id));
+      continue;
     }
   }
 
@@ -660,7 +701,15 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
   if (hasMore) {
     const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
-    const delayMs = delayDays * 24 * 60 * 60 * 1000;
+    let delayMs = delayDays * 24 * 60 * 60 * 1000;
+
+    // Relative scheduling: Calculate delay from initialSentAt if available
+    const initialSentAt = leadEntry.metadata?.initialSentAt;
+    if (initialSentAt) {
+      const targetDate = new Date(initialSentAt);
+      targetDate.setDate(targetDate.getDate() + delayDays);
+      delayMs = Math.max(60000, targetDate.getTime() - Date.now()); // Ensure at least 1m delay
+    }
 
     await campaignQueueManager.scheduleFollowUp(
       campaignId,
@@ -731,34 +780,42 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   }
 
   // 5. Check unified daily budget (Max Capacity)
-
   const sentToday = await getMailboxSentCount(userId, integrationId);
 
+  // Refetch current integration for Neural Brain limits
+  const currentIntegration = await storage.getIntegrationById(integrationId);
+  
   // Pull limits from campaign config or mailbox metadata
   const config = (campaign.config as any) || {};
   const mailboxLimits: Record<string, number> = config.mailboxLimits || {};
   const baseLimit = mailboxLimits[integrationId] || 50;
 
-  // Max multiplier: Default to 3x baseLimit unless specified in config
-  // For Gmail/Outlook, we use a default hard ceiling of 100/day as requested
-  const integration = await storage.getIntegrationById(integrationId);
-  const isSmtp = (integration?.provider as any) === 'smtp' || integration?.provider === 'custom_email';
-  const defaultCeiling = isSmtp ? 500 : 100; // Gmail/Outlook: 100, SMTP: 500
+  // Neural Brain Smart Capping (Applied to follow-ups too)
+  let effectiveHardLimit = baseLimit;
+  if (currentIntegration) {
+    const tier = (currentIntegration as any).tier || 'starter';
+    const isEnterprise = tier.toLowerCase() === 'enterprise';
+    if (!isEnterprise) {
+      const createdAt = new Date((currentIntegration as any).createdAt || Date.now());
+      const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
+      const smartCap = isWarmed ? 60 : 45 + Math.floor(Math.random() * 6); // 45-50
+      effectiveHardLimit = Math.min(baseLimit, smartCap);
+    }
+  }
 
+  // Max multiplier for flexibility
+  const isSmtp = (currentIntegration?.provider as any) === 'smtp' || currentIntegration?.provider === 'custom_email';
+  const defaultCeiling = isSmtp ? 500 : 100;
   const maxMultipliers = config.mailboxMaxMultipliers || {};
   const maxMultiplier = maxMultipliers[integrationId] || config.maxDailyMultiplier || (isSmtp ? 10 : 7);
-  const hardCeiling = config.totalDailyLimit || (baseLimit * maxMultiplier) || defaultCeiling;
+  const hardCeiling = config.totalDailyLimit || (effectiveHardLimit * maxMultiplier) || defaultCeiling;
 
   if (sentToday >= hardCeiling) {
-    const retryDelay = 1 * 60 * 60 * 1000; // 1 hour re-check (flexible rescheduling)
-    console.log(`[CampaignWorker] 📉 Mailbox ${integrationId} hit max capacity (${sentToday}/${hardCeiling}). Re-checking in 1h.`);
+    const retryDelay = 1 * 60 * 60 * 1000; // 1 hour re-check
+    console.log(`[CampaignWorker] 📉 Mailbox ${integrationId.slice(-8)} hit capacity (${sentToday}/${hardCeiling}). Rescheduling.`);
 
     await campaignQueueManager.scheduleFollowUp(
-      campaignId,
-      userId,
-      campaignLeadId,
-      integrationId,
-      stepIndex,
+      campaignId, userId, campaignLeadId, integrationId, stepIndex,
       retryDelay
     );
     return;
@@ -773,9 +830,19 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
     const nextStep = stepIndex + 1;
     if (nextStep <= followupsArr.length) {
       const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
+      let delayMs = delayDays * 24 * 60 * 60 * 1000;
+
+      // Relative scheduling
+      const initialSentAt = leadEntry.metadata?.initialSentAt;
+      if (initialSentAt) {
+        const targetDate = new Date(initialSentAt);
+        targetDate.setDate(targetDate.getDate() + delayDays);
+        delayMs = Math.max(60000, targetDate.getTime() - Date.now());
+      }
+
       await campaignQueueManager.scheduleFollowUp(
         campaignId, userId, campaignLeadId, integrationId, nextStep,
-        delayDays * 24 * 60 * 60 * 1000
+        delayMs
       );
     }
 
@@ -832,8 +899,8 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
   if (!leadEntry) return;
 
   // Get the auto-reply body from campaign template
-  let body = (campaign.template as any)?.autoReplyBody || "Thanks for your reply! We'll get back to you soon.";
-  let subject = (campaign.template as any)?.subject || 'Re: ';
+  let body = (campaign.template as any)?.autoReply?.body || (campaign.template as any)?.autoReplyBody || "Thanks for your reply! We'll get back to you soon.";
+  let subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject || 'Re: ';
   subject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
 
   // Variable replacement
@@ -885,6 +952,7 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     campaignId,
     leadId: lead.id,
     integrationId,
+    isPriorityReply: true // Auto-replies always have priority
   });
 
   // Record message
@@ -1003,27 +1071,35 @@ async function deliverCampaignEmail(
   leadEntry: any,
   integrationId: string
 ): Promise<void> {
-  let subject = (campaign.template as any).subject || 'Contacting you';
-  let body = (campaign.template as any).body;
+  const template = campaign.template as any;
+  let subject = template?.initial?.subject || template?.subject || 'Contacting you';
+  let body = template?.initial?.body || template?.body;
 
   // Follow-up logic: use the correct template for the current step
+  let variantId = 'standard';
   if (leadEntry.currentStep > 0) {
     const followups = (campaign.template as any)?.followups || [];
     const fuConfig = followups[leadEntry.currentStep - 1];
     if (fuConfig) {
-      body = fuConfig.body || body; // BUG #4 FIX: guard against missing follow-up body
-      // BUG #5 FIX: use initial subject as fallback, not the generic 'Contacting you'
+      body = fuConfig.body || body; 
       const fuSubject = fuConfig.subject || subject;
       subject = fuSubject.toLowerCase().startsWith('re:') ? fuSubject : `Re: ${fuSubject}`;
     }
   } else {
-    // For initial step, use AI generation or template
+    // For initial step, use AI generation or A/B testing variants if in autonomous mode
     try {
-      const aiContent = await generateExpertOutreach(lead, userId);
-      subject = aiContent.subject || subject;
-      body = aiContent.body || body;
+      if (campaign.aiAutonomousMode) {
+        const testResult = await handleAutonomousTesting(campaign, lead, userId);
+        subject = testResult.subject;
+        body = testResult.body;
+        variantId = testResult.variantId;
+      } else {
+        const aiContent = await generateExpertOutreach(lead, userId);
+        subject = aiContent.subject || subject;
+        body = aiContent.body || body;
+      }
     } catch (e) {
-      console.warn(`[CampaignWorker] AI generation failed, using template fallback`);
+      console.warn(`[CampaignWorker] AI generation failed, using template fallback:`, e);
     }
   }
 
@@ -1087,6 +1163,9 @@ async function deliverCampaignEmail(
   }
 
   try {
+    // Determine if this is a priority reply
+    const isPriorityReply = leadEntry.currentStep > 0 && (lead.status === 'replied' || lead.status === 'interested' || lead.status === 'warm');
+
     await sendEmail(userId, lead.email, body, subject, {
       isRaw: true,
       isHtml: true,
@@ -1094,6 +1173,7 @@ async function deliverCampaignEmail(
       campaignId: campaign.id,
       leadId: lead.id,
       integrationId,
+      isPriorityReply
     });
   } catch (err) {
     // Release lock on error so BullMQ retry can re-acquire it
@@ -1125,7 +1205,13 @@ async function deliverCampaignEmail(
       body,
       integrationId,
       trackingId,
-      metadata: { campaignId: campaign.id, step: leadEntry.currentStep, integrationId, integration_id: integrationId }
+      metadata: { 
+        campaignId: campaign.id, 
+        step: leadEntry.currentStep, 
+        integrationId, 
+        integration_id: integrationId,
+        variantId // Track A/B variant for optimization
+      }
     }, tx as any); // Pass transaction client to storage
 
     // Detailed campaign email tracking
@@ -1141,6 +1227,13 @@ async function deliverCampaignEmail(
     });
 
     // Update campaign lead status
+    const newMetadata = { ...(leadEntry.metadata as Record<string, any> || {}) };
+    
+    // Track initial send date for relative follow-up scheduling
+    if (leadEntry.currentStep === 0 && !newMetadata.initialSentAt) {
+      newMetadata.initialSentAt = new Date().toISOString();
+    }
+
     const nextStep = leadEntry.currentStep + 1;
     const followupsArr = (campaign.template as any)?.followups || [];
     const hasMore = nextStep <= followupsArr.length;
@@ -1148,8 +1241,13 @@ async function deliverCampaignEmail(
 
     if (hasMore) {
       const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
-      nextActionAt = new Date();
-      nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+      if (newMetadata.initialSentAt) {
+        nextActionAt = new Date(newMetadata.initialSentAt);
+        nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+      } else {
+        nextActionAt = new Date();
+        nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+      }
     }
 
     await tx.update(campaignLeads)
@@ -1159,6 +1257,7 @@ async function deliverCampaignEmail(
         nextActionAt,
         sentAt: new Date(),
         error: null,
+        metadata: newMetadata
       })
       .where(eq(campaignLeads.id, leadEntry.id));
 
@@ -1316,12 +1415,61 @@ async function handleCampaignFailure(campaignId: string): Promise<void> {
 
 // ─── Initialize Worker ──────────────────────────────────────────────────────
 
+/**
+ * Handles A/B testing of subject lines and copy in autonomous mode.
+ * Tests on the first 5-10 leads before selecting a winner.
+ */
+async function handleAutonomousTesting(
+  campaign: any, 
+  lead: any, 
+  userId: string
+): Promise<{ subject: string, body: string, variantId: string }> {
+  const metadata = campaign.metadata || {};
+  const testingVariants = metadata.testing_variants || [];
+  const winningVariantId = metadata.winning_variant_id;
+
+  if (winningVariantId) {
+    const winner = testingVariants.find((v: any) => v.id === winningVariantId);
+    if (winner) return { subject: winner.subject, body: winner.body, variantId: winner.id };
+  }
+
+  // Generate variants if they don't exist
+  let variants = testingVariants;
+  if (!variants || variants.length === 0) {
+    console.log(`[CampaignWorker] 🧪 Generating testing variants for campaign ${campaign.id}...`);
+    const aiResult = await generateExpertOutreach(lead, userId);
+    
+    // Create 3 distinct variants: Curiosity, Result, and a blended approach
+    variants = [
+      { id: 'v1_curiosity', subject: aiResult.subject, body: aiResult.body },
+      { id: 'v2_result', subject: aiResult.alternatives[0] || aiResult.subject, body: aiResult.body },
+      { id: 'v3_hybrid', subject: aiResult.alternatives[1] || `Question regarding ${lead.company || 'your team'}`, body: aiResult.body }
+    ];
+    
+    await db.update(outreachCampaigns)
+      .set({ 
+        metadata: { ...metadata, testing_variants: variants, testing_phase: 'active' } 
+      })
+      .where(eq(outreachCampaigns.id, campaign.id));
+  }
+
+  // Deterministic assignment for the testing pool
+  const leadSeed = lead.id ? parseInt(lead.id.substring(0, 2), 16) || 0 : 0;
+  const selected = variants[leadSeed % variants.length];
+
+  return { 
+    subject: selected.subject, 
+    body: selected.body, 
+    variantId: selected.id 
+  };
+}
+
 export const campaignWorker = hasRedis ? new Worker<CampaignJobData>(
   'campaign-engine',
   processCampaignJob,
   {
     connection: redisConnection as any,
-    concurrency: 15, // Handle multiple mailboxes concurrently
+    concurrency: 25, // Handle multiple mailboxes concurrently
     removeOnComplete: { count: 500 },
     removeOnFail: { count: 1000 },
   } as any
@@ -1344,7 +1492,21 @@ if (campaignWorker) {
     }
   });
 
-  console.log('✅ BullMQ Campaign Queue Worker initialized (concurrency: 15)');
+  console.log('✅ BullMQ Campaign Queue Worker initialized (concurrency: 25)');
+
+  // Initialize Autonomous Scaler (Daily Optimization Cycle)
+  // Using dynamic import with a safer relative path for the worker context
+  const scalerPath = '../../../services/outreach-worker/src/outreach-lib/autonomous-scaler.js';
+  import(scalerPath).then(({ AutonomousScalerService }) => {
+    // Run immediately on start, then every 24 hours
+    AutonomousScalerService.runOptimizationCycle().catch((e: any) => console.error('Scaler failed on init:', e));
+    setInterval(() => {
+      AutonomousScalerService.runOptimizationCycle().catch((e: any) => console.error('Scaler failed in cycle:', e));
+    }, 24 * 60 * 60 * 1000);
+  }).catch((err: any) => {
+    console.error('Failed to load AutonomousScalerService:', err.message);
+  });
+
 } else {
   console.warn('⚠️ BullMQ Campaign Queue Worker disabled (No Redis) — using setInterval fallback');
 }

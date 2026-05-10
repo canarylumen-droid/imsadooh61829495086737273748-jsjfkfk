@@ -209,7 +209,7 @@ export const SAFETY_GUARDRAILS = {
   maxSendsPerDay: 500, // Safe default for SMTP
   gmailMaxPerDay: 100, // Safe ceiling for Gmail/Outlook
   minIntervalBetweenSends: 30, // 30 seconds minimum for jitter
-  maxFollowupsPerLead: 5,
+  maxFollowupsPerLead: 10,
   bounceRateThreshold: 0.08, // 8% bounce = pause
   spamComplaintThreshold: 0.02, // 2% complaints = review
   autoStopOnHighBounceRate: true,
