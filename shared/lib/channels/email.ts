@@ -206,14 +206,16 @@ async function sendCustomSMTP(
 
   const cacheKey = integrationId || `${config.smtp_host}:${config.smtp_user}`;
 
-  const resolvedHost = config.smtp_host ? await resolveSmtpHost(config.smtp_host) : undefined;
-
+  // NOTE: We intentionally do NOT pre-resolve the hostname to an IP here.
+  // Domains like mail.privatemail.com have their A-records pointing to Cloudflare CDN IPs
+  // which do NOT serve SMTP traffic. nodemailer's built-in family:4 + lookup override below
+  // correctly forces IPv4 while allowing proper SMTP-specific DNS resolution.
   const createTransporterPool = (forcedPort?: number, forcedSecure?: boolean) => {
     const transporter = nodemailer.createTransport({
       pool: true,
       maxConnections: 5,
-      maxMessages: 500, // Increased for warmed pools
-      host: resolvedHost,
+      maxMessages: 500,
+      host: config.smtp_host,
       port: forcedPort || config.smtp_port || 587,
       secure: forcedSecure !== undefined ? forcedSecure : (config.smtp_port === 465),
       auth: {
@@ -244,7 +246,7 @@ async function sendCustomSMTP(
 
   // Initialize pool if not cached; re-acquired per-attempt to pick up ENETUNREACH evictions
   if (!smtpPools.has(cacheKey)) {
-    console.log(`[CustomSMTP] Creating new persistent connection pool for ${cacheKey} via ${resolvedHost || config.smtp_host}`);
+    console.log(`[CustomSMTP] Creating new persistent connection pool for ${cacheKey} via ${config.smtp_host}:${config.smtp_port || 587}`);
     smtpPools.set(cacheKey, createTransporterPool());
   }
 
