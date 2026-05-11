@@ -3,6 +3,14 @@ import { integrations } from '@audnix/shared';
 import { eq, and, sql } from 'drizzle-orm';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
 
+export interface HealthState {
+  canSendInitial: boolean;
+  canSendFollowUp: boolean;
+  isHardPaused: boolean;
+  status: 'connected' | 'warning' | 'failed';
+  pauseUntil: Date | null;
+}
+
 /**
  * Mailbox Health Monitor (Production Hardened)
  * 
@@ -39,7 +47,7 @@ export class MailboxHealthMonitor {
         const stillValid = await this.verifyConnection(integration);
         
         if (!stillValid) {
-          await this.pauseMailbox(integration.id, `Fatal Auth Failure: ${error}. User must reconnect account.`, 'failed', 72);
+          await this.pauseMailbox(integration.id, `Fatal Auth Failure: ${error}. Retrying connection later.`, 'failed', 48);
           return;
         } else {
           console.log(`[HealthMonitor] ✨ Verification passed despite error. Treating as transient.`);
@@ -121,13 +129,21 @@ export class MailboxHealthMonitor {
 
     console.log(`[HealthMonitor] ⏸️ ${status === 'failed' ? 'HARD' : 'SOFT'} PAUSE for ${integrationId} (${hours}h). Reason: ${reason}`);
 
+    const updateData: any = {
+      healthStatus: status,
+      mailboxPauseUntil: pauseUntil,
+      lastHealthError: reason,
+      updatedAt: new Date()
+    };
+    
+    // If connection is genuinely BAD (fatal), disconnect it to prompt user to reconnect,
+    // rather than endlessly looping and filling logs with errors.
+    if (status === 'failed') {
+      updateData.connected = false;
+    }
+
     await db.update(integrations)
-      .set({
-        healthStatus: status,
-        mailboxPauseUntil: pauseUntil,
-        lastHealthError: reason,
-        updatedAt: new Date()
-      })
+      .set(updateData)
       .where(eq(integrations.id, integrationId));
       
     // Notify user via WebSocket
@@ -146,26 +162,39 @@ export class MailboxHealthMonitor {
   }
 
   /**
-   * Multi-Tenant Safety: Verify if an integration is healthy AND owned by the user
+   * Multi-Tenant Safety: Verify if an integration is healthy AND owned by the user.
+   * Returns a granular HealthState to support Soft/Hard throttling.
    */
-  static async isHealthy(integrationId: string, userId: string): Promise<boolean> {
+  static async checkHealthState(integrationId: string, userId: string): Promise<HealthState> {
     const [integration] = await db.select().from(integrations)
       .where(and(eq(integrations.id, integrationId), eq(integrations.userId, userId)))
       .limit(1);
       
-    if (!integration) return false;
+    if (!integration || !integration.connected) {
+      return { canSendInitial: false, canSendFollowUp: false, isHardPaused: true, status: 'failed', pauseUntil: null };
+    }
 
-    if (integration.healthStatus === 'failed') {
-      if (integration.mailboxPauseUntil && new Date() < integration.mailboxPauseUntil) {
-        return false;
+    const state: HealthState = {
+      canSendInitial: true,
+      canSendFollowUp: true,
+      isHardPaused: false,
+      status: (integration.healthStatus as 'connected' | 'warning' | 'failed') || 'connected',
+      pauseUntil: integration.mailboxPauseUntil ? new Date(integration.mailboxPauseUntil) : null
+    };
+
+    if (state.pauseUntil && new Date() < state.pauseUntil) {
+      if (state.status === 'failed') {
+        // HARD PAUSE: Halt all outbound entirely
+        state.canSendInitial = false;
+        state.canSendFollowUp = false;
+        state.isHardPaused = true;
+      } else if (state.status === 'warning') {
+        // SOFT PAUSE: Halt new leads, but keep pushing follow-ups
+        state.canSendInitial = false;
+        state.canSendFollowUp = true;
       }
     }
 
-    // Even in 'warning' (soft pause), we respect the pause timer to reduce intensity
-    if (integration.mailboxPauseUntil && new Date() < integration.mailboxPauseUntil) {
-      return false;
-    }
-
-    return integration.connected;
+    return state;
   }
 }

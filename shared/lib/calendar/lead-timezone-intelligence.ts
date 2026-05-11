@@ -202,6 +202,24 @@ export async function isWithinLeadPreferredWindow(
   userId: string, // Required for dynamic lookup
   defaultTz: string = 'UTC'
 ): Promise<boolean> {
+  const prob = await getOptimalSendProbability(utcDate, profile, userId, defaultTz);
+  return prob > 0;
+}
+
+/**
+ * Returns a probability score (0.0 - 1.0) for sending an email at the given time.
+ * Factors:
+ * - Business hours (0.0 outside)
+ * - PEAK hours (9-11 AM, 2-4 PM) -> 1.0
+ * - Lunch/Evening -> 0.4
+ * - Night Watch -> 0.0
+ */
+export async function getOptimalSendProbability(
+  utcDate: Date,
+  profile: { detectedTimezone: string | null; preferredContactStart: number | null; preferredContactEnd: number | null; preferredDays: string[] | null; niche?: string | null },
+  userId: string,
+  defaultTz: string = 'UTC'
+): Promise<number> {
   const tz = profile.detectedTimezone || defaultTz;
   
   // 1. Dynamic Niche Check
@@ -222,11 +240,32 @@ export async function isWithinLeadPreferredWindow(
     const localHour = parseInt(localTime.find(p => p.type === 'hour')?.value || '12', 10);
     const localDay = localTime.find(p => p.type === 'weekday')?.value || 'Monday';
 
-    return localHour >= start && localHour < end && days.includes(localDay as any);
+    // 2. Hard Gate: Day check
+    if (!days.includes(localDay)) return 0;
+
+    // 3. Hard Gate: Night/Business Hours
+    if (localHour < start || localHour >= end) return 0;
+
+    // 4. PEAK Intelligence
+    // Most business niches have peak engagement 9-11 AM and 2-4 PM
+    const isMorningPeak = localHour >= 9 && localHour <= 11;
+    const isAfternoonPeak = localHour >= 14 && localHour <= 16;
+    
+    if (isMorningPeak || isAfternoonPeak) return 1.0;
+
+    // 5. Lunch/Transition logic
+    const isLunch = localHour === 12 || localHour === 13;
+    if (isLunch) return 0.4;
+
+    // 6. Late Afternoon
+    if (localHour >= 17) return 0.2;
+
+    return 0.7; // Standard business hour probability
   } catch {
-    return true; // Fail open
+    return 0.5; // Fail safe
   }
 }
+
 
 /**
  * Advanced population using AI fallback for ambiguous leads.

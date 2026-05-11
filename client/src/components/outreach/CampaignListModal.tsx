@@ -48,6 +48,35 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     }
   });
 
+  const getCampaignETA = (camp: any) => {
+    if (camp.status === 'aborted') return 'Aborted';
+    if (camp.status === 'completed') return 'Done';
+    if (camp.status === 'draft') return 'Not Started';
+    if (camp.status === 'paused') return 'Paused';
+
+    const total = camp.stats?.total || 0;
+    const sent = camp.stats?.sent || 0;
+    const remaining = Math.max(0, total - sent);
+    
+    if (remaining === 0) return 'Awaiting Replies';
+
+    const config = camp.config || {};
+    let dailyLimit = config.totalDailyLimit || config.dailyLimit || 50;
+    
+    // Simulate Neural Brain Throttle UP for high reply rates
+    const replied = camp.stats?.replied || 0;
+    const replyRate = sent > 0 ? (replied / sent) : 0;
+    if (replyRate > 0.05) {
+      dailyLimit = Math.floor(dailyLimit * 1.5);
+    }
+
+    const maxMailboxes = Object.keys(config.mailboxLimits || {}).length || 1;
+    const effectiveLimit = dailyLimit * maxMailboxes;
+    
+    const days = Math.ceil(remaining / effectiveLimit);
+    return `~${days} ${days === 1 ? 'day' : 'days'}`;
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "active":
@@ -117,10 +146,13 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
                         {getStatusBadge(camp.status)}
                       </div>
                       
-                      <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground">
+                      <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground mt-1">
                         <span><strong className="text-foreground">{camp.stats?.sent || 0}</strong> Sent</span>
                         <span><strong className="text-foreground">{camp.stats?.replied || 0}</strong> Replied</span>
                         <span>Total Queue: <strong className="text-foreground">{camp.stats?.total || 0}</strong></span>
+                        <span className="flex items-center gap-1 bg-primary/5 px-2 py-0.5 rounded-md border border-primary/10">
+                          ETA: <strong className="text-primary">{getCampaignETA(camp)}</strong>
+                        </span>
                       </div>
                     </div>
                     

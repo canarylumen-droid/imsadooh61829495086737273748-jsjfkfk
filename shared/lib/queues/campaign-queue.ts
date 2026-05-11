@@ -21,7 +21,7 @@ import {
   campaignEmails,
   integrations,
 } from '@audnix/shared';
-import { eq, and, or, sql, lte, isNull, ne, asc } from 'drizzle-orm';
+import { eq, and, or, sql, lte, isNull, ne, asc, gt } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from '../channels/email.js';
 import { adjustCopyIfNecessary } from "../ai/copy-adjuster.js";
@@ -30,7 +30,7 @@ import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { decryptToJSON } from '@shared/lib/crypto/encryption.js';
 import { mailboxHealthService } from '@services/email-service/src/email/mailbox-health-service.js';
 import { warmupService } from '@services/outreach-worker/src/outreach-lib/warmup-service.js';
-import { getLeadProfile, isWithinLeadPreferredWindow } from '../calendar/lead-timezone-intelligence.js';
+import { getLeadProfile, isWithinLeadPreferredWindow, getOptimalSendProbability } from '../calendar/lead-timezone-intelligence.js';
 
 // ─── Job Type Definitions ─────────────────────────────────────────────────────
 
@@ -73,7 +73,13 @@ interface StatsUpdateJobData {
   userId: string;
 }
 
-type CampaignJobData = SendBatchJobData | FollowUpJobData | AutoReplyJobData | StatsUpdateJobData | AutonomousJobData;
+interface PreCraftJobData {
+  type: 'campaign:pre-craft';
+  campaignId: string;
+  userId: string;
+}
+
+type CampaignJobData = SendBatchJobData | FollowUpJobData | AutoReplyJobData | StatsUpdateJobData | AutonomousJobData | PreCraftJobData;
 
 // ─── Queue & Worker ───────────────────────────────────────────────────────────
 
@@ -119,9 +125,10 @@ export class CampaignQueueManager {
     // Create a repeatable send-batch job for EACH mailbox independently
     for (const mbId of mailboxIds) {
       const dailyLimit = mailboxLimits[mbId] || 50;
-      const businessHours = 24; 
-      const repeatMs = Math.max(60_000, Math.floor((businessHours * 60 * 60 * 1000) / dailyLimit));
-      const jitteredRepeatMs = repeatMs + Math.floor(Math.random() * 30_000);
+      
+      // Heartbeat: Run every 5 minutes to check for leads in their PRIME window.
+      // This high frequency allows the worker to be lead-aware rather than linearly spaced.
+      const jitteredRepeatMs = 300_000 + Math.floor(Math.random() * 60_000); 
       const jobKey = `send-batch_${campaign.id}_${mbId}`;
 
       if (campaignQueue) {
@@ -155,6 +162,19 @@ export class CampaignQueueManager {
         this.fallbackIntervals.set(jobKey, interval);
         console.log(`[CampaignFallback] ⚡ Interval started for ${mbId} (${Math.round(jitteredRepeatMs/60000)}m)`);
       }
+    }
+
+    // Schedule a daily PRE-CRAFT job to generate AI copies for the next 24 hours
+    const preCraftKey = `pre-craft_${campaign.id}`;
+    if (campaignQueue) {
+      await campaignQueue.add(preCraftKey, {
+        type: 'campaign:pre-craft',
+        campaignId: campaign.id,
+        userId: campaign.userId
+      }, {
+        repeat: { pattern: '0 1 * * *' }, // Run daily at 1 AM UTC
+        jobId: preCraftKey.replace(/:/g, '-')
+      });
     }
 
     // Stats aggregation job (every 30s)
@@ -346,6 +366,9 @@ async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
     case 'campaign:update-stats':
       await processStatsUpdate(data);
       break;
+    case 'campaign:pre-craft':
+      await processPreCraft(data);
+      break;
     case 'autonomous':
       try {
         const { outreachEngine } = await import("@services/outreach-worker/workers/outreach-engine.js");
@@ -471,6 +494,8 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
   const { campaignId, userId, integrationId, dailyLimit } = data;
 
+
+
   // 1. Verify campaign is still active
   const [campaign] = await db.select().from(outreachCampaigns)
     .where(and(
@@ -489,10 +514,16 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
   // 3. FAULT TOLERANCE: Check mailbox health (Smart Recovery aware)
   const { MailboxHealthMonitor } = await import('@shared/lib/monitoring/health-monitor.js');
-  const healthy = await MailboxHealthMonitor.isHealthy(integrationId, userId);
-  if (!healthy) {
-    console.log(`[CampaignWorker] ⏳ Mailbox ${integrationId.slice(-8)} is cooling down or requires reconnection. Skipping batch.`);
+  const healthState = await MailboxHealthMonitor.checkHealthState(integrationId, userId);
+  
+  if (healthState.isHardPaused) {
+    // We removed the console.log here to prevent endless log spam every 5 minutes when a mailbox is dead.
     return;
+  }
+
+  const isSoftPaused = !healthState.canSendInitial && healthState.canSendFollowUp;
+  if (isSoftPaused) {
+    console.log(`[CampaignWorker] ⚠️ Mailbox ${integrationId.slice(-8)} is soft paused. Throttling down to follow-ups ONLY.`);
   }
 
   // 4. Check dynamic daily budget (respecting Warmup & Neural Brain)
@@ -577,7 +608,9 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
         ne(leads.status, 'replied'),
         ne(leads.status, 'booked'),
         ne(leads.status, 'converted'),
-        ne(leads.status, 'not_interested')
+        ne(leads.status, 'not_interested'),
+        // SOFT PAUSE GATE: If soft paused, only fetch leads that are already in a follow-up sequence
+        isSoftPaused ? gt(campaignLeads.currentStep, 0) : undefined
       )
     )
     .orderBy(campaignLeads.nextActionAt)
@@ -600,45 +633,39 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       .where(eq(campaignLeads.id, leadEntry.id));
   }
 
-  // --- PHASE 50: TIMEZONE INTELLIGENCE GATE ---
+  // --- PHASE 50: INTELLIGENT SCHEDULING GATE ---
   const tzProfile = await getLeadProfile(lead.id);
   const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
   
   if (tzProfile && !isActivelyEngaged) {
-    const isAwake = await isWithinLeadPreferredWindow(new Date(), tzProfile, userId);
-    if (!isAwake) {
-      console.log(`[CampaignWorker] 😴 Lead ${lead.id.slice(-8)} is outside business window (${tzProfile.detectedTimezone}). Rescheduling.`);
-      
-      // Delay by 1 hour and put back in pool
+    const probability = await getOptimalSendProbability(new Date(), tzProfile, userId);
+    
+    // Dice Roll: If probability is low (e.g. 0.2), we only send 20% of the time.
+    // This naturally spreads leads across the day and clusters them in PEAK hours (prob=1.0).
+    const diceRoll = Math.random();
+    
+    if (probability === 0) {
+      console.log(`[CampaignWorker] 😴 Lead ${lead.id.slice(-8)} is outside business window. Rescheduling.`);
       const nextCheck = new Date(Date.now() + 60 * 60 * 1000);
       await db.update(campaignLeads)
-        .set({ 
-          nextActionAt: nextCheck,
-          status: 'queued' // Return to pool so other mailboxes don't get stuck
-        })
+        .set({ nextActionAt: nextCheck, status: 'queued' })
         .where(eq(campaignLeads.id, leadEntry.id));
-      
       continue; 
     }
 
-    // STAGGERED DELIVERY: Add niche-specific jitter to avoid clustering sends at the start of the window
-    const nicheWindow = tzProfile.nicheCategory || 'general';
-    const staggerDelayMs = Math.floor(Math.random() * 30 * 60 * 1000); // Up to 30 min jitter
-    const now = new Date();
-    const localHour = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: tzProfile.detectedTimezone || 'UTC', hour: 'numeric', hourCycle: 'h23' }).format(now));
-    
-    if (localHour === tzProfile.preferredContactStart && now.getMinutes() < 15) {
-      // If it's the very start of their day, push some leads further into the hour
-      console.log(`[CampaignWorker] ⏳ Staggering lead ${lead.id.slice(-8)} for ${nicheWindow} niche.`);
+    if (diceRoll > probability) {
+      console.log(`[CampaignWorker] 🎲 Dice roll (${diceRoll.toFixed(2)}) > Prob (${probability}) for lead ${lead.id.slice(-8)}. Yielding to next heartbeat.`);
+      // Delay by 15-30 mins to try again later in the same business day
+      const retryAt = new Date(Date.now() + (15 + Math.random() * 15) * 60 * 1000);
       await db.update(campaignLeads)
-        .set({ 
-          nextActionAt: new Date(Date.now() + staggerDelayMs),
-          metadata: { ...leadEntry.metadata, staggeredAt: new Date().toISOString() }
-        })
+        .set({ nextActionAt: retryAt, status: 'queued' })
         .where(eq(campaignLeads.id, leadEntry.id));
       continue;
     }
+
+    console.log(`[CampaignWorker] 🎯 Target Lock: Sending lead ${lead.id.slice(-8)} (Prob: ${probability})`);
   }
+
 
   // 7. FAULT-TOLERANT SEND: Wrap in try/catch to handle mailbox errors
   try {
@@ -730,6 +757,11 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
   wsSync.notifyCampaignStatsUpdated(userId, campaignId);
   wsSync.notifyStatsUpdated(userId);
+
+  // HEARTBEAT SEND CAP: Send at most 1 lead per 5-min heartbeat cycle.
+  // The loop fetches multiple leads so timezone-gated ones can be rescheduled,
+  // but we break after the first successful send to respect distributed pacing.
+  break;
   } // end for-loop (Bug #10 fix)
 }
 
@@ -757,16 +789,27 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   const [lead] = await db.select().from(leads).where(eq(leads.id, leadEntry.leadId));
   if (!lead?.email || lead.aiPaused) return;
 
+  // --- SOFT/HARD PAUSE GATE: Enforce Follow-Up Throttling ---
+  const { MailboxHealthMonitor } = await import('@shared/lib/monitoring/health-monitor.js');
+  const healthState = await MailboxHealthMonitor.checkHealthState(integrationId, userId);
+  
+  if (!healthState.canSendFollowUp) {
+    console.log(`[CampaignWorker] 🛑 Mailbox ${integrationId.slice(-8)} is hard paused. Yielding follow-up for ${lead.id.slice(-8)}.`);
+    await campaignQueueManager.scheduleFollowUp(
+      campaignId, userId, campaignLeadId, integrationId, stepIndex,
+      30 * 60 * 1000 // Retry in 30 minutes (pushes back until pause expires)
+    );
+    return;
+  }
+
   // --- PHASE 50: TIMEZONE INTELLIGENCE GATE (FOLLOW-UP) ---
   const tzProfile = await getLeadProfile(lead.id);
   const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
 
   if (tzProfile && !isActivelyEngaged) {
-    const isAwake = await isWithinLeadPreferredWindow(new Date(), tzProfile, userId);
-    if (!isAwake) {
-      console.log(`[CampaignWorker] 😴 Follow-up for ${lead.id.slice(-8)} outside window. Delaying.`);
-      
-      // Reschedule BullMQ job 1 hour later
+    const probability = await getOptimalSendProbability(new Date(), tzProfile, userId);
+    if (probability === 0) {
+      console.log(`[CampaignWorker] 😴 Follow-up for ${lead.id.slice(-8)} outside window. Delaying 1hr.`);
       await campaignQueueManager.scheduleFollowUp(
         campaignId,
         userId,
@@ -777,6 +820,17 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
       );
       return;
     }
+  }
+
+  // --- REPLY GATE: Follow-ups must yield to any pending auto-reply ---
+  const replyPending = await mailboxHasPendingReply(integrationId);
+  if (replyPending) {
+    console.log(`[CampaignWorker] ⏳ Reply pending — delaying follow-up for ${lead.id.slice(-8)} by 10 min.`);
+    await campaignQueueManager.scheduleFollowUp(
+      campaignId, userId, campaignLeadId, integrationId, stepIndex,
+      10 * 60 * 1000 // retry in 10 minutes
+    );
+    return;
   }
 
   // 4. Check if the lead has replied or unsubscribed since the follow-up was scheduled
@@ -1089,6 +1143,8 @@ async function deliverCampaignEmail(
 
   // Follow-up logic: use the correct template for the current step
   let variantId = 'standard';
+  let isBreakup = false;
+  
   if (leadEntry.currentStep > 0) {
     const followups = (campaign.template as any)?.followups || [];
     const fuConfig = followups[leadEntry.currentStep - 1];
@@ -1096,6 +1152,7 @@ async function deliverCampaignEmail(
       body = fuConfig.body || body; 
       const fuSubject = fuConfig.subject || subject;
       subject = fuSubject.toLowerCase().startsWith('re:') ? fuSubject : `Re: ${fuSubject}`;
+      isBreakup = fuConfig.isBreakup || false;
     }
   } else {
     // For initial step, use AI generation or A/B testing variants if in autonomous mode
@@ -1113,6 +1170,12 @@ async function deliverCampaignEmail(
     } catch (e) {
       console.warn(`[CampaignWorker] AI generation failed, using template fallback:`, e);
     }
+  }
+
+  // CHECK FOR PRE-CRAFTED COPY (Nightly Worker Optimization)
+  if (leadEntry.metadata?.preCraftedCopy) {
+    console.log(`[CampaignWorker] ⚡ Using pre-crafted copy for lead ${lead.id.slice(-8)}`);
+    body = leadEntry.metadata.preCraftedCopy;
   }
 
   // BUG #4/#9 FIX: Hard guard — if body is still empty/undefined, abort with a clear error
@@ -1137,7 +1200,8 @@ async function deliverCampaignEmail(
         originalSubject: subject,
         currentStepIndex: leadEntry.currentStep,
         totalSteps,
-        sequenceHistory: pastEmails as any
+        sequenceHistory: pastEmails as any,
+        isBreakup
       });
       if (adjustment.adjusted) {
         body = adjustment.body;
@@ -1146,6 +1210,7 @@ async function deliverCampaignEmail(
       console.error(`[CampaignWorker] AI Adjustment failed for follow-up ${lead.id}:`, err);
     }
   }
+
 
   // Variable replacement
   const firstName = lead.name?.trim().split(' ')[0] || 'there';
@@ -1432,8 +1497,83 @@ async function deliverCampaignInstagram(
 }
 
 /**
- * Circuit Breaker: Reset failure count on success
+ * Nightly Worker: Pre-crafts outreach copies for leads scheduled for tomorrow.
+ * This avoids AI generation latency during the "Prime Window" peaks.
  */
+async function processPreCraft(data: PreCraftJobData): Promise<void> {
+  const { campaignId, userId } = data;
+  
+  // 1. Fetch leads whose nextActionAt is within the next 24 hours
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const eligibleLeads = await db.select({
+    lead: leads,
+    campaignLead: campaignLeads
+  })
+  .from(campaignLeads)
+  .innerJoin(leads, eq(campaignLeads.leadId, leads.id))
+  .where(and(
+    eq(campaignLeads.campaignId, campaignId),
+    eq(campaignLeads.status, 'queued'),
+    lte(campaignLeads.nextActionAt, tomorrow)
+  ))
+  .limit(20); // Process in manageable batches
+
+  if (eligibleLeads.length === 0) return;
+
+  console.log(`[PreCraft] 🤖 Generating copies for ${eligibleLeads.length} leads in campaign ${campaignId.slice(-8)}`);
+
+  const [campaign] = await db.select().from(outreachCampaigns).where(eq(outreachCampaigns.id, campaignId));
+  if (!campaign) return;
+
+  for (const row of eligibleLeads) {
+    const lead = row.lead;
+    const leadEntry = row.campaignLead;
+
+    try {
+      let subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject;
+      let body = (campaign.template as any)?.initial?.body || (campaign.template as any)?.body;
+
+      // Follow-up check
+      let isBreakup = false;
+      if (leadEntry.currentStep > 0) {
+        const followups = (campaign.template as any)?.followups || [];
+        const fuConfig = followups[leadEntry.currentStep - 1];
+        if (fuConfig) {
+          body = fuConfig.body || body;
+          isBreakup = fuConfig.isBreakup || false;
+        }
+      }
+
+      // Generate the copy
+      const aiContent = await generateExpertOutreach(lead as any, userId);
+      let preCraftedBody = aiContent.body || body;
+
+      // Apply adjustment if necessary
+      const adjustment = await adjustCopyIfNecessary({
+        userId,
+        leadId: lead.id,
+        originalBody: preCraftedBody,
+        originalSubject: subject,
+        currentStepIndex: leadEntry.currentStep,
+        isBreakup
+      });
+
+      if (adjustment.adjusted) {
+        preCraftedBody = adjustment.body;
+      }
+
+      // Save to metadata
+      const metadata = { ...(leadEntry.metadata as any || {}), preCraftedCopy: preCraftedBody, preCraftedAt: new Date().toISOString() };
+      await db.update(campaignLeads)
+        .set({ metadata })
+        .where(eq(campaignLeads.id, leadEntry.id));
+
+    } catch (err: any) {
+      console.warn(`[PreCraft] Failed for lead ${lead.id.slice(-8)}:`, err.message);
+    }
+  }
+}
+
 async function resetCampaignFailureCount(campaignId: string): Promise<void> {
   await db!.update(outreachCampaigns)
     .set({

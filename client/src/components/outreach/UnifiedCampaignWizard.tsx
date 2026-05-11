@@ -78,9 +78,9 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [body, setBody] = useState("");
   
   // Dynamic Follow-ups
-  const [followups, setFollowups] = useState<Array<{ subject: string, body: string, delayDays: string }>>([
-    { delayDays: "3", subject: "", body: "" },
-    { delayDays: "7", subject: "", body: "" }
+  const [followups, setFollowups] = useState<Array<{ subject: string, body: string, delayDays: string, isBreakup?: boolean }>>([
+    { delayDays: "3", subject: "", body: "", isBreakup: false },
+    { delayDays: "7", subject: "", body: "", isBreakup: true } // Default last one to breakup
   ]);
 
   const [autoReplyBody, setAutoReplyBody] = useState("");
@@ -244,7 +244,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
           followups: followups.map(f => ({
             subject: f.subject || subject,
             body: f.body,
-            delayDays: parseInt(f.delayDays)
+            delayDays: parseInt(f.delayDays),
+            isBreakup: f.isBreakup
           })),
           autoReply: { body: autoReplyBody }
         }
@@ -772,21 +773,35 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                           <TabsContent key={`S${i+2}`} value={`S${i+2}`} className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                              <div className="flex justify-between items-center mb-4">
                                <div className="text-[10px] font-black uppercase tracking-widest opacity-40">Delay from Initial Sent Date</div>
-                               <Select 
-                                 value={f.delayDays} 
-                                 onValueChange={v => {
-                                   const newF = [...followups];
-                                   newF[i].delayDays = v;
-                                   setFollowups(newF);
-                                 }}
-                               >
-                                 <SelectTrigger className="w-[120px] h-8 text-[10px] uppercase font-black"><SelectValue /></SelectTrigger>
-                                 <SelectContent>
-                                   {[1, 2, 3, 4, 5, 7, 10, 14, 21, 30].map(d => (
-                                     <SelectItem key={d} value={d.toString()}>{d} {d === 1 ? 'Day' : 'Days'}</SelectItem>
-                                   ))}
-                                 </SelectContent>
-                               </Select>
+                               <div className="flex items-center gap-4">
+                                 <div className="flex items-center gap-2">
+                                   <Label className="text-[9px] font-black uppercase tracking-widest opacity-40">Breakup Strategy</Label>
+                                   <Switch 
+                                     checked={f.isBreakup} 
+                                     onCheckedChange={v => {
+                                       const newF = [...followups];
+                                       newF[i].isBreakup = v;
+                                       setFollowups(newF);
+                                     }}
+                                     className="scale-75"
+                                   />
+                                 </div>
+                                 <Select 
+                                   value={f.delayDays} 
+                                   onValueChange={v => {
+                                     const newF = [...followups];
+                                     newF[i].delayDays = v;
+                                     setFollowups(newF);
+                                   }}
+                                 >
+                                   <SelectTrigger className="w-[120px] h-8 text-[10px] uppercase font-black"><SelectValue /></SelectTrigger>
+                                   <SelectContent>
+                                     {[1, 2, 3, 4, 5, 7, 10, 14, 21, 30].map(d => (
+                                       <SelectItem key={d} value={d.toString()}>{d} {d === 1 ? 'Day' : 'Days'}</SelectItem>
+                                     ))}
+                                   </SelectContent>
+                                 </Select>
+                               </div>
                              </div>
                              <div className="space-y-2">
                                {renderTagBar(`fs${i}`)}

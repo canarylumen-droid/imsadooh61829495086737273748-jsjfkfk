@@ -1285,7 +1285,7 @@ export async function generateCampaignTemplateSequence(
 ): Promise<{
   subject: string;
   body: string;
-  followups: Array<{ subject: string, body: string, delayDays: number }>;
+  followups: Array<{ subject: string, body: string, delayDays: number, isBreakup?: boolean }>;
   autoReplyBody: string;
 }> {
   const brandContext = await getBrandContext(userId);
@@ -1388,7 +1388,9 @@ export async function generateCampaignTemplateSequence(
       followups: (result.followups || []).slice(0, followupCount).map((f: any, index: number) => ({
         subject: f.subject || `Re: ${result.subject}`,
         body: f.body || "",
-        delayDays: delayDaysArr ? delayDaysArr[index] : (parseInt(f.delayDays) || 3)
+        delayDays: delayDaysArr ? delayDaysArr[index] : (parseInt(f.delayDays) || 3),
+        // Last follow-up is always a high-status Breakup/Takeaway
+        isBreakup: index === followupCount - 1
       })),
       autoReplyBody: result.autoReplyBody || ""
     };
@@ -1403,12 +1405,14 @@ export async function generateCampaignTemplateSequence(
         { 
           subject: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`, 
           body: `Hey {{firstName}},\n\nJust bumping this. If efficiency is a focus for {{company}} this quarter, this would be highly relevant.`,
-          delayDays: 3
+          delayDays: 3,
+          isBreakup: false
         },
         {
           subject: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
           body: `Hey {{firstName}} - guessing this isn't a priority right now.\n\nI'll stop reaching out.`,
-          delayDays: 7
+          delayDays: 7,
+          isBreakup: true
         }
       ],
       autoReplyBody: `Hey {{firstName}}! Thanks for getting back to me.\n\nI'd love to jump on a quick call to show you exactly how this works for {{company}}.\n\nDo you have 10 mins this week? Let me know a time that works for you.`
