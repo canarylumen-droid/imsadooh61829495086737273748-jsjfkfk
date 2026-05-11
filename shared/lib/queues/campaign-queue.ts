@@ -237,11 +237,36 @@ export class CampaignQueueManager {
       }
     }
 
-    // Remove delayed follow-up and auto-reply jobs
+    // Remove delayed follow-up and auto-reply jobs.
+    // In BullMQ v5, jobs created with `repeat:` are scheduler-owned and cannot be
+    // removed via job.remove() — we must use removeJobScheduler() or removeRepeatableByKey() for those.
     const delayedJobs = await campaignQueue.getDelayed();
     for (const job of delayedJobs) {
       if ((job.data as any)?.campaignId === campaignId) {
-        await job.remove();
+        try {
+          await job.remove();
+        } catch (removeErr: any) {
+          // BullMQ v5: scheduler-owned jobs throw when removed directly — remove by key instead
+          if (removeErr.message?.includes('job scheduler')) {
+            try {
+              if (job.id) {
+                // Extract the repeatable key from the job id (format: repeat:<key>:<timestamp>)
+                const parts = job.id.split(':');
+                if (parts.length >= 3 && parts[0] === 'repeat') {
+                  const repeatKey = parts.slice(0, -1).join(':'); // everything except timestamp
+                  await campaignQueue!.removeRepeatableByKey(repeatKey);
+                } else {
+                  // Try removing via job scheduler name
+                  await campaignQueue!.removeJobScheduler(job.name);
+                }
+              }
+            } catch (schedulerErr: any) {
+              console.warn(`[CampaignQueue] Could not remove scheduler job ${job.id}:`, schedulerErr.message);
+            }
+          } else {
+            console.warn(`[CampaignQueue] Could not remove delayed job ${job.id}:`, removeErr.message);
+          }
+        }
       }
     }
   }
