@@ -157,7 +157,7 @@ export async function embed(text: string): Promise<number[]> {
   // 2. Try GenAI (768 dims -> padded to 1536)
   if (isProviderAvailable('genai')) {
     try {
-      const model = genai!.getGenerativeModel({ model: "text-embedding-004" }, { apiVersion: 'v1' });
+      const model = genai!.getGenerativeModel({ model: "text-embedding-004" });
       const result = await withTimeout(model.embedContent(text), 5000);
       const vector = result.embedding.values || [];
       if (vector.length === 0) throw new Error("Empty embedding returned");
@@ -296,7 +296,7 @@ export async function generateReply(
         const model = genai!.getGenerativeModel({ 
           model: mName,
           ...(useSystemInstruction ? { systemInstruction: finalSystemPrompt } : {})
-        }, { apiVersion: 'v1' });
+        });
 
         return await withTimeout(model.generateContent({
           contents: options?.history 
@@ -387,7 +387,9 @@ export async function generateReply(
               text: response.choices[0].message.content || "",
               tokensUsed: response.usage?.total_tokens || 0
             };
-          } catch (e) {}
+          } catch (retryErr: any) {
+            console.error("[AI Service] Z-AI Fallback failed too:", retryErr.message);
+          }
         }
         console.error("[AI Service] Z-AI error:", error.message);
         updateProviderHealth('zai', false, error);
@@ -443,7 +445,7 @@ export async function classify(
         const model = genai!.getGenerativeModel({ 
           model: GENAI_STABLE_MODEL,
           systemInstruction: systemPrompt
-        }, { apiVersion: 'v1' });
+        });
         const result = await withTimeout(model.generateContent({
           contents: [{ role: 'user', parts: [{ text }] }],
           generationConfig: {
@@ -518,7 +520,7 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
         const model = genai!.getGenerativeModel({ 
           model: GENAI_STABLE_MODEL,
           systemInstruction: systemPrompt
-        }, { apiVersion: 'v1' });
+        });
         const result = await withTimeout(model.generateContent({
           contents: [{ role: 'user', parts: [{ text: fullPrompt }] }]
         }));

@@ -229,9 +229,9 @@ async function sendCustomSMTP(
         rejectUnauthorized: false,
         servername: config.smtp_host, // SNI must use the original hostname, not the IP
       },
-      connectionTimeout: 60000,
-      greetingTimeout: 60000,
-      socketTimeout: 90000,
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 30000,
     } as any);
 
     transporter.on('error', (err: any) => {

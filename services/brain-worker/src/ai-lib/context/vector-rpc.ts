@@ -21,7 +21,7 @@ export async function searchSimilarChunks(
     });
 
     console.log(`[VectorRPC] ⏳ Waiting for RAG job ${job.id}...`);
-    const result = await job.waitUntilFinished(ragQueueEvents, 30000); // 30s timeout
+    const result = await job.waitUntilFinished(ragQueueEvents, 120000); // 120s timeout
     console.log(`[VectorRPC] ✅ RAG job ${job.id} completed. Found ${result?.length || 0} chunks.`);
     return result || [];
   } catch (error) {

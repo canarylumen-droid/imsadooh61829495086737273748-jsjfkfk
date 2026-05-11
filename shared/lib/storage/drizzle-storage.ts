@@ -1394,20 +1394,8 @@ export class DrizzleStorage implements IStorage {
     // Phase 12: Ensure "Full Deletion" of settings for email providers to prevent ghosting
     if (integration && ['custom_email', 'gmail', 'outlook'].includes(integration.provider)) {
       try {
-        // Purge legacy user_settings SMTP fields
-        await db.execute(sql`
-          UPDATE user_settings 
-          SET smtp_host = NULL, 
-              smtp_port = NULL, 
-              smtp_username = NULL, 
-              smtp_password_encrypted = NULL, 
-              smtp_from_email = NULL, 
-              smtp_from_name = NULL, 
-              smtp_verified = FALSE,
-              email_provider = 'sendgrid'
-          WHERE user_id = ${integration.userId}
-        `);
-        
+        // Legacy user_settings table was removed
+
         // Also purge from the smtp_settings table to prevent UI ghosting in Settings
         await db.delete(smtpSettings).where(eq(smtpSettings.userId, integration.userId));
         
