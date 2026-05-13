@@ -12,6 +12,7 @@ import { ragQueue } from "@shared/lib/queue.js";
 import { blobStorage } from "@shared/lib/storage/blob-storage.js";
 import { acquireLock, releaseLock } from "@shared/lib/redis/redis.js";
 import { refreshPdfTtl } from "@shared/lib/redis/brand-pdf-storage.js";
+import { isValidURL } from "@shared/lib/utils/validation.js";
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
@@ -75,6 +76,9 @@ interface BrandExtraction {
     prefer?: string[];
     avoid?: string[];
   };
+  meeting_link?: string;
+  payment_link?: string;
+  app_link?: string;
 }
 
 type DeepMergeValue = string | number | boolean | null | undefined | DeepMergeValue[] | { [key: string]: DeepMergeValue };
@@ -316,9 +320,14 @@ Return a JSON object with these fields:
 - positioning: Market positioning (premium, mid, volume)
 - objections: Common objections as key-value pairs {"objection": "response"}
 - brandLanguage: { prefer: ["words to use"], avoid: ["words to avoid"] }
+- meeting_link: calendly.com/xxx or cal.com/xxx or any booking URL found
+- payment_link: stripe payment link, paypal.me, bank details, or invoice URL
+- app_link: SaaS app URL, signup page, or download link
 
+IMPORTANT: ONLY return links that are EXPLICITLY present in the document. DO NOT guess or hallucinate URLs.
+If you find multiple booking links, return the most prominent one.
 Only include fields you can confidently extract. Return valid JSON only.`,
-            `Extract brand context from this document:\n\n${pdfText.substring(0, 8000)}`,
+            `Extract brand context from this document (Look carefully for ANY booking/calendar/payment links):\n\n${pdfText.substring(0, 30000)}`,
             {
               model: MODELS.lead_intelligence,
               jsonMode: true,
@@ -445,6 +454,9 @@ Only include fields you can confidently extract. Return valid JSON only.`,
         positioning: brandContext.positioning,
         objections: brandContext.objections,
         brandLanguage: brandContext.brandLanguage,
+        meeting_link: brandContext.meeting_link,
+        payment_link: brandContext.payment_link,
+        app_link: brandContext.app_link,
         brandPdfUploadedAt: new Date().toISOString(),
         brandPdfFileName: req.file.originalname,
         brandPdfSize: req.file.size,
@@ -461,6 +473,10 @@ Only include fields you can confidently extract. Return valid JSON only.`,
         },
         brandGuidelinePdfText: pdfText,
         businessName: brandContext.companyName || user.businessName,
+        // SYNC: Automate booking/payment/app link discovery directly to user fields
+        ...(brandContext.meeting_link && !user.calendarLink && isValidURL(brandContext.meeting_link) && { calendarLink: brandContext.meeting_link }),
+        ...(brandContext.payment_link && !user.defaultPaymentLink && isValidURL(brandContext.payment_link) && { defaultPaymentLink: brandContext.payment_link }),
+        ...(brandContext.app_link && !user.appLink && isValidURL(brandContext.app_link) && { appLink: brandContext.app_link })
       });
 
       console.log(`✅ Brand PDF uploaded and processed for user ${userId}`);

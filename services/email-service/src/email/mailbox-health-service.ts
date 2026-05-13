@@ -267,6 +267,8 @@ class MailboxHealthService {
 
   /**
    * Check if a user's plan is active and not expired
+   * Phase 8: Now performs a real Stripe subscription status check for paid plans.
+   * Results are Redis-cached for 1 hour to avoid hammering Stripe every 2-minute tick.
    */
   async isPlanActive(userId: string): Promise<boolean> {
     try {
@@ -276,13 +278,54 @@ class MailboxHealthService {
       // Free plan is always "active" (within its own limits)
       if (user.plan === ('free' as any)) return true;
 
-      // Trial plan check
+      // Trial plan check — verified locally, no Stripe needed
       if (user.plan === 'trial' && user.trialExpiresAt) {
         return new Date(user.trialExpiresAt) > new Date();
       }
 
-      // Paid plans (assuming active if plan field is set to something else)
-      // In a real system we'd check Stripe subscription status too
+      // Phase 8 Fix: Paid plans MUST verify against Stripe, not just assume active.
+      // A cancelled/past_due subscription should halt outreach, not keep sending indefinitely.
+      const stripeSubscriptionId = (user as any).stripeSubscriptionId;
+      if (stripeSubscriptionId) {
+        // Check Redis cache first (1-hour TTL) to avoid hammering Stripe
+        try {
+          const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+          const redis = await getRedisClient();
+          const cacheKey = `stripe:plan_active:${userId}`;
+
+          if (redis) {
+            const cached = await redis.get(cacheKey);
+            if (cached !== null) {
+              return cached === 'true';
+            }
+          }
+
+          // Cache miss — verify with Stripe
+          const stripeModule = await import('stripe');
+          const Stripe = stripeModule.default;
+          const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2023-10-16' as any });
+          const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+
+          const isActive = subscription.status === 'active' || subscription.status === 'trialing';
+
+          // Cache result for 1 hour
+          if (redis) {
+            await redis.set(cacheKey, isActive ? 'true' : 'false', { EX: 3600 });
+          }
+
+          if (!isActive) {
+            console.warn(`[MailboxHealth] ⚠️ Stripe subscription ${stripeSubscriptionId} for user ${userId} is ${subscription.status}. Plan is NOT active.`);
+          }
+
+          return isActive;
+        } catch (stripeErr: any) {
+          // On Stripe API error, default to active to prevent false positives from network blips
+          console.error(`[MailboxHealth] Stripe verification failed for ${userId} (defaulting active):`, stripeErr.message);
+          return true;
+        }
+      }
+
+      // No Stripe subscription ID — assume active (legacy/manual accounts)
       return true;
     } catch (err) {
       console.error(`[MailboxHealth] Error checking plan for ${userId}:`, err);
@@ -302,8 +345,8 @@ class MailboxHealthService {
 
     const transporter = nodemailer.createTransport({
       host: config.smtp_host,
-      port: config.smtp_port || 587,
-      secure: config.smtp_port === 465,
+      port: parseInt(String(config.smtp_port)) || 587,
+      secure: parseInt(String(config.smtp_port)) === 465,
       auth: {
         user: config.smtp_user,
         pass: config.smtp_pass,

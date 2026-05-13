@@ -129,8 +129,8 @@ class MultiProviderEmailFailover {
 
     const transporter = nodemailer.createTransport({
       host: smtpConfig.smtp_host,
-      port: smtpConfig.smtp_port || 587,
-      secure: smtpConfig.smtp_port === 465,
+      port: parseInt(String(smtpConfig.smtp_port)) || 587,
+      secure: parseInt(String(smtpConfig.smtp_port)) === 465,
       auth: {
         user: smtpConfig.smtp_user,
         pass: smtpConfig.smtp_pass

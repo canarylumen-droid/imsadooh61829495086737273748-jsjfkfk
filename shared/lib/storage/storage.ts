@@ -428,6 +428,7 @@ export class MemStorage implements IStorage {
       metadata: insertUser.metadata || {},
       intelligenceMetadata: {},
       defaultPaymentLink: insertUser.defaultPaymentLink || null,
+      appLink: insertUser.appLink || null,
       offerDescription: insertUser.offerDescription || null,
       offerValue: insertUser.offerValue ?? 0,
       offerDescription2: insertUser.offerDescription2 || null,

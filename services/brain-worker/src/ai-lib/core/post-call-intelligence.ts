@@ -56,7 +56,8 @@ EXTRACTION REQUIREMENTS:
 5. PAYMENT EXTRACTION (CRITICAL):
    - Analyze if the prospect explicitly agreed to pay or buy the product on this call (must be high confidence, "yes I will pay", "send the link", etc.).
    - Extract the agreedToPay boolean (true/false).
-   - If true, extract the paymentAmount (e.g., "$2,000", "€500/mo") if explicitly stated.
+   - If true, extract the paymentAmount as a clean string (e.g., "2000", "500"). 
+   - DO NOT include currency symbols or text like "per month" in paymentAmount if possible, just the numeric value.
    - NOTE: If 'agreedToPay' is true, the system will autonomously email them the checkout link. DO NOT set to true unless explicitly agreed.
 
 6. ADVANCED PREDICTIVE ANALYTICS:

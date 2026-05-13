@@ -4,6 +4,7 @@ import { leads, auditTrail, fathomCalls, prospectObjections, users, pendingPayme
 import { eq, and, ilike, desc } from 'drizzle-orm';
 import { evaluateNextBestAction } from "@services/brain-worker/src/orchestrator/agents/autonomous-agent.js";
 import fetch from 'node-fetch';
+import { acquireLock, releaseLock } from '@shared/lib/redis/redis.js';
 
 export interface FathomWebhookPayload {
   event: string;
@@ -69,12 +70,21 @@ export async function processFathomWebhook(payload: FathomWebhookPayload) {
   
   if (!attendees || attendees.length === 0) return;
 
-  // Idempotency: Check if this meeting has already been fully processed
-  const existingCalls = await db.select().from(fathomCalls).where(eq(fathomCalls.fathomMeetingId, fathomMeetingId));
-  if (existingCalls.length > 0) {
-    console.log(`[Idempotency] Fathom meeting ${fathomMeetingId} already exists. Skipping duplicate processing.`);
+  // Idempotency: Use Redis lock to prevent race conditions during duplicate webhook deliveries
+  const lockKey = `fathom-webhook:${fathomMeetingId}`;
+  const hasLock = await acquireLock(lockKey, 300); // 5 min lock
+  if (!hasLock) {
+    console.log(`[Idempotency] Fathom meeting ${fathomMeetingId} is already being processed. Skipping.`);
     return;
   }
+
+  try {
+    // Idempotency: Check if this meeting has already been fully processed
+    const existingCalls = await db.select().from(fathomCalls).where(eq(fathomCalls.fathomMeetingId, fathomMeetingId));
+    if (existingCalls.length > 0) {
+      console.log(`[Idempotency] Fathom meeting ${fathomMeetingId} already exists in database. Skipping duplicate processing.`);
+      return;
+    }
 
   let fullTranscript = initialTranscript;
   let fullSummary = initialSummary;
@@ -219,9 +229,29 @@ export async function processFathomWebhook(payload: FathomWebhookPayload) {
           
           // Get user configuration for Autonomous Mode
           const userRec = await db.select().from(users).where(eq(users.id, lead.userId)).limit(1);
-          // autonomousMode lives in the config JSONB column — no top-level column exists
           const isAutonomous = !!(userRec[0]?.config as any)?.autonomousMode;
-          const parsedAmount = analysis.paymentAmount ? parseFloat(analysis.paymentAmount.replace(/[^0-9.]/g, '')) : null;
+          // Robust numeric extraction for amountDetected
+          let parsedAmount: number | null = null;
+          if (analysis.paymentAmount) {
+            const cleaned = analysis.paymentAmount.replace(/[^0-9.]/g, '');
+            parsedAmount = cleaned ? parseFloat(cleaned) : null;
+          }
+
+          // NGA-1 "$5k Handoff Rule": If amount is > 5k or UNKNOWN, hand off to human.
+          // We strictly use the user's setting (offerValue) if the call transcript didn't have a price.
+          const userMetadata = (userRec[0]?.metadata as any) || {};
+          const settingsOfferValue = userMetadata.offerValue ? parseFloat(userMetadata.offerValue) : 0;
+          
+          // The effective value we use for the $5k rule check
+          const effectiveValue = parsedAmount !== null ? parsedAmount : settingsOfferValue;
+          
+          // NGA-1 "$5k Handoff Rule": ONLY hand off if we KNOW the value is >= 5000.
+          // If the amount is unknown (0), we proceed with sending the link as requested.
+          const isHighTicket = effectiveValue >= 5000;
+          
+          if (isHighTicket) {
+             console.log(`⚠️ [High-Ticket Handoff] Explicit deal value ($${effectiveValue}) requires human review. Skipping autonomous checkout.`);
+          }
 
           // Idempotency: Prevent duplicate payment rows if Fathom retries the same webhook
           const existingPayment = await db.select()
@@ -232,6 +262,10 @@ export async function processFathomWebhook(payload: FathomWebhookPayload) {
           if (existingPayment.length > 0) {
             console.log(`[Idempotency] pending_payments record already exists for lead ${lead.id} + meeting ${fathomMeetingId}. Skipping duplicate insert.`);
           } else {
+            // Calculate expiry (7 days from now)
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 7);
+
             // Insert into pending_payments (first time only)
             const insertedPayment = await db.insert(pendingPayments).values({
               userId: lead.userId,
@@ -239,14 +273,26 @@ export async function processFathomWebhook(payload: FathomWebhookPayload) {
               fathomMeetingId: fathomMeetingId,
               status: 'pending' as any,
               amountDetected: parsedAmount || null,
+              expiresAt,
             }).returning();
 
-            if (isAutonomous) {
+            if (isAutonomous && !isHighTicket) {
                console.log(`🤖 Autonomous Mode ON: Queuing instant checkout email dispatch for ${lead.email}`);
-               const { checkoutWorker } = await import("@services/billing-service/src/billing/workers/checkout-worker.js");
-               await checkoutWorker.processPendingPayment(insertedPayment[0].id);
+                const { queueCheckoutDispatch } = await import("@shared/lib/queues/billing-queue.js");
+                await queueCheckoutDispatch(insertedPayment[0].id);
             } else {
-               console.log(`⏸️ Autonomous Mode OFF: Check pending dashboard to dispatch email for ${lead.email}`);
+               console.log(`${isHighTicket ? '🛑 High-Ticket Review' : '⏸️ Autonomous Mode OFF'}: Check pending dashboard to dispatch email for ${lead.email}`);
+               // Create a notification for the user about the high-ticket handoff
+               if (isHighTicket) {
+                  await storage.createNotification({
+                    userId: lead.userId,
+                    type: 'info',
+                    title: '🤝 High-Ticket Handoff Required',
+                    message: `A $${effectiveValue} deal was detected for ${lead.name}. Please review and send the checkout link manually.`,
+                    actionUrl: `/dashboard/leads/${lead.id}`,
+                    metadata: { leadId: lead.id, amount: effectiveValue }
+                  });
+               }
             }
           }
 
@@ -362,6 +408,10 @@ export async function processFathomWebhook(payload: FathomWebhookPayload) {
         console.error("AI Next Best Action routing failed:", e);
       }
     }
+  }
+} finally {
+    // Always release the lock
+    await releaseLock(lockKey);
   }
 }
 

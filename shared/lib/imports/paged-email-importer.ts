@@ -299,10 +299,76 @@ async function processEmailForLead(
 
     // AUTO-REPLY TRIGGER & CAMPAIGN MANAGEMENT
     let aiShouldWait = false; // Flag to determine if AI should hold off
+    let fullAnalysis: any = { intent: { score: 0, label: 'nurture' }, urgencyLevel: 0, qualityScore: 0 };
+    let isNegativeIntent = false;
+    let globalAutoReplyBody: string | null = null;
 
     if (direction === 'inbound') {
       try {
-        // 1. MARK CAMPAIGN AS REPLIED: Stop follow-ups if lead replied
+        // 0. Fetch Global Auto Reply Body
+        try {
+          const userObj = await storage.getUserById(userId);
+          globalAutoReplyBody = (userObj?.config as any)?.autoReplyBody || null;
+        } catch (e) {}
+
+        // 1. Run full inbound message analysis FIRST
+        const messageForAnalysis = {
+          ...newMessage,
+          id: (newMessage as any).id,
+          body: email.text || email.html || ''
+        };
+
+        try {
+          fullAnalysis = await analyzeInboundMessage(lead.id, messageForAnalysis as any, lead as any);
+          console.log(`[EMAIL_IMPORT] Full inbound analysis for ${lead.email}: urgency=${fullAnalysis.urgencyLevel}, quality=${fullAnalysis.qualityScore}`);
+
+          // --- PHASE 18: INTELLIGENCE WIRING ---
+          
+          // 1. Competitor Detection
+          try {
+            const { detectCompetitorMention, trackCompetitorMention } = await import('@services/brain-worker/src/ai-lib/analyzers/competitor-detection.js');
+            const compResult = await detectCompetitorMention(messageForAnalysis.body);
+            if (compResult.detected) {
+              console.log(`[EMAIL_IMPORT] 🎯 Competitor detected: ${compResult.competitor}`);
+              await trackCompetitorMention(userId, lead.id, compResult.competitor, compResult.context, compResult.sentiment);
+              // Inject into analysis for follow-up context
+              (fullAnalysis as any).competitorData = compResult;
+            }
+          } catch (compErr) {
+            console.error('[EMAIL_IMPORT] Competitor detection failed:', compErr);
+          }
+
+          // 2. Price Negotiation
+          try {
+            const { detectPriceObjection } = await import('@services/brain-worker/src/ai-lib/specialized/price-negotiation.js');
+            const priceResult = await detectPriceObjection(messageForAnalysis.body);
+            if (priceResult.detected) {
+              console.log(`[EMAIL_IMPORT] 💰 Price objection detected (Severity: ${priceResult.severity})`);
+              // Inject into analysis for follow-up context
+              (fullAnalysis as any).priceObjection = priceResult;
+            }
+          } catch (priceErr) {
+            console.error('[EMAIL_IMPORT] Price objection detection failed:', priceErr);
+          }
+
+          isNegativeIntent = fullAnalysis.intent?.label === 'negative' || 
+                             fullAnalysis.intent?.label === 'unsubscribe' || 
+                             fullAnalysis.qualityScore < 30;
+
+          // Phase 11: Trigger Intelligence-governed Automation Rules
+          const { AutomationRuleEngine } = await import('../automation/rule-engine.js');
+          await AutomationRuleEngine.processEvent(userId, lead.id, {
+            channel: 'email',
+            intentScore: fullAnalysis.qualityScore,
+            confidence: (fullAnalysis.intent as any)?.confidence || 0.8,
+            messageBody: email.text || email.html || '',
+            messageId: (newMessage as any).id
+          });
+        } catch (analysisError) {
+          console.error('[EMAIL_IMPORT] Inbound message analysis error:', analysisError);
+        }
+
+        // 2. MARK CAMPAIGN AS REPLIED: Stop follow-ups if lead replied
         // We do this immediately upon receiving an inbound message from a lead
         let linkedCampaignId: string | null = null;
         try {
@@ -352,7 +418,14 @@ async function processEmailForLead(
                 
                 // If it has a campaign auto reply, trigger it. 
                 // AI should wait during this!
-                const pendingAutoReply = hasCampaignAutoReply;
+                let pendingAutoReply = hasCampaignAutoReply;
+                
+                // BUG A4 FIX: Skip campaign auto-reply if intent is negative
+                if (pendingAutoReply && isNegativeIntent) {
+                  console.log(`[EMAIL_IMPORT] Skipping campaign auto-reply due to negative AI intent: ${fullAnalysis.intent?.label}`);
+                  pendingAutoReply = false;
+                }
+                
                 if (pendingAutoReply) {
                     aiShouldWait = true;
                 }
@@ -369,6 +442,15 @@ async function processEmailForLead(
                   .where(eq(campaignLeads.id, entry.id));
 
                 console.log(`[EMAIL_IMPORT] Lead ${lead.email} marked as 'replied' in campaign ${entry.campaignId}. pendingAutoReply: ${pendingAutoReply}`);
+
+                // --- PHASE 18: AI LEARNING LOOP ---
+                try {
+                  const { learningEngine } = await import('@services/brain-worker/src/ai-lib/engines/learning-engine.js');
+                  // We don't await this as it's an background optimization task
+                  learningEngine.extractWinningPattern(userId, lead.id, entry.campaignId).catch(() => {});
+                } catch (learnErr) {
+                  // Non-critical
+                }
 
                 // Schedule BullMQ auto-reply job for autonomous processing
                 if (pendingAutoReply) {
@@ -463,30 +545,7 @@ async function processEmailForLead(
           console.warn('[EMAIL_IMPORT] Failed to update campaign status:', campaignStatusError);
         }
 
-        // 2. Run full inbound message analysis
-        // We need the full message object for analysis
-        const messageForAnalysis = {
-          ...newMessage,
-          id: (newMessage as any).id,
-          body: email.text || email.html || ''
-        };
-
-        try {
-          const fullAnalysis = await analyzeInboundMessage(lead.id, messageForAnalysis as any, lead as any);
-          console.log(`[EMAIL_IMPORT] Full inbound analysis for ${lead.email}: urgency=${fullAnalysis.urgencyLevel}, quality=${fullAnalysis.qualityScore}`);
-
-          // Phase 11: Trigger Intelligence-governed Automation Rules
-          const { AutomationRuleEngine } = await import('../automation/rule-engine.js');
-          await AutomationRuleEngine.processEvent(userId, lead.id, {
-            channel: 'email',
-            intentScore: fullAnalysis.qualityScore,
-            confidence: (fullAnalysis.intent as any)?.confidence || 0.8,
-            messageBody: email.text || email.html || '',
-            messageId: (newMessage as any).id
-          });
-        } catch (analysisError) {
-          console.error('[EMAIL_IMPORT] Inbound message analysis error:', analysisError);
-        }
+        // AI analysis moved to top of try block for intent verification
 
 
         // Check if we should auto-reply (lead not paused, not recently replied)
@@ -533,7 +592,7 @@ async function processEmailForLead(
                 sequence_number: 1,
                 inbound_message: email.text?.substring(0, 200) || email.html?.substring(0, 200) || '',
                 quick_reply: true,
-                autoReplyBody: null // purely AI generated now
+                customAutoReply: globalAutoReplyBody
               }
             });
 

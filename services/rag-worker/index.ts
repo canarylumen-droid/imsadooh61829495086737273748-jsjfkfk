@@ -3,13 +3,19 @@ import { createLogger } from '@services/api-gateway/src/core/logger.js';
 import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-health-server.js';
 import { createWorker } from '@shared/lib/worker';
 import { ragQueue, vectorOpsQueue } from '@shared/lib/queue';
+import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 
 const log = createLogger('RAG-WORKER');
+const WORKER_NAME = 'RAG';
 
 async function startRagService() {
   log.info('🧠 RAG Worker Service starting...');
 
   startWorkerHealthServer('rag-worker', parseInt(process.env.RAG_WORKER_PORT || process.env.PORT || '8083', 10));
+
+  // Phase 10: Register with worker health monitor so crashes appear in the dashboard
+  workerHealthMonitor.registerWorker(WORKER_NAME);
+  log.info(`✅ [${WORKER_NAME}] Registered with worker health monitor`);
 
   // ── BullMQ Worker — processes RAG tasks (indexing, embedding, searching) ────
   createWorker(ragQueue.name, async (job) => {
@@ -45,6 +51,16 @@ async function startRagService() {
       log.error(`RAG operation failed: ${e.message}`);
       throw e;
     }
+  }, { lockDuration: 600000 }); // Phase 10: increased from 120s to 600s to prevent vector search timeouts
+
+  // Phase 10: onFailed handler — record failures in the health monitor so they're visible
+  const ragWorkerInstance = createWorker(ragQueue.name, async () => {}, {});
+  ragWorkerInstance?.on?.('failed', (job: any, err: any) => {
+    log.error(`RAG job ${job?.id} failed: ${err?.message}`);
+    workerHealthMonitor.recordError(WORKER_NAME, err?.message || 'Unknown RAG job failure');
+  });
+  ragWorkerInstance?.on?.('completed', () => {
+    workerHealthMonitor.recordSuccess(WORKER_NAME);
   });
 
   log.info(`✅ BullMQ worker listening on [${ragQueue.name}]`);

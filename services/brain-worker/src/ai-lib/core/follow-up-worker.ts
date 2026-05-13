@@ -270,13 +270,17 @@ export class FollowUpWorker {
         .where(eq(followUpQueue.id, job.id));
 
       const user = await storage.getUserById(job.userId);
-      // 24/7 MODE: Night Watch blocking removed.
-      // The system will now deliver messages autonomously at any hour including midnight.
+      // BUG A5 FIX: Night Watch now respects LEAD timezone, not just user timezone
       if (user && user.id) {
         const { availabilityService } = await import('@shared/lib/calendar/availability-service.js');
-        const isNight = await availabilityService.isCurrentlyNight(user.timezone || 'America/New_York');
+        const profile = await getLeadProfile(job.leadId);
+        const leadTz = profile?.detectedTimezone || user.timezone || 'America/New_York';
+        const isNight = await availabilityService.isCurrentlyNight(leadTz);
         if (isNight) {
-          console.log(`[Follow-Up Worker] 🌙 24/7 Autonomous Mode: Sending night follow-up for user ${user.id}`);
+          console.log(`[Follow-Up Worker] 🌙 Night detected for lead ${job.leadId} (${leadTz}). Delaying job until morning.`);
+          const nextMorning = await availabilityService.getNextAvailableBusinessHour(leadTz);
+          await db.update(followUpQueue).set({ status: 'pending', scheduledAt: nextMorning }).where(eq(followUpQueue.id, job.id));
+          return;
         }
       }
 
@@ -320,15 +324,11 @@ export class FollowUpWorker {
       };
 
       // CHECK 1: Global Autonomous Mode
+      // BUG A1/A2 FIX: We do NOT return early here if AI is OFF. 
+      // We allow the job to proceed so it can generate the AI reply and save it as a DRAFT.
       const userResults = await db.select().from(users).where(eq(users.id, job.userId)).limit(1);
       const userDetail = userResults[0];
       const globalAutonomousMode = (userDetail?.config as any)?.autonomousMode !== false;
-
-      if (!globalAutonomousMode) {
-        console.log(`[FOLLOW_UP] Global Autonomous Mode is OFF for user ${job.userId}. Reverting job ${job.id} to pending.`);
-        await db.update(followUpQueue).set({ status: 'pending' }).where(eq(followUpQueue.id, job.id));
-        return;
-      }
 
       // CHECK 2: Lead-level opt-out
       if (lead.aiPaused || lead.status === 'unsubscribed' || lead.status === 'bounced') {
@@ -561,7 +561,7 @@ export class FollowUpWorker {
       }
 
       // --- PHASE 33: DRAFT VS SEND VERIFICATION LAYER ---
-      const isAutonomous = (userDetail?.metadata as any)?.isAutonomous !== false;
+      const isAutonomous = globalAutonomousMode;
       let sent = false;
 
       if (isAutonomous) {
@@ -807,10 +807,26 @@ SCRIPT GUIDANCE (use as reference, not required):
 
     // --- PHASE 29: INTENT SIGNAL PROCESSING ---
     const engagementScore = ((lead.metadata as any)?.behavior_pattern?.engagementScore as number) || 0;
+    const lastAnalysis = (lead.metadata as any)?.lastAnalysis;
+    
+    let intelligenceGuidance = '';
+    if (lastAnalysis) {
+      if (lastAnalysis.competitorMentioned) {
+        intelligenceGuidance += `\n- COMPETITOR ALERT: The lead mentioned ${lastAnalysis.competitorName || 'a competitor'}. You MUST acknowledge this and highlight why ${brandContext.businessName} is better (e.g. better AI, voice cloning, multi-channel).`;
+      }
+      if (lastAnalysis.hasObjection) {
+        if (lastAnalysis.objectionCategory === 'price') {
+           intelligenceGuidance += `\n- PRICE OBJECTION DETECTED: The lead is concerned about cost. You have approval to offer a discount if needed. Suggested: "${lastAnalysis.priceNegotiationResponse || 'Offer a small introductory discount'}".`;
+        } else {
+           intelligenceGuidance += `\n- OBJECTION DETECTED: ${lastAnalysis.objectionCategory || 'General'}. Address this concern head-on with value.`;
+        }
+      }
+    }
+
     const intentGuidance = `
 LEAD INTENT & SIGNALS:
 - Current Sentiment: ${lead.sentiment || 'neutral'}
-- Engagement Score: ${engagementScore}
+- Engagement Score: ${engagementScore}${intelligenceGuidance}
 (Adjust your follow-up tone: softer for negative/cold, direct/call-to-action for positive/hot).`;
 
     // Build conversation history string
@@ -948,19 +964,27 @@ Return ONLY a valid JSON object matching this structure:
       .select({
         body: messages.body,
         direction: messages.direction,
-        createdAt: messages.createdAt
+        createdAt: messages.createdAt,
+        externalId: messages.externalId,
+        subject: messages.subject,
+        metadata: messages.metadata
       })
       .from(messages)
       .where(eq(messages.leadId, leadId))
       .orderBy(asc(messages.createdAt))
-      .limit(10);
+      .limit(20); // Fetch more for better context and threading references
 
-    return messageHistory.map((msg: DatabaseMessage): Message => ({
+    return messageHistory.map((msg: any): any => ({
       body: msg.body,
       direction: msg.direction as MessageDirection,
       createdAt: msg.createdAt,
       role: msg.direction === 'inbound' ? 'user' : 'assistant',
-      created_at: msg.createdAt.toISOString()
+      created_at: msg.createdAt.toISOString(),
+      metadata: {
+        ...(msg.metadata || {}),
+        subject: msg.subject || msg.metadata?.subject,
+        externalId: msg.externalId || msg.metadata?.externalId
+      }
     }));
   }
 
@@ -1059,24 +1083,48 @@ Return ONLY a valid JSON object matching this structure:
 
           case 'email':
             if (lead.email) {
-              // Get previous messages to find original subject
+              // Get previous messages to find original subject and externalId for threading
               const history = await this.getConversationHistory(lead.id);
               let subject = options.subject || 'Follow-up';
+              let inReplyTo: string | undefined = undefined;
+              let references: string | undefined = undefined;
 
-              // If no pre-defined subject, look for the original outward subject
-              if (!options.subject) {
-                const originalOutward = history.find(m => m.direction === 'outbound' && (m as any).metadata?.subject);
-                if (originalOutward && (originalOutward as any).metadata?.subject) {
-                  const origSub = (originalOutward as any).metadata?.subject;
-                  subject = origSub.startsWith('RE:') ? origSub : `RE: ${origSub}`;
-                } else {
-                  // No existing thread or subject found? Generate one that converts!
-                  subject = await generateEmailSubject(content, lead.name, (lead.metadata as any)?.company);
-                  console.log(`[FOLLOW_UP] Generated converting subject: "${subject}" for ${lead.email}`);
+              // --- REFINED THREADING LOGIC ---
+              // Find the absolute most recent message to reply to
+              const lastMessage = history.length > 0 ? (history[history.length - 1] as any) : null;
+              const providerThreadId = lastMessage?.metadata?.providerThreadId || (lead.metadata as any)?.providerThreadId;
+
+              if (lastMessage && lastMessage.metadata) {
+                // 1. Threading Headers
+                if (lastMessage.metadata.externalId) {
+                  inReplyTo = lastMessage.metadata.externalId;
+                  
+                  // Construct References (Parent + its own references)
+                  const prevReferences = lastMessage.metadata.references || "";
+                  references = prevReferences ? `${prevReferences} ${inReplyTo}` : inReplyTo;
+                  
+                  console.log(`[FOLLOW_UP] 🧵 Threading reply to message ${inReplyTo} in thread ${providerThreadId}`);
+                }
+
+                // 2. Subject Preservation
+                if (!options.subject && lastMessage.metadata.subject) {
+                  const origSub = lastMessage.metadata.subject;
+                  subject = origSub.toLowerCase().startsWith('re:') ? origSub : `Re: ${origSub}`;
                 }
               }
 
-              await sendEmail(userId, lead.email, content, subject, options);
+              if (!options.subject && !subject) {
+                // No existing thread or subject found? Generate one that converts!
+                subject = await generateEmailSubject(content, lead.name, (lead.metadata as any)?.company);
+                console.log(`[FOLLOW_UP] 🧪 Generated converting subject: "${subject}" for ${lead.email}`);
+              }
+
+              await sendEmail(userId, lead.email, content, subject, { 
+                ...options, 
+                inReplyTo, 
+                references, 
+                threadId: providerThreadId 
+              });
               return true;
             }
             break;

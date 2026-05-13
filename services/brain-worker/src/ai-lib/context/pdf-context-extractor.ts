@@ -19,6 +19,9 @@
 
 import { generateReply } from "../core/ai-service.js";
 import { MODELS } from "../utils/model-config.js";
+import { getRedisClient } from "@shared/lib/redis/redis.js";
+import crypto from "crypto";
+import fetch from 'node-fetch';
 
 export interface ExtractedPDFContent {
   company_name: string;
@@ -57,7 +60,7 @@ export async function extractComprehensiveContext(pdfText: string): Promise<Extr
   try {
     const extractionPrompt = `Analyze this brand PDF and extract EVERYTHING about their business:
 
-${pdfText.substring(0, 6000)} 
+${pdfText.substring(0, 30000)} 
 
 Extract and return ONLY valid JSON (no markdown, no code blocks):
 {
@@ -74,11 +77,11 @@ Extract and return ONLY valid JSON (no markdown, no code blocks):
   "website_urls": ["url1", "url2"],
   "competitor_positioning": "how they position vs competitors",
   "meeting_link": "calendly.com/xxx or cal.com/xxx or any booking URL found",
-  "payment_link": "stripe payment link, paypal.me, bank details, or invoice URL",
-  "app_link": "SaaS app URL, signup page, or download link",
+  "payment_link": "stripe payment link, paypal.me, bank details, or invoice URL. MUST be a valid, clickable URL starting with http/https.",
+  "app_link": "SaaS app URL, signup page, or download link. MUST be a valid, clickable URL.",
   "contact_email": "business email for contact",
   "contact_phone": "business phone number",
-  "social_links": ["instagram", "twitter", "linkedin URLs"]
+  "social_links": ["instagram", "twitter", "linkedin URLs (valid only)"]
 }
 
 IMPORTANT: Look carefully for ANY booking/calendar links (Calendly, Cal.com, Acuity, etc).
@@ -123,6 +126,62 @@ Be thorough and precise.`;
       extracted.website_urls ?? []
     );
 
+    // NEW: Validation helper for payment links
+    const validatePaymentLink = async (url: string | null): Promise<string | null> => {
+      if (!url) return null;
+      
+      // Basic URL sanity check
+      try {
+        new URL(url);
+      } catch (e) {
+        console.warn(`[PDFExtractor] Invalid URL format rejected: ${url}`);
+        return null;
+      }
+
+      // 1. Stripe Validation (Simulated if key missing)
+      if (url.includes('stripe.com')) {
+        const stripeKey = process.env.STRIPE_SECRET_KEY;
+        if (stripeKey) {
+          console.log(`[PDFExtractor] Attempting Stripe API validation for ${url}...`);
+          // Placeholder for real Stripe API check if we have the key
+          // For now, fall through to browser-like fetch
+        }
+      }
+
+      // 2. Browser-like fallback validation (Headless browser proxy)
+      try {
+        console.log(`[PDFExtractor] Validating payment link: ${url}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+          },
+          signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          console.log(`[PDFExtractor] ✅ Payment link validated successfully (Status: ${response.status})`);
+          return url;
+        } else {
+          console.warn(`[PDFExtractor] ❌ Payment link returned error status (${response.status}): ${url}`);
+          return null;
+        }
+      } catch (err: any) {
+        console.error(`[PDFExtractor] ❌ Failed to validate payment link ${url}:`, err.message);
+        return null;
+      }
+    };
+
+    const paymentLink = (extracted as any).payment_link || null;
+    const validatedPaymentLink = await validatePaymentLink(paymentLink);
+
     return {
       company_name: extracted.company_name ?? "Unknown",
       industry: extracted.industry ?? "B2B",
@@ -138,7 +197,7 @@ Be thorough and precise.`;
       competitor_positioning: competitiveResearch ?? "Competitive",
       // New link fields
       meeting_link: (extracted as any).meeting_link || null,
-      payment_link: (extracted as any).payment_link || null,
+      payment_link: validatedPaymentLink,
       app_link: (extracted as any).app_link || null,
       contact_email: (extracted as any).contact_email || null,
       contact_phone: (extracted as any).contact_phone || null,
@@ -189,7 +248,19 @@ export async function performDeepBrandResearch(
   competitor_analysis: string[];
   industry_trends: string[];
 }> {
+  const cacheKey = `deep_research:${crypto.createHash('md5').update(`${companyName}:${industry}`.toLowerCase()).digest('hex')}`;
+  
   try {
+    const redis = await getRedisClient();
+    if (redis) {
+      const cached = await redis.get(cacheKey);
+      if (cached) {
+        console.log(`[DeepResearch] 🚀 Cache HIT for ${companyName} (${industry})`);
+        return JSON.parse(cached);
+      }
+    }
+
+    console.log(`[DeepResearch] 🔍 Cache MISS for ${companyName}. Researching...`);
     const response = await generateReply(
       "You are a world-class market research analyst. Research deeply and provide actionable insights.",
       `Conduct DEEP research on this business and provide comprehensive analysis:
@@ -236,11 +307,20 @@ Return as JSON:
     const content = response.text ?? "{}";
     try {
       const parsed = JSON.parse(content);
-      return {
+      const result = {
         market_research: parsed.market_research || null,
         competitor_analysis: parsed.competitor_analysis || [],
         industry_trends: parsed.industry_trends || [],
       };
+
+      // Cache the result for 7 days (as requested by audit)
+      if (redis) {
+        await redis.set(cacheKey, JSON.stringify(result), {
+          EX: 60 * 60 * 24 * 7
+        });
+      }
+
+      return result;
     } catch {
       return {
         market_research: content,

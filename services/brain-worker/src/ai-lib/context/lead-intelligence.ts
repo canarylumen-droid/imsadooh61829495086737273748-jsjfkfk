@@ -425,21 +425,35 @@ export async function assessChurnRisk(
 export async function detectCompetitorMention(
   messageText: string
 ): Promise<CompetitorMentionResult> {
-  const commonCompetitors = [
-    "hubspot",
-    "salesforce",
-    "pipedrive",
-    "lemlist",
-    "smartlead",
-    "apollo",
-    "outreach",
-  ];
+  try {
+    const response = await generateReply(
+      "You are a sales intelligence expert.",
+      `Analyze this message for any mention of competitors or alternative solutions: "${messageText}"
+      
+      Task:
+      1. Identify if any competitor or alternative service is mentioned.
+      2. Extract the name(s) of the competitor(s).
+      3. Determine the context (e.g. comparing features, comparing price, already using them).
+      
+      Return a JSON object:
+      {
+        "mentionFound": boolean,
+        "competitors": ["name1", "name2"],
+        "context": "string (short description)",
+        "actionSuggested": "string (how to handle this specifically)"
+      }`,
+      { model: MODELS.intelligence_synthesis, jsonMode: true, nga1Enforced: true }
+    );
 
-  const mentionedCompetitors = commonCompetitors.filter((comp) =>
-    messageText.toLowerCase().includes(comp)
-  );
-
-  if (mentionedCompetitors.length === 0) {
+    const result = JSON.parse(response.text || '{}');
+    return {
+      mentionFound: !!result.mentionFound,
+      competitors: result.competitors || [],
+      context: result.context || "",
+      actionSuggested: result.actionSuggested || ""
+    };
+  } catch (error) {
+    console.error("Error detecting competitors:", error);
     return {
       mentionFound: false,
       competitors: [],
@@ -447,14 +461,6 @@ export async function detectCompetitorMention(
       actionSuggested: "",
     };
   }
-
-  return {
-    mentionFound: true,
-    competitors: mentionedCompetitors,
-    context: `Lead mentioned ${mentionedCompetitors.join(", ")}`,
-    actionSuggested: `🚨 ALERT: Lead comparing you to ${mentionedCompetitors[0]}. 
-    This is a SELLING MOMENT. Highlight what ${mentionedCompetitors[0]} DOESN'T have that you do.`,
-  };
 }
 
 // ============ UNIFIED AI INTELLIGENCE ENGINE ============

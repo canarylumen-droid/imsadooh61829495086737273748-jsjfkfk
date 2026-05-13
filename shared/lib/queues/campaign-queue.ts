@@ -20,8 +20,9 @@ import {
   messages,
   campaignEmails,
   integrations,
+  pendingPayments,
 } from '@audnix/shared';
-import { eq, and, or, sql, lte, isNull, ne, asc, gt } from 'drizzle-orm';
+import { eq, and, or, sql, lte, isNull, ne, asc, gt, desc } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from '../channels/email.js';
 import { adjustCopyIfNecessary } from "../ai/copy-adjuster.js";
@@ -79,7 +80,11 @@ interface PreCraftJobData {
   userId: string;
 }
 
-type CampaignJobData = SendBatchJobData | FollowUpJobData | AutoReplyJobData | StatsUpdateJobData | AutonomousJobData | PreCraftJobData;
+interface CleanupPaymentsJobData {
+  type: 'system:cleanup-payments';
+}
+
+type CampaignJobData = SendBatchJobData | FollowUpJobData | AutoReplyJobData | StatsUpdateJobData | AutonomousJobData | PreCraftJobData | CleanupPaymentsJobData;
 
 // ─── Queue & Worker ───────────────────────────────────────────────────────────
 
@@ -410,6 +415,9 @@ async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
         console.error(`[CampaignWorker] Autonomous outreach failed for user ${data.userId}:`, err.message);
       }
       break;
+    case 'system:cleanup-payments':
+      await processPaymentCleanup();
+      break;
     default:
       console.warn(`[CampaignWorker] Unknown job type: ${(data as any).type}`);
   }
@@ -576,6 +584,27 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   }
 
   if (sentToday >= effectiveLimit) {
+    return;
+  }
+
+  // --- LEVEL 20: AUTONOMOUS SALES PRIORITY PAUSE ---
+  // If there is ANY checkout link pending dispatch, we hard-pause standard campaigns.
+  // This protects daily sending limits from clashing with highly valuable payment links.
+  const activeCheckouts = await db.select({ id: pendingPayments.id })
+    .from(pendingPayments)
+    .where(
+      and(
+        eq(pendingPayments.userId, userId),
+        eq(pendingPayments.status, 'pending'),
+        or(
+          isNull(pendingPayments.expiresAt),
+          gt(pendingPayments.expiresAt, new Date())
+        )
+      )
+    ).limit(1);
+
+  if (activeCheckouts.length > 0) {
+    // console.log(`[Priority Schedule] Yielding campaign batch for ${userId}. Active checkout detected.`);
     return;
   }
 
@@ -1036,6 +1065,34 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
 
   const trackingId = Math.random().toString(36).substring(2, 11);
 
+  // --- REFINED THREADING LOGIC ---
+  let inReplyTo: string | undefined = undefined;
+  let references: string | undefined = undefined;
+  let threadId: string | undefined = undefined;
+
+  try {
+    const lastMessages = await db.select()
+      .from(messages)
+      .where(eq(messages.leadId, lead.id))
+      .orderBy(desc(messages.createdAt))
+      .limit(1);
+
+    if (lastMessages.length > 0) {
+      const lastMsg = lastMessages[0];
+      const meta = (lastMsg.metadata as any) || {};
+      
+      inReplyTo = lastMsg.externalId || meta.externalId;
+      threadId = meta.providerThreadId || meta.threadId;
+
+      if (inReplyTo) {
+        const prevRefs = meta.references || "";
+        references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+      }
+    }
+  } catch (threadErr) {
+    console.warn(`[CampaignWorker] Failed to fetch threading headers for auto-reply ${lead.id}:`, threadErr);
+  }
+
   await sendEmail(userId, lead.email, body, subject, {
     isRaw: true,
     isHtml: true,
@@ -1043,7 +1100,10 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     campaignId,
     leadId: lead.id,
     integrationId,
-    isPriorityReply: true // Auto-replies always have priority
+    isPriorityReply: true, // Auto-replies always have priority
+    inReplyTo,
+    references,
+    threadId
   });
 
   // Record message
@@ -1055,7 +1115,14 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     subject,
     body,
     trackingId,
-    metadata: { campaignId, step: 'auto-reply', integrationId }
+    metadata: { 
+      campaignId, 
+      step: 'auto-reply', 
+      integrationId,
+      inReplyTo,
+      references,
+      providerThreadId: threadId
+    }
   });
 
   // Update campaign lead: clear pendingAutoReply flag
@@ -1127,9 +1194,13 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
     })
     .where(eq(outreachCampaigns.id, campaignId));
 
-  // Check if campaign is complete (no more pending leads)
-  if (stats.pending === 0 && stats.total > 0 && campaign.status === 'active') {
-    // Check if all follow-ups are also done
+  // X8 Fix: Check if campaign is complete.
+  // A campaign is complete when ALL leads have been sent (no pending OR queued leads remain)
+  // AND no leads are still in the 'sent' state waiting for a follow-up step.
+  const pendingOrQueued = (stats.pending || 0) + ((stats as any).queued || 0);
+
+  if (pendingOrQueued === 0 && stats.total > 0 && campaign.status === 'active') {
+    // Check if all follow-up sequences are also complete (no leads still waiting for next step)
     const pendingFollowUps = await db.select({ count: sql<number>`count(*)` })
       .from(campaignLeads)
       .where(and(
@@ -1142,9 +1213,20 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
         .set({ status: 'completed', updatedAt: new Date() })
         .where(eq(outreachCampaigns.id, campaignId));
 
-      // Clean up repeatable jobs
+      // Clean up repeatable jobs so no more heartbeats fire for a completed campaign
       await campaignQueueManager.pauseCampaign(campaignId);
-      console.log(`[CampaignWorker] 🏁 Campaign ${campaignId} completed!`);
+
+      // Notify user via WebSocket + notification
+      wsSync.notifyCampaignsUpdated(userId);
+      await storage.createNotification({
+        userId,
+        type: 'system',
+        title: '🏁 Campaign Completed',
+        message: `Your campaign has finished processing all ${stats.total} leads.`,
+        metadata: { campaignId, activityType: 'campaign_completed' }
+      }).catch(() => {}); // non-blocking
+
+      console.log(`[CampaignWorker] 🏁 Campaign ${campaignId} completed! (${stats.total} total leads)`);
     }
   }
 
@@ -1288,9 +1370,37 @@ async function deliverCampaignEmail(
     return;
   }
 
+  // --- REFINED THREADING LOGIC ---
+  let inReplyTo: string | undefined = undefined;
+  let references: string | undefined = undefined;
+  let threadId: string | undefined = undefined;
+
   try {
     // Determine if this is a priority reply
     const isPriorityReply = leadEntry.currentStep > 0 && (lead.status === 'replied' || lead.status === 'interested' || lead.status === 'warm');
+
+    try {
+      const lastMessages = await db.select()
+        .from(messages)
+        .where(eq(messages.leadId, lead.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+
+      if (lastMessages.length > 0) {
+        const lastMsg = lastMessages[0];
+        const meta = (lastMsg.metadata as any) || {};
+        
+        inReplyTo = lastMsg.externalId || meta.externalId;
+        threadId = meta.providerThreadId || meta.threadId;
+
+        if (inReplyTo) {
+          const prevRefs = meta.references || "";
+          references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+        }
+      }
+    } catch (threadErr) {
+      console.warn(`[CampaignWorker] Failed to fetch threading headers for lead ${lead.id}:`, threadErr);
+    }
 
     await sendEmail(userId, lead.email, body, subject, {
       isRaw: true,
@@ -1299,7 +1409,10 @@ async function deliverCampaignEmail(
       campaignId: campaign.id,
       leadId: lead.id,
       integrationId,
-      isPriorityReply
+      isPriorityReply,
+      inReplyTo,
+      references,
+      threadId
     });
   } catch (err) {
     // Release lock on error so BullMQ retry can re-acquire it
@@ -1336,7 +1449,10 @@ async function deliverCampaignEmail(
         step: leadEntry.currentStep, 
         integrationId, 
         integration_id: integrationId,
-        variantId // Track A/B variant for optimization
+        variantId, // Track A/B variant for optimization
+        inReplyTo,
+        references,
+        providerThreadId: threadId
       }
     }, tx as any); // Pass transaction client to storage
 
@@ -1691,6 +1807,34 @@ async function handleAutonomousTesting(
   };
 }
 
+/**
+ * Cleanup job: mark pending payments older than 7 days as 'expired'.
+ * This prevents stale checkout links from indefinitely pausing campaigns.
+ */
+async function processPaymentCleanup(): Promise<void> {
+  if (!db) return;
+  console.log('[CleanupWorker] 🧹 Starting payment link cleanup...');
+  
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  
+  const result = await db.update(pendingPayments)
+    .set({ status: 'expired', updatedAt: new Date() })
+    .where(
+      and(
+        eq(pendingPayments.status, 'pending'),
+        or(
+          lte(pendingPayments.createdAt, sevenDaysAgo),
+          lte(pendingPayments.expiresAt, new Date())
+        )
+      )
+    ).returning();
+    
+  if (result.length > 0) {
+    console.log(`[CleanupWorker] ✅ Marked ${result.length} stale payment links as expired.`);
+  }
+}
+
 export const campaignWorker = hasRedis ? new Worker<CampaignJobData>(
   'campaign-engine',
   processCampaignJob,
@@ -1711,11 +1855,40 @@ if (campaignWorker) {
   });
 
   campaignWorker.on('failed', async (job, err) => {
-    console.error(`[CampaignWorker] ✗ ${job?.data?.type} failed (${job?.id}):`, err.message);
+    const jobType = job?.data?.type;
+    const jobId = job?.id;
+    console.error(`[CampaignWorker] ✗ ${jobType} failed (${jobId}):`, err.message);
     
+    // M5 Fix: Structured audit logging for every job failure.
+    // This ensures failures are never silent — they are always traceable.
+    try {
+      const userId = (job?.data as any)?.userId;
+      const campaignId = (job?.data as any)?.campaignId;
+      if (userId) {
+        const { db: auditDb } = await import('@shared/lib/db/db.js');
+        const { auditTrail } = await import('@audnix/shared');
+        await auditDb.insert(auditTrail).values({
+          userId,
+          action: 'job_failed',
+          details: {
+            entityType: 'bullmq_job',
+            entityId: campaignId || jobId || 'unknown',
+            jobType,
+            jobId,
+            campaignId: campaignId || null,
+            error: err.message,
+            failedAt: new Date().toISOString(),
+          }
+        }).onConflictDoNothing();
+      }
+    } catch (auditErr: any) {
+      // Audit failure must NEVER crash the worker error handler
+      console.error('[CampaignWorker] Audit log failed (non-fatal):', auditErr.message);
+    }
+
     // Circuit Breaker: Increment campaign failure count
-    if (job?.data?.type === 'campaign:send-batch' && job.data.campaignId) {
-      await handleCampaignFailure(job.data.campaignId);
+    if (jobType === 'campaign:send-batch' && (job?.data as any)?.campaignId) {
+      await handleCampaignFailure((job!.data as any).campaignId);
     }
   });
 
@@ -1733,6 +1906,14 @@ if (campaignWorker) {
   }).catch((err: any) => {
     console.error('Failed to load AutonomousScalerService:', err.message);
   });
+  
+  // Schedule Global Cleanup Job (Daily at 2 AM UTC)
+  if (campaignQueue) {
+    campaignQueue.add('global-payment-cleanup', { type: 'system:cleanup-payments' }, {
+      repeat: { pattern: '0 2 * * *' },
+      jobId: 'global-payment-cleanup'
+    }).catch(err => console.error('Failed to schedule payment cleanup:', err.message));
+  }
 
 } else {
   console.warn('⚠️ BullMQ Campaign Queue Worker disabled (No Redis) — using setInterval fallback');

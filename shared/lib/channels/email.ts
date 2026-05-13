@@ -196,7 +196,9 @@ async function sendCustomSMTP(
   body: string,
   isHtml: boolean = false,
   trackingId?: string,
-  integrationId?: string
+  integrationId?: string,
+  inReplyTo?: string,
+  references?: string
 ): Promise<{ messageId: string }> {
   const nodemailer = await import('nodemailer');
   const dns = await import('dns');
@@ -204,7 +206,7 @@ async function sendCustomSMTP(
 
   const emailBody = body;
 
-  const cacheKey = integrationId || `${config.smtp_host}:${config.smtp_user}`;
+  const cacheKey = integrationId || `${config.smtp_host}:${parseInt(String(config.smtp_port)) || 587}:${config.smtp_user}`;
 
   // NOTE: We intentionally do NOT pre-resolve the hostname to an IP here.
   // Domains like mail.privatemail.com have their A-records pointing to Cloudflare CDN IPs
@@ -216,8 +218,8 @@ async function sendCustomSMTP(
       maxConnections: 5,
       maxMessages: 500,
       host: config.smtp_host,
-      port: forcedPort || config.smtp_port || 587,
-      secure: forcedSecure !== undefined ? forcedSecure : (config.smtp_port === 465),
+      port: forcedPort || parseInt(String(config.smtp_port)) || 587,
+      secure: forcedSecure !== undefined ? forcedSecure : (parseInt(String(config.smtp_port)) === 465),
       auth: {
         user: config.smtp_user,
         pass: config.smtp_pass,
@@ -284,6 +286,8 @@ async function sendCustomSMTP(
         subject,
         [isHtml ? 'html' : 'text']: emailBody,
         messageId: messageId.replace(/[<>]/g, ''), // nodemailer adds brackets
+        ...(inReplyTo && { inReplyTo }),
+        ...(references && { references })
       });
 
       // If we reach here, it worked!
@@ -292,7 +296,7 @@ async function sendCustomSMTP(
       // Attempt to save to "Sent" folder via background IMAP connection
       // We DO NOT await this because it can be slow and shouldn't block the actual email delivery
       try {
-        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId);
+        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId, inReplyTo, references);
         
         const backgroundAppend = async () => {
           try {
@@ -325,11 +329,22 @@ async function sendCustomSMTP(
         const diagnostic = isTimeout ? "Check if port 25/587 is blocked by your hosting provider (Railway often blocks port 25)." : "Check network connectivity.";
         console.warn(`[CustomSMTP] ⚠️ ${error.code || 'Timeout'} on attempt ${attempt + 1} — purging stale pool for ${cacheKey} and retrying... (${diagnostic})`);
         
-        // Phase 25: Auto-switch to Port 465 (SSL) if 587 (TLS) fails via timeout
-        if (isTimeout && (config.smtp_port === 587 || !config.smtp_port) && !currentForcedPort) {
-          console.info(`[CustomSMTP] 🛡️ Timeout detected on port 587. Attempting automatic failover to Port 465 (SSL) for next retry...`);
-          currentForcedPort = 465;
-          currentForcedSecure = true;
+        // Phase 25: True Port Cycling for robust failure recovery
+        if (isTimeout) {
+          const PORT_CYCLE: Record<number, number[]> = {
+            465:  [465, 587, 2525],
+            587:  [587, 465, 2525],
+            2525: [2525, 465, 587],
+          };
+          const basePort = parseInt(String(config.smtp_port)) || 587;
+          const cycle = PORT_CYCLE[basePort] || [587, 465, 2525];
+          
+          const currentIdx = currentForcedPort ? cycle.indexOf(currentForcedPort) : 0;
+          if (currentIdx < cycle.length - 1) {
+            currentForcedPort = cycle[currentIdx + 1];
+            currentForcedSecure = currentForcedPort === 465;
+            console.info(`[CustomSMTP] 🛡️ Timeout detected. Attempting automatic failover to Port ${currentForcedPort} for next retry...`);
+          }
         }
 
         try { smtpPools.get(cacheKey)?.close(); } catch (_) {}
@@ -613,6 +628,9 @@ export interface EmailOptions {
   leadId?: string;
   integrationId?: string;
   isPriorityReply?: boolean; // If true, bypasses daily limits and restrictions
+  inReplyTo?: string;
+  references?: string;
+  threadId?: string;
 }
 
 /**
@@ -739,7 +757,18 @@ export async function sendEmail(
       targetUrl: firstUrl || undefined
     });
 
-    const result = await sendCustomSMTP(userId, credentials, recipientEmail, subject, emailBody, true, trackingId, integration.id);
+    const result = await sendCustomSMTP(
+      userId, 
+      credentials, 
+      recipientEmail, 
+      subject, 
+      emailBody, 
+      true, 
+      trackingId, 
+      integration.id,
+      options.inReplyTo,
+      options.references
+    );
 
     if (result?.messageId) {
       await storage.createEmailMessage({
@@ -855,7 +884,10 @@ export async function sendEmail(
         emailSubject,
         emailBody,
         options.isHtml,
-        trackingId
+        trackingId,
+        options.inReplyTo,
+        options.references,
+        options.threadId
       );
       if (result && result.messageId) {
         await storage.createEmailMessage({
@@ -881,7 +913,9 @@ export async function sendEmail(
         emailSubject,
         emailBody,
         options.isHtml,
-        trackingId
+        trackingId,
+        options.inReplyTo,
+        options.references
       );
       if (result && result.messageId) {
         await storage.createEmailMessage({
@@ -925,12 +959,23 @@ async function sendGmailMessage(
   subject: string,
   body: string,
   isHtml: boolean = false,
-  trackingId?: string
+  trackingId?: string,
+  inReplyTo?: string,
+  references?: string,
+  threadId?: string
 ): Promise<{ messageId: string }> {
   const emailBody = body;
 
-  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml);
+  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml, undefined, inReplyTo, references);
   const encodedMessage = Buffer.from(message).toString('base64url');
+
+  const bodyData: any = {
+    raw: encodedMessage
+  };
+
+  if (threadId) {
+    bodyData.threadId = threadId;
+  }
 
   const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
     method: 'POST',
@@ -938,9 +983,7 @@ async function sendGmailMessage(
       'Authorization': `Bearer ${credentials.accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      raw: encodedMessage
-    })
+    body: JSON.stringify(bodyData)
   });
 
   const data = await response.json() as GmailSendResponse;
@@ -960,9 +1003,44 @@ async function sendOutlookMessage(
   subject: string,
   body: string,
   isHtml: boolean = false,
-  trackingId?: string
+  trackingId?: string,
+  inReplyTo?: string,
+  references?: string
 ): Promise<{ messageId: string }> {
   const emailBody = body;
+
+  const bodyData: any = {
+    message: {
+      subject: subject,
+      body: {
+        contentType: isHtml ? 'HTML' : 'Text',
+        content: emailBody
+      },
+      toRecipients: [
+        {
+          emailAddress: {
+            address: to
+          }
+        }
+      ]
+    },
+    saveToSentItems: true
+  };
+
+  if (inReplyTo) {
+    bodyData.message.internetMessageHeaders = [
+      {
+        name: "In-Reply-To",
+        value: inReplyTo
+      }
+    ];
+    if (references) {
+      bodyData.message.internetMessageHeaders.push({
+        name: "References",
+        value: references
+      });
+    }
+  }
 
   const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
     method: 'POST',
@@ -970,23 +1048,7 @@ async function sendOutlookMessage(
       'Authorization': `Bearer ${credentials.accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      message: {
-        subject: subject,
-        body: {
-          contentType: isHtml ? 'HTML' : 'Text',
-          content: emailBody
-        },
-        toRecipients: [
-          {
-            emailAddress: {
-              address: to
-            }
-          }
-        ]
-      },
-      saveToSentItems: true
-    })
+    body: JSON.stringify(bodyData)
   });
 
   if (!response.ok) {
@@ -1008,7 +1070,9 @@ function createMimeMessage(
   subject: string,
   body: string,
   isHtml: boolean = false,
-  messageId?: string
+  messageId?: string,
+  inReplyTo?: string,
+  references?: string
 ): string {
   const boundary = '----=_Part_' + Date.now();
 
@@ -1030,12 +1094,25 @@ function createMimeMessage(
     }
   };
 
-  const parts = [
+  const headers = [
     `From: ${from}`,
     `To: ${to}`,
-    `Subject: ${subject}`,
-    'MIME-Version: 1.0',
-    messageId ? `Message-ID: ${messageId}` : `Message-ID: <${Date.now()}@audnixai.com>`,
+    `Subject: =?utf-8?B?${Buffer.from(subject).toString('base64')}?=`,
+    `MIME-Version: 1.0`,
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    `Date: ${new Date().toUTCString()}`,
+    messageId ? `Message-ID: ${messageId}` : `Message-ID: <${Date.now()}@audnixai.com>`
+  ];
+
+  if (inReplyTo) {
+    headers.push(`In-Reply-To: ${inReplyTo}`);
+  }
+  if (references) {
+    headers.push(`References: ${references}`);
+  }
+
+  const parts = [
+    ...headers,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     '',
     `--${boundary}`,

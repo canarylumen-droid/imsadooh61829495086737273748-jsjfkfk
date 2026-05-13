@@ -93,16 +93,18 @@ async function startAIService() {
   postMortemWorker.tick();
   setInterval(() => postMortemWorker.tick(), 60 * 60 * 1000);
 
-  // Objection intelligence: sweep all active users every 4 hours
+  // Objection intelligence: sweep all active campaigns every 4 hours
+  const { processObjectionLoop } = await import('@services/brain-worker/src/ai-lib/engines/objection-loop.js');
+  
+  // Initial run after startup
+  setTimeout(() => processObjectionLoop().catch(e => log.warn('Initial objection loop failed', { error: e.message })), 30000);
+
   setInterval(async () => {
     try {
-      const allUsers = await db.select({ id: users.id }).from(users);
-      for (const u of allUsers) {
-        objectionService.extractWinningHandles(u.id).catch(() => {});
-      }
-      log.info('Objection intelligence sweep complete', { userCount: allUsers.length });
+      await processObjectionLoop();
+      log.info('Global objection loop complete');
     } catch (e: any) {
-      log.warn('Objection scan error', { error: e?.message });
+      log.warn('Objection loop error', { error: e?.message });
     }
   }, 4 * 60 * 60 * 1000);
 
@@ -146,7 +148,7 @@ async function startAIService() {
             break;
 
           case 'objection-scan':
-            await objectionService.extractWinningHandles(userId);
+            await processObjectionLoop();
             break;
           case 'distill-patterns':
             const { learningWorker: lw } = await import('./workers/learning-worker.js');

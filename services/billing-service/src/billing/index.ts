@@ -61,6 +61,9 @@ async function startBillingService() {
           case 'stripe-webhook':
             await (paymentAutoApprovalWorker as any).processEvent?.(data);
             break;
+          case 'pending-payment':
+            await checkoutWorker.processPendingPayment(job.data.paymentId);
+            break;
           case 'checkout-session':
             await (checkoutWorker as any).processSession?.(data);
             break;

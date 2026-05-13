@@ -1,4 +1,4 @@
-﻿import { Request, Response, Router } from 'express';
+import { Request, Response, Router } from 'express';
 import Stripe from 'stripe';
 import crypto from 'crypto';
 import { stripe, verifyWebhookSignature, processTopupSuccess, PLANS } from '@services/billing-service/src/billing-lib/stripe.js';
@@ -66,6 +66,28 @@ router.post('/webhook/calendly', async (req: Request, res: Response): Promise<vo
  */
 router.post('/webhook/fathom', async (req: Request, res: Response): Promise<void> => {
   try {
+    // BUG #1 Fix: Webhook signature verification
+    const sig = req.headers['x-fathom-signature'] as string;
+    const secret = process.env.FATHOM_WEBHOOK_SECRET;
+    
+    if (secret) {
+      if (!sig) {
+        res.status(401).json({ error: 'Missing fathom signature' });
+        return;
+      }
+      
+      const rawBody = (req as any).rawBody ? (req as any).rawBody.toString() : JSON.stringify(req.body);
+      const expected = crypto.createHmac('sha256', secret)
+        .update(rawBody)
+        .digest('hex');
+        
+      if (sig !== expected) {
+        console.error('[Fathom Webhook] Invalid signature detected.');
+        res.status(401).json({ error: 'Invalid signature' });
+        return;
+      }
+    }
+
     await processFathomWebhook(req.body);
     res.json({ received: true });
   } catch (error: unknown) {

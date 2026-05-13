@@ -92,9 +92,53 @@ export class ClosingWorker {
         const mailbox = ints.find(i => ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected);
         
         if (mailbox) {
-          await sendEmail(userId, lead.email, reply.text, "One final thing...", {
+          // --- REFINED THREADING LOGIC ---
+          let inReplyTo: string | undefined = undefined;
+          let references: string | undefined = undefined;
+          let threadId: string | undefined = undefined;
+
+          try {
+            if (history.length > 0) {
+              const lastMsg = history[0]; // history is usually desc
+              const meta = (lastMsg.metadata as any) || {};
+              inReplyTo = lastMsg.externalId || meta.externalId;
+              threadId = meta.providerThreadId || meta.threadId;
+
+              if (inReplyTo) {
+                const prevRefs = meta.references || "";
+                references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+              }
+            }
+          } catch (threadErr) {
+            console.warn(`[ClosingWorker] Threading failed for ${lead.id}:`, threadErr);
+          }
+
+          const subject = "One final thing...";
+          const threadSubject = inReplyTo ? `Re: ${subject}` : subject;
+
+          await sendEmail(userId, lead.email, reply.text, threadSubject, {
             leadId: lead.id,
-            integrationId: mailbox.id
+            integrationId: mailbox.id,
+            inReplyTo,
+            references,
+            threadId
+          });
+
+          // Record message for history continuity
+          await storage.createMessage({
+            userId,
+            leadId: lead.id,
+            provider: 'email',
+            direction: 'outbound',
+            subject: threadSubject,
+            body: reply.text,
+            integrationId: mailbox.id,
+            metadata: { 
+              closing_nudge: true,
+              inReplyTo,
+              references,
+              providerThreadId: threadId
+            }
           });
 
           // Mark as nudged

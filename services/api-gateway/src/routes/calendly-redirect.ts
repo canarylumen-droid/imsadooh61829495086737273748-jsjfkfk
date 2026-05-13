@@ -78,6 +78,8 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
       await db.update(users).set({
         timezone: tokenData.user.timezone || "America/New_York",
         calendlyUserUri: tokenData.user.uri,
+        // BUG #3 FIX: Auto-save scheduling link from OAuth profile if missing
+        calendarLink: tokenData.user.schedulingUrl || undefined
       }).where(eq(users.id, userId));
 
       // Upsert Calendar Settings

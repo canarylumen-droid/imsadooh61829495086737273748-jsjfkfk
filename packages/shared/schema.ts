@@ -98,6 +98,7 @@ export const users = pgTable("users", {
   offerValue: real("offer_value").default(0),
   offerDescription2: text("offer_description_2"),
   offerValue2: real("offer_value_2").default(0),
+  appLink: text("app_link"),
   aiAdjustCopyEnabled: boolean("ai_adjust_copy_enabled").notNull().default(true),
   doubleOfferEnabled: boolean("double_offer_enabled").notNull().default(false),
   aiStickerFollowupsEnabled: boolean("ai_sticker_followups_enabled").notNull().default(true),
@@ -1223,8 +1224,8 @@ export const fathomCalls = pgTable("fathom_calls", {
   }>().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
+  fathomCallsMeetingIdx: uniqueIndex("fathom_calls_meeting_idx").on(table.fathomMeetingId, table.leadId),
   fathomCallsLeadIdx: index("fathom_calls_lead_idx").on(table.leadId),
-  fathomCallsMeetingIdx: index("fathom_calls_meeting_idx").on(table.fathomMeetingId),
 }));
 
 export const fathomCallsSelect = createSelectSchema(fathomCalls);
@@ -1241,6 +1242,7 @@ export const pendingPayments = pgTable("pending_payments", {
   readyToGoEmail: text("ready_to_go_email"),
   customPaymentLink: text("custom_payment_link"),
   amountDetected: real("amount_detected"),
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({

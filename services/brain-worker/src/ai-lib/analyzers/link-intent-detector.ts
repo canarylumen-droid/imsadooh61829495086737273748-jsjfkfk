@@ -8,6 +8,7 @@
  */
 
 import { getBrandContext, type BrandContext } from '../context/brand-context.js';
+import { isValidURL } from '@shared/lib/utils/validation.js';
 
 export interface LinkIntentResult {
   detected: boolean;
@@ -73,12 +74,12 @@ export function detectLinkIntent(
   // Meeting intent - validate link before using
   if (meetingScore >= paymentScore && meetingScore >= appScore) {
     const link = brand.meetingLink?.trim();
-    if (link && link.length > 0) {
+    if (isValidURL(link)) {
       return {
         detected: true,
         intentType: 'meeting',
         confidence,
-        link,
+        link: link || null,
         suggestedResponse: generateMeetingResponse(brand)
       };
     }
@@ -87,12 +88,12 @@ export function detectLinkIntent(
   // Payment intent - validate link before using
   if (paymentScore > meetingScore && paymentScore >= appScore) {
     const link = brand.paymentLink?.trim();
-    if (link && link.length > 0) {
+    if (isValidURL(link)) {
       return {
         detected: true,
         intentType: 'payment',
         confidence,
-        link,
+        link: link || null,
         suggestedResponse: generatePaymentResponse(brand)
       };
     }
@@ -101,12 +102,12 @@ export function detectLinkIntent(
   // App/trial intent - validate link before using
   if (appScore > meetingScore && appScore > paymentScore) {
     const link = brand.appLink?.trim();
-    if (link && link.length > 0) {
+    if (isValidURL(link)) {
       return {
         detected: true,
         intentType: 'app',
         confidence,
-        link,
+        link: link || null,
         suggestedResponse: generateAppResponse(brand)
       };
     }
@@ -175,11 +176,7 @@ export async function detectAndGenerateLinkResponse(
  * Validate if a link is valid and usable
  */
 function isValidLink(link: string | null | undefined): boolean {
-  if (!link || typeof link !== 'string') return false;
-  const trimmed = link.trim();
-  if (trimmed.length === 0) return false;
-  // Must be a valid URL or at least look like one
-  return /^https?:\/\/[^\s]+/.test(trimmed) || trimmed.includes('.');
+  return isValidURL(link);
 }
 
 /**

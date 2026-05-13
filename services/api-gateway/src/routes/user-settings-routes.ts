@@ -85,7 +85,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       emailProvider: row.email_provider || 'sendgrid',
       smtp: {
         host: row.smtp_host || undefined,
-        port: row.smtp_port || 587,
+        port: parseInt(String(row.smtp_port)) || 587,
         username: row.smtp_username || undefined,
         password: smtpPassword ? '••••••••' : undefined,
         fromEmail: row.smtp_from_email || undefined,
@@ -127,9 +127,22 @@ router.put('/smtp', requireAuth, async (req: Request, res: Response): Promise<vo
     }
 
     const { host, port, username, password, fromEmail, fromName, secure } = req.body;
+    const parsedPort = port ? parseInt(String(port)) : 587;
 
     if (!host || !username || !fromEmail) {
       res.status(400).json({ error: 'Host, username, and from email are required' });
+      return;
+    }
+
+    // Phase 11 Fix: Validate that the SMTP username and fromEmail share the same domain.
+    // Sending from "bob@domain.com" while SMTP auth is "alice@other.com" will cause
+    // the email to show as spoofed, triggering spam flags from Gmail/Outlook.
+    const usernameDomain = username.includes('@') ? username.split('@')[1].toLowerCase() : null;
+    const fromEmailDomain = fromEmail.includes('@') ? fromEmail.split('@')[1].toLowerCase() : null;
+    if (usernameDomain && fromEmailDomain && usernameDomain !== fromEmailDomain) {
+      res.status(400).json({
+        error: `Identity mismatch: SMTP username (${username}) and From email (${fromEmail}) must share the same domain. Mismatches cause spam flags.`
+      });
       return;
     }
 
@@ -141,13 +154,13 @@ router.put('/smtp', requireAuth, async (req: Request, res: Response): Promise<vo
         smtp_password_encrypted, smtp_from_email, smtp_from_name, smtp_secure, smtp_verified
       )
       VALUES (
-        ${userId}, 'custom_smtp', ${host}, ${port || 587}, ${username},
+        ${userId}, 'custom_smtp', ${host}, ${parsedPort}, ${username},
         ${encryptedPassword}, ${fromEmail}, ${fromName || null}, ${secure !== false}, false
       )
       ON CONFLICT (user_id) DO UPDATE SET
         email_provider = 'custom_smtp',
         smtp_host = ${host},
-        smtp_port = ${port || 587},
+        smtp_port = ${parsedPort},
         smtp_username = ${username},
         smtp_password_encrypted = COALESCE(${encryptedPassword}, user_settings.smtp_password_encrypted),
         smtp_from_email = ${fromEmail},
@@ -167,6 +180,7 @@ router.put('/smtp', requireAuth, async (req: Request, res: Response): Promise<vo
     res.status(500).json({ error: 'Failed to save SMTP settings' });
   }
 });
+
 
 router.post('/smtp/test', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -204,8 +218,8 @@ router.post('/smtp/test', requireAuth, async (req: Request, res: Response): Prom
 
     const transporter = nodemailer.createTransport({
       host: row.smtp_host,
-      port: row.smtp_port || 587,
-      secure: row.smtp_secure && row.smtp_port === 465,
+      port: parseInt(String(row.smtp_port)) || 587,
+      secure: row.smtp_secure && parseInt(String(row.smtp_port)) === 465,
       auth: {
         user: row.smtp_username,
         pass: password,

@@ -228,10 +228,21 @@ export async function generateContextAwareMessage(
   // [STATEFUL MEMORY] Fetch or Plan Procedural Memory
   const campaignId = (lead.metadata as any)?.campaignId;
   let proceduralMemory = (lead as any).proceduralMemory;
+  let dynamicStrategySupplement = '';
 
-  if (!proceduralMemory && campaignId) {
-    const memory = await storage.getCampaignLeadProceduralMemory(campaignId, lead.id);
-    proceduralMemory = memory?.strategy || memory;
+  if (campaignId) {
+    const campaign = await storage.getOutreachCampaign(campaignId);
+    if (campaign && campaign.proceduralMemory) {
+       const campMem = campaign.proceduralMemory as any;
+       if (campMem.dynamicStrategySupplement) {
+         dynamicStrategySupplement = campMem.dynamicStrategySupplement;
+       }
+    }
+
+    if (!proceduralMemory) {
+      const memory = await storage.getCampaignLeadProceduralMemory(campaignId, lead.id);
+      proceduralMemory = memory?.strategy || memory;
+    }
   }
 
   if (!proceduralMemory && campaignId) {
@@ -243,6 +254,13 @@ export async function generateContextAwareMessage(
     );
     proceduralMemory = await planProceduralMemory(lead, brandContext, competitive);
     await storage.updateCampaignLeadProceduralMemory(campaignId, lead.id, { strategy: proceduralMemory });
+  }
+
+  // Inject strategy supplement into procedural memory context
+  if (dynamicStrategySupplement && typeof proceduralMemory === 'string') {
+    proceduralMemory = `${proceduralMemory}\n\n[CAMPAIGN STRATEGY UPDATE]: ${dynamicStrategySupplement}`;
+  } else if (dynamicStrategySupplement && typeof proceduralMemory === 'object') {
+    proceduralMemory.strategy = `${proceduralMemory.strategy || ''}\n\n[CAMPAIGN STRATEGY UPDATE]: ${dynamicStrategySupplement}`;
   }
 
   const enhancedLead = {

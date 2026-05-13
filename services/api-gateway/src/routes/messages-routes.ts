@@ -51,6 +51,10 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
     const { leadId } = req.params;
     const { content, channel, subject } = req.body;
 
+    let inReplyTo: string | undefined = undefined;
+    let references: string | undefined = undefined;
+    let threadId: string | undefined = undefined;
+
     if (!content || typeof content !== "string" || content.trim().length === 0) {
       res.status(400).json({ error: "Message content is required" });
       return;
@@ -90,11 +94,35 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
         const { generateTrackingToken } = await import('@services/email-service/src/email/email-tracking.js');
         trackingId = generateTrackingToken();
 
+        // --- REFINED THREADING LOGIC ---
+        try {
+          const history = await storage.getMessagesByLeadId(lead.id);
+          if (history.length > 0) {
+            // History is ordered by createdAt DESC in getMessagesByLeadId (usually)
+            // Let's verify sort order or just find the most recent
+            const lastMsg = history[0]; // storage.ts shows orderBy(desc(messages.createdAt))
+            const meta = (lastMsg.metadata as any) || {};
+            
+            inReplyTo = lastMsg.externalId || meta.externalId;
+            threadId = meta.providerThreadId || meta.threadId || (lead.metadata as any)?.providerThreadId;
+
+            if (inReplyTo) {
+              const prevRefs = meta.references || "";
+              references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+            }
+          }
+        } catch (threadErr) {
+          console.warn("[MessagesRoute] Failed to fetch threading headers:", threadErr);
+        }
+
         await sendEmail(userId, lead.email, messageBody, emailSubject, {
           isRaw: true,
           isHtml: true, // Force HTML for tracking pixel
           trackingId,
-          leadId: lead.id
+          leadId: lead.id,
+          inReplyTo,
+          references,
+          threadId
         });
 
         // metadata should include trackingId for consistency if storage doesn't auto-handle it
@@ -142,7 +170,10 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
       metadata: {
         manual: true,
         sentAt: new Date(),
-        ...(trackingId ? { trackingId } : {})
+        ...(trackingId ? { trackingId } : {}),
+        inReplyTo,
+        references,
+        providerThreadId: threadId
       },
     });
 

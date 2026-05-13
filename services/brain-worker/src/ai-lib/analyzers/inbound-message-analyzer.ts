@@ -3,7 +3,12 @@ import { analyzeLeadIntent, calculateLeadQualityScore, type IntentAnalysis } fro
 import { detectLeadIntent, assessChurnRisk, detectObjection, type ChurnRiskAssessment, type ObjectionDetectionResult, type IntentDetectionResult } from "../context/lead-intelligence.js";
 import { detectCompetitorMention, type CompetitorMentionResult } from "./competitor-detection.js";
 import { autoUpdateLeadStatus, detectConversationStatus } from "../core/conversation-ai.js";
+import { learningEngine } from "../engines/learning-engine.js";
+import { universalSalesAI } from "../../orchestrator/agents/universal-sales-agent.js";
+import { createLogger } from '@services/api-gateway/src/core/logger.js';
 import type { Message, Lead } from "@audnix/shared";
+
+const log = createLogger('INBOUND-ANALYZER');
 
 export interface InboundMessageAnalysis {
   leadId: string;
@@ -59,10 +64,13 @@ export async function analyzeInboundMessage(
 
   /* Synchronous call moved out of Promise.all for type safety and wrapped in try-catch if needed (though it's robust) */
   let competitorMention: CompetitorMentionResult | null = null;
+  let priceObjection: any = null;
   try {
     competitorMention = await detectCompetitorMention(messageBody);
+    const { detectPriceObjection } = await import("../specialized/price-negotiation.js");
+    priceObjection = await detectPriceObjection(messageBody);
   } catch (err) {
-    console.error("Competitor detection failed:", err);
+    console.error("Specialized detection failed:", err);
   }
 
   const [intent, deepIntent, objection, churnRisk, qualityResult] = await Promise.all([
@@ -105,9 +113,9 @@ export async function analyzeInboundMessage(
     }),
   ]);
 
-  const urgencyLevel = determineUrgency(intent, deepIntent, objection, churnRisk, competitorMention);
+  const urgencyLevel = determineUrgency(intent, deepIntent, objection, churnRisk, competitorMention, priceObjection);
   const shouldAutoReply = determineShouldAutoReply(lead, intent, urgencyLevel);
-  const suggestedAction = determineBestAction(intent, deepIntent, objection, churnRisk, competitorMention, qualityResult);
+  const suggestedAction = determineBestAction(intent, deepIntent, objection, churnRisk, competitorMention, qualityResult, priceObjection);
 
   // Status mapping based on deep AI intent
   let finalStatus = lead.status;
@@ -166,8 +174,11 @@ export async function analyzeInboundMessage(
         suggestedAction,
         qualityScore: qualityResult?.score,
         churnRisk: churnRisk?.churnRiskLevel,
-        hasObjection: objection && objection.confidence > 0.5,
+        hasObjection: (objection && objection.confidence > 0.5) || (priceObjection && priceObjection.detected),
+        objectionCategory: priceObjection?.detected ? 'price' : objection?.category,
         competitorMentioned: competitorMention?.detected,
+        competitorName: competitorMention?.competitor,
+        priceNegotiationResponse: priceObjection?.response
       },
     },
   });
@@ -213,6 +224,30 @@ export async function analyzeInboundMessage(
     console.error("Failed to log intent to audit trail:", auditErr);
   }
 
+  // ─── [LEARNING LOOP] INTEGRATION ─────────────────────────────────────────
+  if (deepIntent?.intentLevel === "high" || finalStatus === "warm" || finalStatus === "booked") {
+    const campaignId = (lead.metadata as any)?.campaignId;
+    if (campaignId) {
+      log.info(`📚 [LEARNING] High intent detected. Extracting winning pattern for campaign ${campaignId}`);
+      
+      // 1. Extract and store winning pattern for the whole campaign
+      learningEngine.extractWinningPattern(lead.userId, campaignId, leadId).catch(e => {
+        log.warn("Pattern extraction failed", { error: e.message });
+      });
+
+      // 2. Feed back into Universal Sales AI memory for immediate cross-lead benefit
+      universalSalesAI.learnFromInteraction({
+        leadId,
+        userId: lead.userId,
+        messageType: "follow_up",
+        leadResponse: "interested",
+        sentiment: "positive",
+        timestamp: new Date(),
+        whatWorked: messageBody
+      }).catch(e => log.warn("Universal AI learning failed", { error: e.message }));
+    }
+  }
+
   console.log(`✅ [ANALYZER] Analysis complete for lead ${leadId}:`, {
     urgency: urgencyLevel,
     qualityScore: qualityResult?.score,
@@ -235,13 +270,14 @@ function determineUrgency(
   deepIntent: IntentDetectionResult | null,
   objection: ObjectionDetectionResult | null,
   churnRisk: ChurnRiskAssessment | null,
-  competitorMention: CompetitorMentionResult | null
+  competitorMention: CompetitorMentionResult | null,
+  priceObjection?: any
 ): "critical" | "high" | "medium" | "low" {
   if (intent?.readyToBuy || intent?.wantsToSchedule) return "critical";
   if (deepIntent?.intentLevel === "high") return "critical";
 
   if (competitorMention && (competitorMention as any).detected) return "high";
-  if (objection && objection.confidence > 0.7) return "high";
+  if ((objection && objection.confidence > 0.7) || (priceObjection && priceObjection.detected)) return "high";
   if (churnRisk?.churnRiskLevel === "high") return "high";
 
   if (intent?.isInterested && (intent.confidence || 0) > 0.7) return "medium";
@@ -274,7 +310,8 @@ function determineBestAction(
   objection: ObjectionDetectionResult | null,
   churnRisk: ChurnRiskAssessment | null,
   competitorMention: CompetitorMentionResult | null,
-  qualityResult: { score: number; recommendation: string } | null
+  qualityResult: { score: number; recommendation: string } | null,
+  priceObjection?: any
 ): string {
   if (intent?.readyToBuy) return "🔥 CLOSE NOW: Lead is ready to buy - send booking link immediately";
   if (intent?.wantsToSchedule) return "📅 BOOK CALL: Lead wants to schedule - propose meeting times";
@@ -282,6 +319,10 @@ function determineBestAction(
   if (competitorMention && (competitorMention as any).detected) {
     const competitorName = (competitorMention as any).competitor;
     return `🚨 COMPETITOR ALERT: ${competitorName} mentioned - differentiate and close`;
+  }
+
+  if (priceObjection && priceObjection.detected) {
+    return `💰 PRICE NEGOTIATION: Lead mentioned ${priceObjection.keywords[0] || 'price'}. Suggested: ${priceObjection.response}`;
   }
 
   if (objection && objection.confidence > 0.6) {

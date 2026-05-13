@@ -71,8 +71,8 @@ router.post('/:provider/connect', requireAuth, async (req: Request, res: Respons
         const dns = await import('dns');
         const transporter = nodemailer.createTransport({
           host: credentials.smtp_host,
-          port: credentials.smtp_port || 587,
-          secure: credentials.smtp_port === 465,
+          port: parseInt(String(credentials.smtp_port)) || 587,
+          secure: parseInt(String(credentials.smtp_port)) === 465,
           auth: {
             user: credentials.smtp_user,
             pass: credentials.smtp_pass,

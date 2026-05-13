@@ -61,8 +61,15 @@ export async function createOutreachCampaign(
   // Segment leads by quality tier
   const leadsByQuality = segmentByQuality(leads);
 
-  // Generate base schedule
-  const schedule = generateSendSchedule(leadsByQuality);
+  // Generate base schedule with timezone awareness
+  const leadTimezones: Record<string, string> = {};
+  leads.forEach(l => {
+    if (l.data?.timezone) {
+      leadTimezones[l.id] = l.data.timezone;
+    }
+  });
+
+  const schedule = generateSendSchedule(leadsByQuality, new Date(), leadTimezones);
 
   // Optimize for revenue (reorder batches)
   const optimizedBatches = optimizeForRevenue(schedule);

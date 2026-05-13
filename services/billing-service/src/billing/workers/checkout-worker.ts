@@ -4,11 +4,12 @@ import {
   pendingPayments, 
   users, 
   leads,
+  notifications,
   type PendingPayment,
   type User,
   type Lead
 } from '@audnix/shared';
-import { eq } from 'drizzle-orm';
+import { eq, and, or, isNull, gt } from 'drizzle-orm';
 import { sendEmail } from "@shared/lib/channels/email.js";
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
 import { generateReply, generateEmailSubject } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
@@ -39,8 +40,21 @@ They are warm, engaged, and expecting this link — your job is to make clicking
 Return ONLY the email body text. Plain text, paragraph breaks with \\n\\n. No subject line.
 `;
 
+import { isValidURL } from '@shared/lib/utils/validation.js';
+import { messages } from '@audnix/shared';
+import { desc } from 'drizzle-orm';
+
 export class CheckoutWorker {
   /**
+   * Satisfies the service initialization in billing/index.ts.
+   * Can be used for periodic cleanup or health checks.
+   */
+  async start() {
+    console.log('✅ CheckoutWorker logic online');
+  }
+
+  /**
+
    * Processes a pending payment: generates a personalized AI email with the
    * user's checkout link and dispatches it. Updates payment status to 'sent'.
    */
@@ -69,8 +83,19 @@ export class CheckoutWorker {
 
       // 2. Determine checkout link — custom on this payment > user's default
       const checkoutLink = payment.customPaymentLink || user.defaultPaymentLink;
-      if (!checkoutLink) {
-        console.warn(`[CheckoutWorker] ⚠️ No checkout link configured. Please add one in Settings. Skipping autonomous dispatch for ${lead.email}.`);
+      
+      if (!checkoutLink || !isValidURL(checkoutLink)) {
+        console.warn(`[CheckoutWorker] ⚠️ Missing or invalid checkout link for user ${user.id}. Skipping autonomous dispatch for ${lead.email}.`);
+        
+        // Notify user about broken link
+        await db.insert(notifications).values({
+          userId: user.id,
+          type: 'billing_issue',
+          title: 'Payment Link Required 💳',
+          message: `We couldn't send the checkout email to ${lead.name} because your payment link is missing or invalid. Please update it in Settings.`,
+          metadata: { leadId: lead.id, paymentId: payment.id }
+        });
+
         return false;
       }
 
@@ -110,17 +135,47 @@ ${payment.readyToGoEmail ? `- Notes/context captured from the call: ${payment.re
       // 5. Append the checkout link cleanly below the AI body
       const fullBody = `${aiBody.trim()}\n\n${checkoutLink}`;
 
+      // 6.5. Fetch last message for threading context
+      let inReplyTo: string | undefined = undefined;
+      let references: string | undefined = undefined;
+      let threadId: string | undefined = undefined;
+
+      try {
+        const lastMessages = await db.select()
+          .from(messages)
+          .where(eq(messages.leadId, lead.id))
+          .orderBy(desc(messages.createdAt))
+          .limit(1);
+
+        if (lastMessages.length > 0) {
+          const lastMsg = lastMessages[0];
+          const meta = (lastMsg.metadata as any) || {};
+          inReplyTo = lastMsg.externalId || meta.externalId;
+          threadId = meta.providerThreadId || meta.threadId;
+
+          if (inReplyTo) {
+            const prevRefs = meta.references || "";
+            references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+          }
+        }
+      } catch (threadErr) {
+        console.warn(`[CheckoutWorker] Threading lookup failed for lead ${lead.id}:`, threadErr);
+      }
+
       // 6. Generate a matching AI subject line
       const subject = await generateEmailSubject(aiBody, lead.name, lead.company || undefined);
 
-      console.log(`[CheckoutWorker] 📧 Sending checkout email to ${lead.email} | Subject: "${subject}"`);
+      console.log(`[CheckoutWorker] 📧 Sending checkout email to ${lead.email} | Subject: "${subject}" | Threaded: ${!!threadId}`);
 
       // 7. Send email
       await sendEmail(user.id, lead.email, fullBody, subject, {
         buttonUrl: checkoutLink,
         buttonText: 'Complete Payment',
         leadId: lead.id,
-        isRaw: false
+        isRaw: false,
+        inReplyTo,
+        references,
+        threadId
       });
 
       // 8. Update payment to 'sent' and store the generated email for reference

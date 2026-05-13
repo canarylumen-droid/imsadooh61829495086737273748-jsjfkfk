@@ -312,6 +312,28 @@ export async function generateAIReply(
   // --- STYLE LEARNING ---
   const styleMarkers = await getStyleMarkers(lead.userId);
 
+  // --- [STRATEGY] PROCEDURAL MEMORY INJECTION ---
+  let dynamicStrategySupplement = '';
+  let leadProceduralMemory = '';
+  const campaignId = (lead.metadata as any)?.campaignId;
+  
+  if (campaignId) {
+    try {
+      const campaign = await storage.getOutreachCampaign(campaignId);
+      if (campaign?.proceduralMemory) {
+        const campMem = campaign.proceduralMemory as any;
+        if (campMem.dynamicStrategySupplement) {
+          dynamicStrategySupplement = campMem.dynamicStrategySupplement;
+        }
+      }
+      
+      const leadMem = await storage.getCampaignLeadProceduralMemory(campaignId, lead.id);
+      leadProceduralMemory = leadMem?.strategy || (typeof leadMem === 'string' ? leadMem : '');
+    } catch (memErr) {
+      console.warn("[ConversationAI] Failed to fetch procedural memory:", memErr);
+    }
+  }
+
   // --- OBJECTION HANDLING LOOP ---
   // PHASE 52: Inject winning handles from Objection Service
   const winningPlaybook = objectionService.formatPlaybookForPrompt(lead.userId);
@@ -579,7 +601,8 @@ Never say "slot available" — sound human.`
 }
 
 ${winningPlaybook}
-
+${leadProceduralMemory ? `\n[LONG-TERM STRATEGY]: ${leadProceduralMemory}` : ''}
+${dynamicStrategySupplement ? `\n[CAMPAIGN STRATEGY UPDATE]: ${dynamicStrategySupplement}` : ''}
 ${mediaInstruction}
 
 ${narrativeSummary}

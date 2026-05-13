@@ -1237,6 +1237,35 @@ router.patch('/config', async (req: Request, res: Response): Promise<void> => {
     
     console.log(`🤖 AI Engine toggle for user ${userId}: ${autonomousMode ? 'ON' : 'OFF'}`);
 
+    if (autonomousMode && !(user.config as any)?.autonomousMode) {
+      try {
+        const { db } = await import('@shared/lib/db/db.js');
+        const { followUpQueue } = await import('@audnix/shared');
+        const { eq, and, lte } = await import('drizzle-orm');
+        
+        const overdueJobs = await db.select().from(followUpQueue)
+          .where(and(
+            eq(followUpQueue.userId, userId),
+            eq(followUpQueue.status, 'pending'),
+            lte(followUpQueue.scheduledAt, new Date())
+          ));
+          
+        if (overdueJobs.length > 0) {
+          console.log(`[Grace Window] Staggering ${overdueJobs.length} overdue jobs for user ${userId}`);
+          const intervalMs = (30 * 60 * 1000) / overdueJobs.length;
+          
+          for (let i = 0; i < overdueJobs.length; i++) {
+            const nextTime = new Date(Date.now() + i * intervalMs);
+            await db.update(followUpQueue)
+              .set({ scheduledAt: nextTime })
+              .where(eq(followUpQueue.id, overdueJobs[i].id));
+          }
+        }
+      } catch (err) {
+        console.error('Failed to stagger follow up jobs:', err);
+      }
+    }
+
     res.json({
       success: true,
       config: updatedUser?.config

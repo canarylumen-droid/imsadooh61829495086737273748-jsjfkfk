@@ -27,16 +27,23 @@ export class GmailProvider {
   /**
    * Send email via Gmail API
    */
-  async sendEmail(to: string, subject: string, body: string): Promise<{ messageId: string }> {
+  async sendEmail(to: string, subject: string, body: string, inReplyTo?: string, references?: string): Promise<{ messageId: string }> {
     if (this.isDemoMode) {
       return { messageId: `mock_email_${Date.now()}` };
     }
 
-    const email = [
+    const emailHeaders = [
       `To: ${to}`,
       `From: ${this.credentials.email}`,
       `Subject: ${subject}`,
-      `Content-Type: text/html; charset=UTF-8`,
+      `Content-Type: text/html; charset=UTF-8`
+    ];
+
+    if (inReplyTo) emailHeaders.push(`In-Reply-To: ${inReplyTo}`);
+    if (references) emailHeaders.push(`References: ${references}`);
+
+    const email = [
+      ...emailHeaders,
       "",
       body
     ].join("\r\n");

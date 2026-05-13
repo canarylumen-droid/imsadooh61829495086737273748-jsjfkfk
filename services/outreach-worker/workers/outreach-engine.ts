@@ -12,7 +12,7 @@ import {
   type Integration
 } from '@audnix/shared';
 import { getPlanCapabilities } from '@audnix/shared/plan-utils.js';
-import { eq, and, or, sql, lte, desc, ne, isNull, lt, notInArray } from 'drizzle-orm';
+import { eq, and, or, sql, lte, desc, ne, isNull, lt, notInArray, gt } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from "@shared/lib/channels/email.js";
 import { adjustCopyIfNecessary } from "../../../shared/lib/ai/copy-adjuster.js";
@@ -199,16 +199,7 @@ export class OutreachEngine {
       }
 
       if (!isAutonomousMode) {
-        // We still want to distribute leads but skip all outreach processing
-        console.log(`[OutreachEngine] AI Engine is OFF for user ${userId}. Skipping all outreach automation.`);
-        
-        // Lead distribution still runs as a low-cost prep phase
-        try {
-          const { distributeLeadsFromPool } = await import("./outreach-engine.js");
-          await distributeLeadsFromPool(userId);
-        } catch (e) {}
-        
-        return;
+        console.log(`[OutreachEngine] AI Engine is OFF for user ${userId}. Skipping autonomous follow-ups, but allowing active campaigns.`);
       }
 
       // --- PART 0: Inventory Distribution ---
@@ -237,9 +228,11 @@ export class OutreachEngine {
 
       // --- PART 2: Autonomous AI Outreach ---
       // If no campaign was processed, check for individual "new" leads with AI enabled
-      await this.tickAutonomousOutreach(userId).catch(err => {
-        console.error(`[OutreachEngine] tickAutonomousOutreach failed for ${userId}:`, err.message);
-      });
+      if (isAutonomousMode) {
+        await this.tickAutonomousOutreach(userId).catch(err => {
+          console.error(`[OutreachEngine] tickAutonomousOutreach failed for ${userId}:`, err.message);
+        });
+      }
 
       // --- PART 3: [PHASE 46] Self-Healing Reputation Sweep ---
       await this.selfHealMailboxDistribution(userId).catch(err => {
@@ -279,7 +272,11 @@ export class OutreachEngine {
           .where(
             and(
               eq(pendingPayments.userId, userId),
-              eq(pendingPayments.status, 'pending')
+              eq(pendingPayments.status, 'pending'),
+              or(
+                isNull(pendingPayments.expiresAt),
+                gt(pendingPayments.expiresAt, new Date())
+              )
             )
           ).limit(1);
 
@@ -739,8 +736,8 @@ export class OutreachEngine {
         // Default to ON (true) unless explicitly set to false
         const isAutonomousMode = config.autonomousMode !== false;
         
-        if (!isAutonomousMode) {
-          console.log(`[OutreachEngine] AI Engine is OFF for user ${userId}. Skipping outreach.`);
+        if (!isAutonomousMode && !campaign) {
+          console.log(`[OutreachEngine] AI Engine is OFF for user ${userId}. Skipping autonomous outreach.`);
           return false;
         }
       }
@@ -784,7 +781,7 @@ export class OutreachEngine {
     // SYSTEM 8: Cluster Safety Lock
     const { acquireLock, releaseLock } = await import('@shared/lib/redis/redis.js');
     const lockKey = `outreach:lock:${lead.id}`;
-    const lockAcquired = await acquireLock(lockKey, 180); // 3-minute lock
+    const lockAcquired = await acquireLock(lockKey, 600); // 10-minute lock (Phase 7: extended to prevent double-sends on slow AI/SMTP)
     
     if (!lockAcquired) {
       console.log(`[Safety] Lead ${lead.id} is already being processed by another worker. Skipping.`);
@@ -924,9 +921,37 @@ export class OutreachEngine {
       console.error("[OutreachEngine] Verification service error (skipping for safety):", verifErr);
     }
 
+    // --- REFINED THREADING LOGIC ---
+    let inReplyTo: string | undefined = undefined;
+    let references: string | undefined = undefined;
+    let threadId: string | undefined = undefined;
+
     try {
       // Determine if this is a priority reply (auto-reply, or responding to an already engaged lead)
       const isPriorityReply = !!leadEntry.metadata?.pendingAutoReply || lead.status === 'replied' || lead.status === 'interested';
+
+      try {
+        const lastMessages = await db.select()
+          .from(messages)
+          .where(eq(messages.leadId, lead.id))
+          .orderBy(desc(messages.createdAt))
+          .limit(1);
+
+        if (lastMessages.length > 0) {
+          const lastMsg = lastMessages[0];
+          const meta = (lastMsg.metadata as any) || {};
+          
+          inReplyTo = lastMsg.externalId || meta.externalId;
+          threadId = meta.providerThreadId || meta.threadId;
+
+          if (inReplyTo) {
+            const prevRefs = meta.references || "";
+            references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+          }
+        }
+      } catch (threadErr) {
+        console.warn(`[OutreachEngine] Failed to fetch threading headers for lead ${lead.id}:`, threadErr);
+      }
 
       await sendEmail(userId, lead.email, body, subject, {
         isRaw: true,
@@ -935,7 +960,10 @@ export class OutreachEngine {
         campaignId: campaign.id,
         leadId: lead.id,
         integrationId, // Use the rotated mailbox
-        isPriorityReply
+        isPriorityReply,
+        inReplyTo,
+        references,
+        threadId
       });
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
@@ -993,7 +1021,14 @@ export class OutreachEngine {
       subject,
       body,
       trackingId,
-      metadata: { campaignId: campaign.id, step: leadEntry.currentStep, integrationId }
+      metadata: { 
+        campaignId: campaign.id, 
+        step: leadEntry.currentStep, 
+        integrationId,
+        inReplyTo,
+        references,
+        providerThreadId: threadId
+      }
     });
 
     // Detailed campaign tracking
@@ -1164,7 +1199,7 @@ export class OutreachEngine {
     // [PHASE 90] CLUSTER SAFETY: Prevent race conditions in horizontal scaling
     const { acquireLock, releaseLock } = await import('@shared/lib/redis/redis.js');
     const lockKey = `outreach:lock:${lead.id}`;
-    const lockAcquired = await acquireLock(lockKey, 120);
+    const lockAcquired = await acquireLock(lockKey, 600); // 10-minute lock (Phase 7: extended for autonomous outreach path)
     
     if (!lockAcquired) {
       console.log(`[Safety] Lead ${lead.id} is already being processed by another worker node. Skipping.`);
@@ -1514,8 +1549,28 @@ export async function triggerAutoOutreach(userId: string): Promise<void> {
  * Distributes leads from the global Lead Inventory pool to available mailboxes.
  */
 export async function distributeLeadsFromPool(userId: string, targetIntegrationId?: string): Promise<void> {
+  // Phase 7: Guard — userId must be valid before any queries run
+  if (!userId || typeof userId !== 'string') {
+    console.warn('[LeadPool] distributeLeadsFromPool called with invalid userId. Aborting.');
+    return;
+  }
+
   try {
     console.log(`[LeadPool] Starting professional distribution for user ${userId}`);
+
+    // Phase 7 Guard: Only distribute if user has at least one active campaign.
+    // Prevents wasting DB queries and incorrectly assigning leads when there is
+    // nothing to process (e.g. on a fresh mailbox connect with no campaign).
+    const activeCampaigns = await db
+      .select({ id: outreachCampaigns.id })
+      .from(outreachCampaigns)
+      .where(and(eq(outreachCampaigns.userId, userId), eq(outreachCampaigns.status, 'active')))
+      .limit(1);
+
+    if (activeCampaigns.length === 0) {
+      console.log(`[LeadPool] No active campaigns for user ${userId}. Skipping pool distribution.`);
+      return;
+    }
 
     const integrationsList = await storage.getIntegrations(userId);
     const activeMailboxes = integrationsList.filter(i => i.connected);

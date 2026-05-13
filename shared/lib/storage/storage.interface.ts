@@ -1,5 +1,5 @@
 import { drizzleStorage } from "./drizzle-storage.js";
-import { type User, type InsertUser, type Lead, type InsertLead, type Message, type InsertMessage, type Integration, type InsertIntegration, type Deal, type InsertDeal, type FollowUpQueue, type InsertFollowUpQueue, type OAuthAccount, type InsertOAuthAccount, type CalendarEvent, type InsertCalendarEvent, type AuditTrail, type InsertAuditTrail, type Organization, type InsertOrganization, type TeamMember, type InsertTeamMember, type Payment, type InsertPayment, type AiLearningPattern, type InsertAiLearningPattern, type SmtpSettings, type InsertSmtpSettings, type EmailMessage, type InsertEmailMessage, type Notification, type InsertNotification, type Thread, type InsertThread, type LeadInsight, type InsertLeadInsight, smtpSettings, users, leads, messages, integrations, deals, followUpQueue, aiLearningPatterns, notifications, threads, leadInsights } from "@audnix/shared";
+import { type User, type InsertUser, type Lead, type InsertLead, type Message, type InsertMessage, type Integration, type InsertIntegration, type Deal, type InsertDeal, type FollowUpQueue, type InsertFollowUpQueue, type OAuthAccount, type InsertOAuthAccount, type CalendarEvent, type InsertCalendarEvent, type AuditTrail, type InsertAuditTrail, type Organization, type InsertOrganization, type TeamMember, type InsertTeamMember, type Payment, type InsertPayment, type AiLearningPattern, type InsertAiLearningPattern, type SmtpSettings, type InsertSmtpSettings, type EmailMessage, type InsertEmailMessage, type Notification, type InsertNotification, type Thread, type InsertThread, type LeadInsight, type InsertLeadInsight, type OutreachCampaign, type InsertOutreachCampaign, type CampaignLead, smtpSettings, users, leads, messages, integrations, deals, followUpQueue, aiLearningPatterns, notifications, threads, leadInsights, outreachCampaigns, campaignLeads } from "@audnix/shared";
 import { randomUUID } from "crypto";
 import { eq, and, sql } from "drizzle-orm";
 import { db } from '@shared/lib/db/db.js';
@@ -249,4 +249,14 @@ export interface IStorage {
     channelPerformance: Array<{ channel: string; value: number }>;
     recentEvents: Array<{ id: string; type: string; description: string; time: string; isNew: boolean }>;
   }>;
+
+  // Outreach Campaign methods
+  getOutreachCampaign(id: string): Promise<OutreachCampaign | undefined>;
+  getCampaignById(id: string): Promise<OutreachCampaign | undefined>; // Alias
+  createOutreachCampaign(campaign: InsertOutreachCampaign): Promise<OutreachCampaign>;
+  updateOutreachCampaign(id: string, updates: Partial<OutreachCampaign>): Promise<OutreachCampaign | undefined>;
+  getCampaignLead(campaignId: string, leadId: string): Promise<CampaignLead | undefined>;
+  updateCampaignLeadProceduralMemory(campaignId: string, leadId: string, memory: Record<string, any>): Promise<void>;
+  getCampaignLeadProceduralMemory(campaignId: string, leadId: string): Promise<Record<string, any> | undefined>;
+  updateCampaignProceduralMemory(campaignId: string, memory: Record<string, any>): Promise<void>;
 }
