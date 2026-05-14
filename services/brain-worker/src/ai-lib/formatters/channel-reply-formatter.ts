@@ -8,7 +8,7 @@ export interface FormattedReply {
   channel: "email" | "instagram";
   subject?: string;
   formatting: {
-    useEmoji: boolean;
+    useEmoji: false,
     maxLength: number;
     tone: string;
   };
@@ -49,7 +49,7 @@ async function formatForInstagram(
       message: formatInstagramFallback(rawReply, firstName, maxLength),
       channel: "instagram",
       formatting: {
-        useEmoji: true,
+        useEmoji: false,
         maxLength,
         tone: "casual-friendly",
       },
@@ -70,7 +70,7 @@ ${options.wantsToBook ? "NOTE: Lead wants to book - make it easy for them" : ""}
 INSTAGRAM DM RULES:
 1. Keep it SHORT - 2-3 sentences max (under 150 characters ideal)
 2. Use casual, friendly tone - like texting a friend
-3. Light emoji usage - 1-2 max, natural placement
+3. NO emoji usage - keep it clean text only
 4. No formal greetings ("Dear", "Hi there")
 5. Use contractions (you're, don't, can't)
 6. End with a question or clear next step
@@ -78,7 +78,7 @@ INSTAGRAM DM RULES:
 8. If booking, just drop the link naturally
 
 BAD EXAMPLE: "Hello! I appreciate your interest in our services. Would you be available for a call to discuss further?"
-GOOD EXAMPLE: "yo ${firstName}! that's exactly what we help with 🔥 quick q - when's a good time for a 10min chat?"
+GOOD EXAMPLE: "yo ${firstName}! that's exactly what we help with. quick q - when's a good time for a 10min chat?"
 
 Return ONLY the formatted DM message, nothing else.`;
 
@@ -98,7 +98,7 @@ Return ONLY the formatted DM message, nothing else.`;
       message: formatted.substring(0, maxLength),
       channel: "instagram",
       formatting: {
-        useEmoji: true,
+        useEmoji: false,
         maxLength,
         tone: "casual-friendly",
       },
@@ -109,7 +109,7 @@ Return ONLY the formatted DM message, nothing else.`;
       message: formatInstagramFallback(rawReply, firstName, maxLength),
       channel: "instagram",
       formatting: {
-        useEmoji: true,
+        useEmoji: false,
         maxLength,
         tone: "casual-friendly",
       },
@@ -152,7 +152,7 @@ ${options.wantsToBook ? "NOTE: Lead is ready - include clear call-to-action" : "
 EMAIL FORMATTING RULES:
 1. Keep it CONCISE - 3-5 short paragraphs max
 2. Professional but warm tone - not stiff or corporate
-3. NO emojis (except maybe one if very casual context)
+3. NO emojis under any circumstances.
 4. Clear paragraph breaks for readability
 5. Use contractions to sound human
 6. End with ONE clear call-to-action
@@ -220,7 +220,7 @@ function formatInstagramFallback(text: string, firstName: string, maxLength: num
   formatted = formatted.replace(/\. /g, "! ");
 
   if (!formatted.includes("?") && !formatted.includes("!")) {
-    formatted += " 🔥";
+    formatted += ".";
   }
 
   return formatted;
@@ -273,7 +273,7 @@ export function getChannelGuidelines(channel: "email" | "instagram"): string {
 INSTAGRAM DM GUIDELINES:
 - Max 1000 characters (ideal: under 200)
 - Casual, conversational tone
-- Light emoji usage (1-2 max)
+- NO emojis under any circumstances.
 - No formal greetings
 - Quick responses expected
 - Use contractions

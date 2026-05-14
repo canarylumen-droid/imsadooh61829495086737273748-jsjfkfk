@@ -237,7 +237,7 @@ RULES:
 3. Reference what THEY said
 4. Keep it SUPER short (10-15 words max)
 5. ${askForFollow ? 'Naturally ask them to follow you for the link/info' : 'Tell them to check DM'}
-6. Use 1-2 emojis max
+6. NO emojis under any circumstances.
 7. Make it feel exclusive/valuable
 
 ${askForFollow ? `EXAMPLES:

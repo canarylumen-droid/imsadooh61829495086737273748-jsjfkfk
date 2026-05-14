@@ -21,7 +21,7 @@ async function startOutreachService() {
   startWorkerHealthServer('outreach-worker', parseInt(process.env.OUTREACH_WORKER_PORT || process.env.PORT || '8082', 10));
 
   // ── Register workers with the health monitor ──────────────────────────────
-  ['Outreach Engine', 'Autonomous Outreach', 'Campaign Engine', 'Meeting Reminders', 'Lead Governance', 'Emoji Follow-up', 'Reputation Monitor']
+  ['Outreach Engine', 'Autonomous Outreach', 'Campaign Engine', 'Meeting Reminders', 'Lead Governance', 'Reputation Monitor']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorkerModule = async (name: string, startFn: () => any) => {
@@ -43,7 +43,6 @@ async function startOutreachService() {
     outreachEngineModule,
     { meetingReminderWorker },
     { leadGovernanceWorker },
-    { emojiFollowupWorker },
     { reputationWorker },
     { autonomousOutreachWorker },
     campaignQueueModule,
@@ -52,7 +51,6 @@ async function startOutreachService() {
     import('./workers/outreach-engine.js').catch(() => ({ outreachEngine: null as any })),
     import('./workers/meeting-reminder-worker.js').catch(() => ({ meetingReminderWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/lead-governance-worker.js').catch(() => ({ leadGovernanceWorker: { start: () => {}, stop: () => {} } })),
-    import('./workers/emoji-followup-worker.js').catch(() => ({ emojiFollowupWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/reputation-worker.js').catch(() => ({ reputationWorker: { start: () => {}, stop: () => {} } })),
     import('./workers/outreach-worker.js').catch(() => ({ autonomousOutreachWorker: { start: () => {}, stop: () => {} } })),
     import('@shared/lib/queues/campaign-queue.js').catch((err) => {
@@ -70,7 +68,6 @@ async function startOutreachService() {
   await startWorkerModule('Autonomous Outreach',   () => autonomousOutreachWorker.start());
   await startWorkerModule('Meeting Reminders',     () => meetingReminderWorker.start());
   await startWorkerModule('Lead Governance',       () => leadGovernanceWorker.start());
-  await startWorkerModule('Emoji Follow-up',       () => emojiFollowupWorker.start());
   await startWorkerModule('Reputation Monitor',    () => reputationWorker.start());
 
   if (campaignQueueModule) {

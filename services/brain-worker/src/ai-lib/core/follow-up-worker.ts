@@ -920,8 +920,7 @@ RULES:
 6. If this is follow-up #3+, consider being more direct or offering something specific.
 7. Never mention you're an AI.
 8. End with a soft call-to-action or question.
-9. Match the tone to the channel (Instagram: casual, Email: professional).
-10. For emails, use the provided brand colors for styling (e.g., button backgrounds, links).
+9. Match the tone to the channel (Instagram: casual, Email: professional). NO emojis for any channel.
 ${growthHackInstruction}
 Generate a strategic decision and response.
 You can choose to:
@@ -945,7 +944,7 @@ Return ONLY a valid JSON object matching this structure:
   private getChannelContext(channel: string): string {
     switch (channel) {
       case 'instagram':
-        return 'CHANNEL: Instagram DM - Be casual, use emojis sparingly, keep it brief';
+        return 'CHANNEL: Instagram DM - Be casual, keep it brief. DO NOT use emojis.';
 
       case 'email':
         return 'CHANNEL: Email - More formal, can be slightly longer, include subject line and professional branding';

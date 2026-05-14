@@ -46,7 +46,7 @@ export function prepareMetaButton(message: string, button: DMButton): FormattedD
  * For actual Instagram sends, use prepareMetaButton() + sendMessageWithButton()
  */
 export function formatDMWithButton(message: string, button: DMButton): string {
-  return `${message}\n\n🔗 ${button.text}: ${button.url}`;
+  return `${message}\n\nLINK: ${button.text}: ${button.url}`;
 }
 
 /**
@@ -54,8 +54,8 @@ export function formatDMWithButton(message: string, button: DMButton): string {
  */
 export function formatDMWithButtons(message: string, buttons: DMButton[]): string {
   const formattedButtons = buttons.slice(0, 3).map((btn, i) => {
-    const emoji = i === 0 ? '🔥' : i === 1 ? '✨' : '💡';
-    return `${emoji} ${btn.text}: ${btn.url}`;
+    const indicator = i === 0 ? '>>>' : i === 1 ? '>>' : '>';
+    return `${indicator} ${btn.text}: ${btn.url}`;
   }).join('\n');
 
   return `${message}\n\n━━━━━━━━━━━━━━━━━━━\n${formattedButtons}\n━━━━━━━━━━━━━━━━━━━\n\n👆 Tap a link above to continue`;
@@ -66,11 +66,11 @@ export function formatDMWithButtons(message: string, buttons: DMButton[]): strin
  */
 export function formatCommentReply(intent: string): string {
   const replies: Record<string, string[]> = {
-    'link': ['🔥 Sent!', '✨ Check DMs!', '📩 Just DMd you!', '🚀 In your DMs!'],
-    'info': ['📩 DMd you!', '✨ Check inbox!', '💬 Sent details!'],
-    'offer': ['🎁 Sending now!', '✨ Check DMs!', '🔥 Just sent!'],
-    'product': ['📦 DMd you!', '✨ Check inbox!', '💫 Sent info!'],
-    'general': ['👍 DMd you!', '✨ Check DMs!', '💬 Sent!']
+    'link': ['Sent!', 'Check DMs!', 'Just DMd you!', 'In your DMs!'],
+    'info': ['DMd you!', 'Check inbox!', 'Sent details!'],
+    'offer': ['Sending now!', 'Check DMs!', 'Just sent!'],
+    'product': ['DMd you!', 'Check inbox!', 'Sent info!'],
+    'general': ['DMd you!', 'Check DMs!', 'Sent!']
   };
 
   const options = replies[intent] || replies['general'];
@@ -81,7 +81,7 @@ export function formatCommentReply(intent: string): string {
  * Format a follow request message
  */
 export function formatFollowRequest(message: string): string {
-  return `${message}\n\n━━━━━━━━━━━━━━━━━━\n💫 FOLLOW TO STAY CONNECTED\nDo you mind following me so we can stay connected? 🙏\n━━━━━━━━━━━━━━━━━━`;
+  return `${message}\n\n━━━━━━━━━━━━━━━━━━\nFOLLOW TO STAY CONNECTED\nDo you mind following me so we can stay connected?\n━━━━━━━━━━━━━━━━━━`;
 }
 
 /**
@@ -90,7 +90,7 @@ export function formatFollowRequest(message: string): string {
 export function formatChoiceButtons(message: string, choices: string[]): string {
   const formattedChoices = choices
     .slice(0, 3)
-    .map((choice, i) => `${i + 1}️⃣ ${choice.toUpperCase()}`)
+    .map((choice, i) => `${i + 1}. ${choice.toUpperCase()}`)
     .join('\n');
 
   return `${message}\n\n━━━━━━━━━━━━━━━━━━\n${formattedChoices}\n━━━━━━━━━━━━━━━━━━\n\nReply with the number of your choice`;
@@ -197,7 +197,7 @@ export function generateMeetingEmail(
 ): string {
   return generateBrandedEmail(
     message,
-    { text: '📅 Schedule Your Meeting', url: calendarLink },
+    { text: 'Schedule Your Meeting', url: calendarLink },
     brandColors,
     businessName,
     unsubscribeUrl,

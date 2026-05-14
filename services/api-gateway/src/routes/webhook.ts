@@ -52,7 +52,7 @@ interface CheckoutSessionMetadata {
 /**
  * Calendly webhook handler
  */
-router.post('/webhook/calendly', async (req: Request, res: Response): Promise<void> => {
+router.post('/calendly', async (req: Request, res: Response): Promise<void> => {
   if (req.body?.webhook_used_for_testing) {
     handleCalendlyVerification(req, res);
     return;
@@ -64,7 +64,7 @@ router.post('/webhook/calendly', async (req: Request, res: Response): Promise<vo
 /**
  * Fathom AI webhook handler
  */
-router.post('/webhook/fathom', async (req: Request, res: Response): Promise<void> => {
+router.post('/fathom', async (req: Request, res: Response): Promise<void> => {
   try {
     // BUG #1 Fix: Webhook signature verification
     const sig = req.headers['x-fathom-signature'] as string;
@@ -137,7 +137,7 @@ router.post('/callback', async (req: Request, res: Response): Promise<void> => {
 /**
  * Stripe webhook handler
  */
-router.post('/webhook/stripe', async (req: Request, res: Response): Promise<void> => {
+router.post('/stripe', async (req: Request, res: Response): Promise<void> => {
   try {
     const sig = req.headers['stripe-signature'] as string;
 
@@ -292,7 +292,7 @@ router.post('/webhook/stripe', async (req: Request, res: Response): Promise<void
 /**
  * Lemon Squeezy webhook handler
  */
-router.post('/webhook/lemonsqueezy', async (req: Request, res: Response): Promise<void> => {
+router.post('/lemonsqueezy', async (req: Request, res: Response): Promise<void> => {
   try {
     const signature = req.headers['x-signature'] as string;
     const secret = process.env.LEMONSQUEEZY_WEBHOOK_SECRET;
@@ -388,15 +388,15 @@ router.post('/webhook/lemonsqueezy', async (req: Request, res: Response): Promis
 /**
  * Generic payment webhook (for custom integrations)
  */
-router.post('/webhook/payment', async (req: Request, res: Response): Promise<void> => {
+router.post('/payment', async (req: Request, res: Response): Promise<void> => {
   try {
     const { provider } = req.query;
 
     if (provider === 'stripe') {
-      req.url = '/webhook/stripe';
+      req.url = '/stripe';
       return;
     } else if (provider === 'lemonsqueezy') {
-      req.url = '/webhook/lemonsqueezy';
+      req.url = '/lemonsqueezy';
       return;
     } else {
       res.status(400).json({ error: 'Unknown payment provider' });

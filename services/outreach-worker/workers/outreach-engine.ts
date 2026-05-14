@@ -546,13 +546,8 @@ export class OutreachEngine {
     const tier = (user?.subscriptionTier || user?.plan || 'starter').toLowerCase();
     const isEnterprise = tier === 'enterprise';
 
-    if (isUnmeteredReply) {
-       console.log(`[OutreachEngine] ⚡ Unmetered Reply for mailbox ${integration.id.slice(-8)}. Bypassing daily limits.`);
-       return true;
-    }
-
     // Default safe limits by provider type
-    let defaultLimit = isEnterprise ? 10000 : 50;
+    let defaultLimit = isEnterprise ? 1000 : 50;
     if (integration.provider === 'custom_email') defaultLimit = isEnterprise ? 10000 : 250;
     else if (integration.provider === 'outlook') defaultLimit = isEnterprise ? 1000 : 50;
     else if (integration.provider === 'gmail') defaultLimit = isEnterprise ? 1000 : 50;
@@ -566,15 +561,16 @@ export class OutreachEngine {
 
     /**
      * ADVANCED GMAIL/OUTLOOK BUFFERING & ENTERPRISE SCALING
-     * - Hard cap: mailboxDailyLimit (usually 500 for Gmail, 1000+ for Enterprise)
-     * - Initial Outreach (Priority 3) Buffer: 150 (only for non-enterprise)
+     * - Hard cap: mailboxDailyLimit (50 for non-enterprise, 1000 for enterprise)
+     * - Initial Outreach (Priority 3) Buffer: 150 (enforces gap before hard limit)
      */
     const isGmailOrOutlook = ['gmail', 'outlook'].includes(integration.provider);
     const bufferThreshold = (isGmailOrOutlook && !isEnterprise) ? 150 : 0;
-    const hardLimit = isEnterprise ? mailboxDailyLimit : (isGmailOrOutlook ? 500 : mailboxDailyLimit);
+    const hardLimit = mailboxDailyLimit;
     
     // High Priority (Follow-ups/Auto-Replies) can reach the hard limit.
     // Initial Outreach must stop at hardLimit - bufferThreshold.
+    // NOTE: Buffer threshold is ENFORCED to prevent initial outreach from consuming all daily slots.
     const baseEffectiveLimit = isHighPriority ? hardLimit : Math.max(0, hardLimit - bufferThreshold);
 
     // --- Autonomous Adaptive Reputation Limits ---
@@ -584,6 +580,8 @@ export class OutreachEngine {
     if (!isEnterprise) {
       const createdAt = new Date((integration as any).createdAt || Date.now());
       const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
+      
+      // NEURAL BRAIN CAP: 60/day max for non-enterprise (overrides user setting)
       const smartCap = isWarmed ? 60 : 45 + Math.floor(Math.random() * 6); // 45-50
       effectiveLimit = Math.min(effectiveLimit, smartCap);
       console.log(`[OutreachEngine] 🧠 NEURAL BRAIN: Mailbox ${integration.id.slice(-8)} capped at ${effectiveLimit} (Warmed: ${isWarmed})`);

@@ -251,19 +251,7 @@ export async function scheduleCommentFollowUp(
   }
 }
 
-/**
- * Select appropriate emoji based on intent
- */
-function selectEmojiForIntent(intent: string): string {
-  const emojiMap: Record<string, string> = {
-    'link': '🚀',
-    'info': '📩',
-    'offer': '🎁',
-    'product': '✨',
-    'general': '👍'
-  };
-  return emojiMap[intent] || '✅';
-}
+
 
 /**
  * Check if comment contains inappropriate content

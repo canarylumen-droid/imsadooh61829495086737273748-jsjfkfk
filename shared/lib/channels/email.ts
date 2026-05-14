@@ -690,14 +690,15 @@ export async function sendEmail(
     // Fetch user Tier to enforce dynamic limits
     const user = await storage.getUser(userId);
     const tier = (user?.subscriptionTier || user?.plan || 'starter').toLowerCase();
+    const isEnterprise = tier === 'enterprise';
     
-    // Hardcoded limits (Gmail: 500, Custom: 2500). Enterprise is Unlimited (-1)
-    let dailyLimit = integration.provider === 'gmail' || integration.provider === 'outlook' ? 500 : 2500;
+    // NEW HARDENED LIMITS:
+    // Gmail/Outlook: Non-Enterprise = 50/day, Enterprise = 1000/day
+    // Custom SMTP: 2500/day
+    let dailyLimit = 2500;
     
-    // Override for Enterprise
-    if (tier === 'enterprise') {
-      dailyLimit = 100000; // Effectively unlimited for a single mailbox
-      console.log(`[EmailService] 🚀 Enterprise tier detected for ${user?.email}. Scaling daily capacity to 100k.`);
+    if (integration.provider === 'gmail' || integration.provider === 'outlook') {
+      dailyLimit = isEnterprise ? 1000 : 50;
     }
 
     const currentSent = Number(sentToday?.count || 0);

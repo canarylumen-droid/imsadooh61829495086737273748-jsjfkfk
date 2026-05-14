@@ -31,7 +31,7 @@ They are warm, engaged, and expecting this link — your job is to make clicking
 - Start with a warm, personalized opener that references the call you just had.
 - Make finishing the purchase feel natural and low-friction, not transactional or pushy.
 - The checkout link will be appended by the system — DO NOT include it in the body text. Write as if the link will appear on its own line below your text.
-- Use 1-2 emojis naturally — energetic, not corporate.
+- NO emojis under any circumstances. Keep it clean and professional.
 - Sound like a human, not a CMS template.
 - End with the sender's first name only on its own line (no "Best regards" or "Sincerely").
 - NO placeholder text like [Your Name] or [Company] — the system will inject real values.

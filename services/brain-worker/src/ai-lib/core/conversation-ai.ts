@@ -458,7 +458,7 @@ KNOWN SCHEDULING INTELLIGENCE (do NOT disclose to lead):
 
   // --- STYLE & EMOTION INJECTION ---
   const platformTone: Record<string, string> = {
-    instagram: 'casual, friendly, and conversational with emojis',
+    instagram: 'casual, friendly, and conversational (NO emojis)',
     email: 'professional yet approachable, well-structured'
   };
 

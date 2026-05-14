@@ -164,8 +164,6 @@ app.use("/*/webhook/*", express.json({
   }
 }));
 
-app.use("/webhook/stripe", express.raw({ type: "application/json" }));
-
 app.use(
   "/api/instagram/callback",
   express.json({
