@@ -336,7 +336,22 @@ export async function registerCalendlyWebhook(userId: string, accessToken: strin
 
     if (response.ok) {
       const subscription: any = await response.json();
+      const signingKey = subscription.resource?.signing_key;
       console.log(`✓ Calendly webhook registered - ID: ${subscription.resource?.id || 'unknown'}`);
+      
+      if (signingKey) {
+        // Save signing key to user metadata for later verification
+        const user = await storage.getUserById(userId);
+        if (user) {
+          await storage.updateUser(userId, {
+            metadata: {
+              ...(user.metadata || {}),
+              calendlySigningKey: signingKey
+            }
+          });
+          console.log(`🔐 Calendly signing key saved for user ${userId}`);
+        }
+      }
     } else {
       const error = await response.text();
       console.warn(`⚠️ Failed to register Calendly webhook: ${error}`);

@@ -55,20 +55,19 @@ interface CalendlyWebhookEvent {
 /**
  * Verify Calendly webhook signature
  */
-export function verifyCalendlySignature(req: Request): boolean {
+export function verifyCalendlySignature(req: Request, secret: string): boolean {
   const signature = req.headers['calendly-webhook-signature'] as string;
   const timestamp = req.headers['calendly-webhook-timestamp'] as string;
 
   if (!signature || !timestamp) return false;
+  if (!secret) return true; // Fail open if no secret configured for user (legacy)
 
-  const secret = process.env.CALENDLY_WEBHOOK_SECRET || '';
-  if (!secret) return true; // Skip if no secret configured
-
-  const payload = `${timestamp}.${JSON.stringify(req.body)}`;
+  const rawBody = (req as any).rawBody ? (req as any).rawBody.toString() : JSON.stringify(req.body);
+  const payload = `${timestamp}.${rawBody}`;
   const expectedSignature = crypto
     .createHmac('sha256', secret)
     .update(payload)
-    .digest('hex'); // Calendly uses hex for v1 signatures
+    .digest('hex');
 
   const incomingSignature = signature.replace('v1=', '');
   return incomingSignature === expectedSignature;
@@ -83,6 +82,29 @@ export async function handleCalendlyWebhook(req: Request, res: Response): Promis
 
     if (!event.resource || !event.payload) {
       res.status(400).json({ error: 'Invalid webhook payload' });
+      return;
+    }
+
+    // Identify user owner first to find the correct signing key
+    const scheduledEvent = event.payload.scheduled_event || event.payload.event;
+    const eventOwnerUri = (scheduledEvent as any)?.event_memberships?.[0]?.user || (scheduledEvent as any)?.user;
+    
+    let signingSecret = process.env.CALENDLY_WEBHOOK_SECRET || '';
+
+    if (eventOwnerUri) {
+      const [user] = await db.select().from(users).where(eq(users.calendlyUserUri, eventOwnerUri)).limit(1);
+      if (user) {
+        const metadata = (user.metadata || {}) as any;
+        if (metadata.calendlySigningKey) {
+          signingSecret = metadata.calendlySigningKey;
+        }
+      }
+    }
+
+    // VERIFY SIGNATURE with user-specific secret
+    if (!verifyCalendlySignature(req, signingSecret)) {
+      console.warn('⚠️ Calendly Webhook: Signature verification failed');
+      res.status(401).json({ error: 'Invalid signature' });
       return;
     }
 
