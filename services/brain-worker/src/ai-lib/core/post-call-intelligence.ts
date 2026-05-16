@@ -7,7 +7,7 @@ export interface PostCallAnalysis {
     strengths: string[];
     weaknesses: string[];
     improvements: string[];
-    progressAudit?: string; // Phase 13: Did they follow up on past promises?
+    progressAudit?: string; 
   };
   buyingIntent: "high" | "medium" | "low" | "none";
   conversationalStage: "needs_identified" | "offer_made" | "invoice_requested" | "payment_sent" | "closed_won" | "unknown";
@@ -19,56 +19,38 @@ export interface PostCallAnalysis {
     quote: string;
     shift: "positive" | "negative";
   };
-  talkRatio?: number; // Estimated % of time the salesperson talked (e.g. 75)
+  talkRatio?: number; 
   bookingFailureReason?: string;
   suggestedAction: string;
   agreedToPay?: boolean;
+  alreadyPaidOnCall?: boolean; // NEW: Detect if they paid during the meeting
+  paymentMethodDetected?: string; // e.g. "PayPal", "Stripe", "Bank Transfer"
   paymentAmount?: string;
   confidence: number;
   
-  // Advanced Predictive Metrics (Level 30 Intelligence)
-  revenueImpactScore?: number; // 0-100 score of deal importance
+  revenueImpactScore?: number; 
   velocityPrediction?: "accelerating" | "stable" | "stalled";
   competitorRiskLevel?: "high" | "medium" | "low" | "none";
 }
 
 const POST_CALL_SYSTEM_PROMPT = `You are an elite Sales Director and Performance Coach. 
-Analyze the provided meeting transcript and summary to determine the call outcome, BANT framework, objections, conversational dynamics, and coaching.
+Analyze the provided meeting transcript to determine the call outcome and payment status.
 
 OUTCOME DEFINITIONS:
-- "closed": Active deal won, product purchased, or a specific follow-up meeting DEFINITIVELY booked and confirmed.
-- "followed_up": Prospect is interested but no firm meeting booked yet. Requires more nurturing.
-- "lost": Clear rejection, not a fit, or explicit request to stop contact.
-- "no_show": The transcript indicates the host waited but the guest never arrived.
+- "closed": Active deal won, product purchased, or payment CONFIRMED on the call.
+- "followed_up": Prospect is interested but no payment made yet.
+- "lost": Clear rejection or not a fit.
 
-EXTRACTION REQUIREMENTS:
-1. CONVERSATIONAL STAGE & INTENT: Evaluate the 'buyingIntent' (high, medium, low, none) and 'conversationalStage' (needs_identified, offer_made, invoice_requested, payment_sent, closed_won).
-2. OBJECTIONS: Identify the #1 explicit objection raised by the prospect (e.g., pricing, competitor, trust, timing). Extract the exact quote snippet.
-3. CONVERSATIONAL DYNAMICS:
-   - Talk Ratio: Estimate the percentage of time the Salesperson talked vs Prospect (return 0-100 as integer).
-   - Sentiment Pivot: Find the exact quote where the conversation shifted explicitly positive or negative.
-4. COACHING:
-   - Identify 2-3 specific strengths in the salesperson's approach.
-   - Identify 2-3 specific weaknesses or missed opportunities.
-   - Provide 3 actionable improvements for the next call.
-   - Progress Audit: If PAST CONTEXT is provided, grade if the salesperson followed up on prior promises.
+PAYMENT INTELLIGENCE (CRITICAL):
+1. 'agreedToPay': Set to true if the prospect agrees to buy and expects a link/invoice later.
+2. 'alreadyPaidOnCall': Set to true ONLY if the transcript confirms the lead has ALREADY sent the money while on the call (e.g. "I've just sent it", "Money is gone", "Check your bank, it's paid").
+3. 'paymentMethodDetected': Identify if they mentioned a specific platform (PayPal, Wise, Stripe, Bank Transfer).
+4. 'paymentAmount': Extract the clean numeric amount.
 
-5. PAYMENT EXTRACTION (CRITICAL):
-   - Analyze if the prospect explicitly agreed to pay or buy the product on this call (must be high confidence, "yes I will pay", "send the link", etc.).
-   - Extract the agreedToPay boolean (true/false).
-   - If true, extract the paymentAmount as a clean string (e.g., "2000", "500"). 
-   - DO NOT include currency symbols or text like "per month" in paymentAmount if possible, just the numeric value.
-   - NOTE: If 'agreedToPay' is true, the system will autonomously email them the checkout link. DO NOT set to true unless explicitly agreed.
+NOTE: If 'alreadyPaidOnCall' is true, the system will mark them as CONVERTED immediately and will NOT send any follow-up billing emails. 
+Be 95%+ confident before setting 'alreadyPaidOnCall' to true.
 
-6. ADVANCED PREDICTIVE ANALYTICS:
-   - Revenue Impact Score: 0-100 score based on deal size and company strategic fit.
-   - Velocity Prediction: "accelerating" if they want to move faster, "stable" for normal pace, "stalled" if there are new blockers.
-   - Competitor Risk: Evaluate if they are actively comparing or mentioned a competitor.
-
-SUGGESTED ACTION:
-- Autonomously decide the single most effective next step (e.g., "Send personalized case study", "Book follow-up in 3 days", "Draft Battle Card").
-
-Respond ONLY in JSON format matching the PostCallAnalysis schema. Use proper JSON types.`;
+Respond ONLY in JSON format matching the PostCallAnalysis schema.`;
 
 export async function analyzeMeetingIntelligence(
   transcript: string,
@@ -76,8 +58,8 @@ export async function analyzeMeetingIntelligence(
   pastContext?: string
 ): Promise<PostCallAnalysis> {
   const userPrompt = `
-PAST CONTEXT (Previous Meeting Summaries):
-${pastContext || "No prior meetings recorded."}
+PAST CONTEXT:
+${pastContext || "No prior meetings."}
 
 TRANSCRIPT:
 ${transcript.substring(0, 15000)}
@@ -85,17 +67,16 @@ ${transcript.substring(0, 15000)}
 SUMMARY:
 ${summary}
 
-Analyze the call intelligence.`;
+Analyze the call intelligence and payment status accurately.`;
 
   try {
     const response = await generateReply(POST_CALL_SYSTEM_PROMPT, userPrompt, {
       jsonMode: true,
-      temperature: 0.2,
+      temperature: 0.1, // Low temperature for high accuracy on payment detection
     });
 
     const analysis = extractJson<PostCallAnalysis>(response.text);
     
-    // Ensure default structure if AI misses anything, but preserve genuine analysis instead of mocking
     return {
       outcome: analysis.outcome || "followed_up",
       coaching: {
@@ -112,6 +93,8 @@ Analyze the call intelligence.`;
       bookingFailureReason: analysis.bookingFailureReason,
       suggestedAction: analysis.suggestedAction || "Follow up via email",
       agreedToPay: analysis.agreedToPay,
+      alreadyPaidOnCall: analysis.alreadyPaidOnCall,
+      paymentMethodDetected: analysis.paymentMethodDetected,
       paymentAmount: analysis.paymentAmount,
       confidence: analysis.confidence || 0.8,
       revenueImpactScore: analysis.revenueImpactScore,

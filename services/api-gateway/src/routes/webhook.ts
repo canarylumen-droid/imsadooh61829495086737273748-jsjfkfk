@@ -5,8 +5,10 @@ import { stripe, verifyWebhookSignature, processTopupSuccess, PLANS } from '@ser
 import { storage } from '@shared/lib/storage/storage.js';
 import { handleCalendlyWebhook, handleCalendlyVerification, verifyCalendlySignature } from '@services/api-gateway/src/webhooks/calendly-webhook.js';
 import { handleInstagramWebhook, handleInstagramVerification } from '@services/api-gateway/src/webhooks/instagram-webhook.js';
-import { processFathomWebhook } from '@services/brain-worker/src/ai-lib/specialized/fathom-integration.js';
+import { enqueueFathomMeeting } from '@shared/lib/queues/fathom-queue.js';
+
 import type { PlanType } from '@shared/types.js';
+
 
 const router = Router();
 
@@ -66,30 +68,48 @@ router.post('/calendly', async (req: Request, res: Response): Promise<void> => {
  */
 router.post('/fathom', async (req: Request, res: Response): Promise<void> => {
   try {
-    // BUG #1 Fix: Webhook signature verification
-    const sig = req.headers['x-fathom-signature'] as string;
+    const webhookId = req.headers['webhook-id'] as string;
+    const webhookTimestamp = req.headers['webhook-timestamp'] as string;
+    const webhookSignature = req.headers['webhook-signature'] as string;
     const secret = process.env.FATHOM_WEBHOOK_SECRET;
     
-    if (secret) {
-      if (!sig) {
-        res.status(401).json({ error: 'Missing fathom signature' });
+    if (secret && secret.startsWith('whsec_')) {
+      if (!webhookSignature || !webhookId || !webhookTimestamp) {
+        res.status(401).json({ error: 'Missing fathom security headers' });
+        return;
+      }
+
+      // Verify timestamp is within 5 minutes to prevent replay attacks
+      const now = Math.floor(Date.now() / 1000);
+      if (Math.abs(now - parseInt(webhookTimestamp)) > 300) {
+        console.error('[Fathom Webhook] Stale timestamp detected.');
+        res.status(401).json({ error: 'Stale request' });
         return;
       }
       
       const rawBody = (req as any).rawBody ? (req as any).rawBody.toString() : JSON.stringify(req.body);
-      const expected = crypto.createHmac('sha256', secret)
-        .update(rawBody)
-        .digest('hex');
+      const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody}`;
+      
+      // Fathom secrets are Base64 encoded after the 'whsec_' prefix
+      const secretBytes = Buffer.from(secret.split('_')[1], 'base64');
+      
+      const expected = crypto.createHmac('sha256', secretBytes)
+        .update(signedContent)
+        .digest('base64');
+      
+      // Extract signature: Fathom/Svix format is "v1,hash"
+      const parts = webhookSignature.split(',');
+      const providedSig = parts[0] === 'v1' ? parts[1] : parts.find(p => p.startsWith('v1,'))?.substring(3);
         
-      if (sig !== expected) {
-        console.error('[Fathom Webhook] Invalid signature detected.');
+      if (!providedSig || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(providedSig))) {
+        console.error('[Fathom Webhook] Invalid HMAC signature detected.');
         res.status(401).json({ error: 'Invalid signature' });
         return;
       }
     }
 
-    await processFathomWebhook(req.body);
-    res.json({ received: true });
+    await enqueueFathomMeeting(req.body);
+    res.json({ received: true, queued: true });
   } catch (error: unknown) {
     console.error('Fathom webhook error:', error);
     res.status(500).json({ error: 'Webhook processing failed' });

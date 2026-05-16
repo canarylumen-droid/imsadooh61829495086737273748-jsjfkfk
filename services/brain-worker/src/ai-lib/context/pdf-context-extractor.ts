@@ -56,61 +56,106 @@ interface IndustryGuidance {
   closePatterns: string[];
 }
 
-export async function extractComprehensiveContext(pdfText: string): Promise<ExtractedPDFContent> {
-  try {
-    const extractionPrompt = `Analyze this brand PDF and extract EVERYTHING about their business:
-
-${pdfText.substring(0, 30000)} 
-
-Extract and return ONLY valid JSON (no markdown, no code blocks):
-{
-  "company_name": "exact name from PDF",
-  "industry": "their industry vertical",
-  "target_audience": "who they serve",
-  "main_offer": "primary product/service",
-  "unique_value": ["unique angle 1", "unique angle 2"],
-  "testimonials": [{"text": "exact quote", "source": "name/company", "impact": "result metric"}],
-  "case_studies": [{"title": "case study title", "results": "specific outcomes"}],
-  "pricing_options": ["option 1", "option 2"],
-  "tone_examples": ["sample brand language"],
-  "success_metrics": ["metric 1", "metric 2"],
-  "website_urls": ["url1", "url2"],
-  "competitor_positioning": "how they position vs competitors",
-  "meeting_link": "calendly.com/xxx or cal.com/xxx or any booking URL found",
-  "payment_link": "stripe payment link, paypal.me, bank details, or invoice URL. MUST be a valid, clickable URL starting with http/https.",
-  "app_link": "SaaS app URL, signup page, or download link. MUST be a valid, clickable URL.",
-  "contact_email": "business email for contact",
-  "contact_phone": "business phone number",
-  "social_links": ["instagram", "twitter", "linkedin URLs (valid only)"]
+/**
+ * Split text into chunks for precise extraction without LLM context loss.
+ */
+function chunkText(text: string, size: number = 6000, overlap: number = 500): string[] {
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    const end = Math.min(start + size, text.length);
+    chunks.push(text.slice(start, end));
+    if (end === text.length) break;
+    start += size - overlap;
+  }
+  return chunks;
 }
 
-IMPORTANT: Look carefully for ANY booking/calendar links (Calendly, Cal.com, Acuity, etc).
-Look for payment links (Stripe, PayPal, Gumroad, invoice details, bank transfer info).
-Look for app/signup links if it's a SaaS or software product.
-Be thorough and precise.`;
+/**
+ * Merge two extracted PDF content objects, prioritizing non-empty values
+ */
+function mergeExtractedContent(base: Partial<ExtractedPDFContent>, next: Partial<ExtractedPDFContent>): Partial<ExtractedPDFContent> {
+  const merged: any = { ...base };
+  
+  for (const key in next) {
+    const k = key as keyof ExtractedPDFContent;
+    const nextVal = next[k];
+    const baseVal = base[k];
 
-    const response = await generateReply(
-      "You are a helpful assistant that extracts structured data from PDFs.",
-      extractionPrompt,
-      {
-        model: MODELS.sales_reasoning,
-        jsonMode: true,
-        temperature: 0.3,
-        maxTokens: 1500,
-      }
-    );
+    if (Array.isArray(nextVal) && Array.isArray(baseVal)) {
+      // Deduplicate arrays
+      merged[k] = Array.from(new Set([...baseVal, ...nextVal as any]));
+    } else if (nextVal && !baseVal) {
+      merged[k] = nextVal;
+    } else if (typeof nextVal === 'string' && typeof baseVal === 'string') {
+      // Keep longer string for descriptions, or merge if they look like lists
+      if (nextVal.length > baseVal.length) merged[k] = nextVal;
+    }
+  }
+  return merged;
+}
 
-    const messageContent: string = response.text ?? "{}";
-
+export async function extractComprehensiveContext(pdfText: string): Promise<ExtractedPDFContent> {
+  try {
+    // Phase 1: Split text into 6000-character chunks to ensure high-fidelity extraction
+    const chunks = chunkText(pdfText, 6000, 500);
+    console.log(`[PDFExtractor] 📄 Processing PDF in ${chunks.length} chunk(s)...`);
+    
     let extracted: Partial<ExtractedPDFContent> = {};
-    try {
-      extracted = JSON.parse(messageContent) as Partial<ExtractedPDFContent>;
-    } catch {
-      const text = messageContent;
-      extracted = {
-        company_name: text.match(/company_name["\s:]*([^,\n}]*)/)?.[1] ?? "Unknown",
-        industry: text.match(/industry["\s:]*([^,\n}]*)/)?.[1] ?? "B2B",
-      };
+
+    // Only process the first 5 chunks max to avoid runaway costs/timeouts on massive PDFs
+    const maxChunks = Math.min(chunks.length, 5);
+    
+    for (let i = 0; i < maxChunks; i++) {
+      const chunk = chunks[i];
+      console.log(`[PDFExtractor] 🔍 Extracting from chunk ${i+1}/${maxChunks}...`);
+      
+      const extractionPrompt = `Analyze this segment of a brand PDF and extract business details:
+
+--- SEGMENT START ---
+${chunk} 
+--- SEGMENT END ---
+
+Extract and return ONLY valid JSON:
+{
+  "company_name": "exact name",
+  "industry": "vertical",
+  "target_audience": "who they serve",
+  "main_offer": "primary service",
+  "unique_value": ["angle 1"],
+  "testimonials": [{"text": "quote", "source": "name", "impact": "result"}],
+  "case_studies": [{"title": "title", "results": "outcome"}],
+  "pricing_options": ["option 1"],
+  "tone_examples": ["sample language"],
+  "success_metrics": ["metric"],
+  "website_urls": ["url"],
+  "meeting_link": "booking URL",
+  "payment_link": "payment/invoice URL",
+  "app_link": "SaaS/app URL",
+  "contact_email": "email",
+  "contact_phone": "phone",
+  "social_links": ["urls"]
+}
+
+IMPORTANT: If data is missing in THIS segment, omit the key or return null/empty. Do NOT hallucinate.`;
+
+      const response = await generateReply(
+        "You are a structured data extraction expert for business PDFs.",
+        extractionPrompt,
+        {
+          model: MODELS.sales_reasoning,
+          jsonMode: true,
+          temperature: 0.2,
+          maxTokens: 1000,
+        }
+      );
+
+      try {
+        const chunkExtracted = JSON.parse(response.text ?? "{}");
+        extracted = mergeExtractedContent(extracted, chunkExtracted);
+      } catch (e) {
+        console.warn(`[PDFExtractor] Failed to parse JSON for chunk ${i+1}`);
+      }
     }
 
     const competitiveResearch = await researchCompetitivePosition(
@@ -130,51 +175,28 @@ Be thorough and precise.`;
     const validatePaymentLink = async (url: string | null): Promise<string | null> => {
       if (!url) return null;
       
-      // Basic URL sanity check
       try {
         new URL(url);
       } catch (e) {
-        console.warn(`[PDFExtractor] Invalid URL format rejected: ${url}`);
         return null;
       }
 
-      // 1. Stripe Validation (Simulated if key missing)
-      if (url.includes('stripe.com')) {
-        const stripeKey = process.env.STRIPE_SECRET_KEY;
-        if (stripeKey) {
-          console.log(`[PDFExtractor] Attempting Stripe API validation for ${url}...`);
-          // Placeholder for real Stripe API check if we have the key
-          // For now, fall through to browser-like fetch
-        }
-      }
-
-      // 2. Browser-like fallback validation (Headless browser proxy)
       try {
-        console.log(`[PDFExtractor] Validating payment link: ${url}`);
+        console.log(`[PDFExtractor] Validating link: ${url}`);
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
 
         const response = await fetch(url, {
           method: 'GET',
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
           },
           signal: controller.signal
         });
 
         clearTimeout(timeoutId);
-
-        if (response.ok) {
-          console.log(`[PDFExtractor] ✅ Payment link validated successfully (Status: ${response.status})`);
-          return url;
-        } else {
-          console.warn(`[PDFExtractor] ❌ Payment link returned error status (${response.status}): ${url}`);
-          return null;
-        }
-      } catch (err: any) {
-        console.error(`[PDFExtractor] ❌ Failed to validate payment link ${url}:`, err.message);
+        return response.ok ? url : null;
+      } catch (err) {
         return null;
       }
     };
@@ -195,14 +217,12 @@ Be thorough and precise.`;
       success_metrics: extracted.success_metrics ?? [],
       website_urls: extracted.website_urls ?? [],
       competitor_positioning: competitiveResearch ?? "Competitive",
-      // New link fields
       meeting_link: (extracted as any).meeting_link || null,
       payment_link: validatedPaymentLink,
       app_link: (extracted as any).app_link || null,
       contact_email: (extracted as any).contact_email || null,
       contact_phone: (extracted as any).contact_phone || null,
       social_links: (extracted as any).social_links || [],
-      // Deep research results
       market_research: deepResearch.market_research,
       competitor_analysis: deepResearch.competitor_analysis,
       industry_trends: deepResearch.industry_trends,

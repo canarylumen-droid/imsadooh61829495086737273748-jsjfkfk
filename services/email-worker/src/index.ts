@@ -134,9 +134,50 @@ app.listen(port, () => {
   console.log(`📊 Email Worker metrics/health on port ${port}`);
 });
 
+/**
+ * Watchdog — Periodically scans for dead shards or missing connections
+ * and enqueues reconnections for orphans assigned to THIS replica.
+ */
+async function watchdog() {
+  try {
+    const integrations = await storage.getActiveImapIntegrations() as any[];
+    const redis = await getRedisClient();
+    let reclaims = 0;
+
+    for (const integration of integrations) {
+      if (!isResponsibleFor(integration.id)) continue;
+
+      const isAlive = redis
+        ? Boolean(await redis.exists(IMAP_KEYS.active(integration.id)).catch(() => false))
+        : false;
+
+      if (!isAlive) {
+        // Shard is dead or connection lost -> Reclaim
+        reclaims++;
+        if (imapTaskQueue) {
+          await imapTaskQueue.add('RECLAIM_MAILBOX', {
+            type: 'CONNECT_MAILBOX',
+            integrationId: integration.id,
+            reason: 'watchdog_orphan_detected'
+          }, { priority: 2 });
+        }
+      }
+    }
+
+    if (reclaims > 0) {
+      console.log(`[Watchdog] 🐕 Reclaimed ${reclaims} orphaned mailboxes for replica ${REPLICA_ID}`);
+    }
+  } catch (err: any) {
+    console.error('[Watchdog] Scan failed:', err.message);
+  }
+}
+
 // ── Start ──────────────────────────────────────────────────────────────────────
 
-boot().catch((err) => {
+boot().then(() => {
+  // Run watchdog every 5 minutes
+  setInterval(watchdog, 5 * 60 * 1000);
+}).catch((err) => {
   console.error('[Boot] Fatal boot error:', err);
 });
 

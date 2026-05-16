@@ -299,67 +299,53 @@ router.post(
         return;
       }
 
-      // Extract brand context using AI
+      // Extract brand context using the enterprise-grade extraction engine
       let brandContext: BrandExtraction = {};
       let analysisScore = 0;
       let analysisItems: any[] = [];
 
       if (pdfText) {
         try {
-          const response = await generateReply(
-            `You are a brand analyst. Extract the following information from the brand document.
-Return a JSON object with these fields:
-- companyName: The company/brand name
-- businessDescription: What the business does (1-2 sentences)
-- industry: The industry (e.g., "coaching", "agency", "saas", "ecommerce")
-- uniqueValue: The unique value proposition
-- targetAudience: Who they help/serve
-- successStories: Array of brief success stories or testimonials
-- offer: Their main offer/service/product
-- tone: The communication tone (formal, casual, warm, professional)
-- positioning: Market positioning (premium, mid, volume)
-- objections: Common objections as key-value pairs {"objection": "response"}
-- brandLanguage: { prefer: ["words to use"], avoid: ["words to avoid"] }
-- meeting_link: calendly.com/xxx or cal.com/xxx or any booking URL found
-- payment_link: stripe payment link, paypal.me, bank details, or invoice URL
-- app_link: SaaS app URL, signup page, or download link
+          console.log(`[AdminPDF] 🔍 Triggering comprehensive extraction engine for user ${userId}...`);
+          const { extractComprehensiveContext } = await import("@services/brain-worker/src/ai-lib/context/pdf-context-extractor.js");
+          const extractionResult = await extractComprehensiveContext(pdfText);
 
-IMPORTANT: ONLY return links that are EXPLICITLY present in the document. DO NOT guess or hallucinate URLs.
-If you find multiple booking links, return the most prominent one.
-Only include fields you can confidently extract. Return valid JSON only.`,
-            `Extract brand context from this document (Look carefully for ANY booking/calendar/payment links):\n\n${pdfText.substring(0, 30000)}`,
-            {
-              model: MODELS.lead_intelligence,
-              jsonMode: true,
-              temperature: 0.3,
-              maxTokens: 2000
+          // Convert the worker result back to the BrandExtraction interface used by this route
+          brandContext = {
+            companyName: extractionResult.company_name,
+            businessDescription: extractionResult.main_offer, // Using main_offer as fallback
+            industry: extractionResult.industry,
+            uniqueValue: extractionResult.unique_value.join(", "),
+            targetAudience: extractionResult.target_audience,
+            successStories: extractionResult.testimonials.map(t => `${t.source}: ${t.text}`),
+            offer: extractionResult.main_offer,
+            tone: extractionResult.tone_examples[0] || "professional",
+            positioning: extractionResult.competitor_positioning?.includes("premium") ? "premium" : "mid",
+            objections: {}, // Will be enriched by specialized agents later
+            meeting_link: extractionResult.meeting_link || undefined,
+            payment_link: extractionResult.payment_link || undefined,
+            app_link: extractionResult.app_link || undefined
+          };
+
+          // ENHANCED ANALYSIS: Detect UVP and positioning automatically
+          try {
+            console.log("🔍 [AI] Detecting UVP and positioning from extracted context...");
+            const uvpResult = await detectUVP(brandContext);
+
+            // Merge UVP result into brand context
+            brandContext = {
+              ...brandContext,
+              uniqueValue: uvpResult.uvp || brandContext.uniqueValue,
+              positioning: uvpResult.positioning || brandContext.positioning,
+            };
+
+            // Add differentiators and "why you win" to objections or a new field
+            if (uvpResult.differentiators && uvpResult.differentiators.length > 0) {
+              brandContext.businessDescription = (brandContext.businessDescription || "") +
+                "\n\nKey Differentiators:\n- " + uvpResult.differentiators.join("\n- ");
             }
-          );
-
-          const responseText = response.text;
-          if (responseText) {
-            brandContext = JSON.parse(responseText) as BrandExtraction;
-
-            // ENHANCED ANALYSIS: Detect UVP and positioning automatically
-            try {
-              console.log("🔍 [AI] Detecting UVP and positioning from extracted context...");
-              const uvpResult = await detectUVP(brandContext);
-
-              // Merge UVP result into brand context
-              brandContext = {
-                ...brandContext,
-                uniqueValue: uvpResult.uvp || brandContext.uniqueValue,
-                positioning: uvpResult.positioning || brandContext.positioning,
-              };
-
-              // Add differentiators and "why you win" to objections or a new field
-              if (uvpResult.differentiators && uvpResult.differentiators.length > 0) {
-                brandContext.businessDescription = (brandContext.businessDescription || "") +
-                  "\n\nKey Differentiators:\n- " + uvpResult.differentiators.join("\n- ");
-              }
-            } catch (uvpError) {
-              console.warn("UVP detection failed, continuing with extracted context:", uvpError);
-            }
+          } catch (uvpError) {
+            console.warn("UVP detection failed, continuing with extracted context:", uvpError);
           }
         } catch (aiError: unknown) {
           console.warn("AI extraction failed, using regex fallback:", aiError);

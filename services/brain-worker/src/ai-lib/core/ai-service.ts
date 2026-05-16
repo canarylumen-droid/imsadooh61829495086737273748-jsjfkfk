@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { MODELS, OPENAI_INTELLIGENCE_MODEL, GENAI_STABLE_MODEL, OPENAI_FAST_MODEL, Z_AI_FAST_MODEL, LLM_FAILOVER_ORDER } from "../utils/model-config.js";
 import { storage } from '@shared/lib/storage/storage.js';
+import { openAiLimiter, geminiLimiter, zAiLimiter } from '@shared/lib/ai/rate-limiter.js';
+import { SystemHealthService } from '@shared/lib/monitoring/system-health-service.js';
 
 // Global timeout for AI requests (15 seconds) to prevent worker hangs
 const AI_TIMEOUT = 15000;
@@ -89,6 +91,15 @@ function updateProviderHealth(provider: 'openai' | 'genai' | 'zai', isSuccess: b
 
     status.cooldownUntil = Date.now() + delay;
     console.warn(`[AI Service] ⚠️ Provider ${provider} failed (${status_code || 'Network/Transient'}). Backing off for ${Math.round(delay/1000)}s. Errors: ${status.consecutiveErrors}`);
+
+    // Report to system health dashboard
+    SystemHealthService.logAiError('system', provider, 'provider_failure', error, {
+      status_code,
+      consecutive_errors: status.consecutiveErrors,
+      cooldown_ms: delay,
+      is_rate_limit: isRateLimit,
+      is_transient: isTransient
+    }).catch(() => {});
   }
 }
 
@@ -142,6 +153,7 @@ export async function embed(text: string): Promise<number[]> {
   // 1. Try OpenAI (Native 1536 dims)
   if (isProviderAvailable('openai')) {
     try {
+      await openAiLimiter.acquire(1); // Proactive rate limit
       const response = await withTimeout(openai!.embeddings.create({
         model: "text-embedding-3-small",
         input: text.replace(/\n/g, " "),
@@ -157,6 +169,7 @@ export async function embed(text: string): Promise<number[]> {
   // 2. Try GenAI (768 dims -> padded to 1536)
   if (isProviderAvailable('genai')) {
     try {
+      await geminiLimiter.acquire(1); // Proactive rate limit
       const model = genai!.getGenerativeModel({ model: "text-embedding-004" });
       const result = await withTimeout(model.embedContent(text), 5000);
       const vector = result.embedding.values || [];
@@ -262,6 +275,7 @@ export async function generateReply(
     openai: async () => {
       if (!isProviderAvailable('openai')) return null;
       try {
+        await openAiLimiter.acquire(1); // Global guardrail
         const modelName = (baseModel.startsWith('glm-') || baseModel.startsWith('gemini-')) 
           ? OPENAI_INTELLIGENCE_MODEL 
           : baseModel;
@@ -319,6 +333,7 @@ export async function generateReply(
           modelName = baseModel;
         }
         
+        await geminiLimiter.acquire(1); // Global guardrail
         const result = await tryGenerate(modelName);
         updateProviderHealth('genai', true);
         const response = await result.response;
@@ -370,7 +385,8 @@ export async function generateReply(
         let modelName = (baseModel.startsWith('gpt-') || baseModel.startsWith('gemini-'))
           ? "glm-4"
           : baseModel;
-
+        
+        await zAiLimiter.acquire(1); // Global guardrail
         const response = await tryZai(modelName);
         updateProviderHealth('zai', true);
         return {

@@ -145,7 +145,6 @@ export class CampaignQueueManager {
           dailyLimit,
         }, {
           repeat: { every: jitteredRepeatMs },
-          jobId: jobKey.replace(/:/g, '-'),
           priority: 2
         });
       } else {
@@ -670,7 +669,27 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
     .orderBy(campaignLeads.nextActionAt)
     .limit(5); // Fetch up to 5 so a timezone-blocked lead doesn't stall the whole mailbox
 
-  if (nextLeadResult.length === 0) return; // No more leads for this mailbox
+  if (nextLeadResult.length === 0) {
+    // BUG X8 FIX: Check if the entire campaign is terminal
+    const pendingLeads = await db.select({ id: campaignLeads.id })
+      .from(campaignLeads)
+      .where(and(
+        eq(campaignLeads.campaignId, campaignId),
+        or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
+      ))
+      .limit(1);
+
+    if (pendingLeads.length === 0) {
+      console.log(`[CampaignWorker] 🎉 Campaign ${campaignId} has no more pending leads. Marking as completed.`);
+      await db.update(outreachCampaigns)
+        .set({ status: 'completed' })
+        .where(eq(outreachCampaigns.id, campaignId));
+      
+      // Stop the repeatable jobs
+      await campaignQueueManager.pauseCampaign(campaignId);
+    }
+    return;
+  }
 
   // BUG #10 FIX: Iterate up to 5 leads so a timezone-gated lead
   // doesn't stall the entire mailbox queue.

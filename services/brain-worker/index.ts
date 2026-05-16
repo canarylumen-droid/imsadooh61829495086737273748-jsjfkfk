@@ -1,21 +1,5 @@
 /**
  * ─── SERVICE: AI AGENT ────────────────────────────────────────────────────────
- *
- * Entry point for Railway worker: start:worker:ai
- *
- * Responsibilities:
- *  - Lead enrichment (Google search + Gemini synthesis)
- *  - Autonomous closing conversations
- *  - Post-mortem deal analysis
- *  - Cold re-engagement campaigns
- *  - Follow-up queue processing
- *  - Video comment monitoring + AI replies
- *  - AI budget monitoring
- *  - Objection intelligence extraction (every 4h across all users)
- *
- * If this service crashes, emails keep syncing and the API keeps serving.
- * Jobs stay in Redis and are retried when this service recovers.
- * ─────────────────────────────────────────────────────────────────────────────
  */
 
 import '@services/api-gateway/src/core/bootstrap.js';
@@ -27,23 +11,39 @@ import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
 import { db } from '@shared/lib/db/db.js';
-import { users } from '@audnix/shared';
+import { users, notifications } from '@audnix/shared';
 
 const log = createLogger('AI-AGENT');
+
+/**
+ * Enterprise DLQ Reporter
+ * Automatically notifies the Admin Panel when a critical job fails permanently.
+ */
+async function reportPermanentFailure(job: Job, err: Error) {
+  const { type, userId, leadId } = job.data;
+  log.error(`[DLQ] Job ${job.id} failed permanently:`, { type, error: err.message });
+
+  if (userId) {
+    await db.insert(notifications).values({
+      userId,
+      type: 'webhook_error',
+      title: 'Critical Job Failed 🚨',
+      message: `System failed to process ${type} for lead ${leadId || 'unknown'}. Manual review recommended.`,
+      metadata: { jobId: job.id, type, error: err.message, leadId }
+    }).catch(e => log.error('Failed to log DLQ notification', e));
+  }
+}
 
 async function startAIService() {
   log.info('🤖 AI Agent Service starting...');
 
   startWorkerHealthServer('ai-agent', parseInt(process.env.AI_WORKER_PORT || process.env.PORT || '8082', 10));
 
-  if (!process.env.GEMINI_API_KEY) {
-    log.warn('⚠️ GEMINI_API_KEY not set — AI features will degrade gracefully');
-  }
-
   // ── Register workers ──────────────────────────────────────────────────────
   [
     'Lead Enrichment', 'Autonomous Closing', 'Cold Re-engagement',
     'Follow-up', 'Post-mortem', 'Video Comment', 'AI Budget Monitor',
+    'Fathom Processing', 'Calendly Processing', 'Billing Dispatch'
   ].forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorker = async (name: string, startFn: () => any) => {
@@ -58,7 +58,7 @@ async function startAIService() {
     }
   };
 
-  // ── Load all AI workers from lib/ ─────────────────────────────────────────
+  // ── Load all AI workers ───────────────────────────────────────────────────
   const [
     { leadEnrichmentWorker },
     { closingWorker },
@@ -67,8 +67,8 @@ async function startAIService() {
     { followUpWorker },
     { startVideoCommentMonitoring },
     { aiBudgetWorker },
-    { objectionService },
     { ragWorker },
+    { checkoutWorker },
   ] = await Promise.all([
     import('./workers/lead-enrichment-worker.js'),
     import('./workers/closing-worker.js'),
@@ -77,8 +77,8 @@ async function startAIService() {
     import('@services/brain-worker/src/ai-lib/core/follow-up-worker.js'),
     import('@services/brain-worker/src/ai-lib/specialized/video-comment-monitor.js'),
     import('./workers/ai-budget-worker.js'),
-    import('@services/brain-worker/src/ai-lib/analyzers/objection-service.js'),
     import('./workers/rag-worker.js'),
+    import('@services/billing-service/src/billing/workers/checkout-worker.js'),
   ]);
 
   await startWorker('Lead Enrichment',    () => leadEnrichmentWorker.start());
@@ -87,111 +87,61 @@ async function startAIService() {
   await startWorker('Follow-up',          () => followUpWorker.start());
   await startWorker('Video Comment',      () => startVideoCommentMonitoring());
   await startWorker('AI Budget Monitor',  () => aiBudgetWorker.start());
-  await startWorker('RAG Search Engine',  () => { /* RagWorker starts automatically on import */ });
+  await startWorker('Billing Dispatch',   () => checkoutWorker.start());
 
-  // Post-mortem: run now, then hourly
-  postMortemWorker.tick();
-  setInterval(() => postMortemWorker.tick(), 60 * 60 * 1000);
+  let fathomWorker: Worker | null = null;
+  let calendlyWorker: Worker | null = null;
+  let billingWorker: Worker | null = null;
 
-  // Objection intelligence: sweep all active campaigns every 4 hours
-  const { processObjectionLoop } = await import('@services/brain-worker/src/ai-lib/engines/objection-loop.js');
-  
-  // Initial run after startup
-  setTimeout(() => processObjectionLoop().catch(e => log.warn('Initial objection loop failed', { error: e.message })), 30000);
-
-  setInterval(async () => {
-    try {
-      await processObjectionLoop();
-      log.info('Global objection loop complete');
-    } catch (e: any) {
-      log.warn('Objection loop error', { error: e?.message });
-    }
-  }, 4 * 60 * 60 * 1000);
-
-  // ── [HARDENING] System 11: Pulse Sweep & Strategy Distillation ──────────────────
-  // These were moved from local setInterval (which is volatile) to BullMQ (which is persistent).
-  // The persistent trigger is registered in shared/lib/queues/outreach-queue.ts
-  // The execution logic is handled in the 'pulse-sweep' and 'distill-patterns' cases below.
-
-  // Strategy distillation and Pulse Sweeps are now handled via persistent BullMQ jobs 
-  // registered in outreach-queue.ts or scheduled via the dashboard.
-
-  // ── AI Provider smoke test ────────────────────────────────────────────────
-  try {
-    const { getAIStatus } = await import('@services/brain-worker/src/ai-lib/core/ai-service.js');
-    const s = getAIStatus();
-    log.info('AI Engine online', { provider: s.activeProvider });
-  } catch (e: any) {
-    log.warn('AI smoke test skipped', { error: e?.message });
-  }
-
-  // ── BullMQ Worker — handles queue-dispatched AI jobs ─────────────────────
   if (hasRedis && redisConnection) {
-    const bullWorker = new Worker(
-      'audnix-ai-processing',
-      async (job: Job) => {
-        const { type, userId, leadId, data } = job.data;
-        log.info('Processing job', { type, userId, leadId, jobId: job.id });
-
-        if (quotaService.isRestricted()) throw new Error('DB quota restricted — will retry');
-
-        switch (type) {
-          case 'enrich-lead':
-            await leadEnrichmentWorker.enrichLead({ id: leadId, userId, ...data });
-            break;
-          case 'timezone-enrichment':
-            const { timezoneEnrichmentWorker } = await import('./workers/timezone-enrichment-worker.js');
-            await timezoneEnrichmentWorker.enrichLead({ leadId, userId, ...data });
-            break;
-          case 'post-mortem-tick':
-            await postMortemWorker.tick();
-            break;
-
-          case 'objection-scan':
-            await processObjectionLoop();
-            break;
-          case 'distill-patterns':
-            const { learningWorker: lw } = await import('./workers/learning-worker.js');
-            await lw.processRawEpisodes(); 
-            await lw.distillGlobalPatterns();
-            break;
-          case 'pulse-sweep':
-            const { AIObserver } = await import('./src/ai-lib/engines/ai-observer.js');
-            const allUsers = await db.select({ id: users.id }).from(users);
-            for (const u of allUsers) {
-               await AIObserver.survey(u.id).catch(e => log.error(`Pulse Sweep failed for ${u.id}`, { error: e.message }));
-            }
-            log.info('Global Pulse Sweep complete');
-            break;
-          case 'process-followup-queue':
-            await followUpWorker.processQueue();
-            break;
-          default:
-            log.warn('Unknown AI job type', { type });
-        }
-      },
-      {
-        connection: redisConnection as any,
-        concurrency: 3, // AI jobs are expensive — hard cap
-        removeOnComplete: { count: 200 },
-        removeOnFail: { count: 500 },
-      } as any
+    // ── Fathom Meeting Worker ───────────────────────────────────────────────
+    const { processFathomWebhook } = await import('@services/brain-worker/src/ai-lib/specialized/fathom-integration.js');
+    fathomWorker = new Worker(
+      'fathom-processing',
+      async (job: Job) => { await processFathomWebhook(job.data); },
+      { connection: redisConnection as any, concurrency: 5 }
     );
+    fathomWorker.on('failed', (job, err) => {
+      if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
+    });
 
-    bullWorker.on('completed', job => log.info('Job done', { jobId: job.id, type: job.data.type }));
-    bullWorker.on('failed',    (job, err) => log.error('Job failed', { jobId: job?.id, error: err.message }));
+    // ── Calendly Booking Worker ─────────────────────────────────────────────
+    const { processCalendlyWebhook } = await import('@services/brain-worker/src/ai-lib/specialized/calendly-integration.js');
+    calendlyWorker = new Worker(
+      'calendly-processing',
+      async (job: Job) => { await processCalendlyWebhook(job.data); },
+      { connection: redisConnection as any, concurrency: 10 }
+    );
+    calendlyWorker.on('failed', (job, err) => {
+      if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
+    });
 
-    log.info('✅ BullMQ AI worker listening on [audnix-ai-processing]');
+    // ── Billing / Checkout Worker ───────────────────────────────────────────
+    billingWorker = new Worker(
+      'audnix-billing',
+      async (job: Job) => {
+        const { type, paymentId } = job.data;
+        if (type === 'pending-payment' && paymentId) await checkoutWorker.processPendingPayment(paymentId);
+      },
+      { connection: redisConnection as any, concurrency: 5 }
+    );
+    billingWorker.on('failed', (job, err) => {
+      if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
+    });
+
+    log.info('✅ Enterprise Webhook & Billing workers fully listening with DLQ monitoring');
   }
 
-  // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down AI Agent service...`);
     try { leadEnrichmentWorker.stop(); } catch (_e) {}
     try { reEngagementWorker.stop(); }   catch (_e) {}
     try { followUpWorker.stop(); }       catch (_e) {}
     try { ragWorker.stop(); }           catch (_e) {}
-    setTimeout(() => process.exit(0), 5000);
+    if (fathomWorker) await fathomWorker.close().catch(() => {});
+    if (calendlyWorker) await calendlyWorker.close().catch(() => {});
+    if (billingWorker) await billingWorker.close().catch(() => {});
+    process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));
@@ -203,5 +153,3 @@ startAIService().catch(err => {
   console.error('[AI-AGENT] Fatal startup error:', err);
   process.exit(1);
 });
-
-

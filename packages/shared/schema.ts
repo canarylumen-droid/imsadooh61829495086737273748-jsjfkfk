@@ -1603,3 +1603,31 @@ export const memoryEpisodesSelect = createSelectSchema(memoryEpisodes);
 export const memoryEpisodesInsert = createInsertSchema(memoryEpisodes);
 export const agentSkillsSelect = createSelectSchema(agentSkills);
 export const agentSkillsInsert = createInsertSchema(agentSkills);
+
+export const systemHealthLogs = pgTable("system_health_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  service: text("service").notNull(), // "ai", "email", "rag", "billing", "storage"
+  level: text("level", { enum: ["info", "warn", "error", "critical"] }).notNull().default("info"),
+  event: text("event").notNull(),
+  message: text("message").notNull(),
+  details: jsonb("details").$type<Record<string, any>>().default(sql`'{}'::jsonb`),
+  stackTrace: text("stack_trace"),
+  durationMs: integer("duration_ms"),
+  provider: text("provider"), // e.g. "openai", "gmail", "elevenlabs"
+  isResolved: boolean("is_resolved").notNull().default(false),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => {
+  return {
+    healthServiceIdx: index("health_service_idx").on(table.service),
+    healthLevelIdx: index("health_level_idx").on(table.level),
+    healthCreatedAtIdx: index("health_created_at_idx").on(table.createdAt),
+    healthUserIdIdx: index("health_user_id_idx").on(table.userId),
+  };
+});
+
+export const systemHealthLogsSelect = createSelectSchema(systemHealthLogs);
+export const systemHealthLogsInsert = createInsertSchema(systemHealthLogs);
+export type SystemHealthLog = z.infer<typeof systemHealthLogsSelect>;
+export type InsertSystemHealthLog = z.infer<typeof systemHealthLogsInsert>;
