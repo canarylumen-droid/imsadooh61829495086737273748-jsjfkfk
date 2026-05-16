@@ -127,13 +127,9 @@ export class CampaignQueueManager {
 
     console.log(`[CampaignQueue] 🚀 Starting campaign "${campaign.name}" with ${mailboxIds.length} mailbox(es)`);
 
-    // Create a repeatable send-batch job for EACH mailbox independently
+    // Initial send-batch job for EACH mailbox (one-shot, will reschedule itself)
     for (const mbId of mailboxIds) {
       const dailyLimit = mailboxLimits[mbId] || 50;
-      
-      // Heartbeat: Run every 5 minutes to check for leads in their PRIME window.
-      // This high frequency allows the worker to be lead-aware rather than linearly spaced.
-      const jitteredRepeatMs = 300_000 + Math.floor(Math.random() * 60_000); 
       const jobKey = `send-batch_${campaign.id}_${mbId}`;
 
       if (campaignQueue) {
@@ -144,8 +140,9 @@ export class CampaignQueueManager {
           integrationId: mbId,
           dailyLimit,
         }, {
-          repeat: { every: jitteredRepeatMs },
-          priority: 2
+          delay: 5000, // Start in 5s
+          priority: 2,
+          jobId: jobKey
         });
       } else {
         // [FALLBACK] No Redis — Start a local setInterval loop
@@ -162,9 +159,9 @@ export class CampaignQueueManager {
           } catch (err) {
             console.error(`[CampaignFallback] Batch failed for ${mbId}:`, err);
           }
-        }, jitteredRepeatMs);
+        }, 300_000); // Fallback still uses 5min polling
         this.fallbackIntervals.set(jobKey, interval);
-        console.log(`[CampaignFallback] ⚡ Interval started for ${mbId} (${Math.round(jitteredRepeatMs/60000)}m)`);
+        console.log(`[CampaignFallback] ⚡ Interval started for ${mbId} (5m)`);
       }
     }
 
@@ -181,15 +178,12 @@ export class CampaignQueueManager {
       });
     }
 
-    // Stats aggregation job (every 30s)
-    await campaignQueue.add(`stats:${campaign.id}`, {
+    // Trigger initial stats update immediately
+    await processStatsUpdate({
       type: 'campaign:update-stats',
       campaignId: campaign.id,
       userId: campaign.userId,
-    }, {
-      repeat: { every: 60_000 }, // Reduced from 30s to 60s for DB sanity
-      jobId: `stats-${campaign.id}`,
-    });
+    }).catch(() => {});
 
     console.log(`[CampaignQueue] ✅ Campaign "${campaign.name}" fully registered`);
   }
@@ -670,23 +664,42 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
     .limit(5); // Fetch up to 5 so a timezone-blocked lead doesn't stall the whole mailbox
 
   if (nextLeadResult.length === 0) {
-    // BUG X8 FIX: Check if the entire campaign is terminal
-    const pendingLeads = await db.select({ id: campaignLeads.id })
+    // Precise Scheduling: Find the soonest lead in the future for this mailbox
+    const soonestLeadResult = await db.select({ nextActionAt: campaignLeads.nextActionAt })
       .from(campaignLeads)
       .where(and(
         eq(campaignLeads.campaignId, campaignId),
-        or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
+        eq(campaignLeads.integrationId, integrationId),
+        or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued')),
+        gt(campaignLeads.nextActionAt, new Date())
       ))
+      .orderBy(campaignLeads.nextActionAt)
       .limit(1);
 
-    if (pendingLeads.length === 0) {
-      console.log(`[CampaignWorker] 🎉 Campaign ${campaignId} has no more pending leads. Marking as completed.`);
-      await db.update(outreachCampaigns)
-        .set({ status: 'completed' })
-        .where(eq(outreachCampaigns.id, campaignId));
-      
-      // Stop the repeatable jobs
-      await campaignQueueManager.pauseCampaign(campaignId);
+    if (soonestLeadResult.length > 0 && campaignQueue) {
+      const delay = Math.max(60000, new Date(soonestLeadResult[0].nextActionAt!).getTime() - Date.now());
+      const jobKey = `send-batch_${campaignId}_${integrationId}`;
+      await campaignQueue.add(jobKey, data, { delay, jobId: jobKey, priority: 2 });
+      console.log(`[CampaignQueue] 😴 No leads ready. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(delay/60000)}m`);
+    } else {
+      // BUG X8 FIX: Check if the entire campaign is terminal
+      const pendingLeads = await db.select({ id: campaignLeads.id })
+        .from(campaignLeads)
+        .where(and(
+          eq(campaignLeads.campaignId, campaignId),
+          or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
+        ))
+        .limit(1);
+
+      if (pendingLeads.length === 0) {
+        console.log(`[CampaignWorker] 🎉 Campaign ${campaignId} has no more pending leads. Marking as completed.`);
+        await db.update(outreachCampaigns)
+          .set({ status: 'completed' })
+          .where(eq(outreachCampaigns.id, campaignId));
+        
+        // Stop the repeatable jobs
+        await campaignQueueManager.pauseCampaign(campaignId);
+      }
     }
     return;
   }
@@ -694,148 +707,119 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   // BUG #10 FIX: Iterate up to 5 leads so a timezone-gated lead
   // doesn't stall the entire mailbox queue.
   for (const row of nextLeadResult) {
-  const leadEntry = (row as any).campaignLead;
-  const lead = (row as any).lead;
+    const leadEntry = (row as any).campaignLead;
+    const lead = (row as any).lead;
 
-  if (!lead?.email) continue;
+    if (!lead?.email) continue;
 
-  // Claim the lead for this mailbox (assign integrationId)
-  if (!leadEntry.integrationId || leadEntry.status === 'queued') {
-    await db.update(campaignLeads)
-      .set({ integrationId, status: 'pending' })
-      .where(eq(campaignLeads.id, leadEntry.id));
-  }
-
-  // --- PHASE 50: INTELLIGENT SCHEDULING GATE ---
-  const tzProfile = await getLeadProfile(lead.id);
-  const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
-  
-  if (tzProfile && !isActivelyEngaged) {
-    const probability = await getOptimalSendProbability(new Date(), tzProfile, userId);
-    
-    // Dice Roll: If probability is low (e.g. 0.2), we only send 20% of the time.
-    // This naturally spreads leads across the day and clusters them in PEAK hours (prob=1.0).
-    const diceRoll = Math.random();
-    
-    if (probability === 0) {
-      console.log(`[CampaignWorker] 😴 Lead ${lead.id.slice(-8)} is outside business window. Rescheduling.`);
-      const nextCheck = new Date(Date.now() + 60 * 60 * 1000);
+    // Claim the lead for this mailbox (assign integrationId)
+    if (!leadEntry.integrationId || leadEntry.status === 'queued') {
       await db.update(campaignLeads)
-        .set({ nextActionAt: nextCheck, status: 'queued' })
+        .set({ integrationId, status: 'pending' })
         .where(eq(campaignLeads.id, leadEntry.id));
-      continue; 
     }
 
-    if (diceRoll > probability) {
-      console.log(`[CampaignWorker] 🎲 Dice roll (${diceRoll.toFixed(2)}) > Prob (${probability}) for lead ${lead.id.slice(-8)}. Yielding to next heartbeat.`);
-      // Delay by 15-30 mins to try again later in the same business day
-      const retryAt = new Date(Date.now() + (15 + Math.random() * 15) * 60 * 1000);
-      await db.update(campaignLeads)
-        .set({ nextActionAt: retryAt, status: 'queued' })
-        .where(eq(campaignLeads.id, leadEntry.id));
+    // --- PHASE 50: INTELLIGENT SCHEDULING GATE ---
+    const tzProfile = await getLeadProfile(lead.id);
+    const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
+    
+    if (tzProfile && !isActivelyEngaged) {
+      const probability = await getOptimalSendProbability(new Date(), tzProfile, userId);
+      
+      if (probability === 0) {
+        console.log(`[CampaignWorker] 😴 Lead ${lead.id.slice(-8)} is outside business window. Rescheduling.`);
+        const nextCheck = new Date(Date.now() + 60 * 60 * 1000);
+        await db.update(campaignLeads)
+          .set({ nextActionAt: nextCheck, status: 'queued' })
+          .where(eq(campaignLeads.id, leadEntry.id));
+        continue; 
+      }
+
+      const diceRoll = Math.random();
+      if (diceRoll > probability) {
+        console.log(`[CampaignWorker] 🎲 Dice roll (${diceRoll.toFixed(2)}) > Prob (${probability}) for lead ${lead.id.slice(-8)}. Yielding.`);
+        const retryAt = new Date(Date.now() + (15 + Math.random() * 15) * 60 * 1000);
+        await db.update(campaignLeads)
+          .set({ nextActionAt: retryAt, status: 'queued' })
+          .where(eq(campaignLeads.id, leadEntry.id));
+        continue;
+      }
+    }
+
+    // 7. FAULT-TOLERANT SEND
+    try {
+      if (lead.channel === 'instagram') {
+        await deliverCampaignInstagram(userId, campaign, lead, leadEntry, integrationId);
+      } else {
+        await deliverCampaignEmail(userId, campaign, lead, leadEntry, integrationId);
+      }
+      
+      await resetCampaignFailureCount(campaignId);
+      await db!.update(integrations).set({ failureCount: 0 }).where(eq(integrations.id, integrationId));
+      
+      // Event-Based Stats Update
+      await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
+      
+    } catch (sendError: any) {
+      const errorMsg = sendError.message || 'Unknown send error';
+      console.error(`[CampaignWorker] ❌ Send failed for ${lead.email} via ${integrationId}: ${errorMsg}`);
+
+      const isTransient = mailboxHealthService.isTransientNetworkError(errorMsg);
+      const metadata = { ...(leadEntry.metadata as Record<string, any> || {}) };
+      const failCount = (metadata.failCount || 0) + 1;
+      metadata.failCount = failCount;
+      metadata.lastError = errorMsg;
+
+      if (failCount >= 3) {
+        await db.update(campaignLeads)
+          .set({ status: 'failed', error: `Max failures (3): ${errorMsg}`, metadata })
+          .where(eq(campaignLeads.id, leadEntry.id));
+        continue;
+      }
+
+      if (isTransient || mailboxHealthService.isMailboxError(errorMsg)) {
+        if (!isTransient) {
+          const integration = await storage.getIntegrationById(integrationId);
+          if (integration) await mailboxHealthService.handleMailboxFailure(integration, errorMsg);
+        }
+        await db.update(campaignLeads)
+          .set({ integrationId: null, status: 'queued', error: errorMsg, metadata })
+          .where(eq(campaignLeads.id, leadEntry.id));
+      } else {
+        await db.update(campaignLeads)
+          .set({ status: 'failed', error: errorMsg, metadata })
+          .where(eq(campaignLeads.id, leadEntry.id));
+      }
       continue;
     }
 
-    console.log(`[CampaignWorker] 🎯 Target Lock: Sending lead ${lead.id.slice(-8)} (Prob: ${probability})`);
-  }
-
-
-  // 7. FAULT-TOLERANT SEND: Wrap in try/catch to handle mailbox errors
-  try {
-    if (lead.channel === 'instagram') {
-      await deliverCampaignInstagram(userId, campaign, lead, leadEntry, integrationId);
-    } else {
-      await deliverCampaignEmail(userId, campaign, lead, leadEntry, integrationId);
-    }
-    
-    // Success: Reset failure counts if any
-    await resetCampaignFailureCount(campaignId);
-    await db!.update(integrations).set({ failureCount: 0 }).where(eq(integrations.id, integrationId));
-    
-  } catch (sendError: any) {
-    const errorMsg = sendError.message || 'Unknown send error';
-    console.error(`[CampaignWorker] ❌ Send failed for ${lead.email} via ${integrationId}: ${errorMsg}`);
-
-    // BUG #6 FIX: Distinguish transient network errors from fatal mailbox failures.
-    // Transient errors (ETIMEDOUT, ECONNRESET, etc.) should only re-queue the lead.
-    // Fatal errors (bad credentials, EAUTH) should trigger handleMailboxFailure.
-    const isTransient = mailboxHealthService.isTransientNetworkError(errorMsg);
-
-    // Phase 19: Dead-Lead Circuit Breaker
-    const metadata = { ...(leadEntry.metadata as Record<string, any> || {}) };
-    const failCount = (metadata.failCount || 0) + 1;
-    metadata.failCount = failCount;
-    metadata.lastError = errorMsg;
-
-    if (failCount >= 3) {
-      console.error(`[CampaignWorker] 🛑 Lead ${lead.email} reached max failure threshold (3). Killing lead.`);
-      await db.update(campaignLeads)
-        .set({ status: 'failed', error: `Max failures (3) exceeded: ${errorMsg}`, metadata })
-        .where(eq(campaignLeads.id, leadEntry.id));
-      continue; // next lead in batch
-    }
-
-    if (isTransient || mailboxHealthService.isMailboxError(errorMsg)) {
-      if (!isTransient) {
-        // Only trigger mailbox health failure for auth/credential errors, not network blips
-        const integration = integrationId ? await storage.getIntegrationById(integrationId) : null;
-        if (integration) {
-          await mailboxHealthService.handleMailboxFailure(integration, errorMsg);
-        }
+    // Schedule follow-up if there's a next step
+    const followupsArr = (campaign.template as any)?.followups || [];
+    const nextStep = leadEntry.currentStep + 1;
+    if (nextStep <= followupsArr.length) {
+      const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
+      let delayMs = delayDays * 24 * 60 * 60 * 1000;
+      const initialSentAt = leadEntry.metadata?.initialSentAt;
+      if (initialSentAt) {
+        const targetDate = new Date(initialSentAt);
+        targetDate.setDate(targetDate.getDate() + delayDays);
+        delayMs = Math.max(60000, targetDate.getTime() - Date.now());
       }
-
-      // Re-queue the lead so another mailbox can pick it up
-      await db.update(campaignLeads)
-        .set({ integrationId: null, status: 'queued', error: errorMsg, metadata })
-        .where(eq(campaignLeads.id, leadEntry.id));
-
-      console.warn(`[CampaignWorker] 🔄 Lead ${lead.email} re-queued after ${isTransient ? 'transient network' : 'mailbox'} failure (Attempt ${failCount}/3)`);
-    } else {
-      // Non-mailbox error (e.g. invalid recipient) — mark lead as failed
-      await db.update(campaignLeads)
-        .set({ status: 'failed', error: errorMsg, metadata })
-        .where(eq(campaignLeads.id, leadEntry.id));
-    }
-    continue; // Don't schedule follow-ups on failure
-  }
-
-  // 8. Schedule follow-up if there's a next step
-  const followupsArr = (campaign.template as any)?.followups || [];
-  const nextStep = leadEntry.currentStep + 1;
-  const hasMore = nextStep <= followupsArr.length;
-
-  if (hasMore) {
-    const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
-    let delayMs = delayDays * 24 * 60 * 60 * 1000;
-
-    // Relative scheduling: Calculate delay from initialSentAt if available
-    const initialSentAt = leadEntry.metadata?.initialSentAt;
-    if (initialSentAt) {
-      const targetDate = new Date(initialSentAt);
-      targetDate.setDate(targetDate.getDate() + delayDays);
-      delayMs = Math.max(60000, targetDate.getTime() - Date.now()); // Ensure at least 1m delay
+      await campaignQueueManager.scheduleFollowUp(campaignId, userId, leadEntry.id, integrationId, nextStep, delayMs);
     }
 
-    await campaignQueueManager.scheduleFollowUp(
-      campaignId,
-      userId,
-      leadEntry.id,
-      integrationId,
-      nextStep,
-      delayMs
-    );
+    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
+    
+    // Reschedule the mailbox for the next send
+    if (campaignQueue) {
+      const jobKey = `send-batch_${campaignId}_${integrationId}`;
+      const nextDelay = calcMailboxInterval(sentToday + 1, dailyLimit, currentIntegration);
+      await campaignQueue.add(jobKey, data, { delay: nextDelay, jobId: jobKey, priority: 2 });
+      console.log(`[CampaignQueue] 🎯 Sent lead. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(nextDelay/60000)}m`);
+    }
+
+    break; // Only one send per batch cycle to respect pacing
   }
-
-  // 9. Real-time KPI push
-  wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
-  wsSync.notifyCampaignStatsUpdated(userId, campaignId);
-  wsSync.notifyStatsUpdated(userId);
-
-  // HEARTBEAT SEND CAP: Send at most 1 lead per 5-min heartbeat cycle.
-  // The loop fetches multiple leads so timezone-gated ones can be rescheduled,
-  // but we break after the first successful send to respect distributed pacing.
-  break;
-  } // end for-loop (Bug #10 fix)
 }
 
 /**
@@ -980,8 +964,7 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
 
     // 8. Real-time KPI push
     wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'followup_sent' });
-    wsSync.notifyCampaignStatsUpdated(userId, campaignId);
-    wsSync.notifyStatsUpdated(userId);
+    await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
   } catch (err: any) {
     const errorMsg = err.message || 'Follow-up send failed';
     console.error(`[CampaignWorker] ❌ Follow-up failed for ${lead.email}: ${errorMsg}`);
@@ -1156,12 +1139,7 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     .where(eq(campaignLeads.id, campaignLeadId));
 
   // Stats
-  await db.update(outreachCampaigns)
-    .set({
-      stats: sql`jsonb_set(stats, '{sent}', (COALESCE((stats->>'sent')::int, 0) + 1)::text::jsonb)`,
-      updatedAt: new Date()
-    })
-    .where(eq(outreachCampaigns.id, campaignId));
+  await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
 
   wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'auto_reply_sent' });
   wsSync.notifyCampaignStatsUpdated(userId, campaignId);

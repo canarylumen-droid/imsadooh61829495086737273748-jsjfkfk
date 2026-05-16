@@ -32,6 +32,8 @@ import { objectionService } from '../analyzers/objection-service.js';
 import { searchSimilarChunks } from '../context/vector-rpc.js';
 import { videoMonitors } from '@audnix/shared';
 import { HallucinationGuard } from './hallucination-guard.js';
+import { handleLanguageDetection, localizeAndOptimize } from '../utils/language-util.js';
+import { handleObjection } from '../utils/objection-handler.js';
 
 const isDemoMode = false;
 const PROMPT_VERSION = 'v1.2.0-resilience';
@@ -259,8 +261,38 @@ export async function generateAIReply(
   }
 
   const personaId = (lead.metadata as any)?.personaId;
-  const brandContext = await getBrandContext(lead.userId, personaId);
-  const user = await storage.getUserById(lead.userId);
+  const lastLeadMessage = conversationHistory.filter(m => m.direction === 'inbound').pop();
+
+  // ─── PARALLEL CONTEXT GATHERING (Phase 2) ────────────────────────────────
+  const [
+    brandContext,
+    user,
+    memoryResult,
+    memoryMessages,
+    styleMarkers,
+    ragChunks,
+    intent,
+    leadTzProfile
+  ] = await Promise.all([
+    getBrandContext(lead.userId, personaId),
+    storage.getUserById(lead.userId),
+    retrieveConversationMemory(lead.userId, lead.id),
+    getConversationContext(lead.userId, lead.id),
+    getStyleMarkers(lead.userId),
+    lastLeadMessage ? searchSimilarChunks(lastLeadMessage.body, lead.userId, 4).catch(() => []) : Promise.resolve([]),
+    lastLeadMessage ? analyzeLeadIntent(lastLeadMessage.body, {
+      id: lead.id,
+      name: lead.name || "Lead",
+      channel: lead.channel,
+      status: lead.status,
+      tags: lead.tags || []
+    }) : Promise.resolve(null),
+    getLeadProfile(lead.id).catch(() => null)
+  ]);
+
+  // --- DEDUPLICATION CONTEXT ---
+  const lastOutbound = conversationHistory.filter(m => m.direction === 'outbound').pop();
+  const lastOutboundBody = lastOutbound?.body || "";
 
   // ─── BOOKED LEAD HARD-BLOCK ───────────────────────────────────────────────
   // Booked leads receive ZERO AI messages — only reminders (handled by meeting-reminder-worker)
@@ -280,37 +312,13 @@ export async function generateAIReply(
   const isWarm = assessLeadWarmth(conversationHistory, lead);
   const detectionResult = detectConversationStatus(conversationHistory);
 
-  const memoryResult: MemoryRetrievalResult = await retrieveConversationMemory(lead.userId, lead.id);
-  const memoryMessages = await getConversationContext(lead.userId, lead.id);
   const allMessages = [...memoryMessages, ...conversationHistory];
-  const lastLeadMessage = conversationHistory.filter(m => m.direction === 'inbound').pop();
 
-  // --- SMART INTENT & EMOTION ANALYSIS ---
-  const intent: IntentAnalysis | null = lastLeadMessage
-    ? await analyzeLeadIntent(lastLeadMessage.body, {
-      id: lead.id,
-      name: lead.name || "Lead",
-      channel: lead.channel,
-      status: lead.status,
-      tags: lead.tags || []
-    })
-    : null;
-    
   // --- BRAND RAG (Semantic Retrieval) ---
   let ragContext = "";
-  if (lastLeadMessage) {
-    try {
-      const relevantChunks = await searchSimilarChunks(lastLeadMessage.body, lead.userId, 4);
-      if (relevantChunks.length > 0) {
-        ragContext = `[RELEVANT BRAND KNOWLEDGE]:\n${relevantChunks.map(c => `- ${c.content}`).join('\n')}`;
-      }
-    } catch (ragError) {
-      console.warn("[ConversationAI] RAG search failed:", ragError);
-    }
+  if (ragChunks.length > 0) {
+    ragContext = `[RELEVANT BRAND KNOWLEDGE]:\n${ragChunks.map(c => `- ${c.content}`).join('\n')}`;
   }
-
-  // --- STYLE LEARNING ---
-  const styleMarkers = await getStyleMarkers(lead.userId);
 
   // --- [STRATEGY] PROCEDURAL MEMORY INJECTION ---
   let dynamicStrategySupplement = '';
@@ -319,7 +327,11 @@ export async function generateAIReply(
   
   if (campaignId) {
     try {
-      const campaign = await storage.getOutreachCampaign(campaignId);
+      const [campaign, leadMem] = await Promise.all([
+        storage.getOutreachCampaign(campaignId),
+        storage.getCampaignLeadProceduralMemory(campaignId, lead.id)
+      ]);
+
       if (campaign?.proceduralMemory) {
         const campMem = campaign.proceduralMemory as any;
         if (campMem.dynamicStrategySupplement) {
@@ -327,7 +339,6 @@ export async function generateAIReply(
         }
       }
       
-      const leadMem = await storage.getCampaignLeadProceduralMemory(campaignId, lead.id);
       leadProceduralMemory = leadMem?.strategy || (typeof leadMem === 'string' ? leadMem : '');
     } catch (memErr) {
       console.warn("[ConversationAI] Failed to fetch procedural memory:", memErr);
@@ -339,16 +350,11 @@ export async function generateAIReply(
   const winningPlaybook = objectionService.formatPlaybookForPrompt(lead.userId);
 
   if (intent?.hasObjection || intent?.isNegative) {
-    const bestHandle = objectionService.getBestHandle(lead.userId, lastLeadMessage?.body || "");
-    console.log(`🛡️ Objection detected for lead ${lead.id}. Triggering closer logic.`);
-    const objectionResponse = await generateAutonomousObjectionResponse(lastLeadMessage?.body || "", {
+    const objectionResponse = await handleObjection(lastLeadMessage?.body || "", {
       userId: lead.userId,
       leadName: lead.name || "there",
       leadIndustry: (lead.metadata?.industry as string) || "general",
-      previousMessages: allMessages.slice(-5).map(m => ({
-        role: m.direction === 'inbound' ? 'user' : 'assistant',
-        content: m.body
-      })),
+      previousMessages: allMessages,
       brandName: (brandContext as any)?.businessName || "Our platform",
       userIndustry: (brandContext as any)?.industry || "all"
     });
@@ -412,7 +418,6 @@ export async function generateAIReply(
   const CONTEXT_TOKEN_BUDGET = 3000;
   
   // ─── NICHE + TIMEZONE INTELLIGENCE ───────────────────────────────────────
-  const leadTzProfile = await getLeadProfile(lead.id).catch(() => null);
   const leadLocalTz   = leadTzProfile?.detectedTimezone || 'unknown local time';
   const leadNiche     = leadTzProfile?.niche || (lead.metadata as any)?.niche || (lead.metadata as any)?.industry || 'their industry';
   const leadCity      = leadTzProfile?.detectedCity || (lead as any).city || null;
@@ -617,6 +622,7 @@ ${narrativeSummary}
 - If they ask what time, always write it as "X your time" without saying what timezone
 - NEVER offer or send a payment/checkout link unless the lead explicitly agrees to buy or specifically asks for an invoice/link.
 - All conflict handling: "I've got something on then — how about [day] at [time]?"
+${lastOutboundBody ? `- NEGATIVE CONSTRAINT: Do NOT repeat or paraphrase our last message: "${lastOutboundBody.slice(0, 300)}${lastOutboundBody.length > 300 ? '...' : ''}"` : ''}
 ${enrichedContext}`;
 
   const lastMessage = conversationHistory[conversationHistory.length - 1];
@@ -637,21 +643,14 @@ ${enrichedContext}`;
     } as AIReplyResult;
   }
 
-  const languageDetection: LanguageDetection = detectLanguage(lastMessage.body);
-  if (languageDetection.confidence > 0.6 && languageDetection.code !== 'en') {
-    await updateLeadLanguage(lead.id, languageDetection);
-  }
+  const languageDetection = await handleLanguageDetection(lead.id, lastMessage.body);
 
   const priceObjection: PriceObjectionResult = await detectPriceObjection(lastMessage.body);
   if (priceObjection.detected) {
     const response = await generateNegotiationResponse(priceObjection.severity || 'medium', lead.id);
     await saveNegotiationAttempt(lead.id, priceObjection.suggestedDiscount || 0, false);
 
-      const localizedResponse = await getLocalizedResponse(
-        response,
-        languageDetection,
-        'objection'
-      );
+      const localizedResponse = await localizeAndOptimize(response, languageDetection, 'objection');
 
     return {
       text: optimizeSalesLanguage(localizedResponse),
@@ -670,11 +669,7 @@ ${enrichedContext}`;
       competitorMention.sentiment
     );
 
-    const localizedResponse = await getLocalizedResponse(
-      competitorMention.response,
-      languageDetection,
-      'product_info'
-    );
+    const localizedResponse = await localizeAndOptimize(competitorMention.response, languageDetection, 'product_info');
 
     return {
       text: optimizeSalesLanguage(localizedResponse),

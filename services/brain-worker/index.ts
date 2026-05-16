@@ -9,6 +9,12 @@ import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-h
 import { Worker, Job } from 'bullmq';
 import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
+import { startMemoryWatchdog } from '@shared/lib/monitoring/memory-watchdog.js';
+import { setupSentry } from '@shared/lib/monitoring/sentry.js';
+
+// Start resilience layers
+startMemoryWatchdog(Number(process.env.HEAP_LIMIT_MB) || 1024);
+setupSentry();
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
 import { db } from '@shared/lib/db/db.js';
 import { users, notifications } from '@audnix/shared';
@@ -37,6 +43,9 @@ async function reportPermanentFailure(job: Job, err: Error) {
 async function startAIService() {
   log.info('🤖 AI Agent Service starting...');
 
+  const enabledWorkers = process.env.START_WORKERS ? process.env.START_WORKERS.split(',').map(w => w.trim().toLowerCase()) : ['all'];
+  const isEnabled = (name: string) => enabledWorkers.includes('all') || enabledWorkers.includes(name.toLowerCase().replace(/\s+/g, '-'));
+
   startWorkerHealthServer('ai-agent', parseInt(process.env.AI_WORKER_PORT || process.env.PORT || '8082', 10));
 
   // ── Register workers ──────────────────────────────────────────────────────
@@ -44,9 +53,10 @@ async function startAIService() {
     'Lead Enrichment', 'Autonomous Closing', 'Cold Re-engagement',
     'Follow-up', 'Post-mortem', 'Video Comment', 'AI Budget Monitor',
     'Fathom Processing', 'Calendly Processing', 'Billing Dispatch'
-  ].forEach(n => workerHealthMonitor.registerWorker(n));
+  ].filter(isEnabled).forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorker = async (name: string, startFn: () => any) => {
+    if (!isEnabled(name)) return;
     try {
       const result = startFn();
       if (result instanceof Promise) {
@@ -59,6 +69,7 @@ async function startAIService() {
   };
 
   // ── Load all AI workers ───────────────────────────────────────────────────
+  // We still load them all for now to keep the code simple, but only start the enabled ones
   const [
     { leadEnrichmentWorker },
     { closingWorker },
@@ -95,39 +106,57 @@ async function startAIService() {
 
   if (hasRedis && redisConnection) {
     // ── Fathom Meeting Worker ───────────────────────────────────────────────
-    const { processFathomWebhook } = await import('@services/brain-worker/src/ai-lib/specialized/fathom-integration.js');
-    fathomWorker = new Worker(
-      'fathom-processing',
-      async (job: Job) => { await processFathomWebhook(job.data); },
-      { connection: redisConnection as any, concurrency: 5 }
-    );
-    fathomWorker.on('failed', (job, err) => {
-      if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
-    });
+    if (isEnabled('Fathom Processing')) {
+      const { processFathomWebhook } = await import('@services/brain-worker/src/ai-lib/specialized/fathom-integration.js');
+      fathomWorker = new Worker(
+        'fathom-processing',
+        async (job: Job) => { await processFathomWebhook(job.data); },
+        { 
+          connection: redisConnection as any, 
+          concurrency: parseInt(process.env.FATHOM_CONCURRENCY || '5', 10) 
+        }
+      );
+      fathomWorker.on('failed', (job, err) => {
+        if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
+      });
+      log.info('Fathom Processing ✅ Online');
+    }
 
     // ── Calendly Booking Worker ─────────────────────────────────────────────
-    const { processCalendlyWebhook } = await import('@services/brain-worker/src/ai-lib/specialized/calendly-integration.js');
-    calendlyWorker = new Worker(
-      'calendly-processing',
-      async (job: Job) => { await processCalendlyWebhook(job.data); },
-      { connection: redisConnection as any, concurrency: 10 }
-    );
-    calendlyWorker.on('failed', (job, err) => {
-      if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
-    });
+    if (isEnabled('Calendly Processing')) {
+      const { processCalendlyWebhook } = await import('@services/brain-worker/src/ai-lib/specialized/calendly-integration.js');
+      calendlyWorker = new Worker(
+        'calendly-processing',
+        async (job: Job) => { await processCalendlyWebhook(job.data); },
+        { 
+          connection: redisConnection as any, 
+          concurrency: parseInt(process.env.CALENDLY_CONCURRENCY || '10', 10) 
+        }
+      );
+      calendlyWorker.on('failed', (job, err) => {
+        if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
+      });
+      log.info('Calendly Processing ✅ Online');
+    }
 
     // ── Billing / Checkout Worker ───────────────────────────────────────────
-    billingWorker = new Worker(
-      'audnix-billing',
-      async (job: Job) => {
-        const { type, paymentId } = job.data;
-        if (type === 'pending-payment' && paymentId) await checkoutWorker.processPendingPayment(paymentId);
-      },
-      { connection: redisConnection as any, concurrency: 5 }
-    );
-    billingWorker.on('failed', (job, err) => {
-      if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
-    });
+    if (isEnabled('Billing Dispatch')) {
+      billingWorker = new Worker(
+        'audnix-billing',
+        async (job: Job) => {
+          const { type, paymentId } = job.data;
+          if (type === 'pending-payment' && paymentId) await checkoutWorker.processPendingPayment(paymentId);
+        },
+        { 
+          connection: redisConnection as any, 
+          concurrency: parseInt(process.env.BILLING_CONCURRENCY || '5', 10) 
+        }
+      );
+      billingWorker.on('failed', (job, err) => {
+        if (job && job.attemptsMade >= (job.opts.attempts || 1)) reportPermanentFailure(job, err);
+      });
+      log.info('Billing Dispatch ✅ Online');
+    }
 
     log.info('✅ Enterprise Webhook & Billing workers fully listening with DLQ monitoring');
   }
@@ -153,3 +182,4 @@ startAIService().catch(err => {
   console.error('[AI-AGENT] Fatal startup error:', err);
   process.exit(1);
 });
+

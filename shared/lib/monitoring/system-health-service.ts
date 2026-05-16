@@ -7,10 +7,29 @@ import type { InsertSystemHealthLog } from "@audnix/shared";
  * Centralized logging for enterprise observability and DLQ reporting.
  */
 export class SystemHealthService {
+  private static recentLogs = new Map<string, number>();
+
   /**
    * Log a health event (Error, Warn, Info)
+   * Implements a 5-minute rate-limit per event/message combo to prevent DB flooding.
    */
   static async log(params: Omit<InsertSystemHealthLog, 'id' | 'createdAt' | 'isResolved' | 'resolvedAt'>): Promise<void> {
+    const logKey = `${params.service}:${params.event}:${params.message}`;
+    const now = Date.now();
+    const lastTime = this.recentLogs.get(logKey);
+
+    if (lastTime && (now - lastTime) < 300_000) {
+      return; // Throttled
+    }
+    this.recentLogs.set(logKey, now);
+
+    // Periodically prune the map (every 100 logs)
+    if (this.recentLogs.size > 1000) {
+      for (const [k, v] of this.recentLogs.entries()) {
+        if (now - v > 300_000) this.recentLogs.delete(k);
+      }
+    }
+
     try {
       await db.insert(systemHealthLogs).values({
         ...params,

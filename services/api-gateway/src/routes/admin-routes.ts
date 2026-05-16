@@ -789,6 +789,48 @@ router.get("/users/lookup", async (req: express.Request, res: express.Response):
 
 // ============ ADMIN WHITELIST ============
 
+// Get system health logs
+router.get("/health-logs", async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = (page - 1) * limit;
+    const level = req.query.level as string;
+    const service = req.query.service as string;
+
+    const { systemHealthLogs } = await import("@audnix/shared");
+
+    let query = db.select().from(systemHealthLogs).limit(limit).offset(offset).orderBy(desc(systemHealthLogs.createdAt));
+
+    const conditions = [];
+    if (level) conditions.push(eq(systemHealthLogs.level, level));
+    if (service) conditions.push(eq(systemHealthLogs.service, service));
+
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
+    }
+
+    const logs = await query;
+    
+    // Get count for pagination
+    const totalResult = await db.select({ count: count() }).from(systemHealthLogs);
+    const total = Number(totalResult[0]?.count || 0);
+
+    res.json({ 
+      logs,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages: Math.ceil(total / limit)
+      }
+    });
+  } catch (error) {
+    console.error("[ADMIN] Error fetching health logs:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // Get admin whitelist
 router.get("/whitelist", async (req: express.Request, res: express.Response): Promise<void> => {
   try {
