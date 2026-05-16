@@ -83,6 +83,7 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
 
     const client = createClient({
       url: redisUrl,
+      password: process.env.REDIS_PASSWORD || undefined,
       socket: {
         connectTimeout: 5000,
         reconnectStrategy: (retries) => {

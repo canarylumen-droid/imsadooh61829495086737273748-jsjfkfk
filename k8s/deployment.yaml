@@ -23,8 +23,13 @@ spec:
             secretKeyRef:
               name: audnix-secrets
               key: database-url
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: redis-password
         - name: REDIS_URL
-          value: "redis://redis-service:6379"
+          value: "redis://default:$(REDIS_PASSWORD)@redis-service:6379"
         ports:
         - containerPort: 5000
         livenessProbe:
@@ -74,8 +79,13 @@ spec:
             secretKeyRef:
               name: audnix-secrets
               key: database-url
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: redis-password
         - name: REDIS_URL
-          value: "redis://redis-service:6379"
+          value: "redis://default:$(REDIS_PASSWORD)@redis-service:6379"
         resources:
           requests:
             cpu: "500m"
