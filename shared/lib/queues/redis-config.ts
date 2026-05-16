@@ -9,15 +9,17 @@ function getBullMQConnectionOptions() {
   const host = process.env.REDIS_HOST;
   const port = process.env.REDIS_PORT;
   const password = process.env.REDIS_PASSWORD;
+  const url = process.env.REDIS_URL || '';
 
   if (host) {
+    const useTls = url.startsWith('rediss://') || process.env.REDIS_TLS === 'true';
     return {
       host,
       port: parseInt(port || '6379', 10),
       password,
       maxRetriesPerRequest: null,
       enableReadyCheck: false,
-      tls: host.includes('redislabs.com') || host.includes('upstash.io') || process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined,
+      tls: useTls ? { rejectUnauthorized: false } : undefined,
     };
   }
 
