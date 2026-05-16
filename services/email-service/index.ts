@@ -14,7 +14,8 @@ async function startEmailService() {
   startWorkerHealthServer('email-sync', parseInt(process.env.EMAIL_WORKER_PORT || process.env.PORT || '8081', 10));
 
   // ── Register workers with the health monitor ──────────────────────────────
-  ['IMAP IDLE', 'Email Sync', 'Email Warmup', 'Mailbox Health', 'Lead Redistribution']
+  ['IMAP IDLE', 'Email Sync', 'Email Warmup', 'Mailbox Health', 'Lead Redistribution',
+   'Email Verification', 'Email Routing']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorkerModule = async (name: string, startFn: () => any) => {
@@ -55,6 +56,19 @@ async function startEmailService() {
   await startWorkerModule('IMAP IDLE Manager',     () => imapIdleManager.start());
   await startWorkerModule('Native Push',           () => PushNotificationService.initializeAll());
 
+  // ── Verification + Routing BullMQ Workers ────────────────────────────────
+  const { startVerificationWorker, startRoutingWorker, startReassignWorker, startMailboxEventListener } =
+    await import('@shared/lib/queues/verification-routing-queue.js');
+
+  const verificationWorker = startVerificationWorker();
+  const routingWorker      = startRoutingWorker();
+  const reassignWorker     = startReassignWorker();
+  await startMailboxEventListener();
+
+  if (verificationWorker) log.info('Email Verification ✅ Online (concurrency: 50)');
+  if (routingWorker)      log.info('Email Routing ✅ Online (concurrency: 20)');
+  if (reassignWorker)     log.info('Email Reassign ✅ Online (concurrency: 10, P0 priority)');
+
   // ── Zombie Watchdog — restarts IMAP if it silently stalls ────────────────
   setInterval(async () => {
     try {
@@ -89,6 +103,9 @@ async function startEmailService() {
     log.info(`🛑 ${signal} — shutting down Email Sync service...`);
     try { imapIdleManager.stop(); }     catch (_e) {}
     try { mailboxHealthService.stop(); } catch (_e) {}
+    try { verificationWorker && await verificationWorker.close(); } catch (_e) {}
+    try { routingWorker      && await routingWorker.close();      } catch (_e) {}
+    try { reassignWorker     && await reassignWorker.close();     } catch (_e) {}
     setTimeout(() => process.exit(0), 5000);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));

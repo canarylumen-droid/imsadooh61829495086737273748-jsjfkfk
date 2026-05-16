@@ -10,11 +10,9 @@ import { Worker, Job } from 'bullmq';
 import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { startMemoryWatchdog } from '@shared/lib/monitoring/memory-watchdog.js';
-import { setupSentry } from '@shared/lib/monitoring/sentry.js';
 
 // Start resilience layers
 startMemoryWatchdog(Number(process.env.HEAP_LIMIT_MB) || 1024);
-setupSentry();
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
 import { db } from '@shared/lib/db/db.js';
 import { users, notifications } from '@audnix/shared';

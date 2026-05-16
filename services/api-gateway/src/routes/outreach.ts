@@ -64,11 +64,11 @@ router.post('/generate-template', requireAuth, async (req, res) => {
     ]);
 
     clearTimeout(timeoutId!);
-    if (res.headersSent) return;
+    if (res.headersSent || res.writableEnded) return;
     return res.json({ success: true, sequence });
   } catch (error: any) {
     clearTimeout(timeoutId!);
-    if (res.headersSent) return; // Railway already closed socket — do not double-respond
+    if (res.headersSent || res.writableEnded) return; // Railway already closed socket — do not double-respond
     res.status(500).json({ error: 'Failed to generate campaign sequence', details: error.message });
   }
 });

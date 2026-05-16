@@ -10,11 +10,26 @@ const AI_TIMEOUT = 15000;
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = AI_TIMEOUT): Promise<T> {
   let timeoutHandle: any;
+  let timedOut = false;
+  
   const timeoutPromise = new Promise<never>((_, reject) => {
-    timeoutHandle = setTimeout(() => reject(new Error(`AI Request timed out after ${timeoutMs}ms`)), timeoutMs);
+    timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      reject(new Error(`AI Request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
   });
+
+  // Prevent background promise rejections from bubbling up to the process as Unhandled Promise Rejections
+  // if the promise rejects after withTimeout has already timed out and rejected.
+  promise.catch((err) => {
+    if (timedOut) {
+      console.warn(`[AI Service] Background promise rejected after timeout was triggered:`, err?.message || err);
+    }
+  });
+
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeoutHandle));
 }
+
 
 // Initialize OpenAI conditionally
 const openai = process.env.OPENAI_API_KEY

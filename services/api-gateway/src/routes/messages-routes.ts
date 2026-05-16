@@ -202,7 +202,7 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
       });
     }
 
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.writableEnded) {
       res.json({
         message,
         leadStatus: updatedLead.status,
@@ -210,7 +210,7 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
     }
   } catch (error: unknown) {
     console.error("Send message error:", error);
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.writableEnded) {
       res.status(500).json({ error: "Failed to send message" });
     }
   }

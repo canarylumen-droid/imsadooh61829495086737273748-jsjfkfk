@@ -803,7 +803,7 @@ router.get("/health-logs", async (req: express.Request, res: express.Response): 
     let query = db.select().from(systemHealthLogs).limit(limit).offset(offset).orderBy(desc(systemHealthLogs.createdAt));
 
     const conditions = [];
-    if (level) conditions.push(eq(systemHealthLogs.level, level));
+    if (level) conditions.push(eq(systemHealthLogs.level, level as "info" | "critical" | "error" | "warn"));
     if (service) conditions.push(eq(systemHealthLogs.service, service));
 
     if (conditions.length > 0) {
