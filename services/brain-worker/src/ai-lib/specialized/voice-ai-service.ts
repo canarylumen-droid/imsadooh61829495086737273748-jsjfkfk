@@ -52,10 +52,10 @@ interface DecryptedInstagramMeta {
 type PlanWithVoice = 'trial' | 'starter' | 'pro' | 'enterprise';
 
 const PLAN_VOICE_LIMITS: Record<PlanWithVoice, number> = {
-  trial: 5,
-  starter: 100,
-  pro: 400,
-  enterprise: 1000
+  trial: 0,
+  starter: 250,
+  pro: 1000,
+  enterprise: -1 // -1 means unlimited
 };
 
 /**
@@ -80,8 +80,14 @@ export class VoiceAIService {
       return { allowed: false, remaining: 0 };
     }
 
-    // Calculate total balance: plan minutes + topup minutes - used minutes
     const planMinutes = PLAN_VOICE_LIMITS[user.plan as PlanWithVoice] || 0;
+    
+    // Unlimited balance for Enterprise
+    if (planMinutes === -1) {
+      return { allowed: true, remaining: Infinity };
+    }
+
+    // Calculate total balance: plan minutes + topup minutes - used minutes
     const topupMinutes = user.voiceMinutesTopup || 0;
     const usedMinutes = user.voiceMinutesUsed || 0;
     const totalBalance = planMinutes + topupMinutes - usedMinutes;

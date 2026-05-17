@@ -40,7 +40,7 @@ export function getPlanCapabilities(planId: string) {
     };
   }
 
-  const hasVoiceNotes = tier.voiceMinutes > 0; // Voice notes PAID ONLY (starter+ plans)
+  const hasVoiceNotes = tier.voiceMinutes > 0 || tier.voiceMinutes === -1;
   const isPaid = isPaidPlan(planId);
   const isProOrAbove = ['pro', 'enterprise'].includes(planId);
   const isEnterprise = planId === 'enterprise';

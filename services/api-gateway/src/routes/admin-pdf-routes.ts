@@ -34,7 +34,7 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     }
 
     const data = await pdfParser(buffer);
-    return data.text || "";
+    return data.text ? data.text.replace(/\x00/g, '') : "";
   } catch (error) {
     console.error("PDF extraction error:", error);
     return "";

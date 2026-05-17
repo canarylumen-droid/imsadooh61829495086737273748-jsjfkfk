@@ -32,8 +32,9 @@ export async function processPDF(
     }
 
     // Use pdf-parse for reliable Node.js text extraction
-    const pdfData = await pdf(fileBuffer);
-    const text = pdfData.text;
+    const pdfParser = (pdf as any).default || pdf;
+    const pdfData = await pdfParser(fileBuffer);
+    const text = pdfData.text ? pdfData.text.replace(/\x00/g, '') : "";
 
     // VALIDATION: Ensure we have some text
     if (!text || text.trim().length === 0) {
