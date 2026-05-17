@@ -68,6 +68,7 @@ export default function SettingsPage() {
     calendarLink: "",
     voiceNotesEnabled: true,
     autonomousMode: true,
+    discoverInboundLeads: true,
     defaultPaymentLink: "",
     offerDescription: "",
     offerValue: 0,
@@ -90,6 +91,7 @@ export default function SettingsPage() {
         calendarLink: (user as any).calendarLink || "",
         voiceNotesEnabled: user.voiceNotesEnabled ?? true,
         autonomousMode: (user as any).config?.autonomousMode !== false,
+        discoverInboundLeads: (user as any).config?.discoverInboundLeads !== false,
         defaultPaymentLink: user.defaultPaymentLink || "",
         offerDescription: (user as any).offerDescription || "",
         offerValue: (user as any).offerValue || 0,
@@ -105,13 +107,14 @@ export default function SettingsPage() {
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
       // Ensure we nest config if it's in the data
-      const { autonomousMode, ...rest } = data;
+      const { autonomousMode, discoverInboundLeads, ...rest } = data;
       const payload = {
         ...rest,
-        ...(autonomousMode !== undefined && {
+        ...((autonomousMode !== undefined || discoverInboundLeads !== undefined) && {
           config: {
             ...((user as any)?.config || {}),
-            autonomousMode
+            ...(autonomousMode !== undefined && { autonomousMode }),
+            ...(discoverInboundLeads !== undefined && { discoverInboundLeads })
           }
         })
       };
@@ -428,6 +431,30 @@ export default function SettingsPage() {
                   <Switch
                     checked={formData.autonomousMode}
                     onCheckedChange={c => handleFieldChange('autonomousMode', c)}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
+                <div className="flex gap-4">
+                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
+                    <Mail className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-base flex items-center gap-2">
+                      Inbound Lead Discovery
+                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">CRM Controls</Badge>
+                    </h4>
+                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+                      Automatically create leads in your CRM when unknown contacts send real-time inbound emails to your connected mailboxes. If disabled, Audnix will only sync threads for existing database contacts.
+                    </p>
+                  </div>
+                </div>
+                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
+                  <Switch
+                    checked={formData.discoverInboundLeads}
+                    onCheckedChange={c => handleFieldChange('discoverInboundLeads', c)}
                     className="data-[state=checked]:bg-primary"
                   />
                 </div>

@@ -97,8 +97,28 @@ async function processEmailForLead(
     let lead = leads[0];
     console.log('[DEBUG] Lead lookup result:', lead ? `Found ${lead.id}` : 'Not found');
 
+    const integration = email.integrationId ? await storage.getIntegrationById(email.integrationId) : null;
+    const emailDate = new Date(email.date);
+    const integrationCreatedAt = integration ? new Date(integration.createdAt) : null;
+    const isHistorical = integrationCreatedAt ? emailDate.getTime() < integrationCreatedAt.getTime() : false;
 
     if (!lead) {
+      const user = await storage.getUserById(userId);
+      const userConfig = (user?.config as any) || {};
+      const discoverInboundLeads = userConfig.discoverInboundLeads !== false;
+
+      if (isHistorical) {
+        console.log(`[EMAIL_IMPORT] Skipping historical email from non-existent lead: ${emailAddress}`);
+        results.skipped++;
+        return;
+      }
+
+      if (!discoverInboundLeads && direction === 'inbound') {
+        console.log(`[EMAIL_IMPORT] Skipping email from unknown contact because Inbound Lead Discovery is disabled: ${emailAddress}`);
+        results.skipped++;
+        return;
+      }
+
       // Create lead for both inbound discovery and outbound intentional outreach
       lead = await storage.createLead({
         userId,
@@ -250,29 +270,31 @@ async function processEmailForLead(
 
       if (direction === 'inbound') {
         // Create actual notification for inbound replies
-        try {
-          await storage.createNotification({
-            userId,
-            type: 'inbound_email',
-            title: 'New Reply Received',
-            message: `From ${email.from || lead.email}: "${email.subject}"`,
-            metadata: {
-              leadId: lead.id,
-              threadId: threadId,
-              messageId: (newMessage as any).id
-            }
-          });
+        if (!isHistorical) {
+          try {
+            await storage.createNotification({
+              userId,
+              type: 'inbound_email',
+              title: 'New Reply Received',
+              message: `From ${email.from || lead.email}: "${email.subject}"`,
+              metadata: {
+                leadId: lead.id,
+                threadId: threadId,
+                messageId: (newMessage as any).id
+              }
+            });
 
-          // Notify UI to play sound and show toast
-          wsSync.notifyNotification(userId, {
-            type: 'lead_activity',
-            title: 'New Reply Received',
-            message: `${email.from || lead.email} replied to your outreach.`,
-            leadId: lead.id,
-            playSound: true // Custom flag for frontend sound trigger
-          });
-        } catch (notifErr) {
-          console.error('[Email Import] Notification failed:', notifErr);
+            // Notify UI to play sound and show toast
+            wsSync.notifyNotification(userId, {
+              type: 'lead_activity',
+              title: 'New Reply Received',
+              message: `${email.from || lead.email} replied to your outreach.`,
+              leadId: lead.id,
+              playSound: true // Custom flag for frontend sound trigger
+            });
+          } catch (notifErr) {
+            console.error('[Email Import] Notification failed:', notifErr);
+          }
         }
         // Fire activity update for toasts and analytics
         wsSync.notifyActivityUpdated(userId, {
@@ -514,13 +536,15 @@ async function processEmailForLead(
               });
 
               // Create persistent notification
-              await storage.createNotification({
-                userId,
-                type: 'lead_reply',
-                title: '📩 New Reply Received',
-                message: `${lead.name} replied to your outreach.`,
-                actionUrl: `/dashboard/inbox?leadId=${lead.id}`
-              });
+              if (!isHistorical) {
+                await storage.createNotification({
+                  userId,
+                  type: 'lead_reply',
+                  title: '📩 New Reply Received',
+                  message: `${lead.name} replied to your outreach.`,
+                  actionUrl: `/dashboard/inbox?leadId=${lead.id}`
+                });
+              }
             } catch (notifyErr) {
               console.error('Failed to notify reply activity:', notifyErr);
             }
@@ -568,6 +592,7 @@ async function processEmailForLead(
           hoursSinceLastOutbound > 2 &&
           !['converted', 'not_interested'].includes(lead.status) &&
           isRecent &&
+          !isHistorical &&
           !aiShouldWait) {
 
           // Schedule QUICK follow-up (2-4 minutes like Instagram DMs)

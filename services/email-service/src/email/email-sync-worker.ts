@@ -241,7 +241,8 @@ class EmailSyncWorker {
             subject: getHeader('subject'),
             text: detail.snippet,
             date: new Date(parseInt(detail.internalDate)),
-            html: htmlContent
+            html: htmlContent,
+            integrationId: integration.id
           };
         }));
 
@@ -293,7 +294,8 @@ class EmailSyncWorker {
           subject: m.subject,
           text: m.bodyPreview,
           html: m.body?.content,
-          date: new Date(m.receivedDateTime)
+          date: new Date(m.receivedDateTime),
+          integrationId: integration.id
         })), () => { }, direction) : { imported: 0, skipped: 0, errors: [] };
       };
 

@@ -964,7 +964,18 @@ class ImapIdleManager {
                                             const config = (userRow[0]?.config as any) || {};
                                             const isAutonomousMode = config.autonomousMode !== false;
 
+                                            const integration = await storage.getIntegrationById(integrationId);
+                                            const integrationCreatedAt = integration ? new Date(integration.createdAt) : null;
+
                                             for (const email of emails) {
+                                                const emailDate = new Date(email.date);
+                                                const isHistorical = integrationCreatedAt ? emailDate.getTime() < integrationCreatedAt.getTime() : false;
+                                                
+                                                if (isHistorical) {
+                                                    console.log(`[IMAP] Skipping fast-track AI analysis/reply for historical email from ${email.from}`);
+                                                    continue;
+                                                }
+
                                                 const lead = await storage.getLeadByEmail(email.from?.split('<')[1]?.split('>')[0] || email.from, userId);
                                                 if (lead) {
                                                     if (!isAutonomousMode || lead.aiPaused) continue;

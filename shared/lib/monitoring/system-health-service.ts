@@ -31,8 +31,14 @@ export class SystemHealthService {
     }
 
     try {
+      let cleanUserId: string | null | undefined = params.userId;
+      if (cleanUserId === 'system' || (cleanUserId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanUserId))) {
+        cleanUserId = null;
+      }
+
       await db.insert(systemHealthLogs).values({
         ...params,
+        userId: cleanUserId,
         createdAt: new Date(),
         isResolved: false
       });
