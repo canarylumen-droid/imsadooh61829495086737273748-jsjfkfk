@@ -10,7 +10,7 @@ const router = Router();
  * OTP_ENABLED Feature Flag
  * Set to false to bypass OTP verification during signup.
  */
-const OTP_ENABLED = false;
+const OTP_ENABLED = process.env.OTP_ENABLED !== 'false';
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -34,8 +34,12 @@ router.post('/signup/request-otp', authLimiter, async (req: Request, res: Respon
     }
 
     if (!twilioEmailOTP.isConfigured()) {
-      console.error('❌ Signup failed: Email service not configured (TWILIO_SENDGRID_API_KEY missing)');
-      res.status(503).json({ error: 'Email service not configured' });
+      console.error(`❌ [OTP] Email service NOT configured. Missing both TWILIO_SENDGRID_API_KEY and RESEND_API_KEY`);
+      res.status(503).json({
+        error: 'Email service not configured',
+        details: 'Missing required email service API keys: TWILIO_SENDGRID_API_KEY or RESEND_API_KEY (from SendGrid or Resend)',
+        configured: false
+      });
       return;
     }
 
@@ -261,6 +265,105 @@ router.post(['/logout', '/signout'], (req: Request, res: Response): void => {
     res.clearCookie('connect.sid'); // Explicitly clear cookie
     res.json({ success: true, message: 'Logged out successfully' });
   });
+});
+
+/**
+ * POST /api/user/auth/forgot-password
+ * Request a password reset OTP code
+ */
+router.post('/forgot-password', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email } = req.body as { email?: string };
+
+    const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+    if (!email || !emailRegex.test(email)) {
+      res.status(400).json({ error: 'Valid email required' });
+      return;
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const user = await storage.getUserByEmail(normalizedEmail);
+
+    if (!user) {
+      res.status(404).json({ error: 'No account found with this email. Please check the spelling or sign up.' });
+      return;
+    }
+
+    console.log(`🔑 [Forgot Password - Clean] Requesting password reset OTP for ${normalizedEmail}`);
+    const result = await twilioEmailOTP.sendPasswordResetOTP(normalizedEmail);
+
+    if (!result.success) {
+      console.error(`❌ [Forgot Password FAILED - Clean] ${normalizedEmail} - Error: ${result.error}`);
+      res.status(500).json({ error: result.error || 'Failed to send recovery email' });
+      return;
+    }
+
+    console.log(`✅ [Forgot Password SUCCESS - Clean] Recovery code sent to ${normalizedEmail}`);
+    res.json({
+      success: true,
+      message: 'Recovery verification code sent to your email',
+      expiresIn: '10 minutes'
+    });
+  } catch (error: unknown) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Failed to process password reset request' });
+  }
+});
+
+/**
+ * POST /api/user/auth/reset-password
+ * Verify OTP and reset password to a new one
+ */
+router.post('/reset-password', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, otp, newPassword } = req.body as { email?: string; otp?: string; newPassword?: string };
+
+    if (!email || !otp || !newPassword) {
+      res.status(400).json({ error: 'Email, OTP code, and new password are required' });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      res.status(400).json({ error: 'New password must be at least 8 characters' });
+      return;
+    }
+
+    const normalizedEmail = email.toLowerCase();
+    const user = await storage.getUserByEmail(normalizedEmail);
+
+    if (!user) {
+      res.status(404).json({ error: 'Account not found' });
+      return;
+    }
+
+    // Verify OTP first
+    const verifyResult = await twilioEmailOTP.verifyPasswordResetOTP(normalizedEmail, otp);
+    if (!verifyResult.success) {
+      res.status(400).json({ error: verifyResult.error });
+      return;
+    }
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update user password
+    await storage.updateUser(user.id, {
+      password: hashedPassword,
+      metadata: {
+        ...(user.metadata as any || {}),
+        passwordLastReset: new Date().toISOString()
+      }
+    });
+
+    console.log(`✅ [Password Reset SUCCESS - Clean] Password reset successfully for ${normalizedEmail}`);
+    res.json({
+      success: true,
+      message: 'Password reset successfully. You can now login with your new password.'
+    });
+  } catch (error: unknown) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ error: 'Failed to reset password' });
+  }
 });
 
 router.get('/me', async (req: Request, res: Response): Promise<void> => {

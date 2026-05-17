@@ -34,7 +34,7 @@ export class AudnixEmailSender {
   }
 
   /**
-   * Send email via SendGrid
+   * Send email via SendGrid with Resend fallback
    */
   static async send(options: {
     to: string;
@@ -45,39 +45,23 @@ export class AudnixEmailSender {
     senderName?: string;
   }): Promise<{ success: boolean; error?: string }> {
     try {
-      const apiKey = this.getApiKey();
       const senderEmail = this.getSenderEmail(options.senderType);
       const senderName = options.senderName || 'Audnix AI';
 
-      if (!apiKey) {
-        throw new Error(`No TWILIO_SENDGRID_API_KEY configured - all emails need it (OTP, reminders, billing)`);
-      }
+      const { ResendFailover } = await import('@shared/lib/providers/resend-failover.js');
 
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [
-            {
-              to: [{ email: options.to }],
-              subject: options.subject,
-            },
-          ],
-          from: { email: senderEmail, name: senderName },
-          content: [
-            { type: 'text/html', value: options.html },
-            { type: 'text/plain', value: options.text },
-          ],
-        }),
+      const result = await ResendFailover.send({
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        from: senderEmail,
+        fromName: senderName
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        console.error(`❌ SendGrid error for ${options.senderType}: ${error.errors?.[0]?.message || 'Unknown error'}`);
-        return { success: false, error: error.errors?.[0]?.message || 'SendGrid error' };
+      if (!result.success) {
+        console.error(`❌ Email send failed for ${options.senderType}: ${result.error}`);
+        return { success: false, error: result.error };
       }
 
       console.log(`✅ ${options.senderType} email sent to ${options.to} from ${senderEmail}`);

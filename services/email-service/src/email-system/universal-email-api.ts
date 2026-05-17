@@ -30,10 +30,10 @@ export class UniversalEmailAPI {
     if (process.env.REMINDER_EMAIL_API_KEY && process.env.REMINDER_EMAIL_ENDPOINT) {
       return EmailProvider.CUSTOM_API;
     }
-    if (process.env.TWILIO_SENDGRID_API_KEY) {
+    if (process.env.TWILIO_SENDGRID_API_KEY || process.env.RESEND_API_KEY) {
       return EmailProvider.SENDGRID;
     }
-    throw new Error('No email provider configured. Set REMINDER_EMAIL_API_KEY + REMINDER_EMAIL_ENDPOINT or TWILIO_SENDGRID_API_KEY');
+    throw new Error('No email provider configured. Set REMINDER_EMAIL_API_KEY + REMINDER_EMAIL_ENDPOINT, TWILIO_SENDGRID_API_KEY, or RESEND_API_KEY');
   }
 
   /**
@@ -86,39 +86,21 @@ export class UniversalEmailAPI {
    * Send email via SendGrid
    */
   private static async sendViaSendGrid(payload: EmailPayload): Promise<{ success: boolean; error?: string; messageId?: string }> {
-    if (!this.sendgridKey) {
-      console.error("❌ SendGrid API Key Missing. Attempting to use Mail fallback...");
-      // Mail fallback logic if needed, but per user request we want REAL sending.
-      // However, to avoid "Mail is not defined", we define a local Mail object or handle the error.
-    }
-
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${this.sendgridKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        personalizations: [
-          {
-            to: [{ email: payload.to }],
-            subject: payload.subject,
-          },
-        ],
-        from: { email: payload.from_email, name: payload.from_name || 'Audnix AI' },
-        content: [
-          { type: 'text/html', value: payload.html },
-          { type: 'text/plain', value: payload.text },
-        ],
-      }),
+    const { ResendFailover } = await import('@shared/lib/providers/resend-failover.js');
+    const result = await ResendFailover.send({
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+      text: payload.text,
+      from: payload.from_email,
+      fromName: payload.from_name || 'Audnix AI'
     });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      return { success: false, error: error.errors?.[0]?.message || 'SendGrid error' };
+    if (!result.success) {
+      return { success: false, error: result.error || 'Failed to send email' };
     }
 
-    console.log(`✅ Email sent to ${payload.to} via SendGrid`);
-    return { success: true };
+    console.log(`✅ Email sent to ${payload.to} via SendGrid/Resend failover`);
+    return { success: true, messageId: result.messageId };
   }
 }

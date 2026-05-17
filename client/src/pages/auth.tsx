@@ -53,6 +53,122 @@ export default function AuthPage() {
   const [resetLoading, setResetLoading] = useState(false);
   const [otpEnabled, setOtpEnabled] = useState(true); // Default to true, will be updated on mount
 
+  // Forgot password state
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1 = Request, 2 = Verify & Reset
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotOtp, setForgotOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const handleForgotRequest = async () => {
+    if (!forgotEmail) {
+      toast({
+        title: "Missing Information",
+        description: "Please enter your email address",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const response = await fetch('/api/user/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setForgotStep(2);
+        toast({
+          title: "Recovery Code Sent",
+          description: data.message || "Please check your email for the reset code",
+        });
+      } else {
+        toast({
+          title: "Failed to Request Reset",
+          description: data.error || "Could not process password reset request",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Connection Error",
+        description: "Failed to request password reset",
+        variant: "destructive",
+      });
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleForgotReset = async () => {
+    if (!forgotEmail || !forgotOtp || !newPassword) {
+      toast({
+        title: "Missing Information",
+        description: "Please fill in all recovery fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      toast({
+        title: "Weak Password",
+        description: "New password must be at least 8 characters",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setForgotLoading(true);
+    try {
+      const response = await fetch('/api/user/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: forgotEmail,
+          otp: forgotOtp,
+          newPassword
+        }),
+        credentials: 'include',
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Password Reset Successful",
+          description: "Your password has been updated. You can now log in.",
+        });
+        setIsForgotPassword(false);
+        setIsLogin(true);
+        setForgotStep(1);
+        setPassword("");
+        setForgotOtp("");
+        setNewPassword("");
+      } else {
+        toast({
+          title: "Reset Failed",
+          description: data.error || "Invalid verification code or expired session",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Connection Error",
+        description: "Failed to reset password",
+        variant: "destructive",
+      });
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   // Check if reset was already used for this email
   useEffect(() => {
     if (email && email.includes('@')) {
@@ -521,25 +637,133 @@ export default function AuthPage() {
           <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
 
           <CardHeader className="pb-4">
-            <div className="flex p-1 bg-white/5 rounded-lg border border-white/10">
-              <button
-                onClick={() => { setIsLogin(true); setSignupStep(1); }}
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${isLogin ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
-              >
-                Login
-              </button>
-              <button
-                onClick={() => setIsLogin(false)}
-                className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${!isLogin ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
-              >
-                Register
-              </button>
-            </div>
+            {isForgotPassword ? (
+              <div className="flex justify-between items-center w-full">
+                <div>
+                  <CardTitle className="text-xl font-bold text-white">Reset Password</CardTitle>
+                  <CardDescription className="text-white/60 text-xs mt-1">
+                    {forgotStep === 1
+                      ? "Get a recovery verification code"
+                      : "Enter the code and choose a new password"}
+                  </CardDescription>
+                </div>
+                <button
+                  onClick={() => setIsForgotPassword(false)}
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  Back to Login
+                </button>
+              </div>
+            ) : (
+              <div className="flex p-1 bg-white/5 rounded-lg border border-white/10">
+                <button
+                  onClick={() => { setIsLogin(true); setSignupStep(1); }}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${isLogin ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => setIsLogin(false)}
+                  className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${!isLogin ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
+                >
+                  Register
+                </button>
+              </div>
+            )}
           </CardHeader>
 
           <CardContent className="text-card-foreground">
             <AnimatePresence mode="wait">
-              {isLogin ? (
+              {isForgotPassword ? (
+                <motion.div
+                  key="forgot"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="space-y-4 text-white"
+                >
+                  {forgotStep === 1 ? (
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="f-email">Email Address</Label>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                          <Input
+                            id="f-email"
+                            type="email"
+                            value={forgotEmail}
+                            onChange={(e) => setForgotEmail(e.target.value)}
+                            placeholder="name@company.com"
+                            className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 text-white"
+                          />
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleForgotRequest}
+                        disabled={forgotLoading}
+                        className="w-full h-11 bg-primary hover:bg-primary/90 text-white"
+                      >
+                        {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Send Recovery Code
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="space-y-2 text-center mb-2">
+                        <p className="text-xs text-white/60">
+                          We sent a recovery code to <span className="text-white font-medium">{forgotEmail}</span>
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="f-otp">Verification Code</Label>
+                        <Input
+                          id="f-otp"
+                          placeholder="000000"
+                          value={forgotOtp}
+                          onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                          className="text-center text-2xl tracking-[0.5em] h-14 bg-white/5 border-white/10 font-mono focus:border-primary/50 text-white"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="f-password">New Password</Label>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                          <Input
+                            id="f-password"
+                            type={showPassword ? "text" : "password"}
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="pl-10 pr-10 bg-white/5 border-white/10 focus:border-primary/50 text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2"
+                          >
+                            {showPassword ? <EyeOff className="w-4 h-4 text-white/40" /> : <Eye className="w-4 h-4 text-white/40" />}
+                          </button>
+                        </div>
+                      </div>
+                      <Button
+                        onClick={handleForgotReset}
+                        disabled={forgotLoading || forgotOtp.length !== 6 || newPassword.length < 8}
+                        className="w-full h-11 bg-primary hover:bg-primary/90 text-white"
+                      >
+                        {forgotLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                        Reset Password
+                      </Button>
+                      <button
+                        onClick={handleForgotRequest}
+                        disabled={forgotLoading}
+                        className="w-full text-xs text-primary hover:underline text-center mt-2"
+                      >
+                        Didn't get code? Resend
+                      </button>
+                    </div>
+                  )}
+                </motion.div>
+              ) : isLogin ? (
                 <motion.div
                   key="login"
                   initial={{ opacity: 0, x: -10 }}
@@ -557,7 +781,7 @@ export default function AuthPage() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="name@company.com"
-                        className="pl-10 bg-white/5 border-white/10 focus:border-primary/50"
+                        className="pl-10 bg-white/5 border-white/10 focus:border-primary/50 text-white"
                       />
                     </div>
                   </div>
@@ -565,7 +789,17 @@ export default function AuthPage() {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center">
                       <Label htmlFor="password">Password</Label>
-                      <button type="button" className="text-xs text-primary hover:underline">Forgot password?</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsForgotPassword(true);
+                          setForgotStep(1);
+                          setForgotEmail(email);
+                        }}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Forgot password?
+                      </button>
                     </div>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
@@ -575,7 +809,7 @@ export default function AuthPage() {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="••••••••"
-                        className="pl-10 pr-10 bg-white/5 border-white/10 focus:border-primary/50"
+                        className="pl-10 pr-10 bg-white/5 border-white/10 focus:border-primary/50 text-white"
                       />
                       <button
                         type="button"
@@ -590,7 +824,7 @@ export default function AuthPage() {
                   <Button
                     onClick={handleLogin}
                     disabled={loading}
-                    className="w-full h-11 bg-primary hover:bg-primary/90"
+                    className="w-full h-11 bg-primary hover:bg-primary/90 text-white"
                   >
                     {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                     Sign In

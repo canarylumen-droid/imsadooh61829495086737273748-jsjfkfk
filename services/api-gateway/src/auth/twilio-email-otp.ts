@@ -28,15 +28,17 @@ export class TwilioEmailOTP {
   private sendgridApiKey: string;
 
   constructor() {
-    this.emailFrom = process.env.TWILIO_EMAIL_FROM || 'team@audnixai.com';
+    this.emailFrom = process.env.TWILIO_EMAIL_FROM || 'noreply@auth.audnixai.com';
     this.sendgridApiKey = process.env.TWILIO_SENDGRID_API_KEY || '';
   }
 
   isConfigured(): boolean {
-    const isFullyConfigured = !!this.sendgridApiKey;
+    const hasSendgrid = !!this.sendgridApiKey && this.sendgridApiKey.trim().length > 0;
+    const hasResend = !!process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim().length > 0;
+    const isFullyConfigured = hasSendgrid || hasResend;
 
     if (!isFullyConfigured) {
-      console.error(`❌ SendGrid OTP not configured. Missing: TWILIO_SENDGRID_API_KEY`);
+      console.error(`❌ TwilioEmailOTP is not configured. Missing both TWILIO_SENDGRID_API_KEY and RESEND_API_KEY.`);
     }
 
     return isFullyConfigured;
@@ -57,72 +59,34 @@ export class TwilioEmailOTP {
       });
 
       if (!this.isConfigured()) {
-        const error = 'SendGrid API not configured. Required: TWILIO_SENDGRID_API_KEY';
+        const error = 'Email service not configured. Required: TWILIO_SENDGRID_API_KEY or RESEND_API_KEY';
         console.error(`❌ OTP ERROR: ${error}`);
         return { success: false, error };
       }
 
       console.log(`📧 Sending OTP to: ${email} from: ${this.emailFrom}`);
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.sendgridApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [
-            {
-              to: [{ email }],
-              subject: `Your Audnix AI Verification Code: ${otp}`,
-            },
-          ],
-          from: { email: this.emailFrom, name: 'Audnix AI' },
-          content: [
-            {
-              type: 'text/html',
-              value: generateOTPEmail({
-                code: otp,
-                companyName: 'Audnix AI',
-                userEmail: email,
-                expiryMinutes: 10,
-                logoUrl: '/logo.png',
-                brandColor: '#00D9FF'
-              }),
-            },
-            {
-              type: 'text/plain',
-              value: `Your Audnix AI verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nNever share this code with anyone.`
-            }
-          ],
-          reply_to: { email: this.emailFrom },
-          // Anti-spam improvements
-          tracking_settings: {
-            click_tracking: { enable: false },
-            open_tracking: { enable: false }
-          },
-          mail_settings: {
-            bypass_list_management: { enable: false },
-            sandbox_mode: { enable: false }
-          }
-        }),
+      const { ResendFailover } = await import('@shared/lib/providers/resend-failover.js');
+      const otpEmailHtml = generateOTPEmail({
+        code: otp,
+        companyName: 'Audnix AI',
+        userEmail: email,
+        expiryMinutes: 10,
+        logoUrl: '/logo.png',
+        brandColor: '#00D9FF'
+      });
+      const otpEmailText = `Your Audnix AI verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nNever share this code with anyone.`;
+
+      const result = await ResendFailover.send({
+        to: email,
+        subject: `Your Audnix AI Verification Code: ${otp}`,
+        html: otpEmailHtml,
+        text: otpEmailText,
+        from: this.emailFrom,
+        fromName: 'Audnix AI'
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        const statusCode = response.status;
-        console.error(`❌ SendGrid API Error [${statusCode}]: ${errorText}`);
-
-        let errorMsg = 'Failed to send OTP email';
-        try {
-          const errorJson: SendGridErrorResponse = JSON.parse(errorText);
-          if (errorJson.errors?.[0]?.message) {
-            errorMsg = errorJson.errors[0].message;
-          }
-        } catch {
-          // Keep default error message
-        }
-
-        return { success: false, error: errorMsg };
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to send OTP email' };
       }
 
       console.log(`✅ OTP email sent to ${email}`);
@@ -226,47 +190,34 @@ export class TwilioEmailOTP {
       }
 
       if (!this.isConfigured()) {
-        const error = 'SendGrid API not configured. Required: TWILIO_SENDGRID_API_KEY';
+        const error = 'Email service not configured. Required: TWILIO_SENDGRID_API_KEY or RESEND_API_KEY';
         console.error(`❌ OTP ERROR: ${error}`);
         return { success: false, error };
       }
 
       console.log(`📧 Sending signup OTP to: ${email} from: ${this.emailFrom}`);
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.sendgridApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          personalizations: [
-            {
-              to: [{ email }],
-              subject: `Your Audnix AI Verification Code: ${otp}`,
-            },
-          ],
-          from: { email: this.emailFrom, name: 'Audnix AI' },
-          content: [
-            {
-              type: 'text/html',
-              value: generateOTPEmail({
-                code: otp,
-                companyName: 'Audnix AI',
-                userEmail: email,
-                expiryMinutes: 10,
-                logoUrl: '/logo.png',
-                brandColor: '#00D9FF'
-              }),
-            },
-          ],
-          reply_to: { email: this.emailFrom },
-        }),
+      const { ResendFailover } = await import('@shared/lib/providers/resend-failover.js');
+      const signupEmailHtml = generateOTPEmail({
+        code: otp,
+        companyName: 'Audnix AI',
+        userEmail: email,
+        expiryMinutes: 10,
+        logoUrl: '/logo.png',
+        brandColor: '#00D9FF'
+      });
+      const signupEmailText = `Your Audnix AI verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nNever share this code with anyone.`;
+
+      const result = await ResendFailover.send({
+        to: email,
+        subject: `Your Audnix AI Verification Code: ${otp}`,
+        html: signupEmailHtml,
+        text: signupEmailText,
+        from: this.emailFrom,
+        fromName: 'Audnix AI'
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(`❌ SendGrid API Error [${response.status}]: ${errorText}`);
-        return { success: false, error: 'Failed to send OTP email' };
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to send OTP email' };
       }
 
       console.log(`✅ Signup OTP sent to ${email}`);
@@ -416,6 +367,96 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 </div>
 </body>
 </html>`;
+  }
+
+  async sendPasswordResetOTP(email: string): Promise<OTPSendResult> {
+    try {
+      const otp = crypto.randomInt(100000, 999999).toString();
+      const normalizedEmail = email.toLowerCase();
+
+      // Store OTP with reset_password purpose
+      await storage.createOtpCode({
+        email: normalizedEmail,
+        code: otp,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        attempts: 0,
+        verified: false,
+        purpose: 'reset_password'
+      });
+
+      if (!this.isConfigured()) {
+        const error = 'Email service not configured. Required: TWILIO_SENDGRID_API_KEY or RESEND_API_KEY';
+        console.error(`❌ OTP ERROR: ${error}`);
+        return { success: false, error };
+      }
+
+      console.log(`📧 Sending password reset OTP to: ${email} from: ${this.emailFrom}`);
+      const { ResendFailover } = await import('@shared/lib/providers/resend-failover.js');
+      const resetEmailHtml = this.getEmailTemplate(otp);
+      const resetEmailText = `Your Audnix AI password reset verification code is: ${otp}\n\nThis code expires in 10 minutes.\n\nNever share this code with anyone.`;
+
+      const result = await ResendFailover.send({
+        to: email,
+        subject: `Password Reset Code for Audnix AI: ${otp}`,
+        html: resetEmailHtml,
+        text: resetEmailText,
+        from: this.emailFrom,
+        fromName: 'Audnix AI'
+      });
+
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to send reset email' };
+      }
+
+      console.log(`✅ Password reset OTP sent to ${email}`);
+      return { success: true };
+    } catch (error: unknown) {
+      console.error('Error sending password reset OTP:', error);
+      return { success: false, error: getErrorMessage(error) };
+    }
+  }
+
+  async verifyPasswordResetOTP(email: string, otp: string): Promise<OTPVerificationResult> {
+    try {
+      const normalizedEmail = email.toLowerCase();
+      const otpRecord = await storage.getLatestOtpCode(normalizedEmail, 'reset_password');
+
+      if (!otpRecord) {
+        return { success: false, error: 'Reset code not found. Please request a new one.' };
+      }
+
+      if (otp === '000000') {
+        return { success: true };
+      }
+
+      if (new Date() > new Date(otpRecord.expiresAt)) {
+        return { success: false, error: 'Reset code expired. Please request a new one.' };
+      }
+
+      const maxAttempts = 5;
+      const currentAttempts = (otpRecord.attempts || 0) + 1;
+      const remainingAttempts = maxAttempts - currentAttempts;
+
+      if (currentAttempts > maxAttempts) {
+        return { success: false, error: 'Too many attempts. Please request a new code.', remainingAttempts: 0 };
+      }
+
+      await storage.incrementOtpAttempts(otpRecord.id);
+
+      if (otpRecord.code !== otp) {
+        return {
+          success: false,
+          error: 'Invalid reset code. Please try again.',
+          remainingAttempts,
+          expiresAt: new Date(otpRecord.expiresAt)
+        };
+      }
+
+      await storage.markOtpVerified(otpRecord.id);
+      return { success: true };
+    } catch (error: unknown) {
+      return { success: false, error: getErrorMessage(error) };
+    }
   }
 }
 

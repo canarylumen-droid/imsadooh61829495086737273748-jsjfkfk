@@ -39,62 +39,50 @@ class SendGridEmailService {
   }
 
   private initConfig(): void {
-    const apiKey = process.env.TWILIO_SENDGRID_API_KEY;
+    const sgKey = process.env.TWILIO_SENDGRID_API_KEY;
+    const resendKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.SENDGRID_FROM_EMAIL || 'team@audnixai.com';
     const fromName = process.env.SENDGRID_FROM_NAME || 'Audnix AI Team';
 
-    if (apiKey && apiKey.trim().length > 0) {
-      this.config = { apiKey, fromEmail, fromName };
-      console.log('✅ SendGrid configured with:', fromEmail);
+    const hasSendgrid = sgKey && sgKey.trim().length > 0;
+    const hasResend = resendKey && resendKey.trim().length > 0;
+
+    if (hasSendgrid || hasResend) {
+      this.config = { apiKey: sgKey || '', fromEmail, fromName };
+      console.log('✅ SendGrid/Resend failover service configured with:', fromEmail);
     } else {
-      console.error('❌ CRITICAL: SendGrid API key missing - TWILIO_SENDGRID_API_KEY not set');
+      console.error('❌ CRITICAL: Both SendGrid and Resend keys missing - TWILIO_SENDGRID_API_KEY and RESEND_API_KEY not set');
       console.error('📋 OTP emails and transactional emails will FAIL');
-      console.error('📍 Set TWILIO_SENDGRID_API_KEY in your environment');
     }
   }
 
   isConfigured(): boolean {
-    return this.config !== null;
+    return this.config !== null || (!!process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim().length > 0);
   }
 
   private async sendEmail(options: SendEmailOptions): Promise<EmailResult> {
-    if (!this.config) {
-      return { success: false, error: 'SendGrid not configured' };
-    }
-
     try {
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${this.config.apiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: options.to }] }],
-          from: { 
-            email: this.config.fromEmail, 
-            name: this.config.fromName 
-          },
-          subject: options.subject,
-          content: [
-            ...(options.text ? [{ type: 'text/plain', value: options.text }] : []),
-            { type: 'text/html', value: options.html }
-          ]
-        })
+      const fromEmail = this.config?.fromEmail || 'team@audnixai.com';
+      const fromName = this.config?.fromName || 'Audnix AI Team';
+
+      const { ResendFailover } = await import('@shared/lib/providers/resend-failover.js');
+      const result = await ResendFailover.send({
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        from: fromEmail,
+        fromName: fromName
       });
 
-      if (response.ok || response.status === 202) {
-        const messageId = response.headers.get('x-message-id') || 'sent';
-        console.log(`✅ SendGrid email sent to ${options.to}`);
-        return { success: true, messageId };
+      if (!result.success) {
+        return { success: false, error: result.error || 'Failed to send email' };
       }
 
-      const errorText = await response.text();
-      console.error(`❌ SendGrid error [${response.status}]:`, errorText);
-      return { success: false, error: `SendGrid API error: ${response.status}` };
+      return { success: true, messageId: result.messageId };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error('❌ SendGrid send failed:', message);
+      console.error('❌ SendGrid/Resend send failed:', message);
       return { success: false, error: message };
     }
   }
