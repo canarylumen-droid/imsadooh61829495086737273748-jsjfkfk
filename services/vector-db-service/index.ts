@@ -23,11 +23,11 @@ async function startVectorDbService() {
           // Upsert vector into Qdrant/Pinecone
           log.info(`Upserting vector for document ${documentId}`);
           // Notify other services that an embedding was created
-          await redisClient.publish('events:embeddingCreated', JSON.stringify({ documentId, status: 'success' }));
+          await redisClient?.publish('events:embeddingCreated', JSON.stringify({ documentId, status: 'success' }));
           break;
         case 'delete':
           log.info(`Deleting vector for document ${documentId}`);
-          await redisClient.publish('events:embeddingDeleted', JSON.stringify({ documentId, status: 'success' }));
+          await redisClient?.publish('events:embeddingDeleted', JSON.stringify({ documentId, status: 'success' }));
           break;
         case 'search':
           log.info(`Searching vectors...`);

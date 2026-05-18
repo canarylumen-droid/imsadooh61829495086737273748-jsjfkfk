@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,7 +15,6 @@ import {
   Target,
   MessageSquare,
   BookOpen,
-  ArrowRight,
   Shield,
   TrendingUp,
   Loader2,
@@ -24,8 +23,6 @@ import {
   Lightbulb,
   AlertCircle,
   Cpu,
-  Globe,
-  Activity
 } from "lucide-react";
 
 interface ObjectionAnalysis {
@@ -254,12 +251,6 @@ export default function CloserEngineLive() {
     );
   };
 
-  const scaleMetric = useMemo(() => {
-    const nodes = ["Frankfurt-1", "Singapore-2", "NewYork-4", "London-1"];
-    const node = nodes[Math.floor(Math.random() * nodes.length)];
-    const load = Math.floor(Math.random() * 20) + 2;
-    return { node, load };
-  }, [analysis]);
 
   return (
     <div className="p-4 md:p-12 lg:p-20 max-w-7xl mx-auto selection:bg-primary selection:text-black min-h-screen">
@@ -283,14 +274,6 @@ export default function CloserEngineLive() {
             </p>
           </div>
 
-          <div className="flex items-center gap-8 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4" /> Node: {scaleMetric.node}
-            </div>
-            <div className="flex items-center gap-2">
-              <Activity className="w-4 h-4" /> Load: {scaleMetric.load}%
-            </div>
-          </div>
         </motion.div>
 
         <IntelligenceMap category={analysis?.category} isAnalyzing={analyzeMutation.isPending} />
@@ -338,7 +321,7 @@ export default function CloserEngineLive() {
 
               <div className="flex items-center justify-center gap-6 text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/30 relative z-10">
                 <Sparkles className="w-3 h-3 text-primary" />
-                Validated on 1M+ Close Events
+                AI-powered objection analysis
               </div>
             </Card>
           </motion.div>
@@ -450,30 +433,7 @@ export default function CloserEngineLive() {
           </div>
         </div>
 
-        {/* Global Scaling Indicator */}
-        <div className="pt-20 border-t border-border/10 grid md:grid-cols-3 gap-12 text-center">
-          <div className="space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-muted/20 flex items-center justify-center border border-border/10 mx-auto">
-              <Globe className="w-6 h-6 text-primary" />
-            </div>
-            <h5 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60">Edge Distributed</h5>
-            <p className="text-[9px] font-bold text-muted-foreground/20 uppercase">Redundant Across 14 Cloud Zones</p>
-          </div>
-          <div className="space-y-4 border-x border-border/10 px-12">
-            <div className="w-12 h-12 rounded-2xl bg-muted/20 flex items-center justify-center border border-border/10 mx-auto">
-              <Activity className="w-6 h-6 text-primary" />
-            </div>
-            <h5 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60">No Latency Peak</h5>
-            <p className="text-[9px] font-bold text-muted-foreground/20 uppercase">Deterministic Response &lt; 800ms</p>
-          </div>
-          <div className="space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-muted/20 flex items-center justify-center border border-border/10 mx-auto">
-              <Shield className="w-6 h-6 text-primary" />
-            </div>
-            <h5 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/60">Safety Guidelines</h5>
-            <p className="text-[9px] font-bold text-muted-foreground/20 uppercase">AES-256 Intelligence Encryption</p>
-          </div>
-        </div>
+
       </div>
     </div>
   );

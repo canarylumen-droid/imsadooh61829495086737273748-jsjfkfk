@@ -536,7 +536,8 @@ export default function IntegrationsPage() {
           }
         }}
         providerName={disconnectProvider === 'instagram' ? 'Instagram' :
-          disconnectProvider === 'gmail' ? 'Google Workspace' :
+          disconnectProvider === 'gmail' ? 
+            (customEmailStatus?.integrations?.find(i => i.id === disconnectIntegrationId)?.email?.endsWith('@gmail.com') ? 'Personal Google Account' : 'Google Workspace') :
             disconnectProvider === 'outlook' ? 'Outlook' :
               customEmailStatus?.integrations?.find(i => i.id === disconnectProvider)?.email || 'Email Account'}
       />
@@ -990,7 +991,7 @@ export default function IntegrationsPage() {
                               )}
                             </div>
                             <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                              {mailbox.provider === 'gmail' ? "Google Workspace" :
+                              {mailbox.provider === 'gmail' ? (mailbox.email?.endsWith('@gmail.com') ? "Personal Google Account" : "Google Workspace") :
                                mailbox.provider === 'outlook' ? "Outlook / Office 365" :
                                "Custom SMTP Account"}
                             </p>
@@ -1004,8 +1005,9 @@ export default function IntegrationsPage() {
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reputation</span>
                                 <span className={cn(
                                   "text-sm font-black",
-                                  (mailbox.reputationScore ?? 100) >= 80 ? "text-emerald-500" :
-                                  (mailbox.reputationScore ?? 100) >= 50 ? "text-amber-500" : "text-destructive"
+                                  mailbox.reputationScore === null || mailbox.reputationScore === undefined ? "text-sky-500" :
+                                  mailbox.reputationScore >= 80 ? "text-emerald-500" :
+                                  mailbox.reputationScore >= 50 ? "text-amber-500" : "text-destructive"
                                 )}>
                                   {mailbox.reputationScore !== undefined && mailbox.reputationScore !== null 
                                     ? `${mailbox.reputationScore}/100` 
@@ -1017,10 +1019,13 @@ export default function IntegrationsPage() {
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bounce Rate</span>
                                 <span className={cn(
                                   "text-sm font-black",
+                                  mailbox.bounceRate === null || mailbox.bounceRate === undefined ? "text-sky-500" :
                                   ((mailbox.bounceRate ?? 0) * 100) < 2 ? "text-emerald-500" :
                                   ((mailbox.bounceRate ?? 0) * 100) < 5 ? "text-amber-500" : "text-destructive"
                                 )}>
-                                  {((mailbox.bounceRate ?? 0) * 100).toFixed(2)}%
+                                  {mailbox.bounceRate !== undefined && mailbox.bounceRate !== null
+                                    ? `${((mailbox.bounceRate ?? 0) * 100).toFixed(2)}%`
+                                    : "Initializing..."}
                                 </span>
                               </div>
                             </div>

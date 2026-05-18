@@ -59,12 +59,16 @@ async function startEmailService() {
   // ── Verification + Routing BullMQ Workers ────────────────────────────────
   const { startVerificationWorker, startRoutingWorker, startReassignWorker, startMailboxEventListener } =
     await import('@shared/lib/queues/verification-routing-queue.js');
+  const { startEmailSyncWorker } =
+    await import('@shared/lib/queues/email-sync-queue.js');
 
+  const emailSyncWorkerModule = startEmailSyncWorker();
   const verificationWorker = startVerificationWorker();
   const routingWorker      = startRoutingWorker();
   const reassignWorker     = startReassignWorker();
   await startMailboxEventListener();
 
+  if (emailSyncWorkerModule) log.info('Email Sync Worker ✅ Online (concurrency: 50)');
   if (verificationWorker) log.info('Email Verification ✅ Online (concurrency: 50)');
   if (routingWorker)      log.info('Email Routing ✅ Online (concurrency: 20)');
   if (reassignWorker)     log.info('Email Reassign ✅ Online (concurrency: 10, P0 priority)');
@@ -103,6 +107,7 @@ async function startEmailService() {
     log.info(`🛑 ${signal} — shutting down Email Sync service...`);
     try { imapIdleManager.stop(); }     catch (_e) {}
     try { mailboxHealthService.stop(); } catch (_e) {}
+    try { emailSyncWorkerModule && await (emailSyncWorkerModule as any).close(); } catch (_e) {}
     try { verificationWorker && await verificationWorker.close(); } catch (_e) {}
     try { routingWorker      && await routingWorker.close();      } catch (_e) {}
     try { reassignWorker     && await reassignWorker.close();     } catch (_e) {}

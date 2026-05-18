@@ -118,7 +118,7 @@ export default function ProspectingPage() {
             lead.phone || '',
             lead.location || '',
             lead.website,
-            lead.metadata?.temperature || (lead.leadScore >= 90 ? 'HOT' : 'WARM'),
+            lead.metadata?.temperature || '',
             lead.leadScore,
             lead.wealthSignal,
             lead.estimatedRevenue || '',
@@ -225,16 +225,7 @@ export default function ProspectingPage() {
                                 </div>
                             </form>
 
-                            {/* Feature Tags */}
-                            <div className="px-6 pb-4 pt-2 flex flex-wrap gap-2">
-                                <span className="text-[10px] font-bold text-white/30 uppercase tracking-widest mr-2 py-1.5">Search Filters:</span>
-                                {['Only 95%+ Verified', 'Decision Makers', 'Revenue > $1M', 'Mobile + Email'].map((tag, i) => (
-                                    <div key={i} className="px-3 py-1 rounded-full bg-white/5 border border-white/5 text-[10px] font-medium text-white/60 flex items-center gap-1.5 hover:bg-white/10 transition-colors">
-                                        <div className={`w-1 h-1 rounded-full ${i % 2 === 0 ? 'bg-emerald-500' : 'bg-blue-500'}`} />
-                                        {tag}
-                                    </div>
-                                ))}
-                            </div>
+
                         </CardContent>
 
                         {/* Progress Bar (Bottom) */}

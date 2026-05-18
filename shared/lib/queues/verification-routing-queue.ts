@@ -19,7 +19,7 @@
  */
 
 import { Queue, Worker, type Job } from 'bullmq';
-import { redisConnection, hasRedis } from './redis-config.js';
+import { getSharedRedisConnection, redisConnection, hasRedis } from './redis-config.js';
 import { createHash } from 'crypto';
 import { db } from '@shared/lib/db/db.js';
 import { campaignLeads, leads, integrations } from '@audnix/shared';
@@ -88,42 +88,57 @@ type ReassignQueueJobData     = NewMailboxJobData | RerouteMailboxJobData;
 
 // ─── Queue instances ──────────────────────────────────────────────────────────
 
-export const verificationQueue = hasRedis
-  ? new Queue<VerificationQueueJobData>('email-verification', {
-      connection: redisConnection as any,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5_000 },
-        removeOnComplete: { count: 2000 },
-        removeOnFail: { count: 500, age: 24 * 3600 },
-      },
-    })
-  : null;
+function createLazyQueue<T = any>(name: string, opts?: any): Queue<T> {
+  let instance: Queue<T> | null = null;
+  return new Proxy({}, {
+    get(target, prop) {
+      if (prop === '__closeIfInitialized') {
+        return async () => {
+          if (instance) {
+            await instance.close();
+          }
+        };
+      }
+      if (!instance) {
+        if (!hasRedis) return undefined;
+        instance = new Queue<T>(name, {
+          connection: getSharedRedisConnection(),
+          ...opts,
+        });
+      }
+      const value = Reflect.get(instance, prop);
+      return typeof value === 'function' ? value.bind(instance) : value;
+    }
+  }) as any as Queue<T>;
+}
 
-export const routingQueue = hasRedis
-  ? new Queue<RoutingQueueJobData>('email-routing', {
-      connection: redisConnection as any,
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 3_000 },
-        removeOnComplete: { count: 2000 },
-        removeOnFail: { count: 500, age: 24 * 3600 },
-      },
-    })
-  : null;
+export const verificationQueue = createLazyQueue<VerificationQueueJobData>('email-verification', {
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5_000 },
+    removeOnComplete: { count: 2000 },
+    removeOnFail: { count: 500, age: 24 * 3600 },
+  },
+});
+
+export const routingQueue = createLazyQueue<RoutingQueueJobData>('email-routing', {
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 3_000 },
+    removeOnComplete: { count: 2000 },
+    removeOnFail: { count: 500, age: 24 * 3600 },
+  },
+});
 
 // Dedicated queue for reassignment events (new mailbox connect / mailbox failure)
-export const reassignQueue = hasRedis
-  ? new Queue<ReassignQueueJobData>('email-reassign', {
-      connection: redisConnection as any,
-      defaultJobOptions: {
-        attempts: 5,
-        backoff: { type: 'exponential', delay: 2_000 },
-        removeOnComplete: { count: 500 },
-        removeOnFail: { count: 200, age: 24 * 3600 },
-      },
-    })
-  : null;
+export const reassignQueue = createLazyQueue<ReassignQueueJobData>('email-reassign', {
+  defaultJobOptions: {
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 2_000 },
+    removeOnComplete: { count: 500 },
+    removeOnFail: { count: 200, age: 24 * 3600 },
+  },
+});
 
 // ─── Public API ───────────────────────────────────────────────────────────────
 

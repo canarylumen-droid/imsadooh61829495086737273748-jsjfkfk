@@ -635,7 +635,9 @@ function StatCard({ label, value, icon: Icon, trend, isUp, color, index }: any) 
                             </div>
                         )}
                     </div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 mt-4">System Nominal</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 mt-4">
+                      {trend && trend !== "—" ? (isUp ? "Improving" : "Declining") : "No prior data"}
+                    </p>
 
                     {/* Apple-style background glow */}
                     <div className={cn("absolute -bottom-10 -right-10 w-32 h-32 blur-[80px] opacity-10 rounded-full", color.replace('text-', 'bg-'))} />

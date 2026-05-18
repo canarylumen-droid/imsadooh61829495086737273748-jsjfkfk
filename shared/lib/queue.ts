@@ -1,9 +1,8 @@
-import { Queue, QueueOptions } from 'bullmq';
-import { bullmqRedisConnection } from './redis';
-import { OutreachJobPayload, RagJobPayload, MailSyncJobPayload } from '../types/jobs';
+import { Queue } from 'bullmq';
+import { getSharedRedisConnection, hasRedis } from './queues/redis-config.js';
+import { OutreachJobPayload, RagJobPayload, MailSyncJobPayload } from '../types/jobs.js';
 
-const defaultQueueOptions: QueueOptions = {
-  connection: bullmqRedisConnection,
+const defaultQueueOptions = {
   defaultJobOptions: {
     attempts: 3,
     backoff: {
@@ -15,18 +14,43 @@ const defaultQueueOptions: QueueOptions = {
   },
 };
 
+function createLazyQueue(name: string, opts?: any): Queue {
+  let instance: Queue | null = null;
+  return new Proxy({}, {
+    get(target, prop) {
+      if (prop === '__closeIfInitialized') {
+        return async () => {
+          if (instance) {
+            await instance.close();
+          }
+        };
+      }
+      if (!instance) {
+        if (!hasRedis) return undefined;
+        instance = new Queue(name, {
+          connection: getSharedRedisConnection(),
+          ...defaultQueueOptions,
+          ...opts,
+        });
+      }
+      const value = Reflect.get(instance, prop);
+      return typeof value === 'function' ? value.bind(instance) : value;
+    }
+  }) as any as Queue;
+}
+
 // Define and export all queues used in the system
-export const outreachQueue = new Queue<OutreachJobPayload, any, string>('outreachQueue', defaultQueueOptions);
-export const ragQueue = new Queue<RagJobPayload, any, string>('ragQueue', defaultQueueOptions);
-export const mailSyncQueue = new Queue<MailSyncJobPayload, any, string>('mailSyncQueue', defaultQueueOptions);
-export const vectorOpsQueue = new Queue<any, any, string>('vectorOpsQueue', defaultQueueOptions);
+export const outreachQueue = createLazyQueue('outreachQueue');
+export const ragQueue = createLazyQueue('ragQueue');
+export const mailSyncQueue = createLazyQueue('mailSyncQueue');
+export const vectorOpsQueue = createLazyQueue('vectorOpsQueue');
 
 // Centralized helper to cleanly disconnect all queues (useful for graceful shutdown)
 export const closeQueues = async () => {
   await Promise.all([
-    outreachQueue.close(),
-    ragQueue.close(),
-    mailSyncQueue.close(),
-    vectorOpsQueue.close(),
+    (outreachQueue as any).__closeIfInitialized(),
+    (ragQueue as any).__closeIfInitialized(),
+    (mailSyncQueue as any).__closeIfInitialized(),
+    (vectorOpsQueue as any).__closeIfInitialized(),
   ]);
 };

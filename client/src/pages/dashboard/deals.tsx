@@ -116,8 +116,8 @@ export default function DealsPage() {
   });
 
   const deals: Deal[] = (dealsData?.deals || []).filter(d => filter === 'all' || d.status === filter);
-  const totalValue = (dealsData?.deals || []).reduce((sum: number, deal: Deal) => sum + (deal.value || 0), 0);
   const convertedDeals = (dealsData?.deals || []).filter((d: Deal) => d.status === "converted" || d.status === "closed_won");
+  const totalValue = convertedDeals.reduce((sum: number, deal: Deal) => sum + (deal.value || 0), 0);
   const pendingDeals = (dealsData?.deals || []).filter((d: Deal) => d.status === "pending" || d.status === "open");
 
   // Calculate Avg Value
@@ -381,7 +381,11 @@ export default function DealsPage() {
                           </div>
                         </td>
                         <td className="p-4 align-middle font-medium">
-                          ${deal.value ? deal.value.toLocaleString() : "0"}
+                          {['converted', 'closed_won'].includes(deal.status) ? (
+                            `$${deal.value ? deal.value.toLocaleString() : "0"}`
+                          ) : (
+                            <span className="text-muted-foreground text-xs italic">Pending Payment</span>
+                          )}
                         </td>
                         <td className="p-4 align-middle">
                           <Badge variant={deal.status === 'converted' ? 'default' : 'secondary'} className="capitalize">

@@ -1,10 +1,30 @@
 import { ragQueue } from '@shared/lib/queue.js';
 import { QueueEvents } from 'bullmq';
-import { bullmqRedisConnection } from '@shared/lib/redis.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
+import { getSharedRedisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 
-const ragQueueEvents = new QueueEvents('ragQueue', { connection: bullmqRedisConnection });
+let ragQueueEventsInstance: QueueEvents | null = null;
+
+function getRagQueueEvents(): QueueEvents {
+  if (!ragQueueEventsInstance) {
+    if (!hasRedis) {
+      throw new Error('❌ Redis is not configured for QueueEvents');
+    }
+    ragQueueEventsInstance = new QueueEvents('ragQueue', {
+      connection: getSharedRedisConnection(),
+    });
+  }
+  return ragQueueEventsInstance;
+}
+
+const ragQueueEvents = new Proxy({}, {
+  get(target, prop) {
+    const instance = getRagQueueEvents();
+    const value = Reflect.get(instance, prop);
+    return typeof value === 'function' ? value.bind(instance) : value;
+  }
+}) as any as QueueEvents;
 
 export async function searchSimilarChunks(
   query: string,

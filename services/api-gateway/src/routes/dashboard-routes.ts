@@ -154,8 +154,8 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     const hardBounces = recentBounces.filter(b => b.bounceType === 'hard').length;
     const softBounces = recentBounces.filter(b => b.bounceType === 'soft').length;
     const spamBounces = recentBounces.filter(b => b.bounceType === 'spam').length;
-    let reputationScore = 100;
-    let globalBounceRate = 0;
+    let reputationScore: number | null = null;
+    let globalBounceRate: number | null = null;
 
     // 7-Day Reputation Trend Calculation
     const trendData = [];
@@ -178,14 +178,20 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
     if (integrationId) {
       const activeInt = integrations.find(i => i.id === integrationId);
-      reputationScore = activeInt?.reputationScore ?? 100;
-      globalBounceRate = activeInt?.spamRiskScore ?? 0;
+      reputationScore = activeInt?.reputationScore !== undefined ? activeInt.reputationScore : null;
+      globalBounceRate = activeInt?.spamRiskScore !== undefined ? activeInt.spamRiskScore : null;
     } else {
       // Average reputation score across all connected email mailboxes
       const emailInts = integrations.filter(i => ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected);
       if (emailInts.length > 0) {
-        reputationScore = emailInts.reduce((sum, i) => sum + (i.reputationScore ?? 100), 0) / emailInts.length;
-        globalBounceRate = emailInts.reduce((sum, i) => sum + (i.spamRiskScore ?? 0), 0) / emailInts.length;
+        const scoredInts = emailInts.filter(i => i.reputationScore !== null && i.reputationScore !== undefined);
+        if (scoredInts.length > 0) {
+          reputationScore = scoredInts.reduce((sum, i) => sum + (i.reputationScore ?? 100), 0) / scoredInts.length;
+        }
+        const riskInts = emailInts.filter(i => i.spamRiskScore !== null && i.spamRiskScore !== undefined);
+        if (riskInts.length > 0) {
+          globalBounceRate = riskInts.reduce((sum, i) => sum + (i.spamRiskScore ?? 0), 0) / riskInts.length;
+        }
       }
     }
 
@@ -244,10 +250,8 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
     const globalOpenRate = Number(globalMsgStats?.totalSent || 0) > 0
       ? Number(((Number(globalMsgStats?.opened || 0) / Number(globalMsgStats?.totalSent || 0)) * 100).toFixed(2))
-      : 25.00; // Fallback benchmark
-
-    // Domain Health is now the actual reputation score (which already includes DNS penalties)
-    const domainHealth = Number(reputationScore.toFixed(2));
+      : 25.00; // Fallback benchmark    // Domain Health is now the actual reputation score (which already includes DNS penalties)
+    const domainHealth = reputationScore !== null ? Number(reputationScore.toFixed(2)) : null;
 
     // Map verification results nicely
     const mappedVerifications = activeVerifications.map(v => {
@@ -257,8 +261,8 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
           result.overallStatus = 'fair'; // Adjust logic so partials don't show as error entirely
        }
        return {
-         ...v,
-         result
+          ...v,
+          result
        }
     });
 
@@ -293,11 +297,13 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     const responseData = {
       ...stats,
       domainHealth,
-      globalBounceRate: Number(globalBounceRate.toFixed(4)), // e.g. 0.0250 for 2.50%
+      globalBounceRate: globalBounceRate !== null ? Number(globalBounceRate.toFixed(4)) : null, // e.g. 0.0250 for 2.50%
       domainVerifications: mappedVerifications,
       health: {
         score: domainHealth,
-        status: domainHealth >= 70 ? 'healthy' : (domainHealth >= 55 ? 'fair' : (domainHealth >= 40 ? 'poor' : 'critical')),
+        status: domainHealth !== null 
+          ? (domainHealth >= 70 ? 'healthy' : (domainHealth >= 55 ? 'fair' : (domainHealth >= 40 ? 'poor' : 'critical')))
+          : 'initializing',
         reputation: reputationScore,
         dns: dnsStatus,
         bounces: {
@@ -611,7 +617,13 @@ router.put('/user/profile', requireAuth, async (req: Request, res: Response): Pr
       return;
     }
 
-    const { name, username, company, timezone, defaultCtaLink, defaultCtaText, calendarLink, voiceNotesEnabled, config, defaultPaymentLink, aiStickerFollowupsEnabled } = req.body;
+    const { 
+      name, username, company, timezone, defaultCtaLink, defaultCtaText, 
+      calendarLink, voiceNotesEnabled, config, defaultPaymentLink, 
+      aiStickerFollowupsEnabled, offerDescription, offerValue, 
+      offerDescription2, offerValue2, doubleOfferEnabled, 
+      aiAdjustCopyEnabled, pdfConfidenceThreshold 
+    } = req.body;
 
     const user = await storage.getUserById(userId);
     if (!user) {
@@ -628,6 +640,13 @@ router.put('/user/profile', requireAuth, async (req: Request, res: Response): Pr
     if (timezone !== undefined) updates.timezone = timezone;
     if (defaultPaymentLink !== undefined) (updates as any).defaultPaymentLink = defaultPaymentLink;
     if (aiStickerFollowupsEnabled !== undefined) (updates as any).aiStickerFollowupsEnabled = aiStickerFollowupsEnabled === true;
+    if (offerDescription !== undefined) (updates as any).offerDescription = offerDescription;
+    if (offerValue !== undefined) (updates as any).offerValue = offerValue;
+    if (offerDescription2 !== undefined) (updates as any).offerDescription2 = offerDescription2;
+    if (offerValue2 !== undefined) (updates as any).offerValue2 = offerValue2;
+    if (doubleOfferEnabled !== undefined) (updates as any).doubleOfferEnabled = doubleOfferEnabled === true;
+    if (aiAdjustCopyEnabled !== undefined) (updates as any).aiAdjustCopyEnabled = aiAdjustCopyEnabled === true;
+    if (pdfConfidenceThreshold !== undefined) (updates as any).pdfConfidenceThreshold = pdfConfidenceThreshold;
 
     // Store CTA settings, Calendar Link, and Voice Settings in metadata
     if (defaultCtaLink !== undefined || defaultCtaText !== undefined || calendarLink !== undefined || voiceNotesEnabled !== undefined) {

@@ -733,7 +733,7 @@ export class DrizzleStorage implements IStorage {
              notificationTitle = '📅 Meeting Booked!';
              notificationMessage = `${result.name} booked a meeting.`;
            }
-        } else if (updates.status === 'opened' || updates.status === 'open') {
+        } else if (updates.status === 'open') {
            // Notify only if it actually opened something and wasn't just imported
            if (oldLead.status !== 'new') {
               shouldNotify = true;

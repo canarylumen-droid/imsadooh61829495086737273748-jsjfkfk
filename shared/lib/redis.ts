@@ -1,5 +1,5 @@
-import Redis from 'ioredis';
-import { logger } from './logger';
+import { getSharedRedisConnection, hasRedis } from './queues/redis-config.js';
+import type { Redis } from 'ioredis';
 
 const REDIS_URL = process.env.REDIS_URL;
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -9,18 +9,13 @@ if (!REDIS_URL && IS_PROD) {
 }
 
 // Shared Redis client for generic operations (caching, pub/sub)
-export const redisClient = new Redis(REDIS_URL || 'redis://localhost:6379', {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-});
-
-redisClient.on('error', (err) => {
-  logger.error('Redis Client Error', err);
-});
-
-redisClient.on('ready', () => {
-  logger.info('Redis Client Connected');
-});
+export const redisClient = hasRedis ? new Proxy({}, {
+  get(target, prop) {
+    const conn = getSharedRedisConnection();
+    const value = Reflect.get(conn, prop);
+    return typeof value === 'function' ? value.bind(conn) : value;
+  }
+}) as any as Redis : undefined;
 
 /**
  * BullMQ Connection Configuration

@@ -75,7 +75,54 @@ export default function AIAnalyticsPage() {
   const hasData = analytics && analytics.summary.totalLeads > 0;
 
   const handleExportPDF = () => {
-    // Mock export functionality
+    if (!analytics) return;
+
+    // Build CSV rows from real analytics data
+    const sections: string[] = [];
+
+    // Summary
+    sections.push("SUMMARY");
+    sections.push("Metric,Value");
+    sections.push(`Total Leads,${analytics.summary.totalLeads}`);
+    sections.push(`Conversions,${analytics.summary.conversions}`);
+    sections.push(`Conversion Rate,${analytics.summary.conversionRate}%`);
+    sections.push(`Active Conversations,${analytics.summary.active}`);
+    sections.push(`Leads Replied,${analytics.summary.leadsReplied}`);
+    sections.push(`Best Reply Hour,${analytics.summary.bestReplyHour !== null ? `${analytics.summary.bestReplyHour}:00` : 'N/A'}`);
+    sections.push("");
+
+    // Behavior Insights
+    sections.push("BEHAVIOR INSIGHTS");
+    sections.push("Metric,Value");
+    sections.push(`Reply Rate,${analytics.behaviorInsights.replyRate}%`);
+    sections.push(`Avg Response Time,${analytics.behaviorInsights.avgResponseTime}`);
+    sections.push(`Positive Sentiment Rate,${analytics.behaviorInsights.positiveSentimentRate}%`);
+    sections.push("");
+
+    // Channel Breakdown
+    sections.push("CHANNEL BREAKDOWN");
+    sections.push("Channel,Count,Percentage");
+    analytics.channelBreakdown.forEach(c => {
+      sections.push(`${c.channel},${c.count},${c.percentage.toFixed(1)}%`);
+    });
+    sections.push("");
+
+    // Timeline
+    sections.push("TIMELINE");
+    sections.push("Date,New Leads,Conversions");
+    analytics.timeline.forEach(t => {
+      sections.push(`${t.date},${t.leads},${t.conversions}`);
+    });
+
+    const csv = sections.join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `audnix-ai-analytics-${period}-${new Date().toISOString().split('T')[0]}.csv`);
+    link.click();
+    URL.revokeObjectURL(url);
+
     setShowExportSuccess(true);
     setTimeout(() => setShowExportSuccess(false), 3000);
   };

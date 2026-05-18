@@ -326,8 +326,8 @@ export default function DashboardHome() {
     },
     {
       label: "OPEN RATE",
-      value: typeof stats?.openRate === 'number' ? stats.openRate.toFixed(2) : "0.00",
-      suffix: "%",
+      value: (stats?.openRate === null || stats?.openRate === undefined) ? "Calculating" : stats.openRate.toFixed(2),
+      suffix: (stats?.openRate === null || stats?.openRate === undefined) ? "" : "%",
       icon: Mail,
       percentage: calculatePercentageChange(stats?.openRate || 0, previousStats?.openRate),
       trend: previousStats ? ((stats?.openRate || 0) > (previousStats?.openRate || 0) ? "up" : (stats?.openRate || 0) < (previousStats?.openRate || 0) ? "down" : "neutral") : "neutral",
@@ -336,8 +336,8 @@ export default function DashboardHome() {
     },
     {
       label: "RESPONSE RATE",
-      value: typeof stats?.responseRate === 'number' ? stats.responseRate.toFixed(2) : "0.00",
-      suffix: "%",
+      value: (stats?.responseRate === null || stats?.responseRate === undefined) ? "Calculating" : stats.responseRate.toFixed(2),
+      suffix: (stats?.responseRate === null || stats?.responseRate === undefined) ? "" : "%",
       icon: MessageSquare,
       percentage: calculatePercentageChange(stats?.responseRate || 0, previousStats?.responseRate),
       trend: previousStats ? ((stats?.responseRate || 0) > (previousStats?.responseRate || 0) ? "up" : (stats?.responseRate || 0) < (previousStats?.responseRate || 0) ? "down" : "neutral") : "neutral",
@@ -346,8 +346,8 @@ export default function DashboardHome() {
     },
     {
       label: "CONVERSION RATE",
-      value: typeof stats?.conversionRate === 'number' ? stats.conversionRate.toFixed(2) : "0.00",
-      suffix: "%",
+      value: (stats?.conversionRate === null || stats?.conversionRate === undefined) ? "Calculating" : stats.conversionRate.toFixed(2),
+      suffix: (stats?.conversionRate === null || stats?.conversionRate === undefined) ? "" : "%",
       icon: TrendingUp,
       percentage: calculatePercentageChange(stats?.conversionRate || 0, previousStats?.conversionRate),
       trend: previousStats ? ((stats?.conversionRate || 0) > (previousStats?.conversionRate || 0) ? "up" : (stats?.conversionRate || 0) < (previousStats?.conversionRate || 0) ? "down" : "neutral") : "neutral",
@@ -356,11 +356,14 @@ export default function DashboardHome() {
     },
     {
       label: "BOUNCE RATE",
-      value: typeof stats?.globalBounceRate === 'number' ? (stats.globalBounceRate * 100).toFixed(2) : "0.00",
-      suffix: "%",
+      value: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "Calculating" : (stats.globalBounceRate * 100).toFixed(2),
+      suffix: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "" : "%",
       icon: AlertCircle,
-      percentage: "—", // Can be implemented with previousStats.bounceRate later
-      trend: "neutral",
+      percentage: calculatePercentageChange(stats?.globalBounceRate || 0, previousStats ? (previousStats as any).globalBounceRate : undefined),
+      // Lower bounce rate is good — invert trend color logic
+      trend: (previousStats && (previousStats as any).globalBounceRate !== undefined)
+        ? ((stats?.globalBounceRate || 0) < ((previousStats as any).globalBounceRate || 0) ? "up" : (stats?.globalBounceRate || 0) > ((previousStats as any).globalBounceRate || 0) ? "down" : "neutral")
+        : "neutral",
       color: "text-amber-500",
       glow: "group-hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]"
     },
@@ -600,7 +603,7 @@ export default function DashboardHome() {
             </Card>
 
             <ReputationCard 
-              score={stats?.health?.score ?? 100}
+              score={stats?.health?.score !== undefined ? stats.health.score : null}
               status={(stats?.health?.status === 'warning' ? 'fair' : (stats?.health?.status || 'healthy')) as any}
               bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
               dns={stats?.health?.dns}

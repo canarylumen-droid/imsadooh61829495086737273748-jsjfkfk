@@ -1,35 +1,34 @@
-import { MODELS } from "../utils/model-config.js";
-import { storage } from '../../../storage.js';
-import type { Message, Lead } from "../../shared/schema.js";
-import { storeConversationMemory, retrieveConversationMemory } from "../context/super-memory.js";
-import { detectLanguage, getLocalizedResponse, updateLeadLanguage, type LanguageDetection } from './language-detector.js';
-import { detectPriceObjection, saveNegotiationAttempt, generateNegotiationResponse, type PriceObjectionResult } from '../specialized/price-negotiation.js';
-import { detectCompetitorMention, trackCompetitorMention, type CompetitorMentionResult } from '../analyzers/competitor-detection.js';
-import { optimizeSalesLanguage } from '../formatters/sales-language-optimizer.js';
-import { getBrandContext, formatBrandContextForPrompt } from '../context/brand-context.js';
-import { appendLinkIfNeeded, detectAndGenerateLinkResponse } from '../analyzers/link-intent-detector.js';
-import { BookingProposer } from '../../calendar/booking-proposer.js';
-import { analyzeLeadIntent, type IntentAnalysis } from '../analyzers/intent-analyzer.js';
-import { generateAutonomousObjectionResponse } from '../analyzers/autonomous-objection-responder.js';
-import { universalSalesAI } from '../agents/universal-sales-agent.js';
-import { evaluateAndLogDecision } from '../engines/decision-engine.js';
-import { formatReplyForChannel } from '../formatters/channel-reply-formatter.js';
-import { workerHealthMonitor } from '../monitoring/worker-health.js';
-import { quotaService } from '../monitoring/quota-service.js';
-import { getOAuthRedirectUrl } from '../config/oauth-redirects.js';
-import { encrypt, decrypt } from '../../crypto/encryption.js';
-import { db } from '../../../db.js';
-import { users, integrations, notifications } from '../../shared/schema.js';
+import { MODELS } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
+import { storage } from '@shared/lib/storage/storage.js';
+import type { Message, Lead } from "@audnix/shared";
+import { storeConversationMemory, retrieveConversationMemory } from "@services/brain-worker/src/ai-lib/context/super-memory.js";
+import { detectLanguage, getLocalizedResponse, updateLeadLanguage, type LanguageDetection } from '@services/brain-worker/src/ai-lib/core/language-detector.js';
+import { detectPriceObjection, saveNegotiationAttempt, generateNegotiationResponse, type PriceObjectionResult } from '@services/brain-worker/src/ai-lib/specialized/price-negotiation.js';
+import { detectCompetitorMention, trackCompetitorMention, type CompetitorMentionResult } from '@services/brain-worker/src/ai-lib/analyzers/competitor-detection.js';
+import { optimizeSalesLanguage } from '@services/brain-worker/src/ai-lib/formatters/sales-language-optimizer.js';
+import { getBrandContext, formatBrandContextForPrompt } from '@services/brain-worker/src/ai-lib/context/brand-context.js';
+import { appendLinkIfNeeded, detectAndGenerateLinkResponse } from '@services/brain-worker/src/ai-lib/analyzers/link-intent-detector.js';
+import { BookingProposer } from '@shared/lib/calendar/booking-proposer.js';
+import { analyzeLeadIntent, type IntentAnalysis } from '@services/brain-worker/src/ai-lib/analyzers/intent-analyzer.js';
+import { generateAutonomousObjectionResponse } from '@services/brain-worker/src/ai-lib/analyzers/autonomous-objection-responder.js';
+import { universalSalesAI } from "@services/brain-worker/src/orchestrator/agents/universal-sales-agent.js";
+import { evaluateAndLogDecision } from '@services/brain-worker/src/ai-lib/engines/decision-engine.js';
+import { formatReplyForChannel } from '@services/brain-worker/src/ai-lib/formatters/channel-reply-formatter.js';
+import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
+import { quotaService } from '@shared/lib/monitoring/quota-service.js';
+import { getOAuthRedirectUrl } from "@shared/config/config/oauth-redirects.js";
+import { encrypt, decrypt } from '@shared/lib/crypto/encryption.js';
+import { db } from '@shared/lib/db/db.js';
+import { users, integrations, notifications, videoMonitors } from '@audnix/shared';
 import { eq, and } from 'drizzle-orm';
-import { generateReply, estimateTokens } from './ai-service.js';
-import { getStyleMarkers, type StyleMarkers } from '../context/personality-learner.js';
-import { getCalendlyPrefillLink } from '../../integrations/calendly.js';
-import { getLeadProfile } from '../../calendar/lead-timezone-intelligence.js';
-import { calculateSimilarity } from '../utils/utils.js';
-import { getRegionalInstruction } from '../specialized/regional-norms.js';
-import { objectionService } from '../analyzers/objection-service.js';
-import { searchSimilarChunks } from '../context/vector-search.js';
-import { videoMonitors } from '../../shared/schema.js';
+import { generateReply, estimateTokens } from '@services/brain-worker/src/ai-lib/core/ai-service.js';
+import { getStyleMarkers, type StyleMarkers } from '@services/brain-worker/src/ai-lib/context/personality-learner.js';
+import { getCalendlyPrefillLink } from '@shared/lib/integrations/calendly.js';
+import { getLeadProfile } from '@shared/lib/calendar/lead-timezone-intelligence.js';
+import { calculateSimilarity } from '@services/brain-worker/src/ai-lib/utils/utils.js';
+import { getRegionalInstruction } from '@services/brain-worker/src/ai-lib/specialized/regional-norms.js';
+import { objectionService } from '@services/brain-worker/src/ai-lib/analyzers/objection-service.js';
+import { searchSimilarChunks } from '@services/brain-worker/src/ai-lib/context/vector-rpc.js';
 
 const isDemoMode = false;
 const PROMPT_VERSION = 'v1.2.0-resilience';
@@ -200,7 +199,7 @@ export function detectConversationStatus(messages: Message[]): ConversationStatu
   const recentMessages = messages.slice(-5);
   const allText = recentMessages.map(m => m.body.toLowerCase()).join(' ');
 
-  const conversionKeywords = ['yes', 'book', 'schedule', 'ready', 'let\'s do it', 'sign me up', 'interested', 'when can we'];
+  const conversionKeywords = ['yes', 'book', 'schedule', 'ready', "let's do it", 'sign me up', 'interested', 'when can we'];
   const hasConversionSignal = conversionKeywords.some(keyword => allText.includes(keyword));
 
   const rejectionKeywords = ['not interested', 'no thanks', 'remove me', 'stop', 'unsubscribe', 'leave me alone'];
@@ -300,7 +299,7 @@ export async function generateAIReply(
     try {
       const relevantChunks = await searchSimilarChunks(lastLeadMessage.body, lead.userId, 4);
       if (relevantChunks.length > 0) {
-        ragContext = `[RELEVANT BRAND KNOWLEDGE]:\n${relevantChunks.map(c => `- ${c.content}`).join('\n')}`;
+        ragContext = `[RELEVANT BRAND KNOWLEDGE]:n${relevantChunks.map((c: any) => `- ${c.content}`).join('n')}`;
       }
     } catch (ragError) {
       console.warn("[ConversationAI] RAG search failed:", ragError);
@@ -381,7 +380,7 @@ export async function generateAIReply(
   }
 
   const enrichedContext = memoryResult.context
-    ? `\n\nCONVERSATION INSIGHTS:\n${memoryResult.context}`
+    ? `nnCONVERSATION INSIGHTS:n${memoryResult.context}`
     : '';
 
   // Phase 23: Dynamic Context Pruning based on estimated tokens (Budget: 3,000 tokens)
@@ -413,8 +412,8 @@ KNOWN SCHEDULING INTELLIGENCE (do NOT disclose to lead):
 - Suggest times like: "How does Thursday at 5pm work for you?"
 `;
 
-  const stylePrompt = intent?.style ? `[STYLE INSTRUCTION]\nMirror their ${intent.style} style.` : '';
-  const emotionPrompt = intent?.emotion ? `[EMOTION INSTRUCTION]\nAcknowledge their ${intent.emotion} emotion.` : '';
+  const stylePrompt = intent?.style ? `[STYLE INSTRUCTION]nMirror their ${intent.style} style.` : '';
+  const emotionPrompt = intent?.emotion ? `[EMOTION INSTRUCTION]nAcknowledge their ${intent.emotion} emotion.` : '';
 
   let currentTokenCount = estimateTokens(enrichedContext + stylePrompt + emotionPrompt + leadIntelContext);
   const messageContext: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -447,7 +446,7 @@ KNOWN SCHEDULING INTELLIGENCE (do NOT disclose to lead):
 [PHASE 53] PERSONALIZED MEDIA ASSETS:
 This is a High-Value lead. Use a personalized approach. 
 If it feels natural (e.g. "I'd love to see a demo" or "How does this work?"), reference this video breakdown:
-${activeVideos.map((v: any) => `- "${v.ctaText}": ${v.videoUrl}`).join('\n')}
+${activeVideos.map((v: any) => `- "${v.ctaText}": ${v.videoUrl}`).join('n')}
 Say something like: "I actually made a quick video breakdown showing exactly how we handle this: ${activeVideos[0].videoUrl}"
 `;
     }
@@ -456,9 +455,9 @@ Say something like: "I actually made a quick video breakdown showing exactly how
   // ─── PHASE 51: CROSS-CHANNEL NARRATIVE ───────────────────────────────────
   const crossChannelHistory = allMessages.filter(m => m.provider !== platform && m.provider !== 'system');
   const narrativeSummary = crossChannelHistory.length > 0
-    ? `\n[PHASE 51] CROSS-CHANNEL NARRATIVE HISTORY:\n` +
-      crossChannelHistory.slice(-3).map(m => `- [${m.provider.toUpperCase()}]: ${m.body}`).join('\n') +
-      `\nYou MUST ensure this reply fits the narrative established on other channels.`
+    ? `n[PHASE 51] CROSS-CHANNEL NARRATIVE HISTORY:n` +
+      crossChannelHistory.slice(-3).map(m => `- [${m.provider.toUpperCase()}]: ${m.body}`).join('n') +
+      `nYou MUST ensure this reply fits the narrative established on other channels.`
     : '';
 
   // ─── STATUS-AWARE DYNAMIC PROMPT BUILDER ─────────────────────────────────
@@ -531,7 +530,7 @@ Only meeting reminders are authorised. Do not generate a response.`,
   const languageName = languageMap[languageCode] || 'English';
 
   const languageInstruction = languageCode !== 'en'
-    ? `\n\n[GLOBAL LOCALIZATION]: The lead is communicating in ${languageName}. You MUST respond entirely in ${languageName}. Maintain the brand's tone, professionalism, and voice rules natively in ${languageName}. Use cultural business idioms, not literal translations.`
+    ? `nn[GLOBAL LOCALIZATION]: The lead is communicating in ${languageName}. You MUST respond entirely in ${languageName}. Maintain the brand's tone, professionalism, and voice rules natively in ${languageName}. Use cultural business idioms, not literal translations.`
     : "";
 
   const regionalInstruction = getRegionalInstruction(intent?.detectedCountry || null);
@@ -547,7 +546,7 @@ ${ragContext}
 ${brandGuidelines}
 
 ${(brandContext as any)?.brandSnippets?.length > 0
-  ? `KEY BRAND MESSAGES:\n${(brandContext as any).brandSnippets.map((s: string) => `- ${s}`).join('\n')}`
+  ? `KEY BRAND MESSAGES:n${(brandContext as any).brandSnippets.map((s: string) => `- ${s}`).join('n')}`
   : ''}
 
 ${leadIntelContext}
@@ -720,7 +719,7 @@ ${enrichedContext}`;
 
     // If meeting requested, check brand preference
     if (linkIntent.intentType === 'meeting') {
-      const hasTimeMention = /at|on|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|next|morning|afternoon|evening|\d+/i.test(lastMessage.body);
+      const hasTimeMention = /at|on|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|next|morning|afternoon|evening|d+/i.test(lastMessage.body);
 
       // If they prefer autonomous booking AND provided a time, propose slots
       if (brandContext.bookingPreference === 'autonomous' || hasTimeMention) {
@@ -729,7 +728,7 @@ ${enrichedContext}`;
 
         if (suggestedSlots.length > 0) {
           // Use the natural copy generated by BookingProposer (niche-aware)
-          const slotMessages = suggestedSlots.map(s => s.copy);
+          const slotMessages = suggestedSlots.map((s: any) => s.copy);
           const response = slotMessages.length === 1
             ? slotMessages[0]
             : `${slotMessages[0]} Or if that doesn't work, ${slotMessages[1]?.toLowerCase() || 'let me know what does.'}`;
@@ -762,7 +761,7 @@ ${enrichedContext}`;
     while (retryCount < 2) {
       const currentSystemPrompt = retryCount === 0 
         ? systemPrompt 
-        : `${systemPrompt}\n\n[DEDUPLICATION ALERT]: Your previous attempt was too similar to our last message. REPHRASE COMPLETELY. Use a different opening and a different value proposition. Do not repeat sentences.`;
+        : `${systemPrompt}nn[DEDUPLICATION ALERT]: Your previous attempt was too similar to our last message. REPHRASE COMPLETELY. Use a different opening and a different value proposition. Do not repeat sentences.`;
 
       finalAiResponse = await generateReply(currentSystemPrompt, lastMessage.body, {
         model: MODELS.sales_reasoning,
@@ -903,7 +902,7 @@ export async function generateVoiceScript(
     throw new Error("Voice Service Offline: Live API credentials required.");
   }
 
-  const lastMessages = conversationHistory.slice(-5).map(m => m.body).join('\n');
+  const lastMessages = conversationHistory.slice(-5).map(m => m.body).join('n');
   const isWarm = assessLeadWarmth(conversationHistory, lead);
 
   const voiceMessages = conversationHistory.filter(m =>
@@ -1096,7 +1095,7 @@ export async function generateExpertOutreach(
   let ragContext = "";
   try {
     const relevantChunks = await searchSimilarChunks(`${lead.company} ${industry} ${leadRole}`, userId, 5);
-    ragContext = relevantChunks.map(c => `[From ${c.fileName}]: ${c.content}`).join("\n\n");
+    ragContext = relevantChunks.map((c: any) => `[From ${c.fileName}]: ${c.content}`).join("nn");
   } catch (ragError) {
     console.warn("⚠️ [RAG] Outreach retrieval error:", ragError);
   }
@@ -1236,7 +1235,7 @@ export async function generateCampaignTemplateSequence(
   try {
     const ragContextChunks = await searchSimilarChunks("Campaign sequence " + (focus || ""), userId, 3);
     if (ragContextChunks && ragContextChunks.length > 0) {
-      ragContext = ragContextChunks.map(c => c.content).join("\n\n");
+      ragContext = ragContextChunks.map((c: any) => c.content).join("nn");
     }
   } catch (e) {
     // Ignore, fallback to default
@@ -1311,12 +1310,12 @@ export async function generateCampaignTemplateSequence(
     // Fallback template
     return {
       subject: `{{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
-      body: `Hey {{firstName}},\n\nNoticed {{company}} is scaling in the {{industry}} space. Most teams miss the 20% shift that drives 80% of revenue right now.\n\nWe deployed a system using ${typeof offer === 'string' ? offer.substring(0, 50) : 'high-velocity optimization'} that fixes this.\n\nOpen to a quick framework overview next week?`,
+      body: `Hey {{firstName}},nnNoticed {{company}} is scaling in the {{industry}} space. Most teams miss the 20% shift that drives 80% of revenue right now.nnWe deployed a system using ${typeof offer === 'string' ? offer.substring(0, 50) : 'high-velocity optimization'} that fixes this.nnOpen to a quick framework overview next week?`,
       followUpSubject: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
-      followUpBody: `Hey {{firstName}},\n\nJust bumping this. If efficiency is a focus for {{company}} this quarter, this would be highly relevant.\n\nLet me know if you're open to the 5-min breakdown.`,
+      followUpBody: `Hey {{firstName}},nnJust bumping this. If efficiency is a focus for {{company}} this quarter, this would be highly relevant.nnLet me know if you're open to the 5-min breakdown.`,
       followUpSubject2: `Re: {{company}} / ${(brandContext as any)?.businessName || 'Us'}`,
-      followUpBody2: `Hey {{firstName}} - guessing this isn't a priority right now.\n\nI'll stop reaching out. If you ever want to scale your operations without adding headcount, feel free to reach back out.\n\nCheers,`,
-      autoReplyBody: `Hey {{firstName}}! Thanks for getting back to me.\n\nI'd love to jump on a quick call to show you exactly how this works for {{company}}.\n\nDo you have 10 mins this week? Let me know a time that works for you.`
+      followUpBody2: `Hey {{firstName}} - guessing this isn't a priority right now.nnI'll stop reaching out. If you ever want to scale your operations without adding headcount, feel free to reach back out.nnCheers,`,
+      autoReplyBody: `Hey {{firstName}}! Thanks for getting back to me.nnI'd love to jump on a quick call to show you exactly how this works for {{company}}.nnDo you have 10 mins this week? Let me know a time that works for you.`
     };
   }
 }

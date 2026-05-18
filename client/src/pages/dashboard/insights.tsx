@@ -248,7 +248,20 @@ export default function InsightsPage() {
               value={!insightsData?.metrics?.engagementScore || insightsData.metrics.engagementScore === "NaN" ? "0.00" : Number(insightsData.metrics.engagementScore).toFixed(2)}
               icon={<Sparkles className="h-5 w-5 text-purple-500" />}
               description="Average lead interest"
-              trend="Stable"
+              trend={
+                !insightsData?.metrics?.engagementScore || isNaN(Number(insightsData.metrics.engagementScore))
+                  ? undefined
+                  : Number(insightsData.metrics.engagementScore) >= 50
+                    ? "Healthy"
+                    : "At Risk"
+              }
+              trendColor={
+                !insightsData?.metrics?.engagementScore || isNaN(Number(insightsData.metrics.engagementScore))
+                  ? undefined
+                  : Number(insightsData.metrics.engagementScore) >= 50
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
+                    : "bg-red-500/10 border-red-500/20 text-red-500"
+              }
             />
           </div>
 

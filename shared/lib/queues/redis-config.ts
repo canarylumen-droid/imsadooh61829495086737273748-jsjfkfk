@@ -3,7 +3,7 @@ import Redis from 'ioredis';
 const REDIS_URL = process.env.REDIS_URL;
 const REDIS_HOST = process.env.REDIS_HOST;
 
-export const hasRedis = !!REDIS_URL || !!REDIS_HOST;
+export const hasRedis = !!REDIS_URL || !!REDIS_HOST || process.env.NODE_ENV !== 'production';
 
 function getBullMQConnectionOptions() {
   const host = process.env.REDIS_HOST;
@@ -27,17 +27,39 @@ function getBullMQConnectionOptions() {
 }
 
 // Shared Redis connection for BullMQ
-export const redisConnection = hasRedis ? new Redis(getBullMQConnectionOptions() as any, {
-  maxRetriesPerRequest: null, // Critical for BullMQ
-  enableReadyCheck: false,
-}) : undefined;
+let sharedRedis: Redis | null = null;
 
-if (hasRedis && redisConnection) {
-  redisConnection.on('error', (err) => {
-    console.error('❌ Redis Connection Error:', err);
-  });
+export function getSharedRedisConnection(): Redis {
+  if (!sharedRedis) {
+    if (!hasRedis) {
+      throw new Error('❌ Redis is not configured');
+    }
+    const options = getBullMQConnectionOptions();
+    if (typeof options === 'string') {
+      sharedRedis = new Redis(options, {
+        maxRetriesPerRequest: null,
+        enableReadyCheck: false,
+      });
+    } else {
+      sharedRedis = new Redis(options as any);
+    }
 
-  redisConnection.on('connect', () => {
-    console.log('✅ Connected to Redis');
-  });
+    sharedRedis.on('error', (err) => {
+      console.error('❌ Redis Connection Error:', err);
+    });
+
+    sharedRedis.on('connect', () => {
+      console.log('✅ Connected to Redis');
+    });
+  }
+  return sharedRedis;
 }
+
+export const redisConnection = hasRedis ? new Proxy({}, {
+  get(target, prop) {
+    const conn = getSharedRedisConnection();
+    const value = Reflect.get(conn, prop);
+    return typeof value === 'function' ? value.bind(conn) : value;
+  }
+}) as any as Redis : undefined;
+
