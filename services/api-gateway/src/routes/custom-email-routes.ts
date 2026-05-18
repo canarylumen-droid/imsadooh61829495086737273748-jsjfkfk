@@ -520,31 +520,50 @@ router.post('/disconnect', requireAuth, async (req: Request, res: Response): Pro
     const userId = getCurrentUserId(req)!;
     const { integrationId } = req.body;
 
-    // 1. Immediately kill the IMAP connection BEFORE deleting from DB
+    // Collect targeted integration IDs to disconnect
+    const idsToDisconnect: string[] = [];
+    if (integrationId) {
+      idsToDisconnect.push(integrationId);
+    } else {
+      const allIntegrations = await storage.getIntegrations(userId);
+      const customEmails = allIntegrations.filter(i => i.provider === 'custom_email');
+      for (const i of customEmails) {
+        idsToDisconnect.push(i.id);
+      }
+    }
+
+    // 1. Immediately kill the IMAP connection locally BEFORE deleting from DB
     //    so we have the userId available for the forceDisconnect notification
     const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
-    const targetId = integrationId || null;
-
-    if (targetId) {
+    for (const targetId of idsToDisconnect) {
       imapIdleManager.forceDisconnect(targetId, userId);
     }
 
     // 2. Delete from database
-    if (integrationId) {
-      await storage.deleteIntegrationById(integrationId);
-    } else {
-      // No ID provided — find and disconnect all custom email integrations for this user
-      const allIntegrations = await storage.getIntegrations(userId);
-      const customEmails = allIntegrations.filter(i => i.provider === 'custom_email');
-      for (const i of customEmails) {
-        imapIdleManager.forceDisconnect(i.id, userId);
-        await storage.deleteIntegrationById(i.id);
-      }
+    for (const targetId of idsToDisconnect) {
+      await storage.deleteIntegrationById(targetId);
     }
 
-    // 3. Sync remaining connections (picks up the deletion and won't restart killed ones)
-    // REMOVED immediate sync call to avoid race conditions with DB deletion propagation.
-    // The imapIdleManager.forceDisconnect above has already killed the specific connection.
+    // 3. Broadcast to production workers via BullMQ queue
+    try {
+      const { Queue } = await import('bullmq');
+      const { redisConnection, hasRedis } = await import('@shared/lib/queues/redis-config.js');
+      if (hasRedis && redisConnection) {
+        const imapTaskQueue = new Queue('imap-idle-tasks', {
+          connection: redisConnection as any,
+        });
+        for (const targetId of idsToDisconnect) {
+          await imapTaskQueue.add('DISCONNECT_MAILBOX', {
+            type: 'DISCONNECT_MAILBOX',
+            integrationId: targetId,
+          }, { removeOnComplete: true, removeOnFail: true });
+          console.log(`[CustomEmail] Broadcast DISCONNECT_MAILBOX BullMQ task for: ${targetId}`);
+        }
+        await imapTaskQueue.close();
+      }
+    } catch (queueErr: any) {
+      console.warn('[CustomEmail] Non-fatal BullMQ disconnect broadcast error:', queueErr.message);
+    }
 
     // 4. Real-time frontend update
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');

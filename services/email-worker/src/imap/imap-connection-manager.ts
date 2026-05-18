@@ -647,6 +647,7 @@ export class ImapConnectionManager {
         redis.del(IMAP_KEYS.active(integrationId)),
         redis.sRem(IMAP_KEYS.workerSet(WORKER_ID), integrationId),
         redis.del(`lock:imap:conn:${integrationId}`),
+        redis.del(IMAP_KEYS.integrationState(integrationId)),
       ]);
     } catch { /* ignore on disconnect/shutdown */ }
   }

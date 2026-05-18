@@ -19,6 +19,17 @@ export const TIME_SAVED_BENCHMARKS = {
   DEAL_WON: 3600            // 60m
 };
 
+const formatLeadName = (name: string) => {
+  if (!name) return name;
+  return name
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 // Function to check if the database connection is available
 function checkDatabase() {
   if (!db) {
@@ -622,7 +633,7 @@ export class DrizzleStorage implements IStorage {
         userId: insertLead.userId,
         organizationId: insertLead.organizationId || null,
         externalId: insertLead.externalId || null,
-        name: insertLead.name,
+        name: formatLeadName(insertLead.name),
         company: insertLead.company || null,
         role: insertLead.role || null,
         bio: insertLead.bio || null,
@@ -685,6 +696,10 @@ export class DrizzleStorage implements IStorage {
       oldLead = await this.getLead(id);
     }
 
+    if (updates.name) {
+      updates.name = formatLeadName(updates.name);
+    }
+
     const [result] = await db
       .update(leads)
       .set({ ...updates, updatedAt: new Date() })
@@ -704,13 +719,42 @@ export class DrizzleStorage implements IStorage {
 
       // Trigger notification on status change
       if (oldLead && updates.status && oldLead.status !== updates.status) {
-        this.createNotification({
-          userId: result.userId,
-          type: 'lead_status_change',
-          title: '📈 Lead Status Updated',
-          message: `${result.name} moved from ${oldLead.status} to ${updates.status}.`,
-          actionUrl: `/dashboard/leads/${result.id}`
-        });
+        let shouldNotify = false;
+        let notificationTitle = '📈 Lead Status Updated';
+        let notificationMessage = `${result.name} moved from ${oldLead.status} to ${updates.status}.`;
+        
+        // Suppress noisy status changes
+        if (['replied', 'warm', 'booked', 'converted'].includes(updates.status)) {
+           shouldNotify = true;
+           if (updates.status === 'replied') {
+             notificationTitle = '💬 Lead Replied!';
+             notificationMessage = `${result.name} has replied to your outreach.`;
+           } else if (updates.status === 'booked') {
+             notificationTitle = '📅 Meeting Booked!';
+             notificationMessage = `${result.name} booked a meeting.`;
+           }
+        } else if (updates.status === 'opened' || updates.status === 'open') {
+           // Notify only if it actually opened something and wasn't just imported
+           if (oldLead.status !== 'new') {
+              shouldNotify = true;
+              notificationTitle = '👀 Lead Opened Email';
+              notificationMessage = `${result.name} just opened your email.`;
+           }
+        } else if (updates.status === 'cold' && oldLead.status !== 'new') {
+           shouldNotify = true;
+           notificationTitle = '❄️ Lead Turned Cold';
+           notificationMessage = `${result.name} has turned cold after no recent interaction.`;
+        }
+
+        if (shouldNotify) {
+          this.createNotification({
+            userId: result.userId,
+            type: 'lead_status_change',
+            title: notificationTitle,
+            message: notificationMessage,
+            actionUrl: `/dashboard/leads/${result.id}`
+          });
+        }
 
         // System 2: Record episodic memory for autonomous learning
         episodicMemory.onLeadStatusChange(id, oldLead.status, updates.status).catch(err => {
@@ -1339,6 +1383,12 @@ export class DrizzleStorage implements IStorage {
 
   async disconnectIntegration(userId: string, provider: string): Promise<void> {
     checkDatabase();
+    
+    // Fetch all integrations matching this provider for this user before deleting
+    const matchingIntegrations = await db.select().from(integrations).where(
+      and(eq(integrations.userId, userId), eq(integrations.provider, provider as any))
+    );
+
     // LEGACY: Deletes ALL integrations for this provider/user.
     // Use deleteIntegrationById for targeted cleanup.
     await db
@@ -1362,10 +1412,50 @@ export class DrizzleStorage implements IStorage {
           WHERE user_id = ${userId}
         `);
         
-        // Also purge from the smtp_settings table to prevent UI ghosting in Settings
-        await db.delete(smtpSettings).where(eq(smtpSettings.userId, userId));
+        // Purge specific SMTP settings and OAuth accounts for each matching integration
+        for (const integration of matchingIntegrations) {
+          if (integration.accountType) {
+            await db.delete(smtpSettings).where(
+              and(
+                eq(smtpSettings.userId, userId),
+                eq(smtpSettings.email, integration.accountType)
+              )
+            );
+          }
+          
+          const oauthProvider = provider === 'gmail' ? 'google' : provider === 'outlook' ? 'outlook' : null;
+          if (oauthProvider && integration.accountType) {
+            await db.delete(oauthAccounts).where(
+              and(
+                eq(oauthAccounts.userId, userId),
+                eq(oauthAccounts.provider, oauthProvider),
+                eq(oauthAccounts.providerAccountId, integration.accountType)
+              )
+            );
+          }
+
+          // Purge Redis keys for this integration
+          try {
+            const { getRedisClient } = await import('../redis/redis.js');
+            const redis = await getRedisClient();
+            if (redis) {
+              await Promise.allSettled([
+                redis.del(`imap:active:${integration.id}`),
+                redis.del(`imap:integration:${integration.id}:state`),
+                redis.del(`lock:imap:conn:${integration.id}`),
+                redis.keys('imap:worker:*:integrations').then(async (keys) => {
+                  if (keys && keys.length > 0) {
+                    await Promise.allSettled(keys.map(k => redis.sRem(k, integration.id)));
+                  }
+                })
+              ]);
+            }
+          } catch (redisErr: any) {
+            console.warn(`[Storage] Non-fatal Redis cleanup error during bulk: ${redisErr.message}`);
+          }
+        }
         
-        console.log(`🧹 [Storage] Successfully purged all SMTP settings for user ${userId} following bulk provider disconnect.`);
+        console.log(`🧹 [Storage] Successfully purged all SMTP, OAuth, and Redis settings for user ${userId} following bulk provider disconnect.`);
       } catch (e) {
         console.warn(`[Storage] Failed to clear legacy settings during bulk disconnect:`, e);
       }
@@ -1394,14 +1484,56 @@ export class DrizzleStorage implements IStorage {
     // Phase 12: Ensure "Full Deletion" of settings for email providers to prevent ghosting
     if (integration && ['custom_email', 'gmail', 'outlook'].includes(integration.provider)) {
       try {
-        // Legacy user_settings table was removed
+        // 1. Purge from the smtp_settings table PRECISELY matching this email address
+        if (integration.accountType) {
+          await db.delete(smtpSettings).where(
+            and(
+              eq(smtpSettings.userId, integration.userId),
+              eq(smtpSettings.email, integration.accountType)
+            )
+          );
+          console.log(`🧹 [Storage] Purged SMTP settings for ${integration.accountType}`);
+        } else {
+          // Fallback to purging all smtp settings if accountType is missing
+          await db.delete(smtpSettings).where(eq(smtpSettings.userId, integration.userId));
+        }
 
-        // Also purge from the smtp_settings table to prevent UI ghosting in Settings
-        await db.delete(smtpSettings).where(eq(smtpSettings.userId, integration.userId));
-        
-        console.log(`🧹 [Storage] Successfully purged all SMTP settings for user ${integration.userId} following integration removal.`);
+        // 2. Purge corresponding OAuth Accounts for this user & email address
+        const oauthProvider = integration.provider === 'gmail' ? 'google' : integration.provider === 'outlook' ? 'outlook' : null;
+        if (oauthProvider && integration.accountType) {
+          await db.delete(oauthAccounts).where(
+            and(
+              eq(oauthAccounts.userId, integration.userId),
+              eq(oauthAccounts.provider, oauthProvider),
+              eq(oauthAccounts.providerAccountId, integration.accountType)
+            )
+          );
+          console.log(`🧹 [Storage] Purged OAuth account for ${integration.accountType} (${oauthProvider})`);
+        }
+
+        // 3. Purge Redis traces for this integrationId
+        try {
+          const { getRedisClient } = await import('../redis/redis.js');
+          const redis = await getRedisClient();
+          if (redis) {
+            await Promise.allSettled([
+              redis.del(`imap:active:${id}`),
+              redis.del(`imap:integration:${id}:state`),
+              redis.del(`lock:imap:conn:${id}`),
+              // Also clean up worker set tracking keys if they exist
+              redis.keys('imap:worker:*:integrations').then(async (keys) => {
+                if (keys && keys.length > 0) {
+                  await Promise.allSettled(keys.map(k => redis.sRem(k, id)));
+                }
+              })
+            ]);
+            console.log(`🧹 [Storage] Successfully purged Redis keys for integration ${id}`);
+          }
+        } catch (redisErr: any) {
+          console.warn(`[Storage] Non-fatal Redis cleanup error: ${redisErr.message}`);
+        }
       } catch (e) {
-        console.warn(`[Storage] Failed to clear legacy settings (tables might not exist or already cleared):`, e);
+        console.warn(`[Storage] Failed to clear legacy/OAuth/SMTP/Redis settings for integration removal:`, e);
       }
     }
 
@@ -2712,7 +2844,6 @@ export class DrizzleStorage implements IStorage {
 
     if (notification) {
       wsSync.notifyNotification(data.userId, notification);
-      wsSync.broadcastToUser(data.userId, { type: 'notification', payload: notification });
     }
 
     return notification;

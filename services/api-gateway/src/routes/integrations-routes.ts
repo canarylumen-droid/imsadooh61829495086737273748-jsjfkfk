@@ -201,6 +201,17 @@ router.post('/:provider/disconnect', requireAuth, async (req: Request, res: Resp
       }
     }
 
+    // Get list of all matching integrations before deletion for BullMQ queue tasks
+    let integrationsToDisconnect: any[] = [];
+    if (['custom_email', 'gmail', 'outlook'].includes(provider)) {
+      if (integration) {
+        integrationsToDisconnect = [integration];
+      } else {
+        const allInts = await storage.getIntegrations(userId);
+        integrationsToDisconnect = allInts.filter(i => i.provider === provider);
+      }
+    }
+
     // --- Step 3: Delete the integration record from the database ---
     if (integration) {
       console.log(`[Integrations] Deleting integration record: ${integration.id} (${provider})`);
@@ -214,14 +225,50 @@ router.post('/:provider/disconnect', requireAuth, async (req: Request, res: Resp
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
     wsSync.notifySettingsUpdated(userId);
 
-    // If it's an email provider, kill the permanent IMAP socket instantly
+    if (['custom_email', 'gmail', 'outlook'].includes(provider)) {
+      wsSync.notifyLeadsUpdated(userId);
+      for (const i of integrationsToDisconnect) {
+        if (i?.id) {
+          wsSync.notifySyncStatus(userId, { syncing: false, integrationId: i.id, disconnected: true });
+        }
+      }
+    }
+
+    // If it's an email provider, kill the permanent IMAP socket instantly (both locally and on workers via BullMQ)
     if (['custom_email', 'gmail', 'outlook'].includes(provider)) {
       try {
         const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
-        if (integration?.id) {
-          imapIdleManager.forceDisconnect(integration.id, userId);
+        
+        // 1. Terminate locally (legacy support)
+        for (const i of integrationsToDisconnect) {
+          if (i?.id) {
+            imapIdleManager.forceDisconnect(i.id, userId);
+          }
         }
         await imapIdleManager.syncConnections();
+        
+        // 2. Broadcast to production workers via BullMQ queue
+        try {
+          const { Queue } = await import('bullmq');
+          const { redisConnection, hasRedis } = await import('@shared/lib/queues/redis-config.js');
+          if (hasRedis && redisConnection) {
+            const imapTaskQueue = new Queue('imap-idle-tasks', {
+              connection: redisConnection as any,
+            });
+            for (const i of integrationsToDisconnect) {
+              if (i?.id) {
+                await imapTaskQueue.add('DISCONNECT_MAILBOX', {
+                  type: 'DISCONNECT_MAILBOX',
+                  integrationId: i.id,
+                }, { removeOnComplete: true, removeOnFail: true });
+                console.log(`[Integrations] Broadcast DISCONNECT_MAILBOX BullMQ task for: ${i.id}`);
+              }
+            }
+            await imapTaskQueue.close();
+          }
+        } catch (queueErr: any) {
+          console.warn('[Integrations] Non-fatal BullMQ disconnect broadcast error:', queueErr.message);
+        }
       } catch (e) {
         console.warn('[Integrations] Failed to cleanup IMAP connections:', e);
       }
