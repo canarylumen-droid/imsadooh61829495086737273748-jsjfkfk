@@ -55,6 +55,8 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
       if (!serverOnboardingCompleted && 
           currentPath !== "/onboarding" && 
           !currentPath.startsWith("/auth") &&
+          currentPath !== "/login" &&
+          currentPath !== "/signup" &&
           user.role !== "admin") {
         console.log("🚧 Onboarding incomplete - redirecting to /onboarding");
         localStorage.removeItem('onboarding_completed');

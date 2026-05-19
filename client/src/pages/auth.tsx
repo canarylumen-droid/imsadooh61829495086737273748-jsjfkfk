@@ -25,14 +25,33 @@ const options = {
 zxcvbnOptions.setOptions(options);
 
 export default function AuthPage() {
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const search = useSearch();
   const { data: user } = useUser();
   const { toast } = useToast();
 
   // Signup flow: 1 = Email+Password, 2 = OTP/Skip, 3 = Username, 4 = Success
   const [signupStep, setSignupStep] = useState(1);
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(() => {
+    return location === "/login" || window.location.pathname === "/login";
+  });
+  const isDedicatedPage = location === "/login" || location === "/signup" || window.location.pathname === "/login" || window.location.pathname === "/signup";
+
+  // Sync isLogin state when route changes
+  useEffect(() => {
+    if (location === "/login") {
+      setIsLogin(true);
+    } else if (location === "/signup") {
+      setIsLogin(false);
+    }
+  }, [location]);
+
+  // Set document title dynamically for SEO
+  useEffect(() => {
+    document.title = isLogin 
+      ? "Login | Audnix AI - Enterprise Outreach Platform" 
+      : "Sign Up | Audnix AI - Enterprise Outreach Platform";
+  }, [isLogin]);
 
   // Form state
   // Auto-fill email from URL if present
@@ -654,6 +673,17 @@ export default function AuthPage() {
                   Back to Login
                 </button>
               </div>
+            ) : isDedicatedPage ? (
+              <div className="text-center py-2">
+                <CardTitle className="text-2xl font-bold text-white tracking-tight">
+                  {isLogin ? "Sign In" : "Register"}
+                </CardTitle>
+                <CardDescription className="text-white/60 text-xs mt-1.5">
+                  {isLogin 
+                    ? "Welcome back! Access your outreach workspace." 
+                    : "Create your free account to get started."}
+                </CardDescription>
+              </div>
             ) : (
               <div className="flex p-1 bg-white/5 rounded-lg border border-white/10">
                 <button
@@ -845,6 +875,21 @@ export default function AuthPage() {
                       </Button>
                     </div>
                   )}
+
+                  {isDedicatedPage && (
+                    <div className="text-center pt-2">
+                      <p className="text-xs text-white/40">
+                        Don't have an account?{" "}
+                        <button
+                          type="button"
+                          onClick={() => setLocation("/signup")}
+                          className="text-primary hover:underline font-semibold"
+                        >
+                          Register here
+                        </button>
+                      </p>
+                    </div>
+                  )}
                 </motion.div>
               ) : (
                 <motion.div
@@ -909,6 +954,21 @@ export default function AuthPage() {
                         {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                         Continue <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
+
+                      {isDedicatedPage && (
+                        <div className="text-center pt-2">
+                          <p className="text-xs text-white/40">
+                            Already have an account?{" "}
+                            <button
+                              type="button"
+                              onClick={() => setLocation("/login")}
+                              className="text-primary hover:underline font-semibold"
+                            >
+                              Sign In
+                            </button>
+                          </p>
+                        </div>
+                      )}
                     </div>
                   )}
 

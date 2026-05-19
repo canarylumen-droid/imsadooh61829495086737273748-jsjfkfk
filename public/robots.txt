@@ -1,11 +1,31 @@
 User-agent: *
+
+# Sitemaps
+Sitemap: https://audnixai.com/sitemap.xml
+
+# Allow public landing and feature pages
 Allow: /
-Disallow: /dashboard/
-Disallow: /api/
+Allow: /find-leads
+Allow: /compare
+Allow: /solutions/agencies
+Allow: /solutions/sales-teams
+Allow: /solutions/creators
+Allow: /resources/niche-vault
+Allow: /resources/outreach-playbooks
+Allow: /resources/api-docs
+Allow: /auth
+Allow: /login
+Allow: /signup
 Allow: /privacy-policy
 Allow: /terms-of-service
 Allow: /data-deletion
-Allow: /#faq
 
-Sitemap: https://audnixai.com/sitemap.xml
+# Disallow private user-authenticated areas and APIs
+Disallow: /dashboard/
+Disallow: /onboarding/
+Disallow: /api/
+Disallow: /admin/
+Disallow: /admin-secret-xyz/
+
+# Crawl delay
 Crawl-delay: 1
