@@ -433,42 +433,44 @@ export default function AnalyticsPage() {
                     <CardContent className="h-[300px] flex items-center justify-center">
                         {analytics?.metrics ? (
                             <div className="w-full h-full flex items-center justify-center">
-                                <ResponsiveContainer width="60%" height="100%">
-                                    {(() => {
-                                        const pieData = [
-                                            { name: 'Warm', value: Math.max(0, Number(analytics?.metrics?.replied || 0)), color: '#3b82f6' },
-                                            { name: 'Sent', value: Math.max(0, Number(analytics?.metrics?.sent || 0) - Number(analytics?.metrics?.replied || 0)), color: '#d946ef' },
-                                            { name: 'Converted', value: Math.max(0, Number(analytics?.metrics?.booked || 0)), color: '#10b981' }
-                                        ].filter(item => !isNaN(item.value) && item.value > 0);
+                                <ChartContainer config={{}} className="w-[60%] h-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        {(() => {
+                                            const pieData = [
+                                                { name: 'Warm', value: Math.max(0, Number(analytics?.metrics?.replied || 0)), color: '#3b82f6' },
+                                                { name: 'Sent', value: Math.max(0, Number(analytics?.metrics?.sent || 0) - Number(analytics?.metrics?.replied || 0)), color: '#d946ef' },
+                                                { name: 'Converted', value: Math.max(0, Number(analytics?.metrics?.booked || 0)), color: '#10b981' }
+                                            ].filter(item => !isNaN(item.value) && item.value > 0);
 
-                                        if (pieData.length === 0) {
+                                            if (pieData.length === 0) {
+                                                return (
+                                                    <div className="h-full w-full flex items-center justify-center opacity-30 text-xs font-medium uppercase">
+                                                        No Status Data
+                                                    </div>
+                                                );
+                                            }
+
                                             return (
-                                                <div className="h-full w-full flex items-center justify-center opacity-30 text-xs font-medium uppercase">
-                                                    No Status Data
-                                                </div>
+                                                <PieChart>
+                                                    <Pie
+                                                        data={pieData}
+                                                        cx="50%"
+                                                        cy="50%"
+                                                        innerRadius={60}
+                                                        outerRadius={80}
+                                                        paddingAngle={8}
+                                                        dataKey="value"
+                                                    >
+                                                        {pieData.map((entry, index) => (
+                                                            <Cell key={`cell-${index}`} fill={entry.color} stroke="transparent" />
+                                                        ))}
+                                                    </Pie>
+                                                    <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
+                                                </PieChart>
                                             );
-                                        }
-
-                                        return (
-                                            <PieChart>
-                                                <Pie
-                                                    data={pieData}
-                                                    cx="50%"
-                                                    cy="50%"
-                                                    innerRadius={60}
-                                                    outerRadius={80}
-                                                    paddingAngle={8}
-                                                    dataKey="value"
-                                                >
-                                                    {pieData.map((entry, index) => (
-                                                        <Cell key={`cell-${index}`} fill={entry.color} stroke="transparent" />
-                                                    ))}
-                                                </Pie>
-                                                <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
-                                            </PieChart>
-                                        );
-                                    })()}
-                                </ResponsiveContainer>
+                                        })()}
+                                    </ResponsiveContainer>
+                                </ChartContainer>
                                 <div className="flex flex-col gap-3 justify-center pr-10">
                                     {[
                                         { label: 'Warm', color: 'bg-blue-500' },
