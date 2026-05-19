@@ -38,6 +38,7 @@ import { CustomContextMenu, useContextMenu } from "@/components/ui/interactive/C
 import UnifiedCampaignWizard from "@/components/outreach/UnifiedCampaignWizard";
 import { CampaignListModal } from "@/components/outreach/CampaignListModal";
 import { LeadProcessModal } from "@/components/dashboard/LeadProcessModal";
+import { PageWrapper } from "@/components/ui/page-wrapper";
 import {
   Search,
   Trash2,
@@ -392,73 +393,7 @@ export default function InboxPage() {
     };
   }, [socket, leadId, queryClient, toast]);
 
-  // Historical sync modal state
-  const [activeSyncMailbox, setActiveSyncMailbox] = useState<{ id: string; email: string; provider: string } | null>(null);
-  const [syncStep, setSyncStep] = useState<number>(0); // 0: ask, 1: connecting, 2: folders, 3: importing, 4: analyzing, 5: success
 
-  const { data: customEmailStatus } = useQuery<any>({
-    queryKey: ["/api/custom-email/status"],
-  });
-
-  useEffect(() => {
-    if (customEmailStatus?.integrations && !activeSyncMailbox && syncStep === 0) {
-      // Find the first integration that has NOT been prompted yet
-      const unprompted = customEmailStatus.integrations.find(
-        (i: any) => i.connected && !localStorage.getItem(`email_sync_prompted_${i.id}`)
-      );
-      if (unprompted) {
-        setActiveSyncMailbox({ id: unprompted.id, email: unprompted.email, provider: unprompted.provider });
-      }
-    }
-  }, [customEmailStatus, activeSyncMailbox, syncStep]);
-
-  const handleStartSync = async () => {
-    if (!activeSyncMailbox) return;
-
-    setSyncStep(1);
-    try {
-      await apiRequest("POST", "/api/custom-email/sync-history", { days: 30, integrationId: activeSyncMailbox.id });
-      await apiRequest("POST", "/api/custom-email/sync-now");
-    } catch (err) {
-      console.warn("Failed to trigger backend sync:", err);
-    }
-
-    // Beautiful step progression simulation
-    setTimeout(() => {
-      setSyncStep(2);
-      
-      setTimeout(() => {
-        setSyncStep(3);
-
-        setTimeout(() => {
-          setSyncStep(4);
-
-          setTimeout(() => {
-            setSyncStep(5);
-            localStorage.setItem(`email_sync_prompted_${activeSyncMailbox.id}`, "synced");
-            queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-            queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
-          }, 1500);
-        }, 2000);
-      }, 1500);
-    }, 1500);
-  };
-
-  const handleDeclineSync = () => {
-    if (!activeSyncMailbox) return;
-    localStorage.setItem(`email_sync_prompted_${activeSyncMailbox.id}`, "declined");
-    toast({
-      title: "Sync preferences saved",
-      description: "Only new emails sent/received from this moment will be synced."
-    });
-    setActiveSyncMailbox(null);
-    setSyncStep(0);
-  };
-
-  const handleCloseSyncSuccess = () => {
-    setActiveSyncMailbox(null);
-    setSyncStep(0);
-  };
 
   const [showArchived, setShowArchived] = useState(false);
   const [page, setPage] = useState(0);
@@ -990,7 +925,7 @@ export default function InboxPage() {
   const ChannelIcon = activeLead ? (channelIcons[activeLead.channel as keyof typeof channelIcons] || Instagram) : Instagram;
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden bg-background relative p-0">
+    <PageWrapper className="flex h-[100dvh] w-full overflow-hidden bg-background relative p-0 m-0 max-w-none space-y-0 duration-700">
       <div className="flex w-full h-full max-w-[1600px] mx-auto bg-card border-0 md:border md:rounded-3xl overflow-hidden shadow-2xl">
         {/* Lead List Pane */}
         <div className={cn(
@@ -1160,18 +1095,18 @@ export default function InboxPage() {
                 {/* Only show "Connect Sources" if loading is DONE and ABSOLUTELY no channels are connected AND no leads exist */}
                 {!channelsLoading && !hasAnyChannel && allLeads.length === 0 ? (
                   <div className="max-w-xs">
-                    <div className="w-20 h-20 rounded-[2.5rem] bg-primary/10 flex items-center justify-center mb-8 mx-auto relative group">
+                    <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-8 mx-auto relative group">
                       <div className="absolute inset-0 bg-primary/20 blur-xl md:blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
                       <Plug className="h-10 w-10 text-primary relative z-10 animate-pulse" />
                       <div className="absolute -top-1 -right-1 h-4 w-4 bg-destructive rounded-full border-2 border-background" />
                     </div>
-                    <h3 className="text-xl font-black tracking-tighter uppercase italic mb-2">Connect Sources</h3>
+                    <h3 className="text-lg font-bold tracking-tight mb-2">Connect Sources</h3>
                     <p className="text-sm text-muted-foreground/60 font-medium mb-8 leading-relaxed">
                       Your inbox is ready. Just connect your email or Instagram to start importing and engaging leads in real-time.
                     </p>
                     <Button
                       size="lg"
-                      className="rounded-2xl font-black uppercase tracking-[0.2em] text-[10px] h-12 px-10 shadow-lg shadow-primary/20 hover:scale-105 transition-all w-full"
+                      className="rounded-xl font-bold uppercase tracking-wider text-xs h-10 px-10 shadow-md shadow-primary/15 transition-all w-full"
                       onClick={() => setLocation('/dashboard/integrations')}
                     >
                       Connect Sources Now <ArrowRight className="ml-2 w-4 h-4" />
@@ -1179,11 +1114,11 @@ export default function InboxPage() {
                   </div>
                 ) : (
                   <div className="max-w-xs opacity-40">
-                    <div className="w-20 h-20 rounded-[2.5rem] bg-muted/20 flex items-center justify-center mb-6 mx-auto">
+                    <div className="w-20 h-20 rounded-2xl bg-muted/20 flex items-center justify-center mb-6 mx-auto">
                       <InboxIcon className="h-10 w-10 text-muted-foreground/30" />
                     </div>
-                    <p className="text-sm font-black uppercase tracking-widest text-foreground">No conversations found</p>
-                    <p className="text-[10px] text-muted-foreground font-bold mt-2 uppercase">
+                    <p className="text-sm font-bold uppercase tracking-wider text-foreground">No conversations found</p>
+                    <p className="text-[10px] text-muted-foreground font-semibold mt-2 uppercase">
                       {searchQuery ? "Try adjusting your search" :
                         filterStatus !== 'all' ? `No ${filterStatus} conversations` :
                           showArchived ? "No archived conversations" :
@@ -1317,12 +1252,12 @@ export default function InboxPage() {
             <div className="text-center space-y-6 max-w-sm px-6">
               <div className="relative mx-auto w-24 h-24">
                 <div className="absolute inset-0 bg-primary/20 blur-3xl rounded-full animate-pulse" />
-                <div className="relative h-24 w-24 rounded-[2.5rem] bg-card border border-border/40 flex items-center justify-center shadow-2xl">
+                <div className="relative h-24 w-24 rounded-2xl bg-card border border-border/40 flex items-center justify-center shadow-2xl">
                   <InboxIcon className="h-10 w-10 text-primary/40" />
                 </div>
               </div>
               <div className="space-y-2">
-                <h2 className="text-2xl font-black text-foreground uppercase tracking-tighter">Command Center</h2>
+                <h2 className="text-2xl font-bold text-foreground uppercase tracking-tight">Command Center</h2>
                 <p className="text-sm text-muted-foreground/60 leading-relaxed">
                   Select a live conversation to view deep lead intelligence, handle objections, or let the AI Agent take full control.
                 </p>
@@ -1949,159 +1884,7 @@ export default function InboxPage() {
         messages={messagesData?.messages || []}
       />
 
-      {activeSyncMailbox && (
-        <Dialog open={!!activeSyncMailbox} onOpenChange={() => {
-          if (syncStep === 0 || syncStep === 5) {
-            setActiveSyncMailbox(null);
-            setSyncStep(0);
-          }
-        }}>
-          <DialogContent className="max-w-[480px] p-0 overflow-hidden bg-slate-900 border-slate-800 text-white rounded-3xl shadow-2xl">
-            {syncStep === 0 && (
-              <div className="p-8 space-y-6 bg-slate-900">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <div className="w-16 h-16 rounded-[1.5rem] bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20 relative group">
-                    <div className="absolute inset-0 bg-indigo-500/10 blur-xl rounded-full" />
-                    <Mail className="h-8 w-8 text-indigo-400 animate-pulse" />
-                  </div>
-                  <div className="space-y-1">
-                    <DialogTitle className="text-xl font-black uppercase tracking-tight text-white flex items-center justify-center gap-2">
-                      <Sparkles className="h-5 w-5 text-indigo-400" /> Sync Previous Emails?
-                    </DialogTitle>
-                    <DialogDescription className="text-xs text-slate-400 font-medium">
-                      Newly connected mailbox detected: <strong className="text-white">{activeSyncMailbox.email}</strong>
-                    </DialogDescription>
-                  </div>
-                </div>
 
-                <div className="p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-3">
-                  <p className="text-xs text-slate-300 leading-relaxed text-center font-medium">
-                    Would you like to import your previous conversations from your mailbox server? This will populate your inbox instantly and train Audnix AI on your historical lead interactions.
-                  </p>
-                  <div className="flex flex-col gap-2 pt-2 text-[10px] text-slate-400 font-semibold max-w-[320px] mx-auto">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
-                      Imports the last 30 days of email history
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
-                      Extracts historical leads and conversation threads
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Check className="h-3 w-3 text-emerald-500 shrink-0" />
-                      Provides instant domain reputation health calibration
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3 pt-2">
-                  <Button
-                    className="w-full h-11 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold uppercase tracking-widest text-xs shadow-lg shadow-indigo-600/20"
-                    onClick={handleStartSync}
-                  >
-                    Yes, Sync Entire Mailbox
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    className="w-full h-11 rounded-xl text-xs font-bold uppercase tracking-widest text-slate-400 hover:bg-slate-800/50 hover:text-white"
-                    onClick={handleDeclineSync}
-                  >
-                    No, Only Sync New Outreach
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            {syncStep > 0 && syncStep < 5 && (
-              <div className="p-8 space-y-8 flex flex-col items-center bg-slate-900">
-                <div className="relative w-24 h-24 flex items-center justify-center">
-                  <div className="absolute inset-0 bg-indigo-500/10 blur-xl rounded-full" />
-                  <Loader2 className="h-16 w-16 text-indigo-400 animate-spin" />
-                  <div className="absolute font-black text-xs text-indigo-400">{syncStep * 20}%</div>
-                </div>
-
-                <div className="space-y-2 text-center w-full">
-                  <h3 className="text-sm font-black uppercase tracking-widest text-white">
-                    {syncStep === 1 && "Establishing Secure Connection..."}
-                    {syncStep === 2 && "Mapping Folders & Folder Structures..."}
-                    {syncStep === 3 && "Importing Previous Conversations..."}
-                    {syncStep === 4 && "AI Lead Categorization & Health Analysis..."}
-                  </h3>
-                  <p className="text-[11px] text-slate-400 leading-relaxed max-w-xs mx-auto">
-                    {syncStep === 1 && "Connecting securely via encrypted SMTP/IMAP protocol..."}
-                    {syncStep === 2 && "Locating Inbox, Sent, and Archive folders on your server..."}
-                    {syncStep === 3 && "Downloading thread chunks and rebuilding your inbox display..."}
-                    {syncStep === 4 && "Calibrating domain health metrics and priming autonomous AI agents..."}
-                  </p>
-                </div>
-
-                <div className="w-full bg-slate-950/50 rounded-2xl p-4 border border-slate-800 space-y-2">
-                  <div className="flex items-center justify-between text-[9px] uppercase tracking-widest font-black text-slate-500 mb-2">
-                    <span>Sync Status</span>
-                    <span>Active</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {[
-                      { label: "Connection Established", active: syncStep >= 1, done: syncStep > 1 },
-                      { label: "Folder Architecture Mapped", active: syncStep >= 2, done: syncStep > 2 },
-                      { label: "Lead Interactions Imported", active: syncStep >= 3, done: syncStep > 3 },
-                      { label: "AI Primed & DNS Calibrated", active: syncStep >= 4, done: syncStep > 4 }
-                    ].map((step, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-xs">
-                        <span className={cn(
-                          "font-bold",
-                          step.done ? "text-emerald-400" :
-                          step.active ? "text-indigo-400 animate-pulse" :
-                          "text-slate-500"
-                        )}>{step.label}</span>
-                        {step.done ? (
-                          <Check className="h-4 w-4 text-emerald-400" />
-                        ) : step.active ? (
-                          <Loader2 className="h-3.5 w-3.5 text-indigo-400 animate-spin" />
-                        ) : (
-                          <div className="h-1.5 w-1.5 rounded-full bg-slate-700 mr-1.5" />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {syncStep === 5 && (
-              <div className="p-8 space-y-6 text-center bg-slate-900">
-                <div className="flex flex-col items-center space-y-4">
-                  <div className="w-16 h-16 rounded-[1.5rem] bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 relative group">
-                    <div className="absolute inset-0 bg-emerald-500/10 blur-xl rounded-full" />
-                    <CheckCircle className="h-8 w-8 text-emerald-400 animate-bounce" />
-                  </div>
-                  <div className="space-y-1">
-                    <DialogTitle className="text-xl font-black uppercase tracking-tight text-white">
-                      Mailbox Synchronized!
-                    </DialogTitle>
-                    <DialogDescription className="text-xs text-emerald-400 font-bold uppercase tracking-wider">
-                      Successfully Synced with {activeSyncMailbox.email}
-                    </DialogDescription>
-                  </div>
-                </div>
-
-                <div className="p-4 bg-slate-950/50 rounded-2xl border border-slate-800">
-                  <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                    Your entire mailbox history has been successfully synchronized. Your historical conversations, outbound messages, and active lead contacts are now available in your command center.
-                  </p>
-                </div>
-
-                <Button
-                  className="w-full h-11 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold uppercase tracking-widest text-xs shadow-lg shadow-emerald-600/20"
-                  onClick={handleCloseSyncSuccess}
-                >
-                  Enter Command Center
-                </Button>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-      )}
-    </div>
+    </PageWrapper>
   );
 }

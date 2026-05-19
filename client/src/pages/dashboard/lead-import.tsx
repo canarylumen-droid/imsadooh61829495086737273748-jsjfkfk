@@ -20,6 +20,8 @@ import UnifiedCampaignWizard from "@/components/outreach/UnifiedCampaignWizard";
 
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 export default function LeadImportPage() {
   const { toast } = useToast();
@@ -355,12 +357,12 @@ export default function LeadImportPage() {
   };
 
   return (
-    <div className="p-4 md:p-8 space-y-8 max-w-4xl mx-auto animate-in fade-in duration-700">
+    <PageWrapper className="max-w-5xl mx-auto space-y-8">
       <div className="space-y-1">
-        <h1 className="text-3xl md:text-5xl font-extrabold tracking-tighter bg-gradient-to-br from-foreground via-foreground/90 to-primary/80 bg-clip-text text-transparent">
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">
           Network Data Ingestion
         </h1>
-        <p className="text-muted-foreground/80 text-lg font-medium tracking-tight">
+        <p className="text-muted-foreground mt-1">
           Synchronize your high-intent leads into the Audnix intelligence core.
         </p>
       </div>
@@ -370,10 +372,10 @@ export default function LeadImportPage() {
           <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-primary/10 mb-6">
             <Sparkles className="h-8 w-8 text-primary" />
           </div>
-          <CardTitle className="text-4xl font-black tracking-tight mb-2 uppercase italic text-foreground">
+          <CardTitle className="text-2xl font-bold tracking-tight mb-2 text-foreground">
             Lead Intelligence Sync
           </CardTitle>
-          <CardDescription className="text-sm font-bold tracking-widest text-muted-foreground/60">
+          <CardDescription className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
             UPLOAD CSV, EXCEL, OR PDF FOR CAMPAIGN ANALYSIS
           </CardDescription>
         </CardHeader>
@@ -421,7 +423,7 @@ export default function LeadImportPage() {
 
           <div
             className={cn(
-              "border-2 border-dashed rounded-[2rem] p-16 text-center transition-all cursor-pointer group/upload relative overflow-hidden",
+              "border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer group/upload relative overflow-hidden",
               isDragging ? "bg-primary/20 border-primary scale-[1.02] shadow-[0_0_40px_rgba(0,180,255,0.3)]" : "border-border/40 hover:bg-primary/5 hover:border-primary/20",
               importing && "pointer-events-none opacity-50"
             )}
@@ -452,7 +454,7 @@ export default function LeadImportPage() {
                   </div>
                 ) : (
                   <div className={cn(
-                    "p-6 rounded-[2rem] transition-all transform group-hover/upload:scale-110",
+                    "p-5 rounded-2xl transition-all transform group-hover/upload:scale-110",
                     isDragging ? "bg-primary/20 scale-110" : "bg-primary/5 group-hover/upload:bg-primary/10"
                   )}>
                     <Upload className="h-10 w-10 text-primary" />
@@ -462,7 +464,7 @@ export default function LeadImportPage() {
               <p className="text-xl font-bold tracking-tight mb-2">
                 {file ? file.name : (isDragging ? 'Drop file to upload' : 'Select Data Source')}
               </p>
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/40">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40">
                 DRAG & DROP OR BROWSE • CSV, EXCEL, PDF
               </p>
             </label>
@@ -530,14 +532,14 @@ export default function LeadImportPage() {
               onClick={handleOpenPreview}
               variant="outline"
               disabled={importing}
-              className="px-6 rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest border-border/40 hover:bg-muted/30 h-12 sm:h-14 w-full sm:w-auto"
+              className="px-6 rounded-xl text-xs font-semibold uppercase tracking-wider border-border/40 hover:bg-muted/30 h-12 w-full sm:w-auto"
             >
               Preview Outreach
             </Button>
             <Button
               onClick={manualPasteText.trim() ? handleManualImport : handleImport}
               disabled={(manualPasteText.trim() ? false : !file) || importing}
-              className="flex-1 h-12 sm:h-14 rounded-2xl text-[10px] sm:text-[11px] font-bold uppercase tracking-wider sm:tracking-[0.2em] shadow-xl shadow-primary/20 bg-primary hover:bg-primary/90 transition-all min-w-0"
+              className="flex-1 h-12 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg shadow-primary/10 bg-primary hover:bg-primary/90 transition-all min-w-0"
             >
               {importing ? (
                 <>
@@ -579,9 +581,9 @@ export default function LeadImportPage() {
             <div className="p-4 rounded-xl bg-orange-400/5 border border-orange-400/10 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Sparkles className="h-4 w-4 text-orange-400" />
-                <span className="text-xs font-bold text-orange-400/80 uppercase tracking-widest">Intelligence Filter Active</span>
+                <span className="text-xs font-semibold text-orange-400/80 uppercase tracking-wider">Intelligence Filter Active</span>
               </div>
-              <span className="text-xs font-black text-orange-400">{importResults.filtered} Leads Blocked</span>
+              <span className="text-xs font-bold text-orange-400">{importResults.filtered} Leads Blocked</span>
             </div>
           )}
 
@@ -590,7 +592,7 @@ export default function LeadImportPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <ResponsiveGrid className="md:grid-cols-3 lg:grid-cols-3 gap-6">
         {[
           { label: 'CSV', desc: 'Standard contact export', icon: <CsvIcon /> },
           { label: 'Excel', desc: 'SaaS & CRM exports', icon: <CsvIcon /> },
@@ -604,19 +606,19 @@ export default function LeadImportPage() {
             <p className="text-xs text-muted-foreground">{type.desc}</p>
           </Card>
         ))}
-      </div>
+      </ResponsiveGrid>
 
-      <Card className="bg-primary/5 border-primary/20 rounded-[2rem] overflow-hidden relative">
-        <CardContent className="p-8">
+      <Card className="bg-primary/5 border-primary/20 rounded-2xl overflow-hidden relative">
+        <CardContent className="p-6">
           <div className="flex items-start gap-6">
-            <Badge variant="outline" className="mt-1 bg-primary text-primary-foreground border-0 font-bold tracking-widest text-[10px] px-3 py-1">PRO TIP</Badge>
-            <p className="text-sm text-balance leading-relaxed font-bold tracking-tight text-foreground/80">
+            <Badge variant="outline" className="mt-1 bg-primary text-primary-foreground border-0 font-semibold tracking-wider text-[10px] px-3 py-1">PRO TIP</Badge>
+            <p className="text-sm text-balance leading-relaxed font-semibold tracking-tight text-foreground/80">
               Importing from Apollo, LinkedIn, or HubSpot? Our intelligent system automatically maps columns for instant outreach synchronization.
             </p>
           </div>
           <div className="absolute top-0 right-0 w-32 h-32 blur-[60px] opacity-10 bg-primary rounded-full translate-x-10 -translate-y-10" />
         </CardContent>
       </Card>
-    </div>
+    </PageWrapper>
   );
 }

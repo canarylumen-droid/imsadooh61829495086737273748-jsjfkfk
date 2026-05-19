@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Send, Wand2, Mail, Clock, Users, Smartphone, Monitor,
   Upload, CheckCircle2, ChevronRight, ChevronLeft, Sparkles,
-  FileText, Plus, Database, Inbox, Tags, Trash2
+  FileText, Plus, Database, Inbox, Tags, Trash2, X
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -417,13 +417,13 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
               <Send className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-lg md:text-2xl font-black italic tracking-tighter uppercase font-serif">Campaign Wizard</DialogTitle>
+              <DialogTitle className="text-lg md:text-2xl font-black tracking-tight uppercase">Campaign Wizard</DialogTitle>
               <div className="flex gap-2 mt-1">
                 {[1, 2].map(i => <div key={i} className={cn("h-1.5 rounded-full transition-all duration-500", step === i ? "w-8 bg-primary" : "w-2 bg-muted")} />)}
               </div>
             </div>
           </div>
-          <DialogClose asChild><Button variant="ghost" size="icon" className="rounded-full"><Loader2 className="h-4 w-4 opacity-40" /></Button></DialogClose>
+          <DialogClose asChild><Button variant="ghost" size="icon" className="rounded-full hover:bg-muted/80 transition-colors"><X className="h-4 w-4 opacity-70" /></Button></DialogClose>
         </div>
 
         <div className="flex flex-1 overflow-hidden relative">
@@ -436,7 +436,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                       <div className="space-y-8">
                         <div className="space-y-3">
                           <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Campaign Identity</Label>
-                          <Input value={campaignName} onChange={e => setCampaignName(e.target.value)} placeholder="e.g. Project Nova" className="h-14 bg-muted/20 border-0 font-bold text-lg rounded-2xl" />
+                          <Input value={campaignName} onChange={e => setCampaignName(e.target.value)} placeholder="e.g. Project Nova" className="h-12 bg-muted/20 border-0 font-semibold text-sm rounded-xl" />
                         </div>
                         <div className="space-y-4">
                           <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Connected Inboxes</Label>
@@ -485,18 +485,18 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                           <div className="grid grid-cols-2 gap-4">
                             <button onClick={() => setSourceType('database')} className={cn("p-4 rounded-2xl border-2 text-left transition-all", sourceType === 'database' ? "border-primary bg-primary/5 shadow-lg" : "border-border/40")}>
                               <Database className="w-5 h-5 mb-2 opacity-50" />
-                              <p className="text-xs font-black uppercase">Existing</p>
+                              <p className="text-xs font-bold uppercase">Existing</p>
                             </button>
                             <button onClick={() => setSourceType('upload')} className={cn("p-4 rounded-2xl border-2 text-left transition-all", sourceType === 'upload' ? "border-primary bg-primary/5 shadow-lg" : "border-border/40")}>
                               <Upload className="w-5 h-5 mb-2 opacity-50" />
-                              <p className="text-xs font-black uppercase">Upload</p>
+                              <p className="text-xs font-bold uppercase">Upload</p>
                             </button>
                           </div>
                           {sourceType === 'upload' ? (
                             <label className="border-2 border-dashed border-primary/20 hover:border-primary/40 p-8 rounded-2xl text-center cursor-pointer flex flex-col items-center gap-3 bg-primary/5 transition-all">
                               <input type="file" className="hidden" onChange={handleFileUpload} />
-                              <Sparkles className="h-6 w-6 text-primary animate-pulse" />
-                              <div className="font-black uppercase text-[10px] tracking-widest italic">Drop CSV or PDF here</div>
+                              <Sparkles className="h-6 w-6 text-primary" />
+                              <div className="font-bold uppercase text-[10px] tracking-wider">Drop CSV or PDF here</div>
                             </label>
                           ) : (
                             <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
@@ -515,14 +515,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                       }
                                     }}
                                     disabled={syncLimit === 'all'}
-                                    className="h-14 bg-muted/20 border-border/40 rounded-2xl pl-10 font-black"
+                                    className="h-12 bg-muted/20 border-border/40 rounded-xl pl-10 font-semibold text-sm"
                                   />
                                   <Users className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 opacity-40" />
                                 </div>
                                 <Button 
                                   variant={syncLimit === 'all' ? 'default' : 'outline'}
                                   onClick={() => setSyncLimit(syncLimit === 'all' ? 1000 : 'all')}
-                                  className="h-14 px-6 rounded-2xl font-black text-[10px] uppercase tracking-widest shrink-0"
+                                  className="h-12 px-6 rounded-xl font-bold text-xs uppercase tracking-wider shrink-0"
                                 >
                                   {syncLimit === 'all' ? 'Custom' : 'All Leads'}
                                 </Button>
@@ -530,7 +530,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                               <Button 
                                 onClick={handleFetchLeads} 
                                 disabled={isLoadingLeads || (syncLimit !== 'all' && syncLimit <= 0)}
-                                className="w-full h-14 rounded-2xl bg-primary/10 border-primary/20 text-primary text-xs font-black uppercase tracking-widest hover:bg-primary/20 flex gap-3 transition-all"
+                                className="w-full h-12 rounded-xl bg-primary/10 border-primary/20 text-primary text-xs font-bold uppercase tracking-wider hover:bg-primary/20 flex items-center justify-center gap-3 transition-all"
                               >
                                 {isLoadingLeads ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
                                 {syncLimit === 'all' ? 'Fetch Entire Workforce Pool' : `Sync ${syncLimit} Available Leads`}
@@ -561,35 +561,35 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
                               <div>
                                 <p className="text-[9px] uppercase font-black opacity-40 mb-1">Daily Capacity</p>
-                                <p className={cn("text-3xl font-black italic transition-all", totalDailyVolume === 0 ? "text-muted-foreground/30" : "text-foreground")}>
+                                <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-muted-foreground/30" : "text-foreground")}>
                                   ~{totalDailyVolume}
                                 </p>
-                                <p className="text-[10px] opacity-40 italic">Total throughput</p>
+                                <p className="text-[10px] text-muted-foreground/60">Total throughput</p>
                               </div>
                               <div>
                                 <p className="text-[9px] uppercase font-black opacity-40 mb-1">Per Mailbox</p>
-                                <p className={cn("text-3xl font-black italic transition-all", totalDailyVolume === 0 ? "text-muted-foreground/30" : "text-foreground")}>
+                                <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-muted-foreground/30" : "text-foreground")}>
                                   {selectedMailboxes.length > 0 ? Math.floor(totalDailyVolume / selectedMailboxes.length) : 0}
                                 </p>
-                                <p className="text-[10px] opacity-40 italic">Avg. daily limit</p>
+                                <p className="text-[10px] text-muted-foreground/60">Avg. daily limit</p>
                               </div>
                               <div>
                                 <p className="text-[9px] uppercase font-black opacity-40 text-amber-600 mb-1 flex items-center gap-1">
                                   Boost Buffer
                                 </p>
-                                <p className={cn("text-3xl font-black italic transition-all", totalDailyVolume === 0 ? "text-amber-600/30" : "text-amber-600")}>
+                                <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-amber-600/30" : "text-amber-600")}>
                                   +{maxTotalVolume - totalDailyVolume}
                                 </p>
-                                <p className="text-[10px] text-amber-600/40 italic">AI adaptive retry</p>
+                                <p className="text-[10px] text-amber-600/60">AI adaptive retry</p>
                               </div>
                               <div>
                                 <p className="text-[9px] uppercase font-black opacity-40 text-primary mb-1">
                                   {syncLimit === 'all' ? 'Workforce Velocity' : 'Campaign Velocity'}
                                 </p>
-                                <p className={cn("text-3xl font-black italic transition-all", totalDailyVolume === 0 ? "text-primary/30" : "text-primary")}>
+                                <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-primary/30" : "text-primary")}>
                                   {estimatedDays}d
                                 </p>
-                                <p className="text-[10px] text-primary/40 italic">
+                                <p className="text-[10px] text-primary/60">
                                   Time to finish {syncLimit === 'all' ? 'all' : leads.length} leads
                                 </p>
                               </div>
@@ -603,11 +603,11 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
                           <div className="space-y-4 pt-4 border-t border-primary/5">
                             <div className="flex items-center justify-between">
-                              <Label className="text-[10px] font-black uppercase tracking-widest opacity-40 italic">Campaign Duration Goal: {targetDays} Days</Label>
+                              <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Campaign Duration Goal: {targetDays} Days</Label>
                               <Badge className="bg-primary/10 text-primary text-[8px] font-black">{Math.round((totalDailyVolume * targetDays) / 1000)}k Target Volume</Badge>
                             </div>
                             <Slider value={[targetDays]} onValueChange={v => setTargetDays(v[0])} min={1} max={90} step={1} className="py-2" />
-                            <p className="text-[10px] italic opacity-50">Set your ideal completion timeline. AI will warn you if daily limits exceed safety ceilings to reach this goal.</p>
+                            <p className="text-[10px] text-muted-foreground/60">Set your ideal completion timeline. AI will warn you if daily limits exceed safety ceilings to reach this goal.</p>
                           </div>
                           
                           {(isExtendedTimeline || leads.length > 5000) && (
@@ -637,8 +637,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                   {step === 2 && (
                     <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-10">
                       <div className="flex items-center justify-between pb-6 border-b border-border/10">
-                        <Label className="text-ms font-black uppercase tracking-[0.2em] opacity-40 italic">Sequence Designer ({1 + followups.length} Steps)</Label>
-                        <Button onClick={handleGenerateSequence} disabled={isGeneratingAI} className="rounded-full bg-primary hover:bg-primary/90 text-primary-foreground gap-3 font-black uppercase tracking-wider text-[10px] px-8 h-12 shadow-[0_0_30px_rgba(var(--primary),0.3)]">
+                        <Label className="text-xs font-black uppercase tracking-[0.2em] opacity-40">Sequence Designer ({1 + followups.length} Steps)</Label>
+                        <Button onClick={handleGenerateSequence} disabled={isGeneratingAI} className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-3 font-bold uppercase tracking-wider text-xs px-6 h-11">
                           {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} AI Wizard Generate
                         </Button>
                       </div>
@@ -675,12 +675,12 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         </div>
                         <div className="p-6 bg-muted/10 rounded-3xl border border-border/10 space-y-3">
                            <Label className="text-[9px] font-black uppercase opacity-40">Reply-To Routing</Label>
-                           <Input value={replyTo} onChange={e => setReplyTo(e.target.value)} placeholder="alias@domain.com" className="bg-background border-border/20 font-black text-xs h-12 rounded-xl" />
+                           <Input value={replyTo} onChange={e => setReplyTo(e.target.value)} placeholder="alias@domain.com" className="bg-background border-border/20 font-semibold text-xs h-11 rounded-xl" />
                         </div>
                         <div className="p-6 bg-muted/10 rounded-3xl border border-border/10 flex items-center justify-between">
                            <div>
                              <p className="text-[10px] font-black uppercase">Weekend Protection</p>
-                             <p className="text-[9px] opacity-40 italic mt-1 text-emerald-600">Pauses sending on Saturdays/Sundays</p>
+                             <p className="text-[9px] opacity-40 mt-1 text-emerald-600">Pauses sending on Saturdays/Sundays</p>
                            </div>
                            <Switch checked={excludeWeekends} onCheckedChange={setExcludeWeekends} className="scale-110" />
                         </div>
@@ -689,15 +689,15 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         <div className="grid grid-cols-3 gap-6">
                           <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Forecast</div>
-                            <div className="text-xl font-black">{totalCampaignVolume.toLocaleString()} <span className="text-[10px] opacity-40">EMAILS</span></div>
+                            <div className="text-lg font-bold tracking-tight">{totalCampaignVolume.toLocaleString()} <span className="text-[10px] opacity-40 font-normal">EMAILS</span></div>
                           </div>
                           <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Batch Completion</div>
-                            <div className="text-xl font-black">{estimatedDaysToFinish} <span className="text-[10px] opacity-40">DAYS</span></div>
+                            <div className="text-lg font-bold tracking-tight">{estimatedDaysToFinish} <span className="text-[10px] opacity-40 font-normal">DAYS</span></div>
                           </div>
                           <div className={cn("p-4 rounded-2xl border transition-all", totalTimelineDays > 28 ? "bg-orange-500/10 border-orange-500/20" : "bg-primary/5 border-primary/10")}>
                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Full Sequence</div>
-                            <div className="text-xl font-black">{totalTimelineDays} <span className="text-[10px] opacity-40">DAYS</span></div>
+                            <div className="text-lg font-bold tracking-tight">{totalTimelineDays} <span className="text-[10px] opacity-40 font-normal">DAYS</span></div>
                           </div>
                         </div>
                         {totalTimelineDays > 28 && (
@@ -761,11 +761,11 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         <TabsContent value="S1" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                            <div className="space-y-2">
                              {renderTagBar("subject")}
-                             <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="SUBJECT LINE" className="h-16 bg-muted/20 border-0 font-black text-xl rounded-2xl px-8" />
+                             <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="SUBJECT LINE" className="h-12 bg-muted/20 border border-border/40 font-semibold text-sm rounded-xl px-6" />
                            </div>
                            <div className="space-y-2">
                              {renderTagBar("body")}
-                             <Textarea value={body} onChange={e => setBody(e.target.value)} className="min-h-[350px] bg-muted/5 border-0 rounded-2xl p-8 text-sm leading-relaxed resize-none font-serif italic" placeholder="CRAFT THE PERFECT PROPOSAL..." />
+                             <Textarea value={body} onChange={e => setBody(e.target.value)} className="min-h-[350px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm leading-relaxed resize-none font-sans" placeholder="Craft the perfect proposal..." />
                            </div>
                         </TabsContent>
 
@@ -813,7 +813,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                    setFollowups(newF);
                                  }} 
                                  placeholder={`S${i+2} SUBJECT (OPTIONAL)`} 
-                                 className="h-16 bg-muted/20 border-0 font-black text-xl rounded-2xl px-8" 
+                                 className="h-12 bg-muted/20 border border-border/40 font-semibold text-sm rounded-xl px-6"
                                />
                              </div>
                              <div className="space-y-2">
@@ -825,7 +825,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                    newF[i].body = e.target.value;
                                    setFollowups(newF);
                                  }} 
-                                 className="min-h-[300px] bg-muted/5 border-0 rounded-2xl p-8 text-sm italic" 
+                                 className="min-h-[300px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans"
                                  placeholder={`FOLLOW UP #${i+1} MESSAGE...`} 
                                />
                              </div>
@@ -833,10 +833,10 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         ))}
 
                         <TabsContent value="Auto" className="space-y-6">
-                           <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl text-[10px] font-bold italic">Dynamic AI Responder: Sends within 3 minutes of any reply.</div>
+                           <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl text-[10px] font-bold">Dynamic AI Responder: Sends within 3 minutes of any reply.</div>
                            <div className="space-y-2">
                              {renderTagBar("auto")}
-                             <Textarea value={autoReplyBody} onChange={e => setAutoReplyBody(e.target.value)} className="min-h-[250px] bg-muted/5 border-0 rounded-2xl p-8 text-sm italic" placeholder="THANKS FOR REACHING OUT! WE'LL BE WITH YOU SOON..." />
+                             <Textarea value={autoReplyBody} onChange={e => setAutoReplyBody(e.target.value)} className="min-h-[250px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans" placeholder="Thanks for reaching out! We'll be with you soon..." />
                            </div>
                         </TabsContent>
                       </Tabs>
@@ -847,14 +847,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
             </div>
 
             <div className="p-6 md:p-10 border-t border-border/20 bg-card/95 backdrop-blur-2xl flex items-center justify-between shrink-0 sticky bottom-0 z-30 pb-16 md:pb-10">
-              <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onClose()} className="h-14 px-10 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-muted/50 transition-all font-sans">{step === 1 ? 'Discard' : 'Back'}</Button>
+              <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onClose()} className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-wider hover:bg-muted/50 transition-all font-sans">{step === 1 ? 'Discard' : 'Back'}</Button>
               {step < 2 ? (
                 <Button 
                   disabled={leads.length === 0 || !campaignName || selectedMailboxes.length === 0 || isLoadingLeads} 
                   onClick={() => setStep(2)} 
                   className={cn(
-                    "h-16 px-16 rounded-2xl font-black uppercase tracking-[0.2em] transition-all group font-sans flex flex-col items-center justify-center gap-0 relative overflow-hidden",
-                    (leads.length === 0 || selectedMailboxes.length === 0 || isLoadingLeads) ? "bg-muted text-muted-foreground" : "shadow-2xl shadow-primary/20 bg-primary hover:bg-primary/90 text-primary-foreground"
+                    "h-12 px-8 rounded-xl font-bold uppercase tracking-wider transition-all group font-sans flex flex-col items-center justify-center gap-0 relative overflow-hidden",
+                    (leads.length === 0 || selectedMailboxes.length === 0 || isLoadingLeads) ? "bg-muted text-muted-foreground" : "bg-primary hover:bg-primary/90 text-primary-foreground"
                   )}
                 >
                   {isLoadingLeads && (
@@ -862,16 +862,16 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                       <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin rounded-full" />
                     </div>
                   )}
-                  <div className="flex items-center gap-4 text-sm">
-                    Design Outreach Sequence <ChevronRight className="h-5 w-5 group-hover:translate-x-1 transition-transform" />
+                  <div className="flex items-center gap-4 text-xs">
+                    Design Outreach Sequence <ChevronRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
                   </div>
-                  <span className="text-[8px] font-black opacity-50 tracking-widest mt-0.5">
+                  <span className="text-[8px] font-bold opacity-50 tracking-widest mt-0.5">
                     {isLoadingLeads ? "SYNCING DATABASE..." : (leads.length === 0 ? "ADD LEADS TO CONTINUE" : (selectedMailboxes.length === 0 ? "SELECT AN INBOX TO CONTINUE" : "NEXT: CRAFT YOUR AI OUTREACH SEQUENCE"))}
                   </span>
                 </Button>
               ) : (
-                <Button onClick={handleLaunch} disabled={isLoading || !subject || !body} className="h-16 px-20 rounded-2xl font-black uppercase tracking-[0.3em] shadow-2xl shadow-emerald-500/20 bg-emerald-500 hover:bg-emerald-600 text-white text-sm gap-4 transition-all animate-pulse hover:animate-none font-sans relative">
-                  {isLoading ? "LAUNCHING..." : "LAUNCH CAMPAIGN"} <Plus className="h-5 w-5" />
+                <Button onClick={handleLaunch} disabled={isLoading || !subject || !body} className="h-12 px-12 rounded-xl font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-3 transition-all font-sans relative">
+                  {isLoading ? "LAUNCHING..." : "LAUNCH CAMPAIGN"} <Plus className="h-4 w-4" />
                 </Button>
               )}
             </div>
@@ -879,7 +879,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
           <div className="flex-[0.7] relative overflow-hidden bg-gradient-to-br from-transparent to-primary/5 hidden lg:block border-l border-border/10">
             <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full px-10 text-center">
-               <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30 italic">Live Mobile Engagement Simulation</p>
+               <p className="text-[10px] font-bold uppercase tracking-[0.3em] opacity-30">Live Mobile Engagement Simulation</p>
             </div>
             {renderPreview(viewMode === 'edit' ? subject : (step === 2 ? subject : ""), viewMode === 'edit' ? body : (step === 2 ? body : ""))}
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4 bg-background/50 backdrop-blur-xl border border-border/20 p-2 rounded-full shadow-2xl scale-90">

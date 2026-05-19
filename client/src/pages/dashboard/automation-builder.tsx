@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface AutomationRule {
   id: string;
@@ -138,7 +140,7 @@ export default function AutomationBuilderPage() {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <PageWrapper className="space-y-10">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h1 className="text-4xl font-black tracking-tighter flex items-center gap-4">
@@ -372,7 +374,7 @@ export default function AutomationBuilderPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4">
+            <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 gap-4">
               {rules?.filter(r => r.isActive).map((rule) => (
                 <RuleCard
                   key={rule.id}
@@ -381,7 +383,7 @@ export default function AutomationBuilderPage() {
                   onDelete={() => deleteMutation.mutate(rule.id)}
                 />
               ))}
-            </div>
+            </ResponsiveGrid>
           )}
         </TabsContent>
 
@@ -401,7 +403,7 @@ export default function AutomationBuilderPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-4">
+            <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 gap-4">
               {rules.map((rule) => (
                 <RuleCard
                   key={rule.id}
@@ -410,11 +412,11 @@ export default function AutomationBuilderPage() {
                   onDelete={() => deleteMutation.mutate(rule.id)}
                 />
               ))}
-            </div>
+            </ResponsiveGrid>
           )}
         </TabsContent>
       </Tabs>
-    </div>
+    </PageWrapper>
   );
 }
 

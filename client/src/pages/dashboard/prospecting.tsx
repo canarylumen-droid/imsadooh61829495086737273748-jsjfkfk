@@ -12,6 +12,8 @@ import { useRealtime } from '@/hooks/use-realtime';
 import { useMailbox } from '@/hooks/use-mailbox';
 import { ScraperConsole } from '@/components/dashboard/ScraperConsole';
 import { cn } from '@/lib/utils';
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface Prospect {
     id: string;
@@ -151,33 +153,33 @@ export default function ProspectingPage() {
     });
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+        <PageWrapper className="pb-20">
             <div className="max-w-7xl mx-auto space-y-8">
                 {/* Header */}
-                <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-12">
-                    <div className="space-y-4 text-center md:text-left">
-                        <div className="flex flex-col md:flex-row items-center gap-4">
-                            <h2 className="text-3xl md:text-5xl font-black text-white tracking-tighter uppercase italic">Lead Import</h2>
-                            <div className="px-3 py-1 rounded bg-primary/10 border border-primary/20 flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,180,255,0.2)]">
-                                <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                                <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em] leading-none">Import Active</span>
+                <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-8">
+                    <div className="space-y-1 text-center md:text-left">
+                        <div className="flex flex-col md:flex-row items-center gap-3">
+                            <h2 className="text-2xl font-bold tracking-tight text-white">Prospecting Intelligence</h2>
+                            <div className="px-2.5 py-0.5 rounded-full bg-primary/15 border border-primary/20 flex items-center gap-1.5 shadow-[0_0_15px_rgba(0,180,255,0.1)]">
+                                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                                <span className="text-[10px] font-semibold text-primary uppercase tracking-wider leading-none">Import Active</span>
                             </div>
                         </div>
-                        <p className="text-white/40 text-sm md:text-base font-medium tracking-tight">Enterprise Infrastructure • Worldwide Coverage • Real-Time Data Verification</p>
+                        <p className="text-muted-foreground text-sm max-w-lg font-medium tracking-tight">Enterprise Infrastructure • Worldwide Coverage • Real-Time Data Verification</p>
                     </div>
                     <div className="flex items-center justify-center md:justify-end gap-3">
                         <Button
                             onClick={downloadCSV}
                             disabled={leads.length === 0}
                             variant="outline"
-                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10 transition-all font-bold text-[10px] uppercase tracking-widest h-10 md:h-12 flex-1 md:flex-none"
+                            className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10 transition-all font-semibold text-xs h-11 flex-1 md:flex-none"
                         >
                             <Download className="w-4 h-4 mr-2 text-primary" />
                             Export ({leads.length})
                         </Button>
                         <Button
                             onClick={() => setShowConsole(true)}
-                            className="rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all font-bold text-[10px] uppercase tracking-widest h-10 md:h-12 flex-1 md:flex-none"
+                            className="rounded-xl bg-primary/10 border border-primary/20 text-primary hover:bg-primary/20 transition-all font-semibold text-xs h-11 flex-1 md:flex-none"
                         >
                             <Terminal className="w-4 h-4 mr-2" />
                             Console
@@ -190,7 +192,7 @@ export default function ProspectingPage() {
                     {/* Atmospheric Glow */}
                     <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 via-purple-600 to-cyan-500 rounded-3xl opacity-20 group-hover:opacity-40 blur-xl transition-all duration-500" />
 
-                    <Card className="relative bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-3xl overflow-hidden shadow-2xl">
+                    <Card className="relative bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden shadow-xl">
                         <CardContent className="p-2">
                             <form onSubmit={handleSearch} className="relative flex items-center">
                                 <div className="pl-6 pr-4">
@@ -217,7 +219,7 @@ export default function ProspectingPage() {
                                         <Button
                                             type="submit"
                                             disabled={!query.trim()}
-                                            className="w-12 h-12 rounded-2xl bg-white text-black hover:bg-blue-50 hover:scale-105 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center p-0"
+                                            className="w-12 h-12 rounded-xl bg-white text-black hover:bg-blue-50 hover:scale-105 transition-all shadow-[0_0_20px_rgba(255,255,255,0.3)] disabled:opacity-50 disabled:hover:scale-100 flex items-center justify-center p-0"
                                         >
                                             <Search className="w-6 h-6" />
                                         </Button>
@@ -245,24 +247,26 @@ export default function ProspectingPage() {
                 </div>
 
                 {/* Stats Summary Row */}
-                {[
-                    { label: 'Network Size', value: leads.length, color: 'text-white', id: 'all' },
-                    { label: 'Hardened', value: leads.filter(l => l.status === 'hardened' || l.verified).length, color: 'text-emerald-400', id: 'hardened' },
-                    { label: 'Recoveries', value: leads.filter(l => l.status === 'recovered').length, color: 'text-cyan-400', id: 'recovered' },
-                    { label: 'Bouncy', value: leads.filter(l => l.status === 'bouncy').length, color: 'text-red-400', id: 'bouncy' }
-                ].map((stat, i) => (
-                    <button
-                        key={i}
-                        onClick={() => setFilterStatus(stat.id)}
-                        className={cn(
-                            "p-4 rounded-2xl bg-white/[0.03] border backdrop-blur-sm group hover:border-primary/30 transition-all text-left w-full",
-                            filterStatus === stat.id ? "border-primary/50 bg-primary/5" : "border-white/5"
-                        )}
-                    >
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/30 mb-1 group-hover:text-primary transition-colors">{stat.label}</p>
-                        <p className={`text-2xl font-black tracking-tighter ${stat.color}`}>{stat.value}</p>
-                    </button>
-                ))}
+                <ResponsiveGrid className="md:grid-cols-4 gap-4">
+                    {[
+                        { label: 'Network Size', value: leads.length, color: 'text-white', id: 'all' },
+                        { label: 'Hardened', value: leads.filter(l => l.status === 'hardened' || l.verified).length, color: 'text-emerald-400', id: 'hardened' },
+                        { label: 'Recoveries', value: leads.filter(l => l.status === 'recovered').length, color: 'text-cyan-400', id: 'recovered' },
+                        { label: 'Bouncy', value: leads.filter(l => l.status === 'bouncy').length, color: 'text-red-400', id: 'bouncy' }
+                    ].map((stat, i) => (
+                        <button
+                            key={i}
+                            onClick={() => setFilterStatus(stat.id)}
+                            className={cn(
+                                "p-4 rounded-xl bg-white/[0.03] border backdrop-blur-sm group hover:border-primary/30 transition-all text-left w-full",
+                                filterStatus === stat.id ? "border-primary/50 bg-primary/5" : "border-white/5"
+                            )}
+                        >
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60 mb-1 group-hover:text-primary transition-colors">{stat.label}</p>
+                            <p className={`text-2xl font-bold tracking-tight ${stat.color}`}>{stat.value}</p>
+                        </button>
+                    ))}
+                </ResponsiveGrid>
             </div>
 
             {/* Results Table */}
@@ -284,7 +288,7 @@ export default function ProspectingPage() {
                     ))}
                 </div>
             ) : leads.length > 0 ? (
-                <Card className="bg-[#030303]/80 backdrop-blur-3xl border-white/5 rounded-[2.5rem] overflow-hidden relative intelligence-panel">
+                <Card className="bg-[#030303]/80 backdrop-blur-3xl border-white/5 rounded-2xl overflow-hidden relative intelligence-panel">
                     {/* HUD Decorations */}
                     <div className="hud-corner hud-corner-tl opacity-60" />
                     <div className="hud-corner hud-corner-tr opacity-30" />
@@ -292,7 +296,7 @@ export default function ProspectingPage() {
                     <div className="hud-corner hud-corner-br opacity-30" />
 
                     <CardHeader className="px-10 py-8 border-b border-white/5">
-                        <CardTitle className="text-white text-xl font-black uppercase tracking-widest flex items-center gap-4">
+                        <CardTitle className="text-white text-lg font-bold tracking-tight flex items-center gap-3">
                             <Activity className="w-5 h-5 text-primary" />
                             Verified Leads List ({leads.length})
                         </CardTitle>
@@ -327,24 +331,24 @@ export default function ProspectingPage() {
 
                                                 {/* Never Bounce / Deliverability Status */}
                                                 {lead.status === 'bouncy' ? (
-                                                    <Badge className="bg-red-500 text-white border-red-500 font-bold tracking-widest text-[9px] uppercase shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                                                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30 font-semibold tracking-wider text-[9px] uppercase">
                                                         <XCircle className="w-3 h-3 mr-1" />
                                                         Bouncy / Invalid
                                                     </Badge>
                                                 ) : lead.status === 'recovered' ? (
-                                                    <Badge className="bg-cyan-500 text-white border-cyan-500 font-bold tracking-widest text-[9px] uppercase animate-pulse">
+                                                    <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 font-semibold tracking-wider text-[9px] uppercase animate-pulse">
                                                         <Zap className="w-3 h-3 mr-1" />
                                                         Deliverability Fix
                                                     </Badge>
                                                 ) : lead.verified ? (
-                                                    <Badge className="bg-emerald-500 text-white border-emerald-500 font-bold tracking-widest text-[9px] uppercase">
-                                                        <ShieldCheck className="w-3 h-3 mr-1 shadow-emerald-500/50" />
+                                                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 font-semibold tracking-wider text-[9px] uppercase">
+                                                        <ShieldCheck className="w-3 h-3 mr-1" />
                                                         Verified & Safe
                                                     </Badge>
                                                 ) : null}
 
                                                 {!lead.website && (
-                                                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30 font-bold tracking-tighter shadow-[0_0_10px_rgba(239,68,68,0.2)]">
+                                                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30 font-semibold tracking-wide shadow-[0_0_10px_rgba(239,68,68,0.1)]">
                                                         GHOST (No Website)
                                                     </Badge>
                                                 )}
@@ -397,7 +401,7 @@ export default function ProspectingPage() {
                                                                 href={val}
                                                                 target="_blank"
                                                                 rel="noopener noreferrer"
-                                                                className="px-3 py-1.5 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-xl text-[10px] font-black uppercase tracking-widest text-primary transition-all flex items-center gap-2"
+                                                                className="px-3 py-1.5 bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-xl text-[10px] font-semibold uppercase tracking-wider text-primary transition-all flex items-center gap-2"
                                                             >
                                                                 {type === 'google_maps' ? <MapPin className="w-3 h-3" /> : <Globe className="w-3 h-3" />}
                                                                 {label}
@@ -453,6 +457,6 @@ export default function ProspectingPage() {
                 onClose={() => setShowConsole(false)}
                 logs={logs}
             />
-        </div >
+        </PageWrapper>
     );
 }

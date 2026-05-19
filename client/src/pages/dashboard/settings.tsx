@@ -23,6 +23,8 @@ import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { PdfIcon, VoiceIcon } from "@/components/ui/CustomIcons";
 import { BrandKnowledgeBase } from "@/components/admin/BrandKnowledgeBase";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface UserProfile {
   id: string;
@@ -57,6 +59,7 @@ export default function SettingsPage() {
 
   const { data: user, isLoading } = useQuery<UserProfile | null>({ queryKey: ["/api/user/profile"] });
   const { data: smtpData } = useQuery<any[]>({ queryKey: ["/api/smtp/settings"] });
+  const { data: customEmailStatus } = useQuery<any>({ queryKey: ["/api/custom-email/status"] });
   const { canAccess: canAccessVoiceNotes } = useCanAccessVoiceNotes();
 
   const [formData, setFormData] = useState({
@@ -178,6 +181,25 @@ export default function SettingsPage() {
     enabled: !!user && (user.voiceNotesEnabled || canAccessVoiceNotes)
   });
 
+  const syncEmailMutation = useMutation({
+    mutationFn: async () => {
+      if (!customEmailStatus?.integrations) throw new Error("No mailboxes found.");
+      const connected = customEmailStatus.integrations.filter((i: any) => i.connected);
+      if (connected.length === 0) throw new Error("Please connect a custom domain mailbox first.");
+      
+      for (const i of connected) {
+        await apiRequest("POST", "/api/custom-email/sync-history", { days: 30, integrationId: i.id });
+      }
+      await apiRequest("POST", "/api/custom-email/sync-now");
+    },
+    onSuccess: () => {
+      toast({ title: "Sync Started", description: "Your email history (last 30 days) is being synchronized in the background." });
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+    },
+    onError: (err: any) => toast({ title: "Sync Failed", description: err.message, variant: "destructive" })
+  });
+
   const handleFieldChange = (key: string, val: any) => {
     setFormData(prev => ({ ...prev, [key]: val }));
     setHasChanges(true);
@@ -186,7 +208,7 @@ export default function SettingsPage() {
   if (isLoading || !user) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
-    <div className="space-y-10">
+    <PageWrapper className="space-y-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
           <div className="flex items-center gap-2 mb-2">
@@ -221,7 +243,7 @@ export default function SettingsPage() {
         </TabsList>
 
         <TabsContent value="profile" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="border-border/50 shadow-sm rounded-2xl">
               <CardContent className="flex flex-col items-center p-8">
                 <div className="relative group mb-6">
@@ -256,7 +278,7 @@ export default function SettingsPage() {
                 <CardTitle className="text-xl">Profile Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Full Name</Label>
                     <Input
@@ -357,7 +379,7 @@ export default function SettingsPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
+                </ResponsiveGrid>
 
                 <div className="space-y-6 pt-6 border-t border-border/40">
                   <div className="flex items-center justify-between mb-4">
@@ -399,7 +421,7 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </ResponsiveGrid>
         </TabsContent>
 
         <TabsContent value="brand" className="space-y-6">
@@ -482,6 +504,34 @@ export default function SettingsPage() {
                     checked={formData.aiAdjustCopyEnabled}
                     onCheckedChange={c => handleFieldChange('aiAdjustCopyEnabled', c)}
                   />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
+                <div className="flex gap-4">
+                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
+                    <RefreshCw className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-base flex items-center gap-2">
+                      Historical Email Sync
+                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">Mailboxes</Badge>
+                    </h4>
+                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+                      Manually synchronize past email history (up to 30 days) from connected custom domains to populate your inbox and lead database.
+                    </p>
+                  </div>
+                </div>
+                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => syncEmailMutation.mutate()} 
+                    disabled={syncEmailMutation.isPending}
+                    className="rounded-xl font-bold h-11 border-primary/20 hover:bg-primary/5 text-primary"
+                  >
+                    {syncEmailMutation.isPending ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
+                    Sync History Now
+                  </Button>
                 </div>
               </div>
 
@@ -629,6 +679,6 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
       </Tabs>
-    </div >
+    </PageWrapper>
   );
 }

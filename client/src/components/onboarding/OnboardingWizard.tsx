@@ -200,7 +200,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
         .onboarding-modal [data-radix-dialog-close] { display: none !important; }
         .onboarding-modal > button.absolute { display: none !important; }
       `}</style>
-      <DialogContent className="w-[calc(100vw-24px)] max-w-md max-h-[85vh] overflow-hidden flex flex-col p-0 onboarding-modal rounded-2xl">
+      <DialogContent className="w-[calc(100vw-24px)] max-w-md max-h-[90vh] overflow-hidden flex flex-col p-0 onboarding-modal rounded-2xl glass-premium border border-primary/20 shadow-2xl">
 
         {/* Thin progress bar at the very top */}
         <div className="h-0.5 bg-muted shrink-0">
@@ -254,7 +254,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                 </div>
 
                 <div>
-                  <h2 className="text-xl font-black tracking-tight text-white">You're in. Let's set up.</h2>
+                  <h2 className="text-xl font-bold tracking-tight text-white">You're in. Let's set up.</h2>
                   <p className="text-white/50 text-sm mt-1 max-w-xs mx-auto leading-snug">
                     Takes 60 seconds. Helps us personalize your AI engine.
                   </p>
@@ -273,7 +273,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
 
                 <Button
                   onClick={() => setStep(1)}
-                  className="w-full max-w-xs h-11 rounded-xl font-black bg-cyan-500 text-black hover:bg-cyan-400 group"
+                  className="w-full max-w-xs h-11 rounded-xl font-bold bg-cyan-500 text-black hover:bg-cyan-400 group text-xs uppercase tracking-wider"
                 >
                   Begin Setup
                   <ChevronRight className="ml-1.5 w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
@@ -285,7 +285,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
               {step === 1 && (
                 <>
                 <div className="text-center mb-3">
-                  <h2 className="text-lg font-black text-white">What's your role?</h2>
+                  <h2 className="text-lg font-bold text-white">What's your role?</h2>
                   <p className="text-white/50 text-xs mt-0.5">Pick the one that fits best</p>
                 </div>
 
@@ -321,7 +321,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                   <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-cyan-500/10 mb-2">
                     <Search className="w-5 h-5 text-cyan-500" />
                   </div>
-                  <h2 className="text-lg font-black text-white">How'd you find us?</h2>
+                  <h2 className="text-lg font-bold text-white">How'd you find us?</h2>
                   <p className="text-white/50 text-xs mt-0.5">Tap one to continue</p>
                 </div>
 
@@ -330,7 +330,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                     <button
                       key={src}
                       onClick={() => handleSourceSelect(src)}
-                      className={`py-2 px-1.5 rounded-lg border text-center text-xs font-medium transition-all leading-tight ${
+                      className={`py-2.5 px-1.5 rounded-xl border text-center text-xs font-semibold transition-all leading-tight ${
                         source === src
                           ? 'border-primary bg-primary/10 text-primary'
                           : 'border-border/60 hover:border-primary/50 text-muted-foreground hover:text-foreground'
@@ -349,11 +349,11 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                       value={customSource}
                       onChange={(e) => setCustomSource(e.target.value)}
                       autoFocus
-                      className="h-10 text-sm"
+                      className="h-11 rounded-xl text-sm border-border/40 hover:border-primary/40 focus-visible:ring-primary/20 bg-background/50"
                     />
                     <Button
                       onClick={() => setStep(3)}
-                      className="w-full h-10"
+                      className="w-full h-11 rounded-xl font-bold text-xs uppercase tracking-wider"
                       disabled={!customSource.trim()}
                     >
                       Continue →
@@ -370,7 +370,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                   <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 mb-2">
                     <Sparkles className="w-5 h-5 text-primary" />
                   </div>
-                  <h2 className="text-lg font-black">What's your goal?</h2>
+                  <h2 className="text-lg font-bold">What's your goal?</h2>
                   <p className="text-muted-foreground text-xs mt-0.5">Select all that apply</p>
                 </div>
 
@@ -379,7 +379,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                     <button
                       key={tag}
                       onClick={() => handleTagToggle(tag)}
-                      className={`p-2.5 rounded-lg border text-left text-xs font-medium transition-all leading-tight ${
+                      className={`p-2.5 rounded-xl border text-left text-xs font-medium transition-all leading-tight ${
                         selectedTags.includes(tag)
                           ? 'border-primary bg-primary/10 text-primary'
                           : 'border-border/60 hover:border-primary/50 text-muted-foreground hover:text-foreground'
@@ -398,10 +398,10 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                   placeholder="Or describe in your own words (optional)"
                   value={useCase}
                   onChange={(e) => setUseCase(e.target.value)}
-                  className="h-10 text-sm"
+                  className="h-11 rounded-xl text-sm border-border/40 hover:border-primary/40 focus-visible:ring-primary/20 bg-background/50"
                 />
 
-                <Button onClick={handleUseCaseNext} className="w-full h-10">
+                <Button onClick={handleUseCaseNext} className="w-full h-11 rounded-xl font-bold text-xs uppercase tracking-wider">
                   Continue →
                 </Button>
                 </>
@@ -414,7 +414,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                   <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-primary/10 mb-2">
                     <Building className="w-5 h-5 text-primary" />
                   </div>
-                  <h2 className="text-lg font-black">Team size?</h2>
+                  <h2 className="text-lg font-bold">Team size?</h2>
                   <p className="text-muted-foreground text-xs mt-0.5">Tap one to continue</p>
                 </div>
 
@@ -448,7 +448,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                   <div className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-cyan-500/10 mb-2">
                     <Zap className="w-5 h-5 text-cyan-500" />
                   </div>
-                  <h2 className="text-lg font-black text-white">Last thing — your company</h2>
+                  <h2 className="text-lg font-bold text-white">Last thing — your company</h2>
                   <p className="text-white/50 text-xs mt-0.5">What should we call your business?</p>
                 </div>
 
@@ -463,7 +463,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
                     onChange={(e) => setCompanyName(e.target.value)}
                     autoFocus
                     disabled={loading}
-                    className="h-11 text-sm"
+                    className="h-11 rounded-xl text-sm border-border/40 hover:border-primary/40 focus-visible:ring-primary/20 bg-background/50"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleCompanyNameSubmit();
                     }}
@@ -472,7 +472,7 @@ export const OnboardingWizard = React.memo(function OnboardingWizard({ isOpen, o
 
                 <Button
                   onClick={handleCompanyNameSubmit}
-                  className="w-full h-11 font-bold"
+                  className="w-full h-11 rounded-xl font-bold text-xs uppercase tracking-wider"
                   disabled={loading || !companyName.trim()}
                 >
                   {loading ? "Setting up…" : "Complete Setup 🎉"}

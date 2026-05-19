@@ -1,16 +1,11 @@
-
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Brain, TrendingUp, MessageCircle, ThumbsUp, Clock, Sparkles, AlertCircle, Loader2, Download, Zap, Target, Activity } from "lucide-react";
+import { Brain, TrendingUp, MessageCircle, Clock, Sparkles, Loader2, Download, Zap, Target, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import {
-  LineChart,
-  Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -22,6 +17,8 @@ import {
   Pie,
   Cell
 } from "recharts";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 // Premium Theme Colors
 const COLORS = {
@@ -69,7 +66,6 @@ export default function AIAnalyticsPage() {
 
   const { data: analytics, isLoading } = useQuery<AnalyticsResponse>({
     queryKey: ["/api/ai/analytics", { period }],
-
   });
 
   const hasData = analytics && analytics.summary.totalLeads > 0;
@@ -134,7 +130,7 @@ export default function AIAnalyticsPage() {
           <p className="font-semibold mb-1 text-foreground">{label}</p>
           {payload.map((entry: any, index: number) => (
             <div key={index} className="flex items-center gap-2 mb-0.5">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
               <span className="text-muted-foreground capitalize">{entry.name}:</span>
               <span className="font-medium text-foreground">{entry.value}</span>
             </div>
@@ -158,7 +154,7 @@ export default function AIAnalyticsPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <PageWrapper className="duration-700">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -185,7 +181,7 @@ export default function AIAnalyticsPage() {
           <Button
             onClick={handleExportPDF}
             variant="outline"
-            className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5"
+            className="gap-2 shadow-sm border-primary/20 hover:bg-primary/5 rounded-xl h-10"
           >
             <Download className="h-4 w-4" />
             Export
@@ -208,24 +204,24 @@ export default function AIAnalyticsPage() {
       </AnimatePresence>
 
       {!hasData ? (
-        <div className="py-20 text-center space-y-6 bg-muted/5 rounded-3xl border-2 border-dashed border-border/40">
+        <div className="py-20 text-center space-y-6 bg-muted/5 rounded-2xl border-2 border-dashed border-border/40 mt-8">
           <div className="w-16 h-16 bg-muted rounded-full mx-auto flex items-center justify-center">
             <Activity className="h-8 w-8 opacity-20" />
           </div>
           <div>
-            <h3 className="text-xl font-semibold">No Data Yet</h3>
+            <h3 className="text-xl font-semibold text-white">No Data Yet</h3>
             <p className="text-muted-foreground max-w-sm mx-auto mt-2">
               Connect your accounts and import leads to start seeing AI analytics.
             </p>
           </div>
-          <Button onClick={() => window.location.href = '/dashboard/lead-import'}>
+          <Button onClick={() => window.location.href = '/dashboard/lead-import'} className="rounded-xl h-11">
             Import Leads
           </Button>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-6 mt-8 animate-in fade-in duration-700">
           {/* Top Stat Cards */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <ResponsiveGrid className="md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard
               title="Total Leads"
               value={analytics.summary.totalLeads}
@@ -259,12 +255,12 @@ export default function AIAnalyticsPage() {
               color="text-amber-500"
               subtext="AI response latency"
             />
-          </div>
+          </ResponsiveGrid>
 
           {/* Main Charts Row */}
-          <div className="grid gap-6 lg:grid-cols-3">
+          <ResponsiveGrid className="lg:grid-cols-3 gap-6 mt-6">
             {/* Timeline Chart (Activity) */}
-            <Card className="lg:col-span-2 border-border/40 bg-card/50 backdrop-blur-sm overflow-hidden">
+            <Card className="lg:col-span-2 border-border/40 bg-card/50 backdrop-blur-sm rounded-2xl overflow-hidden">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
                   <Activity className="h-5 w-5 text-primary" />
@@ -324,7 +320,7 @@ export default function AIAnalyticsPage() {
             </Card>
 
             {/* Channel Breakdown (Pie) */}
-            <Card className="border-border/40 bg-card/50 backdrop-blur-sm overflow-hidden">
+            <Card className="border-border/40 bg-card/50 backdrop-blur-sm rounded-2xl overflow-hidden">
               <CardHeader>
                 <CardTitle className="text-lg">Channel Distribution</CardTitle>
                 <CardDescription>Where your leads are coming from</CardDescription>
@@ -364,17 +360,17 @@ export default function AIAnalyticsPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </ResponsiveGrid>
 
           {/* Bottom Insights */}
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card className="bg-gradient-to-br from-primary/10 via-transparent to-transparent border-primary/20">
+          <ResponsiveGrid className="md:grid-cols-2 gap-6 mt-6">
+            <Card className="bg-gradient-to-br from-primary/10 via-transparent to-transparent border-primary/20 rounded-2xl">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-base font-bold">
                   <Clock className="h-5 w-5 text-primary" /> Optimal Follow-Up Time
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-2">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-3xl font-bold text-primary">
@@ -383,22 +379,22 @@ export default function AIAnalyticsPage() {
                         {analytics.behaviorInsights.bestReplyHour !== null && analytics.behaviorInsights.bestReplyHour >= 12 ? 'PM' : 'AM'}
                       </span>
                     </p>
-                    <p className="text-sm text-muted-foreground mt-1">Peak engagement window</p>
+                    <p className="text-sm text-muted-foreground mt-1 font-medium">Peak engagement window</p>
                   </div>
-                  <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center">
                     <Zap className="h-6 w-6 text-primary" />
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="bg-gradient-to-br from-purple-500/10 via-transparent to-transparent border-purple-500/20">
+            <Card className="bg-gradient-to-br from-purple-500/10 via-transparent to-transparent border-purple-500/20 rounded-2xl">
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-base font-bold">
                   <TrendingUp className="h-4 w-4 text-primary" /> Customer Sentiment
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pt-2">
                 <div className="flex items-center gap-4">
                   <div className="flex-1">
                     <div className="flex justify-between mb-2 text-sm font-medium">
@@ -415,7 +411,7 @@ export default function AIAnalyticsPage() {
                     </div>
                   </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-3">
+                <p className="text-xs text-muted-foreground mt-3 font-medium">
                   {parseFloat(analytics.behaviorInsights.positiveSentimentRate || '0') >= 70 
                     ? 'AI tone analysis indicates high satisfaction' 
                     : parseFloat(analytics.behaviorInsights.positiveSentimentRate || '0') >= 50
@@ -424,16 +420,16 @@ export default function AIAnalyticsPage() {
                 </p>
               </CardContent>
             </Card>
-          </div>
+          </ResponsiveGrid>
         </div>
       )}
-    </div>
+    </PageWrapper>
   );
 }
 
 function StatCard({ title, value, icon: Icon, color, subtext, progress, circle }: any) {
   return (
-    <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-[2rem] group relative">
+    <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-2xl group relative">
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">{title}</CardTitle>
         <Icon className={cn("h-4 w-4 transition-colors", color)} />

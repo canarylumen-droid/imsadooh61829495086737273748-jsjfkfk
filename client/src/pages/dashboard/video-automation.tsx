@@ -44,6 +44,8 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface VideoMonitorStats {
   commentsChecked: number;
@@ -152,7 +154,7 @@ function IntentDetectionDemo() {
   };
 
   return (
-    <Card className="border-border/40 bg-card/40 backdrop-blur-xl rounded-[2rem] overflow-hidden group relative">
+    <Card className="border-border/40 bg-card/40 backdrop-blur-xl rounded-2xl overflow-hidden group relative">
       <CardHeader className="pb-4">
         <div className="flex items-center gap-4">
           <div className="p-3 rounded-2xl bg-fuchsia-500/10 text-fuchsia-500 shadow-inner group-hover:scale-110 transition-transform">
@@ -160,7 +162,7 @@ function IntentDetectionDemo() {
           </div>
           <div>
             <CardTitle className="text-lg font-bold tracking-tight">Intelligence Intent Engine</CardTitle>
-            <CardDescription className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50">
+            <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
               AI buying signal analysis
             </CardDescription>
           </div>
@@ -258,7 +260,7 @@ function MonitorCard({ monitor, nextSync, onToggle, onDelete, isToggling, isDele
   });
 
   return (
-    <Card className="group hover:border-primary/20 transition-all duration-500 border-border/40 bg-card/40 backdrop-blur-xl rounded-[2rem] overflow-hidden relative">
+    <Card className="group hover:border-primary/20 transition-all duration-500 border-border/40 bg-card/40 backdrop-blur-xl rounded-2xl overflow-hidden relative">
       <CardHeader className="pb-3 px-6 pt-6">
         <div className="flex items-start justify-between">
           <div className="space-y-1.5 flex-1 min-w-0 pr-4">
@@ -267,7 +269,7 @@ function MonitorCard({ monitor, nextSync, onToggle, onDelete, isToggling, isDele
                 {monitor.isActive ? "LIVE SCANNING" : "MONITOR PAUSED"}
               </Badge>
             </div>
-            <a href={monitor.videoUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-bold text-muted-foreground/40 hover:text-primary truncate block uppercase tracking-[0.1em] transition-colors">
+            <a href={monitor.videoUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] font-semibold text-muted-foreground/40 hover:text-primary truncate block uppercase tracking-[0.1em] transition-colors">
               Source URL ↗
             </a>
           </div>
@@ -285,16 +287,16 @@ function MonitorCard({ monitor, nextSync, onToggle, onDelete, isToggling, isDele
         {/* Stats Grid */}
         <div className="grid grid-cols-3 gap-4 py-4 border-y border-border/20">
           <div className="text-center">
-            <div className="text-xl font-extrabold tracking-tighter">{monitor.stats?.commentsChecked || 0}</div>
-            <div className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground/40 mt-1">Found</div>
+            <div className="text-xl font-bold tracking-tight">{monitor.stats?.commentsChecked || 0}</div>
+            <div className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/50 mt-1">Found</div>
           </div>
           <div className="text-center">
-            <div className="text-xl font-extrabold tracking-tighter text-primary">{monitor.stats?.dmsSent || 0}</div>
-            <div className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground/40 mt-1">Relays</div>
+            <div className="text-xl font-bold tracking-tight text-primary">{monitor.stats?.dmsSent || 0}</div>
+            <div className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/50 mt-1">Relays</div>
           </div>
           <div className="text-center">
-            <div className="text-xl font-extrabold tracking-tighter text-emerald-500">{monitor.stats?.conversions || 0}</div>
-            <div className="text-[9px] uppercase tracking-widest font-bold text-muted-foreground/40 mt-1">Impact</div>
+            <div className="text-xl font-bold tracking-tight text-emerald-500">{monitor.stats?.conversions || 0}</div>
+            <div className="text-[9px] uppercase tracking-wider font-semibold text-muted-foreground/50 mt-1">Impact</div>
           </div>
         </div>
 
@@ -416,7 +418,7 @@ export default function VideoAutomationPage() {
   const currentReels = filteredReels.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const ReelsSkeleton = () => (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-in fade-in duration-700">
+    <ResponsiveGrid className="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 animate-in fade-in duration-700">
       {Array.from({ length: 8 }).map((_, i) => (
         <div key={i} className="aspect-[9/16] rounded-xl overflow-hidden relative border border-white/5 bg-muted/5 group">
           {/* Top gradient */}
@@ -434,7 +436,7 @@ export default function VideoAutomationPage() {
           </div>
         </div>
       ))}
-    </div>
+    </ResponsiveGrid>
   );
 
   const selectedMonitor = useMemo(() => {
@@ -442,21 +444,21 @@ export default function VideoAutomationPage() {
   }, [monitors, selectedMonitorId]);
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
+    <PageWrapper className="slide-in-from-bottom-4 duration-700 space-y-8">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <h2 className="text-3xl font-black tracking-tighter text-foreground mb-2">Video Intelligence Workflow</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-foreground mb-2">Video Intelligence Workflow</h2>
           <p className="text-muted-foreground font-medium max-w-lg">Transform Instagram Reels into conversion engines. Monitor engagement pulse and trigger AI outreach instantly.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex bg-muted/50 rounded-xl p-1 border border-border/50 shadow-inner">
-            <Button variant="ghost" className="h-9 px-4 text-xs font-black uppercase tracking-widest bg-background shadow-sm rounded-lg border border-border/20">Performance</Button>
-            <Button variant="ghost" className="h-9 px-4 text-xs font-black uppercase tracking-widest opacity-40">Configuration</Button>
+            <Button variant="ghost" className="h-9 px-4 text-xs font-semibold uppercase tracking-wider bg-background shadow-sm rounded-lg border border-border/20">Performance</Button>
+            <Button variant="ghost" className="h-9 px-4 text-xs font-semibold uppercase tracking-wider opacity-40">Configuration</Button>
           </div>
           <Button
             variant="outline"
-            className="rounded-xl border-border/40 hover:bg-muted/50 h-11 px-4 text-xs font-black uppercase tracking-widest"
+            className="rounded-xl border-border/40 hover:bg-muted/50 h-11 px-4 text-xs font-semibold uppercase tracking-wider"
             onClick={() => {
               queryClient.invalidateQueries({ queryKey: ["/api/dashboard/instagram/media"] });
               toast({ title: "Syncing...", description: "Fetching latest Instagram media" });
@@ -468,22 +470,22 @@ export default function VideoAutomationPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+      <ResponsiveGrid className="grid-cols-1 lg:grid-cols-4 gap-8">
         {/* Left Column: Active Monitors List */}
         <div className="lg:col-span-1 space-y-6">
-          <Card className="bg-card border-border/40 rounded-[2rem] overflow-hidden group border-b-4 border-b-primary/20">
+          <Card className="bg-card border-border/40 rounded-2xl overflow-hidden group border-b-4 border-b-primary/20">
             <CardHeader className="p-6">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.25em] text-muted-foreground/50">Active Workflow</h3>
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">Active Workflow</h3>
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]" />
               </div>
-              <p className="text-2xl font-black">{monitors?.length || 0}</p>
+              <p className="text-2xl font-bold">{monitors?.length || 0}</p>
               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-1">Monitored Media Units</p>
             </CardHeader>
           </Card>
 
           <div className="space-y-4">
-            <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 px-4">Monitoring Workflows</h3>
+            <h3 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 px-4">Monitoring Workflows</h3>
             <ScrollArea className="h-[400px] -mx-1 px-1">
               <div className="space-y-3">
                 {monitorsLoading ? (
@@ -493,7 +495,7 @@ export default function VideoAutomationPage() {
                 ) : monitors?.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-2xl border border-dashed border-border/40 bg-muted/5 backdrop-blur-sm opacity-40">
                     <Zap className="h-8 w-8 mb-4" />
-                    <p className="text-xs font-black uppercase tracking-widest leading-relaxed">
+                    <p className="text-xs font-bold uppercase tracking-wider leading-relaxed">
                       No active monitors.
                     </p>
                   </div>
@@ -519,7 +521,7 @@ export default function VideoAutomationPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-black truncate">{mon.ctaText || "Untitled Workflow"}</p>
+                          <p className="text-sm font-bold truncate">{mon.ctaText || "Untitled Workflow"}</p>
                           <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest mt-0.5">
                             {mon.isActive ? 'Watching' : 'Paused'}
                           </p>
@@ -533,7 +535,7 @@ export default function VideoAutomationPage() {
           </div>
 
           <Button
-            className="w-full h-14 rounded-2xl font-black uppercase tracking-widest gap-2 shadow-lg shadow-primary/20 hover:shadow-primary/30 active:scale-95 transition-all bg-primary text-primary-foreground"
+            className="w-full h-11 rounded-xl font-bold uppercase tracking-wider text-xs gap-2 shadow-md shadow-primary/10 hover:shadow-primary/20 active:scale-98 transition-all bg-primary text-primary-foreground"
             onClick={() => {
               toast({ title: "Provisioning Monitor", description: "Select a reel from your feed below." });
             }}
@@ -556,7 +558,7 @@ export default function VideoAutomationPage() {
               >
                 <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
                   <div className="xl:col-span-2">
-                    <div className="aspect-[9/16] bg-black rounded-[2.5rem] border-4 border-card shadow-2xl overflow-hidden relative group">
+                    <div className="aspect-[9/16] bg-black rounded-2xl border-4 border-card shadow-2xl overflow-hidden relative group">
                       {selectedMonitor?.videoUrl ? (
                         <video
                           src={selectedMonitor.videoUrl}
@@ -570,7 +572,7 @@ export default function VideoAutomationPage() {
                         </div>
                       )}
                       <div className="absolute top-6 left-6">
-                        <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/40 font-black text-[10px] tracking-widest">
+                        <Badge className="bg-emerald-500/20 text-emerald-500 border-emerald-500/40 font-semibold text-[10px] tracking-wider">
                           LIVE ANALYSIS
                         </Badge>
                       </div>
@@ -578,23 +580,23 @@ export default function VideoAutomationPage() {
                   </div>
 
                   <div className="xl:col-span-3 space-y-8">
-                    <div className="p-8 rounded-[2rem] bg-card border border-border/40 shadow-sm relative overflow-hidden group glass-premium">
+                    <div className="p-6 rounded-2xl bg-card border border-border/40 shadow-sm relative overflow-hidden group glass-premium">
                       <div className="relative z-10">
-                        <h3 className="text-xs font-black uppercase tracking-[0.3em] text-primary mb-4">Intelligence Analytics</h3>
-                        <h2 className="text-2xl font-black tracking-tight mb-4 truncate">{selectedMonitor?.videoUrl ? "Active Media Monitor" : "Select Monitor"}</h2>
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-primary mb-3">Intelligence Analytics</h3>
+                        <h2 className="text-xl font-bold tracking-tight mb-4 truncate">{selectedMonitor?.videoUrl ? "Active Media Monitor" : "Select Monitor"}</h2>
                         <div className="grid grid-cols-2 gap-4 mb-8">
                           <div className="p-5 rounded-2xl bg-muted/40 border border-border/60">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1">Intent Accuracy</p>
-                            <div className="flex items-end gap-2 text-xl font-black">84% <TrendingUp className="w-4 h-4 text-emerald-500 mb-1" /></div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-1">Intent Accuracy</p>
+                            <div className="flex items-end gap-2 text-xl font-bold">84% <TrendingUp className="w-4 h-4 text-emerald-500 mb-1" /></div>
                           </div>
                           <div className="p-5 rounded-2xl bg-muted/40 border border-border/60">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 mb-1">Impact Level</p>
-                            <div className="flex items-end gap-2 text-xl font-black">High <Zap className="w-4 h-4 text-amber-500 mb-1" /></div>
+                            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-1">Impact Level</p>
+                            <div className="flex items-end gap-2 text-xl font-bold">High <Zap className="w-4 h-4 text-amber-500 mb-1" /></div>
                           </div>
                         </div>
                         <Button
                           variant="outline"
-                          className="w-full h-14 rounded-2xl font-black uppercase tracking-widest text-xs gap-3"
+                          className="w-full h-11 rounded-xl font-bold uppercase tracking-wider text-xs gap-3"
                           onClick={() => setSelectedMonitorId(null)}
                         >
                           Cancel Process
@@ -612,12 +614,12 @@ export default function VideoAutomationPage() {
                 key="empty"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="h-[500px] rounded-[3rem] border-2 border-dashed border-border/40 bg-muted/10 flex flex-col items-center justify-center text-center p-12"
+                className="h-[500px] rounded-2xl border-2 border-dashed border-border/40 bg-muted/10 flex flex-col items-center justify-center text-center p-12"
               >
                 <div className="w-20 h-20 rounded-full bg-primary/5 border border-primary/10 flex items-center justify-center mb-6">
                   <Play className="w-10 h-10 text-primary opacity-20" />
                 </div>
-                <h3 className="text-xl font-black tracking-tight mb-2">Intelligence Monitoring Hub</h3>
+                <h3 className="text-lg font-bold tracking-tight mb-2">Intelligence Monitoring Hub</h3>
                 <p className="text-sm text-muted-foreground/60 max-w-sm font-medium italic">Select a monitor to view live intent analysis or deploy a new workflow from the reels below.</p>
               </motion.div>
             )}
@@ -626,12 +628,12 @@ export default function VideoAutomationPage() {
           {/* Reels Feed Section */}
           <div className="space-y-8">
             <div className="flex items-center justify-between border-b border-border/40 pb-4">
-              <h3 className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground/40">Media Intelligence Feed</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/40">Media Intelligence Feed</h3>
               <div className="relative w-64 group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
                 <Input
                   placeholder="Filter Reels..."
-                  className="pl-9 h-10 rounded-full bg-muted/50 border-none text-[11px] font-bold focus-visible:ring-2 focus-visible:ring-primary/20"
+                  className="pl-9 h-10 rounded-full bg-muted/50 border-none text-[11px] font-semibold focus-visible:ring-2 focus-visible:ring-primary/20"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -642,7 +644,7 @@ export default function VideoAutomationPage() {
               <ReelsSkeleton />
             ) : (
               <div className="space-y-12">
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 md:gap-6">
+                <ResponsiveGrid className="grid-cols-2 sm:grid-cols-4 gap-4 md:gap-6">
                   {currentReels.map((reel: any) => (
                     <motion.div
                       key={reel.id}
@@ -675,11 +677,11 @@ export default function VideoAutomationPage() {
                         </div>
                       )}
                       <div className="absolute bottom-6 inset-x-6">
-                        <p className="text-[10px] font-black text-white line-clamp-2 leading-snug opacity-80 uppercase tracking-widest">{reel.caption || "NO CAPTION"}</p>
+                        <p className="text-[10px] font-semibold text-white line-clamp-2 leading-snug opacity-80 uppercase tracking-wider">{reel.caption || "NO CAPTION"}</p>
                       </div>
                     </motion.div>
                   ))}
-                </div>
+                </ResponsiveGrid>
 
                 {totalPages > 1 && (
                   <div className="flex justify-center pt-8">
@@ -716,13 +718,13 @@ export default function VideoAutomationPage() {
             )}
           </div>
         </div>
-      </div>
+      </ResponsiveGrid>
 
       <CustomContextMenu
         config={contextConfig}
         onClose={closeMenu}
         onAction={handleMenuAction}
       />
-    </div>
+    </PageWrapper>
   );
 }

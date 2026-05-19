@@ -43,6 +43,8 @@ import { AutonomousActionFeed } from "@/components/outreach/AutonomousActionFeed
 import { ReputationCard } from "@/components/outreach/ReputationCard";
 import { ReputationTrendChart } from "@/components/outreach/ReputationTrendChart";
 import { RecentConversations } from "@/components/dashboard/RecentConversations";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface UserProfile {
   id: string;
@@ -408,7 +410,7 @@ export default function DashboardHome() {
   const cleanInsightSummary = insightsData?.summary ? insightsData.summary.split('**').join('') : "";
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <PageWrapper className="space-y-8">
       {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-border/20">
           <div className="space-y-1">
@@ -456,30 +458,30 @@ export default function DashboardHome() {
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="relative overflow-hidden group bg-primary/10 border border-primary/20 rounded-[2rem] p-6 shadow-lg shadow-primary/5 mb-8"
+            className="relative overflow-hidden group bg-primary/10 border border-primary/20 rounded-2xl p-6 shadow-lg shadow-primary/5 mb-8"
           >
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 blur-[40px] md:blur-[80px] rounded-full translate-x-1/2 -translate-y-1/2 group-hover:bg-primary/20 transition-all duration-700" />
             <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
-              <div className="h-12 w-12 rounded-2xl bg-primary/20 flex items-center justify-center text-primary shrink-0 animate-pulse">
+              <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0 animate-pulse">
                 <Brain className="h-6 w-6" />
               </div>
               <div className="flex-1 space-y-1 text-center md:text-left">
-                <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-primary/60">Standard Peak Window</h3>
+                <h3 className="text-[10px] font-semibold uppercase tracking-wider text-primary/60">Standard Peak Window</h3>
                 <p className="text-sm md:text-base font-bold text-foreground/90">
-                  AI predicts your optimal sending window is <span className="text-primary font-black uppercase tracking-widest">{insightsData.bestReplyHour || 14}:00 - {((insightsData.bestReplyHour || 14) + 2) % 24}:00</span> based on recent patterns.
+                  AI predicts your optimal sending window is <span className="text-primary font-bold uppercase tracking-wider">{insightsData.bestReplyHour || 14}:00 - {((insightsData.bestReplyHour || 14) + 2) % 24}:00</span> based on recent patterns.
                 </p>
                 <div className="flex items-center justify-center md:justify-start gap-4 mt-2">
-                  <Badge variant="outline" className="bg-primary/5 text-[9px] font-black uppercase tracking-widest px-3 py-1 border-primary/10">
+                  <Badge variant="outline" className="bg-primary/5 text-[9px] font-semibold uppercase tracking-wider px-3 py-1 border-primary/10">
                     <Zap className="w-3 h-3 mr-1.5" /> Adaptive Frequency: ON
                   </Badge>
-                  <Badge variant="outline" className="bg-primary/5 text-[9px] font-black uppercase tracking-widest px-3 py-1 border-primary/10">
+                  <Badge variant="outline" className="bg-primary/5 text-[9px] font-semibold uppercase tracking-wider px-3 py-1 border-primary/10">
                     <Activity className="w-3 h-3 mr-1.5" /> High Deliverability
                   </Badge>
                 </div>
               </div>
               <Button
                 variant="default"
-                className="rounded-full bg-primary hover:bg-primary/90 text-[10px] font-black uppercase tracking-widest h-10 px-8 shadow-md"
+                className="rounded-xl bg-primary hover:bg-primary/90 text-[10px] font-bold uppercase tracking-wider h-10 px-6 shadow-md"
                 onClick={() => setLocation('/dashboard/ai-analytics')}
               >
                 View Full Analysis
@@ -489,7 +491,7 @@ export default function DashboardHome() {
         )}
 
         {/* KPI Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+        <ResponsiveGrid className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
           {kpis.map((kpi, index) => {
             const Icon = kpi.icon;
             const TrendIcon = kpi.trend === "up" ? ArrowUp : kpi.trend === "down" ? ArrowDown : Minus;
@@ -501,7 +503,7 @@ export default function DashboardHome() {
                 transition={{ delay: index * 0.1, duration: 0.5, ease: "easeOut" }}
               >
                 <Card className={cn(
-                  "relative transition-all duration-500 border-border/40 rounded-[2.5rem] overflow-hidden group bg-card/40 backdrop-blur-2xl hover:border-primary/30 h-full",
+                  "relative transition-all duration-500 border-border/40 rounded-2xl overflow-hidden group bg-card/40 backdrop-blur-2xl hover:border-primary/30 h-full",
                   kpi.glow
                 )}>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -517,7 +519,7 @@ export default function DashboardHome() {
                     {kpi.percentage !== "—" && (
                       <div className="flex items-center gap-2 flex-wrap min-h-[20px]">
                         <span className={`text-[9px] md:text-[10px] font-bold flex items-center px-1.5 md:px-2 py-0.5 rounded-full shrink-0 ${kpi.trend === "up" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
-                          <TrendIcon className="h-2.5 w-2.5 md:h-3 md:w-3 mr-0.5" />
+                           <TrendIcon className="h-2.5 w-2.5 md:h-3 md:w-3 mr-0.5" />
                           {kpi.percentage}
                         </span>
                         <span className="text-[8px] md:text-[9px] font-bold text-muted-foreground/30 uppercase tracking-widest truncate">Growth</span>
@@ -549,7 +551,7 @@ export default function DashboardHome() {
               </motion.div>
             );
           })}
-        </div>
+        </ResponsiveGrid>
 
         {/* Main Content Split */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -647,6 +649,6 @@ export default function DashboardHome() {
             </Card>
           </div>
         </div>
-      </div>
+    </PageWrapper>
   );
 }

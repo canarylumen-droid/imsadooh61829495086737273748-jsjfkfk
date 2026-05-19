@@ -394,26 +394,26 @@
 /* Refined Lightweight Glass - Optimized for Performance */
 .glass-premium {
   /* Default: Standard Dashboard (Conservative Blur) */
-  --glass-bg: hsla(230, 35%, 10%, 0.9);
-  --glass-blur: blur(10px);
-  --glass-border: hsla(var(--primary) / 0.1);
+  --glass-bg: hsla(230, 35%, 6%, 0.25);
+  --glass-blur: blur(24px);
+  --glass-border: hsla(var(--primary) / 0.15);
 
   background: var(--glass-bg);
   backdrop-filter: var(--glass-blur);
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--glass-border);
-  box-shadow: inset 0 0 40px hsla(var(--primary) / 0.05);
+  box-shadow: inset 0 0 40px hsla(var(--primary) / 0.02);
 }
 
 /* Light Mode Liquid Glass Overrides */
 :root {
   .glass-premium {
-    --glass-bg: rgba(255, 255, 255, 0.4);
-    --glass-blur: blur(20px);
-    --glass-border: rgba(6, 182, 212, 0.2);
+    --glass-bg: rgba(255, 255, 255, 0.12);
+    --glass-blur: blur(24px);
+    --glass-border: rgba(6, 182, 212, 0.15);
     box-shadow:
-      0 8px 32px 0 rgba(31, 38, 135, 0.07),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+      0 8px 32px 0 rgba(31, 38, 135, 0.04),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.25);
     border: 1px solid var(--glass-border);
   }
 }

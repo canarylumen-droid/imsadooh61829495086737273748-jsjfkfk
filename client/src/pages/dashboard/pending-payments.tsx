@@ -24,7 +24,9 @@ import {
   FileText,
   Clock,
   User as UserIcon,
-  Crown
+  Crown,
+  TrendingUp,
+  Percent
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "@/hooks/use-toast";
@@ -32,6 +34,8 @@ import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface PendingPayment {
   id: string;
@@ -116,30 +120,72 @@ export default function PendingPaymentsPage() {
     return matchesSearch;
   });
 
+  // Calculate metrics for stats grid
+  const activeOrders = payments?.filter(p => p.status === 'pending' || p.status === 'sent') || [];
+  const confirmedOrders = payments?.filter(p => p.status === 'paid') || [];
+  const totalPaidRevenue = confirmedOrders.reduce((sum, p) => sum + (p.amountDetected || 0), 0);
+  const conversionRate = payments && payments.length > 0 
+    ? Math.round((confirmedOrders.length / payments.length) * 100) 
+    : 0;
+
   return (
-    <div className="min-h-screen bg-transparent p-6 space-y-8">
-      {/* Premium Header */}
+    <PageWrapper className="space-y-8">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-primary/10 border border-primary/20">
-              <DollarSign className="h-6 w-6 text-primary" />
-            </div>
-            <h1 className="text-3xl font-black uppercase italic tracking-tighter">Manual Link Management</h1>
-            <Badge variant="outline" className="ml-2 border-primary/30 text-primary uppercase font-black text-[10px]">Enterprise Pipeline</Badge>
-          </div>
-          <p className="text-muted-foreground text-sm font-medium">Manage autonomous payment triggers from Fathom calls. Verify receipts manually to unpause campaigns.</p>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+            Manual Link Management
+          </h1>
+          <p className="text-muted-foreground mt-1 text-sm font-medium">
+            Manage autonomous payment triggers from Fathom calls. Verify receipts manually to unpause campaigns.
+          </p>
         </div>
       </div>
+
+      {/* Stats Summary Grid */}
+      <ResponsiveGrid className="grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Confirmed Revenue</CardTitle>
+            <DollarSign className="h-4 w-4 text-emerald-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">${totalPaidRevenue.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground mt-1">Lifetime payments processed</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active Orders</CardTitle>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{activeOrders.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">Awaiting checkout completion</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Conversion Rate</CardTitle>
+            <Percent className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{conversionRate}%</div>
+            <p className="text-xs text-muted-foreground mt-1">Call-to-payment conversion ratio</p>
+          </CardContent>
+        </Card>
+      </ResponsiveGrid>
 
       <Card className="border-border/40 bg-card/60 backdrop-blur-3xl overflow-hidden shadow-2xl">
         <CardHeader className="border-b border-border/10 pb-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full md:w-auto">
               <TabsList className="bg-muted/30 p-1 rounded-2xl border border-border/10 h-11">
-                <TabsTrigger value="pending" className="rounded-xl px-6 font-bold uppercase tracking-widest text-[10px]">Active Orders</TabsTrigger>
-                <TabsTrigger value="paid" className="rounded-xl px-6 font-bold uppercase tracking-widest text-[10px]">Confirmed</TabsTrigger>
-                <TabsTrigger value="all" className="rounded-xl px-6 font-bold uppercase tracking-widest text-[10px]">History</TabsTrigger>
+                <TabsTrigger value="pending" className="rounded-xl px-6 font-semibold uppercase tracking-wider text-[10px]">Active Orders</TabsTrigger>
+                <TabsTrigger value="paid" className="rounded-xl px-6 font-semibold uppercase tracking-wider text-[10px]">Confirmed</TabsTrigger>
+                <TabsTrigger value="all" className="rounded-xl px-6 font-semibold uppercase tracking-wider text-[10px]">History</TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -158,11 +204,11 @@ export default function PendingPaymentsPage() {
           <Table>
             <TableHeader className="bg-muted/10">
               <TableRow className="hover:bg-transparent">
-                <TableHead className="w-[300px] text-[10px] font-black uppercase tracking-widest px-8">Prospect Detail</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Detected Context</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Checkout URL</TableHead>
-                <TableHead className="text-[10px] font-black uppercase tracking-widest">Status</TableHead>
-                <TableHead className="text-right text-[10px] font-black uppercase tracking-widest px-8">Pipeline Actions</TableHead>
+                <TableHead className="w-[300px] text-[10px] font-semibold uppercase tracking-wider px-8">Prospect Detail</TableHead>
+                <TableHead className="text-[10px] font-semibold uppercase tracking-wider">Detected Context</TableHead>
+                <TableHead className="text-[10px] font-semibold uppercase tracking-wider">Checkout URL</TableHead>
+                <TableHead className="text-[10px] font-semibold uppercase tracking-wider">Status</TableHead>
+                <TableHead className="text-right text-[10px] font-semibold uppercase tracking-wider px-8">Pipeline Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -201,16 +247,16 @@ export default function PendingPaymentsPage() {
                         </div>
                         <div className="flex flex-col gap-0.5 min-w-0">
                           <Link href={`/dashboard/inbox`}>
-                            <span className="text-sm font-black tracking-tight hover:text-primary cursor-pointer transition-colors truncate">{p.lead?.name}</span>
+                            <span className="text-sm font-semibold tracking-tight hover:text-primary cursor-pointer transition-colors truncate">{p.lead?.name}</span>
                           </Link>
-                          <span className="text-[10px] font-bold text-muted-foreground truncate italic">{p.lead?.email}</span>
+                          <span className="text-[10px] font-medium text-muted-foreground truncate italic">{p.lead?.email}</span>
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
-                          <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary text-[9px] font-black tracking-widest py-0.5">
+                          <Badge variant="outline" className="border-primary/20 bg-primary/5 text-primary text-[9px] font-semibold tracking-wider py-0.5">
                             <DollarSign className="h-2.5 w-2.5 mr-1" />
                             APPROX ${p.amountDetected || '---'}
                           </Badge>
@@ -249,7 +295,7 @@ export default function PendingPaymentsPage() {
                     <TableCell>
                       <Badge 
                         variant={p.status === 'paid' ? 'default' : p.status === 'sent' ? 'secondary' : 'outline'}
-                        className={p.status === 'paid' ? "bg-emerald-500/20 text-emerald-500 border-emerald-500/30 font-black uppercase tracking-widest text-[9px] px-3" : "font-black uppercase tracking-widest text-[9px] px-3"}
+                        className={p.status === 'paid' ? "bg-emerald-500/20 text-emerald-500 border-emerald-500/30 font-semibold uppercase tracking-wider text-[9px] px-3" : "font-semibold uppercase tracking-wider text-[9px] px-3"}
                       >
                         {p.status}
                       </Badge>
@@ -261,7 +307,7 @@ export default function PendingPaymentsPage() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="h-9 rounded-xl border-primary/20 hover:bg-primary/10 font-black text-[10px] px-4"
+                              className="h-9 rounded-xl border-primary/20 hover:bg-primary/10 font-semibold text-[10px] px-4"
                               onClick={() => resendEmailMutation.mutate(p.id)}
                               disabled={resendEmailMutation.isPending}
                             >
@@ -271,7 +317,7 @@ export default function PendingPaymentsPage() {
                             <Button 
                               variant="default" 
                               size="sm" 
-                              className="h-9 rounded-xl bg-primary text-black hover:bg-primary/90 font-black text-[10px] px-4 shadow-[0_4px_12px_rgba(var(--primary),.3)]"
+                              className="h-9 rounded-xl bg-primary text-black hover:bg-primary/90 font-bold text-[10px] px-4 shadow-[0_4px_12px_rgba(var(--primary),.3)]"
                               onClick={() => confirmPaymentMutation.mutate(p.id)}
                               disabled={confirmPaymentMutation.isPending}
                             >
@@ -295,6 +341,6 @@ export default function PendingPaymentsPage() {
           </Table>
         </CardContent>
       </Card>
-    </div>
+    </PageWrapper>
   );
 }

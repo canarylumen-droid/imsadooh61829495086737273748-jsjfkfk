@@ -5,10 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
     TrendingUp,
-    RefreshCw,
     Target,
     Mail,
     BarChart3,
@@ -18,31 +18,22 @@ import {
     PieChart as PieChartIcon,
     Activity,
     Zap,
-    Unplug,
-    MessageSquare,
     Send,
     MessageCircle,
     Eye,
     DollarSign,
     Clock
 } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
+import { useQuery } from "@tanstack/react-query";
 import {
     ChartContainer,
     ChartTooltip,
     ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
-    BarChart,
-    Bar,
     XAxis,
     YAxis,
     CartesianGrid,
-    LineChart,
-    Line,
     PieChart,
     Pie,
     Cell,
@@ -51,6 +42,8 @@ import {
     Area
 } from "recharts";
 import { PremiumLoader } from "@/components/ui/premium-loader";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface AnalyticsData {
     metrics: {
@@ -81,8 +74,6 @@ interface AnalyticsData {
     isAnyConnected?: boolean;
 }
 
-// ... imports remain the same
-
 const COLORS = {
     primary: "hsl(var(--primary))",
     sent_email: "#3b82f6",
@@ -109,13 +100,9 @@ export default function AnalyticsPage() {
     const [showInstagram, setShowInstagram] = useState(true);
     const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
     const [chartType, setChartType] = useState<'area' | 'bar'>('area');
-    const [timeRange, setTimeRange] = useState<string>('7d');
-    const [channelFilter, setChannelFilter] = useState<'all' | 'email' | 'instagram'>('all');
-    const queryClient = useQueryClient();
     const { selectedMailboxId } = useMailbox();
     const { data: analytics, isLoading } = useQuery<AnalyticsData>({
         queryKey: ["/api/dashboard/analytics/full", { days: dateRange, integrationId: selectedMailboxId }],
-
     });
 
     const { data: previousStats } = useQuery<any>({
@@ -132,7 +119,6 @@ export default function AnalyticsPage() {
         };
     };
 
-    // Use server-filtered metrics directly
     const filteredMetrics = analytics?.metrics;
 
     if (isLoading && !analytics) return (
@@ -141,13 +127,12 @@ export default function AnalyticsPage() {
         </div>
     );
 
-    // Empty state logic — show dashboard structure if any channel is connected, even with zero data
     const hasData = analytics && (analytics.metrics.sent > 0 || analytics.metrics.replied > 0 || analytics.metrics.booked > 0 || analytics.isAnyConnected);
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-700">
+        <PageWrapper>
             {/* Summary Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+            <ResponsiveGrid className="xl:grid-cols-6 lg:grid-cols-3 gap-6">
                 {hasData ? (
                     <>
                         <StatCard
@@ -208,16 +193,16 @@ export default function AnalyticsPage() {
                 ) : (
                     <div className="lg:col-span-4 flex flex-col items-center justify-center py-16 text-center text-muted-foreground opacity-60">
                         <Activity className="h-8 w-8 mb-3" />
-                        <p className="text-sm font-bold tracking-widest uppercase">No data available for this period</p>
+                        <p className="text-sm font-semibold tracking-wider uppercase">No data available for this period</p>
                     </div>
                 )}
-            </div>
+            </ResponsiveGrid>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
                 {/* Main Growth Chart */}
-                <Card className="lg:col-span-2 bg-card border-border/40 rounded-[2rem] overflow-hidden">
+                <Card className="lg:col-span-2 bg-card border-border/40 rounded-2xl overflow-hidden">
                     <CardHeader className="p-4 sm:p-6 md:p-8 pb-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
-                        <CardTitle className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground/40 text-center sm:text-left">Engagement Velocity</CardTitle>
+                        <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 text-center sm:text-left">Engagement Velocity</CardTitle>
                         <div className="flex flex-wrap justify-center gap-4">
                             <div className="flex bg-muted/50 rounded-lg p-1">
                                 <Button
@@ -301,13 +286,13 @@ export default function AnalyticsPage() {
                                             dataKey="name"
                                             axisLine={false}
                                             tickLine={false}
-                                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10, fontWeight: 700 }}
+                                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10, fontWeight: 600 }}
                                             dy={10}
                                         />
                                         <YAxis
                                             axisLine={false}
                                             tickLine={false}
-                                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10, fontWeight: 700 }}
+                                            tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10, fontWeight: 600 }}
                                         />
                                         <ChartTooltip
                                             cursor={{ stroke: 'hsl(var(--primary))', strokeWidth: 2, strokeDasharray: '4 4' }}
@@ -381,8 +366,8 @@ export default function AnalyticsPage() {
                 </Card>
 
                 {/* Real-time Activity Feed */}
-                <Card className="bg-card border-border/40 rounded-[2rem] p-8 flex flex-col relative overflow-hidden">
-                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground/40 mb-8 flex items-center gap-2">
+                <Card className="bg-card border-border/40 rounded-2xl p-8 flex flex-col relative overflow-hidden">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-8 flex items-center gap-2">
                         <Activity className="w-4 h-4 text-primary" /> Live Interaction Stream
                     </h3>
                     <div className="space-y-6 flex-1">
@@ -397,135 +382,131 @@ export default function AnalyticsPage() {
                                     )} />
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
-                                            <p className="text-sm font-black text-foreground group-hover:text-primary transition-colors truncate">{event.description}</p>
+                                            <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">{event.description}</p>
                                             {(event as any).isNew && (
-                                                <Badge className="h-4 px-1.5 text-[8px] font-black bg-primary text-black border-0 animate-in fade-in zoom-in">NEW</Badge>
+                                                <Badge className="h-4 px-1.5 text-[8px] font-semibold bg-primary text-black border-0 animate-in fade-in zoom-in">NEW</Badge>
                                             )}
                                         </div>
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 mt-1">{event.time}</p>
+                                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-1">{event.time}</p>
                                     </div>
                                 </div>
                             ))
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-center opacity-20 py-20">
                                 <Zap className="w-12 h-12 mb-4" />
-                                <p className="text-xs font-black uppercase tracking-widest">Waiting for activity...</p>
+                                <p className="text-xs font-semibold uppercase tracking-wider">Waiting for activity...</p>
                             </div>
                         )}
                     </div>
                     <Button
                         onClick={() => setIsAuditModalOpen(true)}
                         variant="ghost"
-                        className="mt-8 text-[10px] font-black uppercase tracking-widest text-primary p-0 h-auto justify-start hover:bg-transparent hover:text-primary/80"
+                        className="mt-8 text-[10px] font-semibold uppercase tracking-wider text-primary p-0 h-auto justify-start hover:bg-transparent hover:text-primary/80"
                     >
                         View Transparency Audit Log <ArrowUpRight className="ml-1 h-3 w-3" />
                     </Button>
 
                     <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-primary/5 blur-[60px] rounded-full" />
                 </Card>
-            </div>
+            </ResponsiveGrid>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <ResponsiveGrid className="grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                 {/* Lead Distribution Pie Chart */}
-                <Card className="bg-card border-border/40 rounded-[2rem] overflow-hidden">
+                <Card className="bg-card border-border/40 rounded-2xl overflow-hidden">
                     <CardHeader className="p-8">
-                        <CardTitle className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground/40">Lead Status System</CardTitle>
+                        <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50">Lead Status System</CardTitle>
                     </CardHeader>
                     <CardContent className="h-[300px] flex items-center justify-center">
                         {analytics?.metrics ? (
-                            <ResponsiveContainer width="100%" height="100%">
-                                <ChartContainer config={chartConfig} className="w-full h-full">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <PieChart>
-                                            <Pie
-                                                data={[
-                                                    { name: 'Warm', value: analytics.metrics.replied, color: '#3b82f6' },
-                                                    { name: 'Sent', value: analytics.metrics.sent - analytics.metrics.replied, color: '#d946ef' },
-                                                    { name: 'Converted', value: analytics.metrics.booked, color: '#10b981' }
-                                                ]}
-                                                cx="50%"
-                                                cy="50%"
-                                                innerRadius={60}
-                                                outerRadius={80}
-                                                paddingAngle={8}
-                                                dataKey="value"
-                                            >
-                                                {[0, 1, 2].map((entry, index) => (
-                                                    <Cell key={`cell-${index}`} fill={['#3b82f6', '#d946ef', '#10b981'][index]} />
-                                                ))}
-                                            </Pie>
-                                            <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
-                                        </PieChart>
-                                    </ResponsiveContainer>
-                                </ChartContainer>
-                            </ResponsiveContainer>
+                            <div className="w-full h-full flex items-center justify-center">
+                                <ResponsiveContainer width="60%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={[
+                                                { name: 'Warm', value: analytics.metrics.replied, color: '#3b82f6' },
+                                                { name: 'Sent', value: analytics.metrics.sent - analytics.metrics.replied, color: '#d946ef' },
+                                                { name: 'Converted', value: analytics.metrics.booked, color: '#10b981' }
+                                            ]}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={60}
+                                            outerRadius={80}
+                                            paddingAngle={8}
+                                            dataKey="value"
+                                        >
+                                            {[0, 1, 2].map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={['#3b82f6', '#d946ef', '#10b981'][index]} />
+                                            ))}
+                                        </Pie>
+                                        <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="flex flex-col gap-3 justify-center pr-10">
+                                    {[
+                                        { label: 'Warm', color: 'bg-blue-500' },
+                                        { label: 'Sent', color: 'bg-fuchsia-500' },
+                                        { label: 'Converted', color: 'bg-emerald-500' }
+                                    ].map(item => (
+                                        <div key={item.label} className="flex items-center gap-3">
+                                            <div className={cn("w-2 h-2 rounded-full", item.color)} />
+                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">{item.label}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
                         ) : (
                             <div className="opacity-20 flex flex-col items-center">
                                 <PieChartIcon className="w-12 h-12 mb-2" />
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Aggregating Data...</p>
+                                <p className="text-[10px] font-semibold uppercase tracking-wider">Aggregating Data...</p>
                             </div>
                         )}
-                        <div className="flex flex-col gap-3 justify-center pr-10">
-                            {[
-                                { label: 'Warm', color: 'bg-blue-500' },
-                                { label: 'Sent', color: 'bg-fuchsia-500' },
-                                { label: 'Converted', color: 'bg-emerald-500' }
-                            ].map(item => (
-                                <div key={item.label} className="flex items-center gap-3">
-                                    <div className={cn("w-2 h-2 rounded-full", item.color)} />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">{item.label}</span>
-                                </div>
-                            ))}
-                        </div>
                     </CardContent>
                 </Card>
 
                 {/* Audit Purpose Info */}
-                <Card className="bg-card border-border/40 rounded-[2rem] p-8 flex flex-col justify-center">
+                <Card className="bg-card border-border/40 rounded-2xl p-8 flex flex-col justify-center">
                     <div className="flex items-center gap-4 mb-6">
-                        <div className="p-3 rounded-2xl bg-primary/10 text-primary">
+                        <div className="p-3 rounded-xl bg-primary/10 text-primary">
                             <Sparkles className="w-6 h-6" />
                         </div>
-                        <h3 className="text-lg font-black tracking-tight">AI Decision Engine</h3>
+                        <h3 className="text-lg font-bold tracking-tight">AI Decision Engine</h3>
                     </div>
-                    <p className="text-sm text-muted-foreground leading-relaxed mb-6">
+                    <p className="text-sm text-muted-foreground leading-relaxed mb-6 font-medium">
                         Audnix logs every deterministic decision cycle. The **Transparency Audit Log** provides transparency into how the AI interprets leads, handles objections, and triggers automation rules.
                     </p>
                     <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 rounded-2xl bg-muted/30 border border-border/50">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Transparency</div>
-                            <p className="text-[11px] font-bold opacity-70 leading-snug">Track AI logic flow step-by-step.</p>
+                        <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-2">Transparency</div>
+                            <p className="text-[11px] font-medium opacity-85 leading-snug">Track AI logic flow step-by-step.</p>
                         </div>
-                        <div className="p-4 rounded-2xl bg-muted/30 border border-border/50">
-                            <div className="text-[10px] font-black uppercase tracking-widest text-primary mb-2">Optimization</div>
-                            <p className="text-[11px] font-bold opacity-70 leading-snug">Refine rules based on failed cycles.</p>
+                        <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
+                            <div className="text-[10px] font-semibold uppercase tracking-wider text-primary mb-2">Optimization</div>
+                            <p className="text-[11px] font-medium opacity-85 leading-snug">Refine rules based on failed cycles.</p>
                         </div>
                     </div>
                 </Card>
-            </div>
+            </ResponsiveGrid>
 
             {/* Stats Table Section */}
-            <Card className="bg-card border-border/40 rounded-[2rem] overflow-hidden">
-                <CardHeader className="p-8 border-b border-border/40 bg-muted/30">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <CardTitle className="text-xs font-black uppercase tracking-[0.3em] text-muted-foreground/40">Performance Matrix</CardTitle>
-                            <CardDescription className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 mt-1">Numerical breakdown by intersection cycle</CardDescription>
-                        </div>
-                        <Badge variant="outline" className="rounded-full px-4 h-6 border-primary/20 bg-primary/5 text-primary text-[8px] font-black tracking-widest uppercase">
-                            Real-time Sync
-                        </Badge>
+            <Card className="bg-card border-border/40 rounded-2xl overflow-hidden mt-6">
+                <div className="p-8 border-b border-border/40 bg-muted/30 flex items-center justify-between">
+                    <div>
+                        <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50">Performance Matrix</CardTitle>
+                        <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-1">Numerical breakdown by intersection cycle</CardDescription>
                     </div>
-                </CardHeader>
+                    <Badge variant="outline" className="rounded-full px-4 h-6 border-primary/20 bg-primary/5 text-primary text-[8px] font-semibold tracking-wider uppercase">
+                        Real-time Sync
+                    </Badge>
+                </div>
                 <CardContent className="p-0">
                     <div className="overflow-x-auto">
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-border/20">
-                                    <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">Metric</th>
-                                    <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-right">Current Period</th>
-                                    <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-right">Previous Period</th>
-                                    <th className="px-8 py-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 text-right">Inertia</th>
+                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">Metric</th>
+                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Current Period</th>
+                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Previous Period</th>
+                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Inertia</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/10">
@@ -543,12 +524,12 @@ export default function AnalyticsPage() {
 
                                     return (
                                         <tr key={idx} className="hover:bg-muted/20 transition-colors group">
-                                            <td className="px-8 py-5 text-sm font-black text-foreground/80 group-hover:text-primary transition-colors">{row.label}</td>
-                                            <td className="px-8 py-5 text-sm font-black text-right">{row.current !== undefined ? row.current : (row.currentVal || 0)}</td>
-                                            <td className="px-8 py-5 text-sm font-black text-right opacity-40">{row.previous !== undefined ? row.previous : (row.previousVal || 0)}</td>
+                                            <td className="px-8 py-5 text-sm font-semibold text-foreground/80 group-hover:text-primary transition-colors">{row.label}</td>
+                                            <td className="px-8 py-5 text-sm font-semibold text-right">{row.current !== undefined ? row.current : (row.currentVal || 0)}</td>
+                                            <td className="px-8 py-5 text-sm font-semibold text-right opacity-45">{row.previous !== undefined ? row.previous : (row.previousVal || 0)}</td>
                                             <td className="px-8 py-5 text-right">
                                                 <div className={cn(
-                                                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+                                                    "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider",
                                                     isNeutral ? "bg-muted text-muted-foreground" :
                                                         isUp ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
                                                 )}>
@@ -565,15 +546,15 @@ export default function AnalyticsPage() {
                 </CardContent>
             </Card>
 
-            {/* Audit Logs Modal */}
+            {/* Audit Logs Sheet */}
             <Sheet open={isAuditModalOpen} onOpenChange={setIsAuditModalOpen}>
                 <SheetContent side="right" className="w-full sm:max-w-xl p-0 bg-background border-l border-border">
                     <div className="h-full flex flex-col">
                         <div className="p-8 border-b border-border bg-card/50">
-                            <h2 className="text-xl font-black tracking-tight flex items-center gap-3">
+                            <h2 className="text-xl font-bold tracking-tight flex items-center gap-3">
                                 <Activity className="w-5 h-5 text-primary" /> Transparency Audit Log
                             </h2>
-                            <p className="text-xs text-muted-foreground mt-1 lowercase first-letter:uppercase font-bold">Historical trace of all AI decision cycles and lead intersections</p>
+                            <p className="text-xs text-muted-foreground mt-1 lowercase first-letter:uppercase font-semibold">Historical trace of all AI decision cycles and lead intersections</p>
                         </div>
                         <ScrollArea className="flex-1 p-8">
                             <div className="space-y-8">
@@ -582,10 +563,10 @@ export default function AnalyticsPage() {
                                         <div className="absolute left-[-5px] top-0 w-[9px] h-[9px] rounded-full bg-primary shadow-[0_0_10px_#3b82f6]" />
                                         <div className="space-y-2">
                                             <div className="flex items-baseline justify-between">
-                                                <h4 className="text-sm font-black uppercase tracking-widest">{event.type}</h4>
+                                                <h4 className="text-sm font-semibold uppercase tracking-wider">{event.type}</h4>
                                                 <span className="text-[10px] font-mono opacity-40">{event.time}</span>
                                             </div>
-                                            <p className="text-sm text-foreground/80 leading-relaxed font-bold">{event.description}</p>
+                                            <p className="text-sm text-foreground/80 leading-relaxed font-medium">{event.description}</p>
                                             {event.details && (
                                                 <div className="p-3 rounded-xl bg-muted/50 border border-border/20 text-xs font-mono opacity-60">
                                                     {event.details}
@@ -599,7 +580,7 @@ export default function AnalyticsPage() {
                     </div>
                 </SheetContent>
             </Sheet>
-        </div>
+        </PageWrapper>
     );
 }
 
@@ -610,36 +591,35 @@ function StatCard({ label, value, icon: Icon, trend, isUp, color, index }: any) 
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
         >
-            <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-[2rem] group relative">
+            <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-2xl group relative">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">{label}</CardTitle>
+                    <CardTitle className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">{label}</CardTitle>
                     <div className={cn("p-2 rounded-xl bg-muted/50 transition-colors group-hover:bg-primary/10")}>
                         <Icon className={cn("h-4 w-4", color)} />
                     </div>
                 </CardHeader>
                 <CardContent className="pt-2">
                     <div className="flex items-baseline justify-between gap-1 w-full">
-                        <div className="text-3xl font-black tracking-tighter truncate">{value}</div>
+                        <div className="text-3xl font-bold tracking-tight truncate">{value}</div>
                         {trend && trend !== "—" && (
                             <div className={cn(
                                 "flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0",
                                 isUp ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
                             )}>
                                 {isUp ? <ArrowUpRight className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                                <span className="text-[10px] font-black">{trend}</span>
+                                <span className="text-[10px] font-semibold">{trend}</span>
                             </div>
                         )}
                         {trend === "—" && (
                             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
-                                <span className="text-[10px] font-black">STABLE</span>
+                                <span className="text-[10px] font-semibold">STABLE</span>
                             </div>
                         )}
                     </div>
-                    <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 mt-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-4">
                       {trend && trend !== "—" ? (isUp ? "Improving" : "Declining") : "No prior data"}
                     </p>
 
-                    {/* Apple-style background glow */}
                     <div className={cn("absolute -bottom-10 -right-10 w-32 h-32 blur-[80px] opacity-10 rounded-full", color.replace('text-', 'bg-'))} />
                 </CardContent>
             </Card>

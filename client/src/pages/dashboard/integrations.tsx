@@ -55,6 +55,8 @@ import {
 } from "@/components/ui/tooltip";
 
 import { getPlanCapabilities, getActivePlanId } from "@shared/plan-utils";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface Integration {
   id?: string;
@@ -504,7 +506,7 @@ export default function IntegrationsPage() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <PageWrapper className="space-y-8">
       <DisconnectConfirmationDialog
         isOpen={isDisconnectDialogOpen}
         onOpenChange={setIsDisconnectDialogOpen}
@@ -1092,15 +1094,17 @@ export default function IntegrationsPage() {
                           </Button>
                           <Badge className={cn(
                             "text-[9px] font-black border-0 uppercase tracking-tighter",
+                            !(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "bg-muted text-muted-foreground" :
                             calculateReputation() === null ? "bg-muted text-muted-foreground" :
                               parseFloat(calculateReputation()!) >= 70 ? "bg-emerald-500/10 text-emerald-500" : 
                               parseFloat(calculateReputation()!) >= 55 ? "bg-amber-500/10 text-amber-500" :
                               parseFloat(calculateReputation()!) >= 40 ? "bg-orange-500/10 text-orange-500" : "bg-red-500/10 text-red-500"
                           )}>
-                            {calculateReputation() === null ? "Pending Analysis" : 
-                             parseFloat(calculateReputation()!) >= 70 ? "Healthy" : 
-                             parseFloat(calculateReputation()!) >= 55 ? "Attention Required" : 
-                             parseFloat(calculateReputation()!) >= 40 ? "Cautious" : "Unhealthy - Reduced to 5/day"}
+                            {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Inactive" :
+                             calculateReputation() === null ? "Pending Analysis" : 
+                              parseFloat(calculateReputation()!) >= 70 ? "Healthy" : 
+                              parseFloat(calculateReputation()!) >= 55 ? "Attention Required" : 
+                              parseFloat(calculateReputation()!) >= 40 ? "Cautious" : "Unhealthy - Reduced to 5/day"}
                           </Badge>
                         </div>
                       </div>
@@ -1109,7 +1113,9 @@ export default function IntegrationsPage() {
                         <div className="space-y-0.5">
                           <p className="text-[9px] font-bold text-muted-foreground/60 uppercase">Domain Grade</p>
                           <div className="text-3xl font-black tracking-tighter text-foreground h-9 flex items-center gap-2">
-                            {calculateReputation() !== null ? (
+                            {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? (
+                              "0.00%"
+                            ) : calculateReputation() !== null ? (
                               <>
                                 {calculateReputation()}%
                                 {parseFloat(calculateReputation()!) === 100 && (
@@ -1123,17 +1129,20 @@ export default function IntegrationsPage() {
                           <p className="text-[9px] font-bold text-muted-foreground/60 uppercase">Engine Status</p>
                           <p className={cn(
                             "text-xs font-black uppercase tracking-widest pt-2",
+                            !(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "text-muted-foreground" :
                             calculateReputation() === null ? "text-muted-foreground" :
                               parseFloat(calculateReputation()!) >= 70 ? "text-emerald-500" : 
                               parseFloat(calculateReputation()!) >= 40 ? "text-orange-500" : "text-red-500"
                           )}>
-                            {calculateReputation() === null ? "Waiting" : parseFloat(calculateReputation()!) >= 70 ? "Autonomous" : "User Oversight Recommended"}
+                            {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Offline" :
+                             calculateReputation() === null ? "Waiting" : parseFloat(calculateReputation()!) >= 70 ? "Autonomous" : "User Oversight Recommended"}
                           </p>
                         </div>
                       </div>
 
                       <div className={cn(
                         "p-3 rounded-xl border text-[10px] leading-tight font-medium transition-all duration-300",
+                        !(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "bg-muted/10 border-border/20 text-muted-foreground" :
                         calculateReputation() === null ? "bg-muted/10 border-border/20 text-muted-foreground" :
                           parseFloat(calculateReputation()!) >= 70
                             ? "bg-primary/5 border-primary/10 text-muted-foreground"
@@ -1141,7 +1150,8 @@ export default function IntegrationsPage() {
                             ? "bg-orange-500/5 border-orange-500/10 text-orange-400"
                             : "bg-red-500/5 border-red-500/10 text-red-400"
                       )}>
-                        {calculateReputation() === null ? "AI is initiating a health checkpoint for your domain." :
+                        {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Please connect a mailbox to initiate domain health monitoring." :
+                         calculateReputation() === null ? "AI is initiating a health checkpoint for your domain." :
                           parseFloat(calculateReputation()!) >= 70
                             ? "Your domain parameters are within safe limits. AI is managing 1-by-1 sending autonomously."
                             : parseFloat(calculateReputation()!) >= 40
@@ -1193,16 +1203,16 @@ export default function IntegrationsPage() {
               ) : (
                 <div className="p-12">
                    <div className="flex flex-col items-center text-center space-y-6">
-                    <div className="h-24 w-24 rounded-[2.5rem] bg-primary/5 flex items-center justify-center border border-primary/10 relative shadow-inner group">
+                    <div className="h-24 w-24 rounded-2xl bg-primary/5 flex items-center justify-center border border-primary/10 relative shadow-inner group">
                       <div className="absolute inset-0 bg-primary/5 blur-xl group-hover:bg-primary/10 transition-all rounded-full" />
                       <Mail className="h-10 w-10 text-primary relative z-10" />
                     </div>
                     <div className="space-y-2 max-w-sm">
-                      <h3 className="text-2xl font-black tracking-tight">Connect Custom Domain</h3>
+                      <h3 className="text-xl font-bold tracking-tight">Connect Custom Domain</h3>
                       <p className="text-sm font-medium text-muted-foreground leading-relaxed px-4">Professional outreach requires a custom SMTP & IMAP connection for high deliverability.</p>
                     </div>
                     <Button 
-                      className="rounded-2xl gap-2 h-12 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest shadow-xl shadow-primary/20"
+                      className="rounded-xl gap-2 h-11 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-wider shadow-lg shadow-primary/15"
                       onClick={() => setIsEditingCustomEmail(true)}
                     >
                       <Plus className="h-4 w-4" /> Start Connecting
@@ -1213,7 +1223,7 @@ export default function IntegrationsPage() {
             </Card>
 
             {/* Social and SaaS Integrations */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {isLoading ? (
                 // Skeleton loading for integration cards
                 Array.from({ length: 4 }).map((_, i) => (
@@ -1279,7 +1289,7 @@ export default function IntegrationsPage() {
                   );
                 })
               )}
-            </div>
+            </ResponsiveGrid>
           </div>
         </TabsContent >
 
@@ -1340,7 +1350,7 @@ export default function IntegrationsPage() {
           </Card>
         </TabsContent>
       </Tabs >
-    </div >
+    </PageWrapper>
   );
 }
 

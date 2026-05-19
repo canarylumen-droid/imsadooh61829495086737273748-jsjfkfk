@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { PageWrapper } from "@/components/ui/page-wrapper";
 import {
   Copy,
   Sparkles,
@@ -180,7 +181,7 @@ export default function SalesAssistant() {
       <motion.div
         initial={{ opacity: 0, scale: 0.98 }}
         animate={{ opacity: 1, scale: 1 }}
-        className={`rounded-[2rem] border transition-all duration-500 ${theme.border} ${theme.bg} overflow-hidden group`}
+        className={`rounded-2xl border transition-all duration-500 ${theme.border} ${theme.bg} overflow-hidden group`}
       >
         <button
           onClick={() => toggleSection(id)}
@@ -225,15 +226,15 @@ export default function SalesAssistant() {
   };
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <PageWrapper className="max-w-6xl mx-auto space-y-8 animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent flex items-center gap-2">
+          <h1 className="text-2xl md:text-3xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent flex items-center gap-2">
             Sales Assistant <Brain className="h-8 w-8 text-primary" />
           </h1>
-          <p className="text-muted-foreground text-lg">
+          <p className="text-muted-foreground text-base">
             Your AI partner for objection handling and closing.
           </p>
         </div>
@@ -250,15 +251,15 @@ export default function SalesAssistant() {
           transition={{ delay: 0.1 }}
           className="h-full"
         >
-          <Card className="h-full border-border/40 shadow-2xl bg-card/40 backdrop-blur-xl rounded-[2.5rem] overflow-hidden grayscale-[0.5] hover:grayscale-0 transition-all duration-700">
+          <Card className="h-full border-border/40 shadow-xl bg-card/40 backdrop-blur-xl rounded-2xl overflow-hidden grayscale-[0.5] hover:grayscale-0 transition-all duration-700">
             <CardHeader className="p-10 pb-4">
-              <CardTitle className="flex items-center gap-3 text-2xl font-black uppercase tracking-tight text-foreground">
+              <CardTitle className="flex items-center gap-3 text-xl font-bold uppercase tracking-tight text-foreground">
                 <div className="p-2.5 rounded-xl bg-primary/10 text-primary">
                   <MessageSquare className="w-6 h-6" />
                 </div>
                 Prospect Input
               </CardTitle>
-              <CardDescription className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/30">
+              <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/45">
                 Verbatim Intelligence Analysis
               </CardDescription>
             </CardHeader>
@@ -278,7 +279,7 @@ export default function SalesAssistant() {
               <Button
                 onClick={handleAnalyze}
                 disabled={analyzeMutation.isPending || !prospectText.trim()}
-                className="w-full h-20 text-xs font-black uppercase tracking-[0.3em] shadow-2xl shadow-primary/20 rounded-[1.5rem] bg-primary hover:bg-primary/90 transition-all active:scale-95"
+                className="w-full h-11 text-xs font-bold uppercase tracking-wider shadow-md shadow-primary/10 rounded-xl bg-primary hover:bg-primary/90 transition-all active:scale-98"
                 size="lg"
               >
                 {analyzeMutation.isPending ? (
@@ -433,6 +434,6 @@ export default function SalesAssistant() {
           )}
         </AnimatePresence>
       </div>
-    </div>
+    </PageWrapper>
   );
 }

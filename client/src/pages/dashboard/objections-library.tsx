@@ -30,6 +30,8 @@ import {
   ArrowRight,
   ShieldAlert,
 } from "lucide-react";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface Objection {
   id: string;
@@ -90,19 +92,19 @@ function ObjectionCard({ objection, index }: {
       animate={{ opacity: 1, scale: 1 }}
       transition={{ delay: index * 0.05, type: "spring", stiffness: 100, damping: 10 }}
     >
-      <Card className={`overflow-hidden border group transition-all duration-500 hover:scale-[1.02] cursor-pointer rounded-[2rem] ${CATEGORY_STYLES[objection.category] || CATEGORY_STYLES.generic}`}>
+      <Card className={`overflow-hidden border group transition-all duration-500 hover:scale-[1.02] cursor-pointer rounded-2xl ${CATEGORY_STYLES[objection.category] || CATEGORY_STYLES.generic}`}>
         <CardHeader className="p-8 pb-4">
           <div className="flex items-center justify-between mb-4">
-            <Badge variant="outline" className="font-black uppercase tracking-[0.2em] text-[10px] bg-muted/20 border-border/10">
+            <Badge variant="outline" className="font-semibold uppercase tracking-wider text-[10px] bg-muted/20 border-border/10">
               {objection.category.toUpperCase()} PATTERN
             </Badge>
             <ShieldAlert className="h-4 w-4 text-muted-foreground/30" />
           </div>
-          <CardTitle className="text-xl font-black text-foreground uppercase tracking-tight leading-none group-hover:text-primary transition-colors">{objection.name}</CardTitle>
+          <CardTitle className="text-xl font-bold text-foreground uppercase tracking-tight leading-none group-hover:text-primary transition-colors">{objection.name}</CardTitle>
         </CardHeader>
         <CardContent className="p-8 pt-0 space-y-4">
           <div className="p-6 rounded-2xl bg-card border border-border/40">
-            <p className="text-sm font-bold text-foreground/80 leading-relaxed tracking-tight">{objection.content}</p>
+            <p className="text-sm font-medium text-foreground/80 leading-relaxed tracking-tight">{objection.content}</p>
           </div>
           <div className="flex items-center justify-between pt-2">
             <div className="flex gap-2">
@@ -113,7 +115,7 @@ function ObjectionCard({ objection, index }: {
                 <Copy className="h-4 w-4" />
               </button>
             </div>
-            <Button variant="ghost" size="sm" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 hover:text-primary h-auto p-0">
+            <Button variant="ghost" size="sm" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 hover:text-primary h-auto p-0">
               Evolution Logic <ArrowRight className="ml-1 h-3 w-3" />
             </Button>
           </div>
@@ -157,7 +159,7 @@ export default function ObjectionsLibraryPage() {
   ];
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <PageWrapper className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-3">
@@ -180,7 +182,7 @@ export default function ObjectionsLibraryPage() {
             placeholder="Search response patterns..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-12 bg-muted/40 border-border/40 rounded-2xl h-12 focus:border-primary/50 transition-all font-bold tracking-tight"
+            className="pl-12 bg-muted/40 border-border/40 rounded-xl h-12 focus:border-primary/50 transition-all font-semibold tracking-tight"
           />
         </div>
         <div className="flex gap-2">
@@ -223,11 +225,11 @@ export default function ObjectionsLibraryPage() {
       </div>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <ResponsiveGrid>
           {[...Array(9)].map((_, i) => (
             <Skeleton key={i} className="h-24 bg-muted animate-pulse rounded-xl" />
           ))}
-        </div>
+        </ResponsiveGrid>
       ) : filteredObjections.length === 0 ? (
         <Card className="bg-muted/40 border-border/40">
           <CardContent className="py-12 text-center">
@@ -237,7 +239,7 @@ export default function ObjectionsLibraryPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <ResponsiveGrid>
           {filteredObjections.map((objection, index) => (
             <ObjectionCard
               key={objection.id}
@@ -245,29 +247,29 @@ export default function ObjectionsLibraryPage() {
               index={index}
             />
           ))}
-        </div>
+        </ResponsiveGrid>
       )}
       <motion.div
         initial={{ opacity: 0, y: 40 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        className="mt-20 p-12 rounded-[3.5rem] bg-gradient-to-br from-primary/20 via-primary/5 to-purple-500/10 border border-primary/20 relative overflow-hidden group grayscale hover:grayscale-0 transition-all duration-1000"
+        className="mt-12 p-8 rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-purple-500/5 border border-primary/20 relative overflow-hidden group transition-all duration-500"
       >
-        <div className="absolute inset-0 bg-primary/5 blur-[120px] rounded-full group-hover:bg-primary/10 transition-colors" />
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-10">
-          <div className="text-center md:text-left space-y-4">
-            <h2 className="text-4xl md:text-5xl font-black text-white tracking-tighter uppercase leading-[0.9]">
-              Custom Sales <br /> <span className="text-primary">Logic Required?</span>
+        <div className="absolute inset-0 bg-primary/5 blur-[120px] rounded-full" />
+        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="text-center md:text-left space-y-2">
+            <h2 className="text-2xl font-bold text-white tracking-tight">
+              Custom Sales Logic Required?
             </h2>
-            <p className="text-white/60 font-bold max-w-md tracking-tight text-lg">
+            <p className="text-white/60 text-sm max-w-md leading-relaxed">
               Train your personal objection patterns into the core for proven close rates. Automated optimization active.
             </p>
           </div>
-          <Button className="h-20 px-16 rounded-[2rem] bg-white text-black font-black uppercase tracking-[0.3em] text-[10px] hover:scale-105 active:scale-95 transition-all shadow-[0_20px_40px_rgba(255,255,255,0.1)]">
+          <Button className="h-11 px-6 rounded-xl bg-white text-black font-bold uppercase tracking-wider text-xs hover:bg-white/90 active:scale-98 transition-all shadow-lg shadow-white/5 shrink-0">
             Start Trainer
           </Button>
         </div>
       </motion.div>
-    </div>
+    </PageWrapper>
   );
 }

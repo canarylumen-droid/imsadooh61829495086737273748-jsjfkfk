@@ -1,9 +1,8 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -32,6 +31,8 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface AIDecision {
   id: string;
@@ -85,7 +86,6 @@ export default function AIDecisionsPage() {
   const { data: decisions, isLoading } = useQuery<AIDecision[]>({
     queryKey: ['/api/automation/decisions'],
     retry: false,
-
   });
 
   const stats: DecisionStats = {
@@ -113,15 +113,15 @@ export default function AIDecisionsPage() {
   };
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700">
+    <PageWrapper className="space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-border/20">
         <div className="space-y-1">
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tighter bg-gradient-to-br from-foreground via-foreground/90 to-primary/80 bg-clip-text text-transparent flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-br from-foreground via-foreground/90 to-primary/80 bg-clip-text text-transparent flex items-center gap-3">
             <Brain className="h-8 w-8 text-primary/80" />
             Transparency Log
           </h1>
-          <p className="text-muted-foreground/80 text-lg font-medium tracking-tight">
+          <p className="text-muted-foreground/80 text-base font-medium tracking-tight">
             Complete visibility into every automated decision and interaction.
           </p>
         </div>
@@ -129,7 +129,7 @@ export default function AIDecisionsPage() {
           <Button
             variant="outline"
             size="sm"
-            className="rounded-2xl border-border/40 hover:bg-muted/50 transition-all font-bold uppercase tracking-wider text-[10px] h-10 px-6 backdrop-blur-md"
+            className="rounded-xl border-border/40 hover:bg-muted/50 transition-all font-semibold uppercase tracking-wider text-[10px] h-10 px-5 backdrop-blur-md"
             onClick={handleRefresh}
           >
             <RefreshCw className="mr-2 h-3.5 w-3.5" /> Refresh Log
@@ -138,7 +138,7 @@ export default function AIDecisionsPage() {
       </div>
 
       {/* KPI Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <ResponsiveGrid className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard
           label="Total Events"
           value={stats.total}
@@ -168,7 +168,7 @@ export default function AIDecisionsPage() {
           color="text-indigo-500"
           delay={0.3}
         />
-      </div>
+      </ResponsiveGrid>
 
       {/* Oversight Engine Banner */}
       <motion.div
@@ -176,17 +176,17 @@ export default function AIDecisionsPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
       >
-        <Card className="bg-gradient-to-r from-primary/5 via-purple-500/5 to-background border-primary/10 rounded-[2.5rem] overflow-hidden relative group">
+        <Card className="bg-gradient-to-r from-primary/5 via-purple-500/5 to-background border-primary/10 rounded-2xl overflow-hidden relative group">
           <div className="absolute top-0 right-0 w-64 h-64 blur-[100px] opacity-20 bg-primary/30 rounded-full group-hover:opacity-30 transition-opacity" />
           <CardContent className="p-8 relative z-10">
             <div className="flex flex-col md:flex-row items-center gap-8">
-              <div className="p-5 bg-card/50 backdrop-blur-xl rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/10 shrink-0">
+              <div className="p-5 bg-card/50 backdrop-blur-xl rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/10 shrink-0">
                 <Shield className="h-10 w-10 text-primary" />
               </div>
               <div className="text-center md:text-left">
-                <h3 className="text-xl font-black text-foreground uppercase tracking-tight flex items-center justify-center md:justify-start gap-2">
+                <h3 className="text-lg font-bold text-foreground flex items-center justify-center md:justify-start gap-2">
                   Intelligence Oversight Engine
-                  <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-500 text-[9px] uppercase tracking-widest border-emerald-500/20">Active</Badge>
+                  <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-500 text-[9px] uppercase tracking-wider border-emerald-500/20">Active</Badge>
                 </h3>
                 <p className="text-sm text-muted-foreground/80 mt-3 font-medium leading-relaxed max-w-2xl">
                   AI operates with strict safety guidelines. Every action requires minimum intent
@@ -200,14 +200,14 @@ export default function AIDecisionsPage() {
       </motion.div>
 
       {/* Main Content */}
-      <Card className="border-border/40 bg-card/30 backdrop-blur-xl rounded-[2.5rem] overflow-hidden shadow-sm">
-        <CardHeader className="px-8 pt-8 pb-4 border-b border-border/10">
+      <Card className="border-border/40 bg-card/30 backdrop-blur-xl rounded-2xl overflow-hidden shadow-sm">
+        <div className="px-8 pt-8 pb-4 border-b border-border/10">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-primary/10 rounded-xl">
                 <Zap className="h-5 w-5 text-primary" />
               </div>
-              <CardTitle className="text-lg font-bold">Decision Log</CardTitle>
+              <h2 className="text-lg font-bold text-foreground">Decision Log</h2>
             </div>
 
             <div className="flex gap-3">
@@ -241,7 +241,7 @@ export default function AIDecisionsPage() {
               </Select>
             </div>
           </div>
-        </CardHeader>
+        </div>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="flex flex-col items-center justify-center py-20 space-y-4">
@@ -253,7 +253,7 @@ export default function AIDecisionsPage() {
                 <Brain className="h-8 w-8 text-muted-foreground/40" />
               </div>
               <div className="space-y-1">
-                <h3 className="font-bold text-lg text-foreground/80">No Decisions Yet</h3>
+                <h3 className="font-semibold text-lg text-foreground/80">No Decisions Yet</h3>
                 <p className="text-sm text-muted-foreground max-w-sm px-4">
                   AI decisions will appear here as soon as your automation engine processes new leads.
                 </p>
@@ -268,7 +268,7 @@ export default function AIDecisionsPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </PageWrapper>
   );
 }
 
@@ -293,18 +293,18 @@ function StatCard({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.5, ease: "easeOut" }}
     >
-      <Card className="border-border/40 bg-card/40 backdrop-blur-xl rounded-[2.5rem] overflow-hidden group hover:scale-[1.02] hover:border-primary/20 transition-all duration-500 shadow-sm h-full">
-        <CardContent className="p-8 pb-6 flex flex-col justify-between h-full">
+      <Card className="border-border/40 bg-card/40 backdrop-blur-xl rounded-2xl overflow-hidden group hover:scale-[1.02] hover:border-primary/20 transition-all duration-500 shadow-sm h-full">
+        <CardContent className="p-6 pb-6 flex flex-col justify-between h-full">
           <div className="flex items-start justify-between mb-8">
-            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">{label}</div>
-            <div className={cn("p-2.5 rounded-2xl transition-transform group-hover:scale-110 duration-500 bg-muted/10", color.replace('text-', 'bg-').replace('500', '500/10'))}>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40">{label}</div>
+            <div className={cn("p-2.5 rounded-xl transition-transform group-hover:scale-110 duration-500 bg-muted/10", color.replace('text-', 'bg-').replace('500', '500/10'))}>
               <Icon className={cn("h-5 w-5", color)} />
             </div>
           </div>
           <div>
-            <div className="text-3xl font-extrabold text-foreground tracking-tighter mb-1">{value}</div>
+            <div className="text-3xl font-bold text-foreground tracking-tight mb-1">{value}</div>
             {subtext && (
-              <div className="text-[10px] font-black uppercase tracking-widest text-emerald-500/80">{subtext}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-emerald-500/80">{subtext}</div>
             )}
           </div>
         </CardContent>
@@ -326,26 +326,26 @@ function DecisionRow({ decision }: { decision: AIDecision }) {
     >
       <div className="flex flex-col md:flex-row gap-6">
         <div className="flex flex-col items-center gap-3 shrink-0">
-          <div className={cn("p-3 rounded-2xl shadow-sm transition-transform group-hover:scale-105", colorClass.split(' ')[1], colorClass.split(' ')[2].replace('border-', 'border-opacity-50 border-2 '))}>
+          <div className={cn("p-3 rounded-xl shadow-sm transition-transform group-hover:scale-105", colorClass.split(' ')[1], colorClass.split(' ')[2].replace('border-', 'border-opacity-50 border-2 '))}>
             <DecisionIcon className={cn("h-6 w-6", colorClass.split(' ')[0])} />
           </div>
-          <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30 font-mono">{format(new Date(decision.createdAt), 'HH:mm')}</span>
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/30 font-mono">{format(new Date(decision.createdAt), 'HH:mm')}</span>
         </div>
 
         <div className="flex-1 min-w-0 space-y-3">
           <div className="flex items-center gap-3 flex-wrap">
-            <Badge variant="outline" className="gap-1.5 text-[10px] font-black uppercase tracking-widest bg-background/50 border-border/20 h-7 px-3 py-0 rounded-lg">
+            <Badge variant="outline" className="gap-1.5 text-[10px] font-semibold uppercase tracking-wider bg-background/50 border-border/20 h-7 px-3 py-0 rounded-lg">
               <ActionIcon className="h-3 w-3 opacity-60" />
               {decision.actionType.replace('_', ' ')}
             </Badge>
             <Badge
               variant="secondary"
-              className={cn("text-[10px] font-black uppercase tracking-widest h-7 px-3 rounded-lg border", colorClass)}
+              className={cn("text-[10px] font-semibold uppercase tracking-wider h-7 px-3 rounded-lg border", colorClass)}
             >
               {decision.decision}
             </Badge>
             <div className="flex items-center gap-1 ml-auto md:hidden">
-              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30">{format(new Date(decision.createdAt), 'MMM d')}</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/30">{format(new Date(decision.createdAt), 'MMM d')}</span>
             </div>
           </div>
 
@@ -355,16 +355,16 @@ function DecisionRow({ decision }: { decision: AIDecision }) {
 
           <div className="flex items-center gap-6 pt-2">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/10 border border-border/10">
-              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Intent</span>
-              <span className={cn("text-[10px] font-black", decision.intentScore > 70 ? "text-emerald-500" : "text-amber-500")}>{decision.intentScore}%</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">Intent</span>
+              <span className={cn("text-[10px] font-bold", decision.intentScore > 70 ? "text-emerald-500" : "text-amber-500")}>{decision.intentScore}%</span>
             </div>
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/10 border border-border/10">
-              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/50">Confidence</span>
-              <span className="text-[10px] font-black text-primary">{Math.round((decision.confidence || 0) * 100)}%</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/50">Confidence</span>
+              <span className="text-[10px] font-bold text-primary">{Math.round((decision.confidence || 0) * 100)}%</span>
             </div>
             <div className="hidden md:flex items-center gap-2 ml-auto">
               <Clock className="h-3 w-3 text-muted-foreground/30" />
-              <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground/30">{format(new Date(decision.createdAt), 'MMM d, yyyy')}</span>
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/30">{format(new Date(decision.createdAt), 'MMM d, yyyy')}</span>
             </div>
           </div>
         </div>

@@ -6,8 +6,6 @@ import { Sparkles as SparklesIcon, ChevronDown, Shield, FileText, LayoutGrid, Za
 import { Logo } from "@/components/ui/Logo";
 import { Magnetic } from "@/components/ui/Magnetic";
 
-import { ThemeToggle } from "@/components/ThemeToggle";
-
 const SOLUTIONS = [
   {
     name: "For Agencies",
@@ -199,7 +197,6 @@ export function Navigation() {
             </div>
           </div>
 
-          <ThemeToggle />
           <Link href="/auth">
             <Button
               variant="ghost"
@@ -211,7 +208,7 @@ export function Navigation() {
           <Magnetic>
             <Link href="/auth">
               <Button
-                className="h-9 sm:h-10 px-5 lg:px-8 rounded-full text-[10px] lg:text-[11px] font-black uppercase tracking-widest shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all bg-primary text-white hover:scale-105"
+                className="h-9 sm:h-10 px-5 lg:px-8 rounded-full text-[10px] lg:text-[11px] font-bold uppercase tracking-widest shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all bg-primary text-white hover:scale-105"
               >
                 Get Started
               </Button>
@@ -246,7 +243,7 @@ export function Navigation() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-xl"
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
               onClick={() => setMobileMenuOpen(false)}
             />
             <motion.div
@@ -254,10 +251,10 @@ export function Navigation() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="absolute right-0 top-0 bottom-0 w-[85%] sm:w-[320px] bg-background border-l border-border/40 p-6 flex flex-col shadow-2xl overflow-y-auto"
+              className="absolute right-0 top-0 bottom-0 w-[85%] sm:w-[320px] glass-premium border-l border-primary/20 p-6 flex flex-col shadow-2xl overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-6">
-                <span className="text-lg font-black tracking-tighter uppercase text-foreground">Audnix<span className="text-primary">.AI</span></span>
+                <span className="text-lg font-bold tracking-tight uppercase text-foreground">Audnix<span className="text-primary">.AI</span></span>
                   <Button 
                     variant="ghost" 
                     size="icon" 
@@ -269,7 +266,7 @@ export function Navigation() {
               </div>
 
               <div className="flex flex-col gap-6">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/20 mb-2">Navigation</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-foreground/40 mb-2">Navigation</p>
                 {navLinks.map((link) => (
                   <div
                     key={link.name}
@@ -294,7 +291,7 @@ export function Navigation() {
                     }}
                   >
                     <div className="flex items-center justify-between py-3 border-b border-primary/5 group-active:bg-primary/5 px-2 rounded-xl transition-all cursor-pointer w-full h-full min-h-[50px]">
-                      <span className="text-xl font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
+                      <span className="text-sm font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors">
                         {link.name}
                       </span>
                       <ChevronDown className="w-5 h-5 -rotate-90 text-primary/40 group-hover:text-primary transition-colors" />
@@ -303,12 +300,12 @@ export function Navigation() {
                 ))}
               </div>
 
-              <div className="mt-8 flex flex-col gap-4">
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/20 mb-2">Solutions</p>
+              <div className="mt-6 flex flex-col gap-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-foreground/40 mb-2">Solutions</p>
                 {SOLUTIONS.map((sol) => (
                   <div
                     key={sol.name}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted border border-transparent transition-all cursor-pointer"
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 border border-transparent transition-all cursor-pointer"
                     onClick={() => {
                       setMobileMenuOpen(false);
                       setTimeout(() => {
@@ -317,14 +314,39 @@ export function Navigation() {
                     }}
                   >
                     <sol.icon className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-bold text-foreground/60">{sol.name}</span>
+                    <span className="text-sm font-semibold text-foreground/80">{sol.name}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 flex flex-col gap-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-foreground/40 mb-2">Resources</p>
+                {[
+                  { name: "Niche Vault", href: "/resources/niche-vault", icon: LayoutGrid },
+                  { name: "Outreach Playbooks", href: "/resources/outreach-playbooks", icon: Zap },
+                  { name: "Engineering Docs", href: "/resources/api-docs", icon: Brain },
+                  { name: "Terms of Service", href: "/terms-of-service", icon: FileText },
+                  { name: "Privacy Policy", href: "/privacy-policy", icon: Shield },
+                ].map((item) => (
+                  <div
+                    key={item.name}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 border border-transparent transition-all cursor-pointer"
+                    onClick={() => {
+                      setMobileMenuOpen(false);
+                      setTimeout(() => {
+                        window.location.href = item.href;
+                      }, 300);
+                    }}
+                  >
+                    <item.icon className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold text-foreground/80">{item.name}</span>
                   </div>
                 ))}
               </div>
 
               <div className="mt-auto flex flex-col gap-4 pt-10">
                 <Button
-                  className="w-full h-12 rounded-xl text-xs font-black uppercase tracking-widest bg-primary text-black cursor-pointer"
+                  className="w-full h-12 rounded-xl text-xs font-bold uppercase tracking-widest bg-primary text-black cursor-pointer"
                   onClick={() => {
                     setMobileMenuOpen(false);
                     setTimeout(() => {
@@ -334,7 +356,7 @@ export function Navigation() {
                 >
                   Get Started
                 </Button>
-                <p className="text-[9px] font-black text-foreground/10 uppercase tracking-[0.4em] text-center">v4.0.0 Stable</p>
+                <p className="text-[9px] font-bold text-foreground/20 uppercase tracking-[0.4em] text-center">v4.0.0 Stable</p>
               </div>
             </motion.div>
           </div>

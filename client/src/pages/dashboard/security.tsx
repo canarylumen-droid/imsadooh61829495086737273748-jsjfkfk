@@ -7,6 +7,8 @@ import { Shield, ShieldAlert, ShieldCheck, Globe, User, Clock, AlertTriangle } f
 import { format } from "date-fns";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useToast } from "@/hooks/use-toast";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface SecurityViolation {
   ip: string;
@@ -51,7 +53,7 @@ export default function SecurityDashboard() {
   ].sort((a, b) => b.timestamp - a.timestamp);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <PageWrapper className="space-y-8">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
@@ -67,7 +69,7 @@ export default function SecurityDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-3">
+      <ResponsiveGrid className="md:grid-cols-3 gap-6">
         <Card className="bg-card/50 backdrop-blur-sm border-primary/10">
           <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
             <CardTitle className="text-sm font-medium">Total Threats Blocked</CardTitle>
@@ -102,7 +104,7 @@ export default function SecurityDashboard() {
             <p className="text-xs text-muted-foreground mt-1">WordPress brute-force filter active</p>
           </CardContent>
         </Card>
-      </div>
+      </ResponsiveGrid>
 
       <Card className="border-primary/10 bg-card/30 backdrop-blur-md overflow-hidden">
         <CardHeader className="border-b border-primary/5 bg-primary/5 px-6">
@@ -115,10 +117,10 @@ export default function SecurityDashboard() {
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent border-primary/5">
-                <TableHead className="w-[200px]">IP Address</TableHead>
-                <TableHead>Target Path</TableHead>
-                <TableHead>User Agent</TableHead>
-                <TableHead className="text-right">Time</TableHead>
+                <TableHead className="w-[200px] text-[10px] tracking-wider uppercase font-semibold text-muted-foreground/60">IP Address</TableHead>
+                <TableHead className="text-[10px] tracking-wider uppercase font-semibold text-muted-foreground/60">Target Path</TableHead>
+                <TableHead className="text-[10px] tracking-wider uppercase font-semibold text-muted-foreground/60">User Agent</TableHead>
+                <TableHead className="text-right text-[10px] tracking-wider uppercase font-semibold text-muted-foreground/60">Time</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -163,7 +165,7 @@ export default function SecurityDashboard() {
           </Table>
         </CardContent>
       </Card>
-    </div>
+    </PageWrapper>
   );
 }
 

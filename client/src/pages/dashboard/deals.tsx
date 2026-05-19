@@ -33,6 +33,8 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { apiRequest } from "@/lib/queryClient";
+import { PageWrapper } from "@/components/ui/page-wrapper";
+import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
 interface Deal {
   id: string;
@@ -212,7 +214,7 @@ export default function DealsPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <PageWrapper className="space-y-8">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -246,7 +248,7 @@ export default function DealsPage() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
@@ -297,7 +299,7 @@ export default function DealsPage() {
             <p className="text-xs text-muted-foreground mt-1">Conversion avg</p>
           </CardContent>
         </Card>
-      </div>
+      </ResponsiveGrid>
 
       {/* Chart Section */}
       {revenueAnalytics?.timeline && (
@@ -412,6 +414,6 @@ export default function DealsPage() {
           </div>
         )}
       </div>
-    </div>
+    </PageWrapper>
   );
 }

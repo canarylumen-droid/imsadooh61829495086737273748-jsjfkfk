@@ -22,26 +22,32 @@ router.get('/all', requireAuth, async (req: Request, res: Response): Promise<voi
   try {
     const userId = getCurrentUserId(req)!;
 
-    const [emailIntegration, instagramIntegration, calendlyIntegration] = await Promise.all([
-      storage.getIntegration(userId, 'custom_email'),
-      storage.getIntegration(userId, 'instagram'),
-      storage.getIntegration(userId, 'calendly')
-    ]);
+    const integrations = await storage.getIntegrations(userId);
+
+    const emailIntegration = integrations.find(
+      i => (i.provider === 'custom_email' || i.provider === 'gmail' || i.provider === 'outlook') && i.connected
+    );
+    const instagramIntegration = integrations.find(
+      i => i.provider === 'instagram' && i.connected
+    );
+    const calendlyIntegration = integrations.find(
+      i => i.provider === 'calendly' && i.connected
+    );
 
     const response: AllChannelsResponse = {
       email: {
-        provider: 'custom_smtp',
-        connected: !!emailIntegration?.connected,
+        provider: emailIntegration?.provider || 'custom_smtp',
+        connected: !!emailIntegration,
         accountName: emailIntegration?.accountType || undefined,
       },
       instagram: {
         provider: 'instagram',
-        connected: !!instagramIntegration?.connected,
+        connected: !!instagramIntegration,
         accountName: instagramIntegration?.accountType || undefined,
       },
       calendly: {
         provider: 'calendly',
-        connected: !!calendlyIntegration?.connected,
+        connected: !!calendlyIntegration,
         accountName: calendlyIntegration?.accountType || undefined,
       }
     };
@@ -56,12 +62,15 @@ router.get('/all', requireAuth, async (req: Request, res: Response): Promise<voi
 router.get('/email', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
-    const integration = await storage.getIntegration(userId, 'custom_email');
+    const integrations = await storage.getIntegrations(userId);
+    const integration = integrations.find(
+      i => (i.provider === 'custom_email' || i.provider === 'gmail' || i.provider === 'outlook') && i.connected
+    );
 
     res.json({
       success: true,
-      provider: 'custom_smtp',
-      connected: !!integration?.connected,
+      provider: integration ? integration.provider : 'custom_smtp',
+      connected: !!integration,
       accountName: integration?.accountType || null,
     });
   } catch (error: unknown) {

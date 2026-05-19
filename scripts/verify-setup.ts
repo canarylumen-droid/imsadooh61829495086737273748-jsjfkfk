@@ -10,7 +10,7 @@ async function verify() {
     process.exit(1);
   }
 
-  const targetEmail = 'canarylumen1@gmail.com';
+  const targetEmail = 'team.replyflow@gmail.com';
   console.log(`🔍 Verifying setup for ${targetEmail}...`);
 
   // 1. Check User

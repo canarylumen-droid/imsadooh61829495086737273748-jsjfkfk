@@ -177,7 +177,7 @@ router.post('/:provider/disconnect', requireAuth, async (req: Request, res: Resp
       
       try {
         if (provider === 'gmail') {
-          const { gmailOAuth } = await import('@services/api-gateway/src/oauth/gmail.js');
+          const { gmailOAuth } = await import('@services/api-gateway/src/oauth/gmail.ts');
           console.log(`[Integrations] Revoking Gmail OAuth token for: ${emailAddress || 'unknown'}`);
           await gmailOAuth.revokeToken(userId, emailAddress);
         } else if (provider === 'outlook') {
