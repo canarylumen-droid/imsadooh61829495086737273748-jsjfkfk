@@ -341,10 +341,10 @@ export default function AnalyticsPage() {
                                 <ResponsiveContainer width="100%" height="100%">
                                     {(() => {
                                         const pieData = [
-                                            { name: 'Sent', value: Math.max(0, analytics?.metrics?.sent || 0), color: COLORS.sent_email },
-                                            { name: 'Opened', value: Math.max(0, analytics?.metrics?.opened || 0), color: COLORS.opened },
-                                            { name: 'Replied', value: Math.max(0, analytics?.metrics?.replied || 0), color: COLORS.replied_instagram },
-                                        ].filter(item => item.value > 0);
+                                            { name: 'Sent', value: Math.max(0, Number(analytics?.metrics?.sent || 0)), color: COLORS.sent_email },
+                                            { name: 'Opened', value: Math.max(0, Number(analytics?.metrics?.opened || 0)), color: COLORS.opened },
+                                            { name: 'Replied', value: Math.max(0, Number(analytics?.metrics?.replied || 0)), color: COLORS.replied_instagram },
+                                        ].filter(item => !isNaN(item.value) && item.value > 0);
 
                                         if (pieData.length === 0) {
                                             return (
@@ -436,10 +436,10 @@ export default function AnalyticsPage() {
                                 <ResponsiveContainer width="60%" height="100%">
                                     {(() => {
                                         const pieData = [
-                                            { name: 'Warm', value: Math.max(0, analytics.metrics?.replied || 0), color: '#3b82f6' },
-                                            { name: 'Sent', value: Math.max(0, (analytics.metrics?.sent || 0) - (analytics.metrics?.replied || 0)), color: '#d946ef' },
-                                            { name: 'Converted', value: Math.max(0, analytics.metrics?.booked || 0), color: '#10b981' }
-                                        ].filter(item => item.value > 0);
+                                            { name: 'Warm', value: Math.max(0, Number(analytics?.metrics?.replied || 0)), color: '#3b82f6' },
+                                            { name: 'Sent', value: Math.max(0, Number(analytics?.metrics?.sent || 0) - Number(analytics?.metrics?.replied || 0)), color: '#d946ef' },
+                                            { name: 'Converted', value: Math.max(0, Number(analytics?.metrics?.booked || 0)), color: '#10b981' }
+                                        ].filter(item => !isNaN(item.value) && item.value > 0);
 
                                         if (pieData.length === 0) {
                                             return (
