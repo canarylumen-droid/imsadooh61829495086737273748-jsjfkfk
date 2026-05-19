@@ -179,7 +179,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     if (integrationId) {
       const activeInt = integrations.find(i => i.id === integrationId);
       reputationScore = activeInt?.reputationScore !== undefined ? activeInt.reputationScore : null;
-      globalBounceRate = activeInt?.spamRiskScore !== undefined ? activeInt.spamRiskScore : null;
+      globalBounceRate = stats.globalBounceRate;
     } else {
       // Average reputation score across all connected email mailboxes
       const emailInts = integrations.filter(i => ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected);
@@ -188,11 +188,8 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
         if (scoredInts.length > 0) {
           reputationScore = scoredInts.reduce((sum, i) => sum + (i.reputationScore ?? 100), 0) / scoredInts.length;
         }
-        const riskInts = emailInts.filter(i => i.spamRiskScore !== null && i.spamRiskScore !== undefined);
-        if (riskInts.length > 0) {
-          globalBounceRate = riskInts.reduce((sum, i) => sum + (i.spamRiskScore ?? 0), 0) / riskInts.length;
-        }
       }
+      globalBounceRate = stats.globalBounceRate;
     }
 
     // Filter verifications to the selected mailbox domain if provided

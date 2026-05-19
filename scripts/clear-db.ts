@@ -1,6 +1,6 @@
 
 import 'dotenv/config';
-import { db, pool } from "../server/db";
+import { db, pool } from "../shared/lib/db/db.js";
 import { sql } from "drizzle-orm";
 
 async function clearDb() {

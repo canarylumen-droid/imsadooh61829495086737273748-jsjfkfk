@@ -1,7 +1,7 @@
 import type { IStorage } from './storage.js';
 import type { User, InsertUser, Lead, InsertLead, Message, InsertMessage, Integration, InsertIntegration, Deal, OnboardingProfile, OtpCode, FollowUpQueue, InsertFollowUpQueue, OAuthAccount, InsertOAuthAccount, CalendarEvent, InsertCalendarEvent, AuditTrail, InsertAuditTrail, Organization, InsertOrganization, TeamMember, InsertTeamMember, Payment, InsertPayment, SmtpSettings, InsertSmtpSettings, EmailMessage, InsertEmailMessage, Notification, InsertNotification, Thread, InsertThread, LeadInsight, InsertLeadInsight, OutreachCampaign, InsertOutreachCampaign, CampaignLead, InsertCampaignLead, FathomCall, InsertFathomCall, PendingPayment, InsertPendingPayment } from "@audnix/shared";
 import { db } from '@shared/lib/db/db.js';
-import { users, leads, messages, integrations, notifications, deals, usageTopups, onboardingProfiles, otpCodes, payments, followUpQueue, oauthAccounts, calendarEvents, auditTrail, organizations, teamMembers, aiLearningPatterns, bounceTracker, smtpSettings, videoMonitors, processedComments, emailMessages, brandEmbeddings, threads, leadInsights, outreachCampaigns, campaignLeads, fathomCalls, pendingPayments } from "@audnix/shared";
+import { users, leads, messages, integrations, notifications, deals, usageTopups, onboardingProfiles, otpCodes, payments, followUpQueue, oauthAccounts, calendarEvents, auditTrail, organizations, teamMembers, aiLearningPatterns, bounceTracker, smtpSettings, videoMonitors, processedComments, emailMessages, brandEmbeddings, threads, leadInsights, outreachCampaigns, campaignLeads, fathomCalls, pendingPayments, prospects, emailTracking } from "@audnix/shared";
 import { eq, desc, and, gte, lte, sql, not, isNull, or, like, inArray, exists } from "drizzle-orm";
 import { isValidUUID } from '../utils/validation.js';
 import crypto from 'crypto';
@@ -1389,11 +1389,10 @@ export class DrizzleStorage implements IStorage {
       and(eq(integrations.userId, userId), eq(integrations.provider, provider as any))
     );
 
-    // LEGACY: Deletes ALL integrations for this provider/user.
-    // Use deleteIntegrationById for targeted cleanup.
-    await db
-      .delete(integrations)
-      .where(and(eq(integrations.userId, userId), eq(integrations.provider, provider as any)));
+    // Call deleteIntegrationById for each to ensure robust unlinking and cleaning
+    for (const integration of matchingIntegrations) {
+      await this.deleteIntegrationById(integration.id);
+    }
 
     // Phase 12: Ensure "Full Deletion" of settings for email providers to prevent ghosting
     if (['custom_email', 'gmail', 'outlook'].includes(provider)) {
@@ -1411,53 +1410,8 @@ export class DrizzleStorage implements IStorage {
               email_provider = 'sendgrid'
           WHERE user_id = ${userId}
         `);
-        
-        // Purge specific SMTP settings and OAuth accounts for each matching integration
-        for (const integration of matchingIntegrations) {
-          if (integration.accountType) {
-            await db.delete(smtpSettings).where(
-              and(
-                eq(smtpSettings.userId, userId),
-                eq(smtpSettings.email, integration.accountType)
-              )
-            );
-          }
-          
-          const oauthProvider = provider === 'gmail' ? 'google' : provider === 'outlook' ? 'outlook' : null;
-          if (oauthProvider && integration.accountType) {
-            await db.delete(oauthAccounts).where(
-              and(
-                eq(oauthAccounts.userId, userId),
-                eq(oauthAccounts.provider, oauthProvider),
-                eq(oauthAccounts.providerAccountId, integration.accountType)
-              )
-            );
-          }
-
-          // Purge Redis keys for this integration
-          try {
-            const { getRedisClient } = await import('../redis/redis.js');
-            const redis = await getRedisClient();
-            if (redis) {
-              await Promise.allSettled([
-                redis.del(`imap:active:${integration.id}`),
-                redis.del(`imap:integration:${integration.id}:state`),
-                redis.del(`lock:imap:conn:${integration.id}`),
-                redis.keys('imap:worker:*:integrations').then(async (keys) => {
-                  if (keys && keys.length > 0) {
-                    await Promise.allSettled(keys.map(k => redis.sRem(k, integration.id)));
-                  }
-                })
-              ]);
-            }
-          } catch (redisErr: any) {
-            console.warn(`[Storage] Non-fatal Redis cleanup error during bulk: ${redisErr.message}`);
-          }
-        }
-        
-        console.log(`🧹 [Storage] Successfully purged all SMTP, OAuth, and Redis settings for user ${userId} following bulk provider disconnect.`);
       } catch (e) {
-        console.warn(`[Storage] Failed to clear legacy settings during bulk disconnect:`, e);
+        console.warn(`[Storage] Failed to clear legacy SMTP settings in user_settings:`, e);
       }
     }
   }
@@ -1474,12 +1428,15 @@ export class DrizzleStorage implements IStorage {
     const [integration] = await db.select().from(integrations).where(eq(integrations.id, id)).limit(1);
     
     // Safely unlink constraints from connected entities to allow deletion
-    try {
-      await db.update(leads).set({ integrationId: null as any }).where(eq(leads.integrationId, id));
-    } catch (e) {}
-    try {
-      await db.update(messages).set({ integrationId: null as any }).where(eq(messages.integrationId, id));
-    } catch (e) {}
+    try { await db.update(leads).set({ integrationId: null as any }).where(eq(leads.integrationId, id)); } catch (e) {}
+    try { await db.update(messages).set({ integrationId: null as any }).where(eq(messages.integrationId, id)); } catch (e) {}
+    try { await db.update(notifications).set({ integrationId: null as any }).where(eq(notifications.integrationId, id)); } catch (e) {}
+    try { await db.update(prospects).set({ integrationId: null as any }).where(eq(prospects.integrationId, id)); } catch (e) {}
+    try { await db.update(emailTracking).set({ integrationId: null as any }).where(eq(emailTracking.integrationId, id)); } catch (e) {}
+    try { await db.update(emailMessages).set({ integrationId: null as any }).where(eq(emailMessages.integrationId, id)); } catch (e) {}
+    try { await db.update(campaignLeads).set({ integrationId: null as any }).where(eq(campaignLeads.integrationId, id)); } catch (e) {}
+    try { await db.delete(bounceTracker).where(eq(bounceTracker.integrationId, id)); } catch (e) {}
+    try { await db.delete(auditTrail).where(eq(auditTrail.integrationId, id)); } catch (e) {}
     
     // Phase 12: Ensure "Full Deletion" of settings for email providers to prevent ghosting
     if (integration && ['custom_email', 'gmail', 'outlook'].includes(integration.provider)) {
@@ -1489,7 +1446,7 @@ export class DrizzleStorage implements IStorage {
           await db.delete(smtpSettings).where(
             and(
               eq(smtpSettings.userId, integration.userId),
-              eq(smtpSettings.email, integration.accountType)
+              sql`lower(${smtpSettings.email}) = lower(${integration.accountType})`
             )
           );
           console.log(`🧹 [Storage] Purged SMTP settings for ${integration.accountType}`);
@@ -1505,7 +1462,7 @@ export class DrizzleStorage implements IStorage {
             and(
               eq(oauthAccounts.userId, integration.userId),
               eq(oauthAccounts.provider, oauthProvider),
-              eq(oauthAccounts.providerAccountId, integration.accountType)
+              sql`lower(${oauthAccounts.providerAccountId}) = lower(${integration.accountType})`
             )
           );
           console.log(`🧹 [Storage] Purged OAuth account for ${integration.accountType} (${oauthProvider})`);
@@ -1537,11 +1494,20 @@ export class DrizzleStorage implements IStorage {
       }
     }
 
-    const result = await db
-      .delete(integrations)
-      .where(eq(integrations.id, id));
-      
-    console.log(`🗑️ [Storage] Successfully deleted integration ${id} from database.`);
+    try {
+      await db
+        .delete(integrations)
+        .where(eq(integrations.id, id));
+      console.log(`🗑️ [Storage] Successfully deleted integration ${id} from database.`);
+    } catch (delErr: any) {
+      console.error(`❌ [Storage] Failed to delete integration ${id} (falling back to marking disconnected):`, delErr);
+      await db.update(integrations).set({
+        connected: false,
+        healthStatus: 'failed',
+        lastHealthError: 'Pending deletion cleanup',
+        updatedAt: new Date()
+      }).where(eq(integrations.id, id));
+    }
   }
 
 

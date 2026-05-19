@@ -144,11 +144,6 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
         i => i.provider === 'gmail' && i.accountType === emailAddress
       );
       if (gmailInt) {
-        console.log(`[Google Redirect] 🔄 Triggering immediate email sync for mailbox: ${gmailInt.id}`);
-        emailSyncWorker.syncUserEmails(userId, gmailInt as any).catch(err => {
-          console.error('[Google Redirect] Background sync failed:', err);
-        });
-
         console.log(`[Google Redirect] Launching lead distribution for mailbox: ${gmailInt.id}`);
         distributeLeadsFromPool(userId, gmailInt.id).catch(err =>
           console.error('[Google Redirect] Lead distribution failed (non-fatal):', err)

@@ -270,22 +270,7 @@ export default function IntegrationsPage() {
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
     }
-
-    // 2. Autonomous check: if email connected but no domain health, trigger it
-    if (customEmailStatus?.connected && customEmailStatus?.email && stats?.domainHealth === undefined) {
-      if (!verifyDomainMutation.isPending) {
-        // If there's a selected mailbox, verify *that* domain, otherwise fallback
-        const targetEmail = selectedMailboxId && customEmailStatus?.integrations?.find(i => i.id === selectedMailboxId)?.email
-          ? customEmailStatus.integrations.find(i => i.id === selectedMailboxId)!.email
-          : customEmailStatus.email;
-
-        const domain = getDomainFromEmail(targetEmail);
-        if (domain) {
-          verifyDomainMutation.mutate(domain);
-        }
-      }
-    }
-  }, [customEmailStatus?.connected, customEmailStatus?.email, stats?.domainHealth, selectedMailboxId, queryClient]);
+  }, [queryClient]);
 
   // Real-time listener for reputation and health updates
   useEffect(() => {

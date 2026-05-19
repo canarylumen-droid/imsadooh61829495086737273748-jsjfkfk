@@ -416,9 +416,8 @@ export default function InboxPage() {
     if (!activeSyncMailbox) return;
 
     setSyncStep(1);
-
     try {
-      await apiRequest("POST", "/api/custom-email/sync-history", { days: 30 });
+      await apiRequest("POST", "/api/custom-email/sync-history", { days: 30, integrationId: activeSyncMailbox.id });
       await apiRequest("POST", "/api/custom-email/sync-now");
     } catch (err) {
       console.warn("Failed to trigger backend sync:", err);

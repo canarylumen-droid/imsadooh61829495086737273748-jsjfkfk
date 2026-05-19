@@ -216,8 +216,33 @@ router.post('/gmail/disconnect', async (req: Request, res: Response): Promise<vo
       return;
     }
 
-    await gmailOAuth.revokeToken(userId);
-    await storage.disconnectIntegration(userId, 'gmail');
+    const { integrationId } = req.query;
+    if (integrationId && typeof integrationId === 'string') {
+      const integration = await storage.getIntegrationById(integrationId);
+      if (integration && integration.userId === userId) {
+        if (integration.accountType) {
+          await gmailOAuth.revokeToken(userId, integration.accountType);
+        }
+        await storage.deleteIntegrationById(integrationId);
+      }
+    } else {
+      const allInts = await storage.getIntegrations(userId);
+      const gmailInts = allInts.filter(i => i.provider === 'gmail');
+      for (const i of gmailInts) {
+        if (i.accountType) {
+          await gmailOAuth.revokeToken(userId, i.accountType);
+        }
+      }
+      await storage.disconnectIntegration(userId, 'gmail');
+    }
+
+    // Broadcast settings update to frontend
+    try {
+      const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+      wsSync.notifySettingsUpdated(userId);
+    } catch (e) {
+      console.warn('[OAuth Route] Failed to notify settings updated via WS:', e);
+    }
 
     res.json({ success: true });
   } catch (error) {
@@ -285,8 +310,33 @@ router.post('/outlook/disconnect', async (req: Request, res: Response): Promise<
       return;
     }
 
-    await outlookOAuth.revokeToken(userId);
-    await storage.disconnectIntegration(userId, 'outlook');
+    const { integrationId } = req.query;
+    if (integrationId && typeof integrationId === 'string') {
+      const integration = await storage.getIntegrationById(integrationId);
+      if (integration && integration.userId === userId) {
+        if (integration.accountType) {
+          await outlookOAuth.revokeToken(userId, integration.accountType);
+        }
+        await storage.deleteIntegrationById(integrationId);
+      }
+    } else {
+      const allInts = await storage.getIntegrations(userId);
+      const outlookInts = allInts.filter(i => i.provider === 'outlook');
+      for (const i of outlookInts) {
+        if (i.accountType) {
+          await outlookOAuth.revokeToken(userId, i.accountType);
+        }
+      }
+      await storage.disconnectIntegration(userId, 'outlook');
+    }
+
+    // Broadcast settings update to frontend
+    try {
+      const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+      wsSync.notifySettingsUpdated(userId);
+    } catch (e) {
+      console.warn('[OAuth Route] Failed to notify settings updated via WS:', e);
+    }
 
     res.json({ success: true });
   } catch (error) {

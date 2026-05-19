@@ -301,18 +301,6 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
       imapIdleManager.syncConnections();
 
-      setTimeout(async () => {
-        try {
-          const integrations = await storage.getIntegrations(userId);
-          const customEmail = integrations.find((i: any) => i.provider === 'custom_email' && i.accountType === email);
-          if (customEmail) {
-            imapIdleManager.syncHistoricalEmails(userId, customEmail.id, 30).catch(console.error);
-          }
-        } catch (err: any) {
-          console.error('[Email Connect] CRITICAL: Failed to load integrations for background sync:', err);
-        }
-      }, 5000);
-
       const { distributeLeadsFromPool } = await import('@services/outreach-worker/src/sales-engine/outreach-engine.js');
       const integrations = await storage.getIntegrations(userId);
       const customEmail = integrations.find((i: any) => i.provider === 'custom_email' && i.accountType === email);
@@ -597,17 +585,38 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
     // Include ALL email-capable providers in the unified mailbox view
     // showing both connected and recently disconnected for cleanup
     const emailProviders = ['custom_email', 'gmail', 'outlook'];
-    const mailboxes = allIntegrations
+    
+    const { db } = await import('@shared/lib/db/db.js');
+    const { leads: leadsSchema, messages: msgSchema } = await import('@audnix/shared');
+    const { and, eq, sql } = await import('drizzle-orm');
+
+    const mailboxes = await Promise.all(allIntegrations
       .filter(i => emailProviders.includes(i.provider))
-      .map(i => ({
-        id: i.id,
-        email: i.accountType,
-        connected: i.connected,
-        provider: i.provider, // 'custom_email' | 'gmail' | 'outlook'
-        healthStatus: (i as any).healthStatus || 'connected',
-        lastSync: i.lastSync,
-        reputationScore: (i as any).reputationScore || 100,
-        bounceRate: (i as any).spamRiskScore || 0,
+      .map(async i => {
+        // Fetch bouncy leads count for this integration
+        const [bouncyRes] = await db.select({ count: sql<number>`count(*)` })
+          .from(leadsSchema)
+          .where(and(eq(leadsSchema.userId, userId), eq(leadsSchema.integrationId, i.id), eq(leadsSchema.status, 'bouncy')));
+        
+        // Fetch outreached leads count for this integration
+        const [outreachedRes] = await db.select({ count: sql<number>`count(distinct ${msgSchema.leadId})` })
+          .from(msgSchema)
+          .where(and(eq(msgSchema.userId, userId), eq(msgSchema.integrationId, i.id), eq(msgSchema.direction, 'outbound')));
+
+        const bouncy = Number(bouncyRes?.count || 0);
+        const outreached = Number(outreachedRes?.count || 0);
+        const calculatedBounceRate = outreached > 0 ? (bouncy / outreached) : 0;
+
+        return {
+          id: i.id,
+          email: i.accountType,
+          connected: i.connected,
+          provider: i.provider, // 'custom_email' | 'gmail' | 'outlook'
+          healthStatus: (i as any).healthStatus || 'connected',
+          lastSync: i.lastSync,
+          reputationScore: (i as any).reputationScore || 100,
+          bounceRate: calculatedBounceRate,
+        };
       }));
 
     res.json({
@@ -766,29 +775,49 @@ router.post('/sync-now', requireAuth, async (req: Request, res: Response): Promi
 router.post('/sync-history', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
-    const { days } = req.body;
+    const { days, integrationId } = req.body;
     const daysToSync = parseInt(days) || 30;
 
-    // Get the integration ID for the historical sync
-    const integration = await storage.getIntegration(userId, 'custom_email');
+    let integration;
+    if (integrationId) {
+      integration = await storage.getIntegrationById(integrationId);
+      if (integration && integration.userId !== userId) {
+        res.status(403).json({ error: 'Unauthorized integration' });
+        return;
+      }
+    } else {
+      integration = await storage.getIntegration(userId, 'custom_email');
+    }
+
     if (!integration) {
-      res.status(400).json({ error: 'No custom email integration found' });
+      res.status(400).json({ error: 'Integration not found' });
       return;
     }
 
     // Run in background to avoid timeout
-    const { imapIdleManager: imapMgr } = await import('@services/email-service/src/email/imap-idle-manager.js');
-    imapMgr.syncHistoricalEmails(userId, integration.id, daysToSync)
-      .then((result: any) => {
-        console.log(`[Historical Sync] Background job finished for ${userId}:`, result);
-      })
-      .catch((err: any) => {
-        console.error(`[Historical Sync] Background job failed for ${userId}:`, err);
-      });
+    if (integration.provider === 'custom_email') {
+      const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
+      imapIdleManager.syncHistoricalEmails(userId, integration.id, daysToSync)
+        .then((result: any) => {
+          console.log(`[Historical Sync] IMAP background sync finished for ${userId}:`, result);
+        })
+        .catch((err: any) => {
+          console.error(`[Historical Sync] IMAP background sync failed for ${userId}:`, err);
+        });
+    } else if (['gmail', 'outlook'].includes(integration.provider)) {
+      const { emailSyncWorker } = await import('@services/email-service/src/email/email-sync-worker.js');
+      emailSyncWorker.syncUserEmails(userId, integration as any, 5000)
+        .then((result: any) => {
+          console.log(`[Historical Sync] OAuth background sync finished for ${userId}:`, result);
+        })
+        .catch((err: any) => {
+          console.error(`[Historical Sync] OAuth background sync failed for ${userId}:`, err);
+        });
+    }
 
     res.json({
       success: true,
-      message: `Historical sync started for last ${daysToSync} days. Check back in a few minutes.`
+      message: `Historical sync started. Check back in a few minutes.`
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to trigger historical sync' });

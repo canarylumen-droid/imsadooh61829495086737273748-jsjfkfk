@@ -237,6 +237,7 @@ export interface IStorage {
     intentRate: number;
     outreachVelocity: number;
     timeSaved: number;
+    globalBounceRate: number;
   }>;
 
   getAnalyticsFull(userId: string, days: number, integrationId?: string): Promise<{
@@ -1125,6 +1126,7 @@ export class MemStorage implements IStorage {
     intentRate: number;
     outreachVelocity: number;
     timeSaved: number;
+    globalBounceRate: number;
   }> {
     const userLeads = Array.from(this.leads.values()).filter(l => l.userId === userId);
     const totalLeads = userLeads.length;
@@ -1163,7 +1165,8 @@ export class MemStorage implements IStorage {
       conversionRate,
       intentRate: 0,
       outreachVelocity: 0,
-      timeSaved: 0
+      timeSaved: 0,
+      globalBounceRate: 0
     };
   }
 

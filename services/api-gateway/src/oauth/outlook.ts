@@ -230,11 +230,13 @@ export class OutlookOAuth {
 
     const expiresAt = new Date(Date.now() + (tokens.expires_in * 1000));
 
+    const email = profile.mail || profile.userPrincipalName || profile.id;
+
     // Save to oauth_accounts table via storage
     await storage.saveOAuthAccount({
       userId: userId,
       provider: 'outlook',
-      providerAccountId: profile.id, // Microsoft ID
+      providerAccountId: email,
       accessToken: encryptedAccessToken,
       refreshToken: encryptedRefreshToken,
       expiresAt: expiresAt,
@@ -361,29 +363,7 @@ export class OutlookOAuth {
     return decryptedToken;
   }
 
-  /**
-   * Revoke OAuth tokens
-   */
-  async revokeToken(userId: string, email?: string): Promise<void> {
-    // Note: Microsoft doesn't provide a programmatic way to revoke tokens easily via API
-    // without a specific token. Users generally revoke access through Microsoft account settings.
 
-    // Remove specific account from database if email provided, otherwise all
-    await storage.deleteOAuthAccount(userId, 'outlook', email);
-
-    // If this was the primary outlook email, clear it from metadata
-    const user = await storage.getUser(userId);
-    const metadata = user?.metadata as any || {};
-    if (metadata.outlook_email === email || (!email && metadata.outlook_email)) {
-      await storage.updateUser(userId, {
-        metadata: {
-          ...metadata,
-          outlook_email: null,
-          outlook_connected: false
-        }
-      });
-    }
-  }
 
   /**
    * Create calendar event
@@ -555,6 +535,50 @@ export class OutlookOAuth {
     if (!response.ok && response.status !== 404) {
       const error = await response.json();
       console.warn(`[Outlook OAuth] Failed to delete subscription: ${error.error?.message}`);
+    }
+  }
+
+  /**
+   * Revoke Outlook tokens and remove from database
+   */
+  async revokeToken(userId: string, emailAddress?: string): Promise<void> {
+    const tokenData = await storage.getOAuthAccount(userId, 'outlook', emailAddress);
+    if (tokenData && tokenData.accessToken) {
+      try {
+        const decryptedAccessToken = decrypt(tokenData.accessToken);
+        // Revoke Microsoft Graph sign-in sessions (invalidates all refresh tokens)
+        const response = await fetch('https://graph.microsoft.com/v1.0/me/revokeSignInSessions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${decryptedAccessToken}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          console.warn(`[Outlook OAuth] Session revocation warning: ${error.error?.message}`);
+        } else {
+          console.log(`[Outlook OAuth] Revoked sign-in sessions for user ${userId} (${emailAddress || ''})`);
+        }
+      } catch (err: any) {
+        console.warn(`[Outlook OAuth] Failed to revoke session: ${err.message}`);
+      }
+    }
+
+    await storage.deleteOAuthAccount(userId, 'outlook', emailAddress);
+
+    // If this was the primary outlook email, clear it from metadata
+    const user = await storage.getUser(userId);
+    const metadata = user?.metadata as any || {};
+    if (metadata.outlook_email === emailAddress || (!emailAddress && metadata.outlook_email)) {
+      await storage.updateUser(userId, {
+        metadata: {
+          ...metadata,
+          outlook_email: null,
+          outlook_connected: false
+        }
+      });
     }
   }
 }

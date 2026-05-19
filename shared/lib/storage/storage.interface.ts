@@ -221,6 +221,7 @@ export interface IStorage {
     intentRate: number;
     outreachVelocity: number;
     timeSaved: number;
+    globalBounceRate: number;
   }>;
 
   getAnalyticsFull(userId: string, days: number, integrationId?: string): Promise<{

@@ -133,11 +133,6 @@ router.get('/outlook/callback', async (req: Request, res: Response): Promise<voi
         i => i.provider === 'outlook' && i.accountType === emailAddress
       );
       if (outlookInt) {
-        console.log(`[Outlook Redirect] 🔄 Triggering immediate email sync for mailbox: ${outlookInt.id}`);
-        emailSyncWorker.syncUserEmails(userId, outlookInt as any).catch(err => {
-          console.error('[Outlook Redirect] Background sync failed:', err);
-        });
-
         distributeLeadsFromPool(userId, outlookInt.id).catch(err =>
           console.error('[Outlook Redirect] Lead distribution failed:', err)
         );
