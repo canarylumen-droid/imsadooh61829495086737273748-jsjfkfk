@@ -372,7 +372,7 @@ export default function AnalyticsPage() {
                     </h3>
                     <div className="space-y-6 flex-1">
                         {(analytics?.recentEvents || []).length > 0 ? (
-                            analytics?.recentEvents.map(event => (
+                            (analytics?.recentEvents || []).map(event => (
                                 <div key={event.id} className="flex gap-4 group items-center">
                                     <div className={cn(
                                         "mt-1 w-2 h-2 rounded-full shrink-0 transition-all duration-500",

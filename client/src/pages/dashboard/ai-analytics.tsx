@@ -224,33 +224,33 @@ export default function AIAnalyticsPage() {
           <ResponsiveGrid className="md:grid-cols-2 lg:grid-cols-4 gap-6">
             <StatCard
               title="Total Leads"
-              value={analytics.summary.totalLeads}
+              value={analytics?.summary?.totalLeads || 0}
               icon={Target}
               color="text-primary"
-              subtext={`${analytics.summary.active} active conversations`}
+              subtext={`${analytics?.summary?.active || 0} active conversations`}
               circle
             />
             <StatCard
               title="Conversion Rate"
-              value={`${analytics.summary.conversionRate}%`}
+              value={`${analytics?.summary?.conversionRate || '0.00'}%`}
               icon={TrendingUp}
               color="text-emerald-500"
-              subtext={`${analytics.summary.conversions} total conversions`}
-              progress={parseFloat(analytics.summary.conversionRate)}
+              subtext={`${analytics?.summary?.conversions || 0} total conversions`}
+              progress={parseFloat(analytics?.summary?.conversionRate || '0')}
               circle
             />
             <StatCard
               title="Engagement Rate"
-              value={`${analytics.behaviorInsights.replyRate}%`}
+              value={`${analytics?.behaviorInsights?.replyRate || '0.00'}%`}
               icon={MessageCircle}
               color="text-purple-500"
-              subtext={`${analytics.summary.leadsReplied} replies received`}
-              progress={parseFloat(analytics.behaviorInsights.replyRate)}
+              subtext={`${analytics?.summary?.leadsReplied || 0} replies received`}
+              progress={parseFloat(analytics?.behaviorInsights?.replyRate || '0')}
               circle
             />
             <StatCard
               title="Avg Response Time"
-              value={analytics.behaviorInsights.avgResponseTime}
+              value={analytics?.behaviorInsights?.avgResponseTime || '--'}
               icon={Clock}
               color="text-amber-500"
               subtext="AI response latency"
@@ -270,7 +270,7 @@ export default function AIAnalyticsPage() {
               </CardHeader>
               <CardContent className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={analytics.timeline}>
+                  <AreaChart data={analytics?.timeline || []}>
                     <defs>
                       <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor={COLORS.primary} stopOpacity={0.3} />
@@ -326,13 +326,13 @@ export default function AIAnalyticsPage() {
                 <CardDescription>Where your leads are coming from</CardDescription>
               </CardHeader>
               <CardContent className="h-[300px] relative">
-                {analytics.channelBreakdown.length === 0 ? (
+                {!(analytics?.channelBreakdown?.length > 0) ? (
                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground text-sm">No data</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
-                        data={analytics.channelBreakdown}
+                        data={analytics?.channelBreakdown || []}
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
@@ -341,7 +341,7 @@ export default function AIAnalyticsPage() {
                         dataKey="count"
                         stroke="none"
                       >
-                        {analytics.channelBreakdown.map((entry, index) => (
+                        {(analytics?.channelBreakdown || []).map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                         ))}
                       </Pie>
@@ -351,10 +351,10 @@ export default function AIAnalyticsPage() {
                 )}
                 {/* Custom Legend */}
                 <div className="flex flex-wrap gap-3 justify-center mt-[-20px] relative z-10 px-4">
-                  {analytics.channelBreakdown.map((entry, index) => (
+                  {(analytics?.channelBreakdown || []).map((entry, index) => (
                     <div key={entry.channel} className="flex items-center gap-1.5">
                       <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: PIE_COLORS[index % PIE_COLORS.length] }} />
-                      <span className="text-xs font-medium capitalize text-muted-foreground">{entry.channel} ({entry.percentage.toFixed(0)}%)</span>
+                      <span className="text-xs font-medium capitalize text-muted-foreground">{entry.channel} ({entry.percentage?.toFixed(0) || 0}%)</span>
                     </div>
                   ))}
                 </div>
@@ -374,9 +374,9 @@ export default function AIAnalyticsPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-3xl font-bold text-primary">
-                      {analytics.behaviorInsights.bestReplyHour !== null ? `${analytics.behaviorInsights.bestReplyHour}:00` : '--:--'}
+                      {analytics?.behaviorInsights?.bestReplyHour != null ? `${analytics.behaviorInsights.bestReplyHour}:00` : '--:--'}
                       <span className="text-lg font-normal text-muted-foreground ml-1">
-                        {analytics.behaviorInsights.bestReplyHour !== null && analytics.behaviorInsights.bestReplyHour >= 12 ? 'PM' : 'AM'}
+                        {analytics?.behaviorInsights?.bestReplyHour != null && analytics.behaviorInsights.bestReplyHour >= 12 ? 'PM' : 'AM'}
                       </span>
                     </p>
                     <p className="text-sm text-muted-foreground mt-1 font-medium">Peak engagement window</p>
@@ -399,12 +399,12 @@ export default function AIAnalyticsPage() {
                   <div className="flex-1">
                     <div className="flex justify-between mb-2 text-sm font-medium">
                       <span>Positive Interactions</span>
-                      <span className="text-purple-400">{analytics.behaviorInsights.positiveSentimentRate || '0'}%</span>
+                      <span className="text-purple-400">{analytics?.behaviorInsights?.positiveSentimentRate || '0'}%</span>
                     </div>
                     <div className="h-2 w-full bg-purple-500/10 rounded-full overflow-hidden">
                       <motion.div
                         initial={{ width: 0 }}
-                        animate={{ width: `${analytics.behaviorInsights.positiveSentimentRate || 0}%` }}
+                        animate={{ width: `${analytics?.behaviorInsights?.positiveSentimentRate || 0}%` }}
                         transition={{ duration: 1, delay: 0.5 }}
                         className="h-full bg-purple-500 rounded-full"
                       />
@@ -412,9 +412,9 @@ export default function AIAnalyticsPage() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-3 font-medium">
-                  {parseFloat(analytics.behaviorInsights.positiveSentimentRate || '0') >= 70 
+                  {parseFloat(analytics?.behaviorInsights?.positiveSentimentRate || '0') >= 70 
                     ? 'AI tone analysis indicates high satisfaction' 
-                    : parseFloat(analytics.behaviorInsights.positiveSentimentRate || '0') >= 50
+                    : parseFloat(analytics?.behaviorInsights?.positiveSentimentRate || '0') >= 50
                       ? 'Moderate engagement - room for improvement'
                       : 'Focus on lead nurturing to improve sentiment'}
                 </p>
