@@ -339,26 +339,40 @@ export default function AnalyticsPage() {
                         ) : (
                             <ChartContainer config={chartConfig} className="h-full w-full">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={[
-                                                { name: 'Sent', value: analytics?.metrics?.sent || 0, color: COLORS.sent_email },
-                                                { name: 'Opened', value: analytics?.metrics?.opened || 0, color: COLORS.opened },
-                                                { name: 'Replied', value: analytics?.metrics?.replied || 0, color: COLORS.replied_instagram },
-                                            ].filter(item => item.value > 0)}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={80}
-                                            outerRadius={110}
-                                            paddingAngle={5}
-                                            dataKey="value"
-                                        >
-                                            {[0, 1, 2].map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={[COLORS.sent_email, COLORS.sent_instagram, COLORS.replied_instagram][index]} stroke="transparent" />
-                                            ))}
-                                        </Pie>
-                                        <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
-                                    </PieChart>
+                                    {(() => {
+                                        const pieData = [
+                                            { name: 'Sent', value: Math.max(0, analytics?.metrics?.sent || 0), color: COLORS.sent_email },
+                                            { name: 'Opened', value: Math.max(0, analytics?.metrics?.opened || 0), color: COLORS.opened },
+                                            { name: 'Replied', value: Math.max(0, analytics?.metrics?.replied || 0), color: COLORS.replied_instagram },
+                                        ].filter(item => item.value > 0);
+
+                                        if (pieData.length === 0) {
+                                            return (
+                                                <div className="h-full w-full flex items-center justify-center opacity-30 text-xs font-medium uppercase">
+                                                    No Engagement Data
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <PieChart>
+                                                <Pie
+                                                    data={pieData}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={80}
+                                                    outerRadius={110}
+                                                    paddingAngle={5}
+                                                    dataKey="value"
+                                                >
+                                                    {pieData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.color} stroke="transparent" />
+                                                    ))}
+                                                </Pie>
+                                                <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
+                                            </PieChart>
+                                        );
+                                    })()}
                                 </ResponsiveContainer>
                             </ChartContainer>
                         )}
@@ -420,26 +434,40 @@ export default function AnalyticsPage() {
                         {analytics?.metrics ? (
                             <div className="w-full h-full flex items-center justify-center">
                                 <ResponsiveContainer width="60%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={[
-                                                { name: 'Warm', value: analytics.metrics?.replied || 0, color: '#3b82f6' },
-                                                { name: 'Sent', value: (analytics.metrics?.sent || 0) - (analytics.metrics?.replied || 0), color: '#d946ef' },
-                                                { name: 'Converted', value: analytics.metrics?.booked || 0, color: '#10b981' }
-                                            ]}
-                                            cx="50%"
-                                            cy="50%"
-                                            innerRadius={60}
-                                            outerRadius={80}
-                                            paddingAngle={8}
-                                            dataKey="value"
-                                        >
-                                            {[0, 1, 2].map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={['#3b82f6', '#d946ef', '#10b981'][index]} />
-                                            ))}
-                                        </Pie>
-                                        <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
-                                    </PieChart>
+                                    {(() => {
+                                        const pieData = [
+                                            { name: 'Warm', value: Math.max(0, analytics.metrics?.replied || 0), color: '#3b82f6' },
+                                            { name: 'Sent', value: Math.max(0, (analytics.metrics?.sent || 0) - (analytics.metrics?.replied || 0)), color: '#d946ef' },
+                                            { name: 'Converted', value: Math.max(0, analytics.metrics?.booked || 0), color: '#10b981' }
+                                        ].filter(item => item.value > 0);
+
+                                        if (pieData.length === 0) {
+                                            return (
+                                                <div className="h-full w-full flex items-center justify-center opacity-30 text-xs font-medium uppercase">
+                                                    No Status Data
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <PieChart>
+                                                <Pie
+                                                    data={pieData}
+                                                    cx="50%"
+                                                    cy="50%"
+                                                    innerRadius={60}
+                                                    outerRadius={80}
+                                                    paddingAngle={8}
+                                                    dataKey="value"
+                                                >
+                                                    {pieData.map((entry, index) => (
+                                                        <Cell key={`cell-${index}`} fill={entry.color} stroke="transparent" />
+                                                    ))}
+                                                </Pie>
+                                                <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
+                                            </PieChart>
+                                        );
+                                    })()}
                                 </ResponsiveContainer>
                                 <div className="flex flex-col gap-3 justify-center pr-10">
                                     {[
