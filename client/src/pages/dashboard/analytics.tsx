@@ -127,7 +127,7 @@ export default function AnalyticsPage() {
         </div>
     );
 
-    const hasData = analytics && (analytics.metrics.sent > 0 || analytics.metrics.replied > 0 || analytics.metrics.booked > 0 || analytics.isAnyConnected);
+    const hasData = analytics && analytics.metrics && (analytics.metrics.sent > 0 || analytics.metrics.replied > 0 || analytics.metrics.booked > 0 || analytics.isAnyConnected);
 
     return (
         <PageWrapper>
@@ -342,9 +342,9 @@ export default function AnalyticsPage() {
                                     <PieChart>
                                         <Pie
                                             data={[
-                                                { name: 'Sent', value: analytics?.metrics.sent || 0, color: COLORS.sent_email },
-                                                { name: 'Opened', value: analytics?.metrics.opened || 0, color: COLORS.opened },
-                                                { name: 'Replied', value: analytics?.metrics.replied || 0, color: COLORS.replied_instagram },
+                                                { name: 'Sent', value: analytics?.metrics?.sent || 0, color: COLORS.sent_email },
+                                                { name: 'Opened', value: analytics?.metrics?.opened || 0, color: COLORS.opened },
+                                                { name: 'Replied', value: analytics?.metrics?.replied || 0, color: COLORS.replied_instagram },
                                             ].filter(item => item.value > 0)}
                                             cx="50%"
                                             cy="50%"
@@ -423,9 +423,9 @@ export default function AnalyticsPage() {
                                     <PieChart>
                                         <Pie
                                             data={[
-                                                { name: 'Warm', value: analytics.metrics.replied, color: '#3b82f6' },
-                                                { name: 'Sent', value: analytics.metrics.sent - analytics.metrics.replied, color: '#d946ef' },
-                                                { name: 'Converted', value: analytics.metrics.booked, color: '#10b981' }
+                                                { name: 'Warm', value: analytics.metrics?.replied || 0, color: '#3b82f6' },
+                                                { name: 'Sent', value: (analytics.metrics?.sent || 0) - (analytics.metrics?.replied || 0), color: '#d946ef' },
+                                                { name: 'Converted', value: analytics.metrics?.booked || 0, color: '#10b981' }
                                             ]}
                                             cx="50%"
                                             cy="50%"

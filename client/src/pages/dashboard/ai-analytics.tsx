@@ -68,7 +68,7 @@ export default function AIAnalyticsPage() {
     queryKey: ["/api/ai/analytics", { period }],
   });
 
-  const hasData = analytics && analytics.summary.totalLeads > 0;
+  const hasData = analytics && analytics.summary && analytics.summary.totalLeads > 0;
 
   const handleExportPDF = () => {
     if (!analytics) return;
