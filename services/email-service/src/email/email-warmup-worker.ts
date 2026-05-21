@@ -66,9 +66,9 @@ class EmailWarmupWorker {
     this.isRunning = true;
     console.log('🔥 Email warmup worker started');
 
-    this.checkInterval = setInterval(() => {
-      this.checkAndUpdateWarmupLimits();
-    }, 60 * 60 * 1000);
+      onScheduledTask('email-warmup', () => {
+        this.checkAndUpdateWarmupLimits();
+      });
 
     this.checkAndUpdateWarmupLimits();
   }

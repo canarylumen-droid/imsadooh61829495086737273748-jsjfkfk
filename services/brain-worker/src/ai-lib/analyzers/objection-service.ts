@@ -1,6 +1,7 @@
 import { db } from '@shared/lib/db/db.js';
 import { messages, leads } from "@audnix/shared";
 import { eq, and, desc, sql } from "drizzle-orm";
+import { getCustomObjections } from '@shared/lib/storage/custom-training-storage.js';
 
 export interface ObjectionHandle {
   objection: string;
@@ -112,6 +113,25 @@ Below are examples of how you successfully handled objections for this user in t
 ${handles.map(h => `- OBJECTION: "${h.objection}"\n  - WINNING_REPLY: "${h.response}"`).join('\n')}
 Use these as stylistic and logical references for your current reply.
 `;
+  }
+
+  /**
+   * Retrieves user's custom defined objections from S3 and formats them for the prompt.
+   */
+  async formatCustomObjectionsForPrompt(userId: string): Promise<string> {
+    try {
+      const custom = await getCustomObjections(userId);
+      if (custom.length === 0) return "";
+
+      return `
+### CUSTOM TRAINING RULES (User-Defined Objections)
+Always prioritize these user-defined objection rules. If a prospect's objection matches one of these patterns, use the user's preferred response style/handling instruction:
+${custom.map((c, i) => `${i + 1}. PATTERN: "${c.objection}"\n   CATEGORY: ${c.category}\n   PREFERRED RESPONSE / HANDLING INSTRUCTION: "${c.response}"`).join('\n')}
+`;
+    } catch (err) {
+      console.error('[ObjectionService] Failed to format custom objections:', err);
+      return "";
+    }
   }
 }
 

@@ -44,7 +44,8 @@ import {
   DollarSign,
   Users,
   ShieldAlert,
-  Clock
+  Clock,
+  Terminal
 } from "lucide-react";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -239,7 +240,6 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
       label: "Tools",
       items: [
         { label: "Inbox", icon: Inbox, path: "/dashboard/inbox" },
-        { label: "Automation", icon: Zap, path: "/dashboard/automation" },
         { label: "Pending Payments", icon: DollarSign, path: "/dashboard/pending-payments" },
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
@@ -250,6 +250,8 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
       items: [
         { label: "Import Leads", icon: Upload, path: "/dashboard/lead-import" },
         { label: "Objections", icon: Shield, path: "/dashboard/objections" },
+        { label: "Custom Knowledge", icon: BookMarked, path: "/dashboard/custom-knowledge" },
+        { label: "AI Sandbox", icon: Terminal, path: "/dashboard/sandbox" },
       ],
     },
     {

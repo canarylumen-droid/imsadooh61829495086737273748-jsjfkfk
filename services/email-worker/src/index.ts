@@ -10,6 +10,7 @@
  */
 
 import express from 'express';
+import { subscribe } from '@services/event-bus/src/redis-pubsub.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { ImapConnectionManager } from './imap/imap-connection-manager.js';
 import { createMailboxWorker } from './imap/mailbox-worker.js';
@@ -116,6 +117,7 @@ async function boot() {
         console.error(`[Boot] Failed to enqueue orphan reconnect for ${integration.id}:`, err.message)
       );
     } else {
+      // Autonomous scaler now runs via BullMQ repeatable job (see autonomous-scaler queue).{
       // No Redis → connect directly
       connectionManager.connectMailbox(integration.id).catch((err: any) =>
         console.error(`[Boot] Direct connect failed for ${integration.id}:`, err.message)
@@ -176,7 +178,7 @@ async function watchdog() {
 
 boot().then(() => {
   // Run watchdog every 5 minutes
-  setInterval(watchdog, 5 * 60 * 1000);
+  // Removed polling; rely on event-driven orphan detection via Redis Pub/Sub
 }).catch((err) => {
   console.error('[Boot] Fatal boot error:', err);
 });

@@ -1,4 +1,5 @@
 import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
+import { onScheduledTask } from "@services/event-bus/src/utils/eventScheduler.js";
 
 interface LeadScore {
   score: number;
@@ -163,21 +164,17 @@ function generateRecommendations(score: number, factors: any): string[] {
   return recommendations;
 }
 
-/**
- * Start real-time lead learning worker
- */
 export function startLeadLearning() {
   console.log('🧠 Starting lead learning system...');
-
-  // Analyze all leads every hour
-  setInterval(async () => {
+  // Register handler for scheduled lead learning tasks
+  onScheduledTask('lead-learning', async () => {
     try {
-      // Using Neon database (Drizzle ORM) - no Supabase needed
       console.log('📊 Lead learning system running (database integration available)');
       workerHealthMonitor.recordSuccess('lead-learning');
     } catch (error: any) {
       console.error('Lead learning error:', error);
       workerHealthMonitor.recordError('lead-learning', error?.message || 'Unknown error');
     }
-  }, 60 * 60 * 1000); // Every hour
+  });
 }
+

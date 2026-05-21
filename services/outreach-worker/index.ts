@@ -1,4 +1,4 @@
-import '@services/api-gateway/src/core/bootstrap.js';
+import { onScheduledTask as eventScheduler } from '@services/event-bus/src/utils/eventScheduler.js';
 import { createLogger } from '@services/api-gateway/src/core/logger.js';
 import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-health-server.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
@@ -77,11 +77,9 @@ async function startOutreachService() {
   // ── Activate Autonomous Neural Scaler ──────────────────────────────
   if (AutonomousScalerService) {
     log.info('Autonomous Scaler ✅ Active (Cycle: 12h)');
-    // Run once on startup, then every 12 hours
-    AutonomousScalerService.runOptimizationCycle().catch((err: any) => log.error('Initial Scaler Cycle failed', { error: err.message }));
-    setInterval(() => {
-      AutonomousScalerService.runOptimizationCycle().catch((err: any) => log.error('Daily Scaler Cycle failed', { error: err.message }));
-    }, 12 * 60 * 60 * 1000); 
+eventScheduler.onScheduledTask('autonomous-scaler', async () => {
+  AutonomousScalerService.runOptimizationCycle().catch((err: any) => log.error('Daily Scaler Cycle failed', { error: err.message }));
+});
   }
 
   // ── BullMQ Worker — processes queue-dispatched jobs with retry support ────

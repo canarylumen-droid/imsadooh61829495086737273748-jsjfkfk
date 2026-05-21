@@ -21,15 +21,14 @@ export class WeeklyInsightsWorker {
     this.isRunning = true;
     console.log("Starting weekly insights worker...");
 
-    // Check every 6 hours for users who need weekly insights
-    this.checkInterval = setInterval(
-      () => {
-        this.processWeeklyInsights().catch((error: unknown) => {
-          console.error("Error in weekly insights worker:", error);
-        });
-      },
-      6 * 60 * 60 * 1000 // 6 hours
-    );
+    // Register scheduled task for weekly insights (runs every 6 hours)
+    onScheduledTask('weekly-insights', async () => {
+      try {
+        await this.processWeeklyInsights();
+      } catch (error: unknown) {
+        console.error("Error in weekly insights worker:", error);
+      }
+    });
 
     // Run immediately on start
     this.processWeeklyInsights().catch((error: unknown) => {

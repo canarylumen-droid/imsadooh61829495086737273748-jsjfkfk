@@ -73,15 +73,18 @@ async function startEmailService() {
   if (routingWorker)      log.info('Email Routing ✅ Online (concurrency: 20)');
   if (reassignWorker)     log.info('Email Reassign ✅ Online (concurrency: 10, P0 priority)');
 
-  // ── Zombie Watchdog — restarts IMAP if it silently stalls ────────────────
-  setInterval(async () => {
+  // ── Zombie Watchdog — restarts IMAP if it silently stalls (event‑driven) ────────────────
+  // Listen for an 'imapIdleCheck' event to verify the IMAP idle manager is alive.
+  // Other services should emit this event when appropriate (e.g., after processing mail).
+  import { eventBus } from '@services/event-bus/src/redis-pubsub.js';
+  eventBus.on('imapIdleCheck', async () => {
     try {
       if (!imapIdleManager.getRunningStatus()) {
         log.warn('🛡️ [WATCHDOG] IMAP Idle Manager stalled — restarting...');
         imapIdleManager.start();
       }
     } catch (_e) {}
-  }, 5 * 60_000);
+  });
 
   // ── BullMQ Worker — processes queue-dispatched jobs with retry support ────
   createWorker(mailSyncQueue.name, async (job) => {

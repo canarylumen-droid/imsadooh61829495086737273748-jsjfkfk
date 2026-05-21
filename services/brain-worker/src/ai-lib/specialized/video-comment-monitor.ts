@@ -496,9 +496,37 @@ export function startVideoCommentMonitoring(): void {
   console.log('📊 Comment sync: Every 5 minutes');
   console.log('⏰ Reply timing: 2-4 minutes (human-like, based on lead status)');
 
-  setInterval(async () => {
+  // Register scheduled task for video comment monitoring (runs every 5 minutes)
+  onScheduledTask('video-comment-monitor', async () => {
     if (quotaService.isRestricted()) {
       console.log('[VideoCommentMonitor] 🚨 System is currently under database quota restriction. Skipping check.');
+      return;
+    }
+    try {
+      // Only check users who actually have active monitors
+      const users: User[] = await (storage as any).getUsersWithActiveVideoMonitors?.() || [];
+
+      for (const user of users) {
+        try {
+          const storageWithActiveMonitors = storage as typeof storage & { getActiveVideoMonitors?: (userId: string) => Promise<VideoMonitor[]> };
+          const activeMonitors: VideoMonitor[] = await storageWithActiveMonitors.getActiveVideoMonitors?.(user.id) || [];
+          for (const monitor of activeMonitors) {
+            await monitorVideoComments(user.id, monitor.id);
+          }
+        } catch (monitorError: unknown) {
+          const errorMessage = monitorError instanceof Error ? monitorError.message : 'Unknown error';
+          if (!errorMessage?.includes('does not exist')) {
+            console.error(`Error monitoring for user ${user.id}:`, errorMessage);
+          }
+        }
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      if (!errorMessage?.includes('does not exist') && !errorMessage?.includes('Database connection is not available')) {
+        console.error('Comment monitoring error:', errorMessage);
+      }
+    }
+  });
       return;
     }
     try {

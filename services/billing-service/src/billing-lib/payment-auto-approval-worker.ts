@@ -25,40 +25,47 @@ class PaymentAutoApprovalWorker {
 
   /**
    * Start the auto-approval worker
-   * Runs every 30 seconds to check and auto-upgrade pending payments
+   * Uses BullMQ to run every 30 seconds
    */
-  start() {
-    if (this.processingInterval) {
-      console.warn("Auto-approval worker already running");
+  private isRunning = false;
+
+  /**
+   * Start the worker to process payment auto-approvals
+   */
+  async start() {
+    if (this.isRunning) {
+      console.warn('Auto-approval worker already running');
       return;
     }
-
-    console.log("🚀 Payment auto-approval worker started (checks every 30s, 24/7 auto-upgrade)");
-
-    this.processingInterval = setInterval(async () => {
-      if (!this.isProcessing) {
-        await this.processPendingPayments();
-      }
-    }, 30000); // Check every 30 seconds
+    this.isRunning = true;
+    console.log('🚀 Payment auto-approval worker started (event-scheduler)');
+    // Register scheduled task using Redis PubSub channel
+    onScheduledTask('payment-auto-approval', async () => {
+      await this.processPendingPayments();
+    });
+    // Run once immediately on start
+    await this.processPendingPayments();
   }
 
   /**
    * Stop the auto-approval worker
    */
-  stop() {
-    if (this.processingInterval) {
-      clearInterval(this.processingInterval);
-      this.processingInterval = null;
-      console.log("⏹️  Payment auto-approval worker stopped");
-    }
-  }
+  /**
+   * Stop the worker
+   */
+   async stop() {
+     if (this.isRunning) {
+       // No explicit unsubscribe mechanism; rely on process exit or external management
+       this.isRunning = false;
+       console.log('⏹️  Payment auto-approval worker stopped');
+     }
+   }
 
   /**
    * Process all pending payments and auto-approve them
    */
   private async processPendingPayments() {
     if (quotaService.isRestricted()) {
-      // Don't spam logs for this worker as it runs every 30s
       return;
     }
     try {
@@ -168,7 +175,7 @@ class PaymentAutoApprovalWorker {
   getStats() {
     return {
       ...this.stats,
-      status: this.processingInterval ? "running" : "stopped",
+      status: this.isRunning ? "running" : "stopped",
       uptime: new Date().getTime() - this.stats.lastRun.getTime(),
     };
   }

@@ -55,6 +55,6 @@ CMD ["sh", "-c", "\
     outreach) node dist/services/outreach-worker/index.js ;; \
     brain)    node dist/services/brain-worker/index.js ;; \
     knowledge) node dist/services/rag-worker/index.js ;; \
-    email)    node dist/services/email-service/index.js ;; \
+    email)    node dist/services/email-worker/index.js ;; \
     *)        node dist/services/api-gateway/index.js ;; \
   esac"]

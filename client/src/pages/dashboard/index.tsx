@@ -16,10 +16,11 @@ const LeadImportPage = lazy(() => import("./lead-import"));
 const VideoAutomationPage = lazy(() => import("./video-automation"));
 const CloserEngineLive = lazy(() => import("./closer-engine"));
 const SalesAssistant = lazy(() => import("./sales-assistant"));
-const AutomationBuilderPage = lazy(() => import("./automation-builder"));
 const ContentLibraryPage = lazy(() => import("./content-library"));
 const AIDecisionsPage = lazy(() => import("./ai-decisions"));
 const ObjectionsLibraryPage = lazy(() => import("./objections-library"));
+const CustomKnowledgePage = lazy(() => import("./custom-knowledge"));
+const SandboxPage = lazy(() => import("./sandbox"));
 const ProspectingPage = lazy(() => import("./prospecting"));
 const LeadProfilePage = lazy(() => import("./lead-profile"));
 const PendingPaymentsPage = lazy(() => import("./pending-payments"));
@@ -48,10 +49,11 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/video-automation" component={VideoAutomationPage} />
           <Route path="/dashboard/closer-engine" component={CloserEngineLive} />
           <Route path="/dashboard/sales-assistant" component={SalesAssistant} />
-          <Route path="/dashboard/automation" component={AutomationBuilderPage} />
           <Route path="/dashboard/content-library" component={ContentLibraryPage} />
           <Route path="/dashboard/ai-decisions" component={AIDecisionsPage} />
           <Route path="/dashboard/objections" component={ObjectionsLibraryPage} />
+          <Route path="/dashboard/custom-knowledge" component={CustomKnowledgePage} />
+          <Route path="/dashboard/sandbox" component={SandboxPage} />
           <Route path="/dashboard/prospecting" component={ProspectingPage} />
           <Route path="/dashboard/pending-payments" component={PendingPaymentsPage} />
         </Switch>

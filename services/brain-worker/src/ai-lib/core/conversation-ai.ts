@@ -34,6 +34,7 @@ import { videoMonitors } from '@audnix/shared';
 import { HallucinationGuard } from './hallucination-guard.js';
 import { handleLanguageDetection, localizeAndOptimize } from '../utils/language-util.js';
 import { handleObjection } from '../utils/objection-handler.js';
+import { getCustomKnowledge } from '@shared/lib/storage/custom-training-storage.js';
 
 const isDemoMode = false;
 const PROMPT_VERSION = 'v1.2.0-resilience';
@@ -272,7 +273,8 @@ export async function generateAIReply(
     styleMarkers,
     ragChunks,
     intent,
-    leadTzProfile
+    leadTzProfile,
+    customKnowledge
   ] = await Promise.all([
     getBrandContext(lead.userId, personaId),
     storage.getUserById(lead.userId),
@@ -287,7 +289,8 @@ export async function generateAIReply(
       status: lead.status,
       tags: lead.tags || []
     }) : Promise.resolve(null),
-    getLeadProfile(lead.id).catch(() => null)
+    getLeadProfile(lead.id).catch(() => null),
+    getCustomKnowledge(lead.userId).catch(() => null)
   ]);
 
   // --- DEDUPLICATION CONTEXT ---
@@ -308,6 +311,22 @@ export async function generateAIReply(
 
   // Dynamic brand PDF processing: incorporate extracted text into system prompt
   const brandGuidelines = user?.brandGuidelinePdfText || (brandContext as any)?.brandVoice || "No specific brand guidelines provided.";
+
+  // Supplement with S3-backed custom training knowledge base
+  let customKnowledgeContext = '';
+  if (customKnowledge) {
+    const ck = customKnowledge;
+    if (ck.businessName || ck.brandVoice || ck.coreOffer || ck.customInstructions || (ck.faqs && ck.faqs.length > 0)) {
+      customKnowledgeContext = `
+### CUSTOM USER TRAINING KNOWLEDGE BASE (High Priority)
+Business Name: ${ck.businessName || "N/A"}
+Brand Voice / Tone: ${ck.brandVoice || "N/A"}
+Core Offer Details: ${ck.coreOffer || "N/A"}
+Custom Instructions: ${ck.customInstructions || "N/A"}
+${ck.faqs && ck.faqs.length > 0 ? `Frequently Asked Questions:\n${ck.faqs.map((f: any) => `- Q: "${f.question}"\n  A: "${f.answer}"`).join('\n')}` : ''}
+`;
+    }
+  }
 
   const isWarm = assessLeadWarmth(conversationHistory, lead);
   const detectionResult = detectConversationStatus(conversationHistory);
@@ -574,6 +593,8 @@ ${ragContext}
 
 [BRAND GUIDELINES]
 ${brandGuidelines}
+
+${customKnowledgeContext}
 
 ${(brandContext as any)?.brandSnippets?.length > 0
   ? `KEY BRAND MESSAGES:\n${(brandContext as any).brandSnippets.map((s: string) => `- ${s}`).join('\n')}`
