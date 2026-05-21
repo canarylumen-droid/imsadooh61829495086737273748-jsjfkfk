@@ -1,4 +1,4 @@
-import { subscribe } from '../../redis-pubsub.js';
+import { subscribe } from '../redis-pubsub.js';
 
 /**
  * Register a handler that will be invoked whenever a message is published on the given channel.
@@ -6,7 +6,7 @@ import { subscribe } from '../../redis-pubsub.js';
  */
 export function onScheduledTask(channel: string, handler: () => Promise<void> | void) {
   // Subscribe once; the Redis client will keep the connection alive.
-  subscribe(channel, async (msg) => {
+  subscribe(channel, async (_msg: unknown) => {
     try {
       await handler();
     } catch (err) {

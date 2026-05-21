@@ -4,6 +4,7 @@ import { quotaService } from "@shared/lib/monitoring/quota-service.js";
 import { db } from '@shared/lib/db/db.js';
 import { users } from "@audnix/shared";
 import { eq, and, isNotNull, inArray, ne } from "drizzle-orm";
+import { onScheduledTask } from '@services/event-bus/src/utils/eventScheduler.js';
 
 interface AutoApprovalStats {
   checked: number;

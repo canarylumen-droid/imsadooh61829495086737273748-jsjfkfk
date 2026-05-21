@@ -475,6 +475,7 @@
     color: hsl(var(--muted-foreground));
     pointer-events: none;
   }
+}
 
   .toggle-elevate::before,
   .toggle-elevate-2::before {
@@ -490,7 +491,7 @@
     background-color: var(--elevate-2);
   }
 
-  .border.toggle-elevate::before {
+  .toggle-elevate[class~="border"]::before {
     inset: -1px;
   }
 
@@ -530,7 +531,6 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after {
     inset: -1px;
   }
-}
 
 @layer utilities {
   .bg-brand-gradient {

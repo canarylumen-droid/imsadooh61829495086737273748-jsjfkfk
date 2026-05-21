@@ -77,7 +77,7 @@ async function startOutreachService() {
   // ── Activate Autonomous Neural Scaler ──────────────────────────────
   if (AutonomousScalerService) {
     log.info('Autonomous Scaler ✅ Active (Cycle: 12h)');
-eventScheduler.onScheduledTask('autonomous-scaler', async () => {
+eventScheduler('autonomous-scaler', async () => {
   AutonomousScalerService.runOptimizationCycle().catch((err: any) => log.error('Daily Scaler Cycle failed', { error: err.message }));
 });
   }

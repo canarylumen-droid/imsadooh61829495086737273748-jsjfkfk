@@ -1,6 +1,7 @@
 import { storage } from '@shared/lib/storage/storage.js';
 import { generateInsights } from "./ai-service.js";
 import { quotaService } from "@shared/lib/monitoring/quota-service.js";
+import { onScheduledTask } from '@services/event-bus/src/utils/eventScheduler.js';
 import type { User, Lead, Message } from "@audnix/shared";
 import type { WeeklyInsight, LeadInsights } from '@shared/types.js';
 

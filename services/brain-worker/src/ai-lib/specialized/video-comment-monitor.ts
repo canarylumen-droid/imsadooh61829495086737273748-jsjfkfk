@@ -5,6 +5,7 @@ import { InstagramProvider } from "@shared/lib/providers/instagram.js";
 import { formatDMWithButton } from '../formatters/dm-formatter.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
+import { onScheduledTask } from '@services/event-bus/src/utils/eventScheduler.js';
 import type { User, Lead, Integration, VideoMonitor } from '@audnix/shared';
 
 const isDemoMode = false;
@@ -527,33 +528,6 @@ export function startVideoCommentMonitoring(): void {
       }
     }
   });
-      return;
-    }
-    try {
-      // Only check users who actually have active monitors
-      const users: User[] = await (storage as any).getUsersWithActiveVideoMonitors?.() || [];
-
-      for (const user of users) {
-        try {
-          const storageWithActiveMonitors = storage as typeof storage & { getActiveVideoMonitors?: (userId: string) => Promise<VideoMonitor[]> };
-          const activeMonitors: VideoMonitor[] = await storageWithActiveMonitors.getActiveVideoMonitors?.(user.id) || [];
-          for (const monitor of activeMonitors) {
-            await monitorVideoComments(user.id, monitor.id);
-          }
-        } catch (monitorError: unknown) {
-          const errorMessage = monitorError instanceof Error ? monitorError.message : 'Unknown error';
-          if (!errorMessage?.includes('does not exist')) {
-            console.error(`Error monitoring for user ${user.id}:`, errorMessage);
-          }
-        }
-      }
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      if (!errorMessage?.includes('does not exist') && !errorMessage?.includes('Database connection is not available')) {
-        console.error('Comment monitoring error:', errorMessage);
-      }
-    }
-  }, 300000);
 }
 
 

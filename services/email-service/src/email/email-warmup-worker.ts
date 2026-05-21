@@ -4,6 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
+import { onScheduledTask } from '@services/event-bus/src/utils/eventScheduler.js';
 
 /**
  * Email Warm-up System

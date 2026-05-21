@@ -15,6 +15,7 @@ import { socketService } from "@shared/lib/realtime/socket-service.js";
 import { availabilityService } from "@shared/lib/calendar/availability-service.js";
 import { timezoneService } from "@shared/lib/calendar/timezone-service.js";
 import { onScheduledTask } from '@services/event-bus/src/utils/eventScheduler.js';
+import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
 import MultiChannelOrchestrator from '@shared/lib/multi-channel-orchestrator.js';
 import DayAwareSequence from './day-aware-sequence.js';

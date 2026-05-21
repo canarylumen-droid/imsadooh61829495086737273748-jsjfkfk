@@ -106,7 +106,9 @@ export class ElevenLabsProvider {
     formData.append("name", name);
 
     audioFiles.forEach((buffer, index) => {
-      const blob = new Blob([buffer], { type: "audio/mpeg" });
+      const audioBytes = new Uint8Array(buffer.byteLength);
+      audioBytes.set(buffer);
+      const blob = new Blob([audioBytes.buffer], { type: "audio/mpeg" });
       formData.append("files", blob, `sample_${index}.mp3`);
     });
 

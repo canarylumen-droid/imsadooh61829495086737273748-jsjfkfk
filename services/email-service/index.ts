@@ -4,6 +4,7 @@ import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-h
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { createWorker } from '@shared/lib/worker';
 import { mailSyncQueue } from '@shared/lib/queue';
+import { subscribe } from '@services/event-bus/src/redis-pubsub.js';
 
 const log = createLogger('EMAIL-SYNC');
 
@@ -76,8 +77,7 @@ async function startEmailService() {
   // ── Zombie Watchdog — restarts IMAP if it silently stalls (event‑driven) ────────────────
   // Listen for an 'imapIdleCheck' event to verify the IMAP idle manager is alive.
   // Other services should emit this event when appropriate (e.g., after processing mail).
-  import { eventBus } from '@services/event-bus/src/redis-pubsub.js';
-  eventBus.on('imapIdleCheck', async () => {
+  subscribe('imapIdleCheck', async () => {
     try {
       if (!imapIdleManager.getRunningStatus()) {
         log.warn('🛡️ [WATCHDOG] IMAP Idle Manager stalled — restarting...');
