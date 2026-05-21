@@ -54,6 +54,7 @@ export default function SettingsPage() {
     timezone: "America/New_York",
     ctaLink: "",
     ctaText: "",
+    calendarLink: "",
     voiceNotesEnabled: true
   });
 
@@ -66,6 +67,7 @@ export default function SettingsPage() {
         timezone: user.timezone || "America/New_York",
         ctaLink: user.defaultCtaLink || "",
         ctaText: user.defaultCtaText || "",
+        calendarLink: (user as any).calendarLink || "",
         voiceNotesEnabled: user.voiceNotesEnabled ?? true
       });
     }
@@ -282,6 +284,16 @@ export default function SettingsPage() {
                     onChange={e => handleFieldChange('ctaText', e.target.value)}
                     className="rounded-xl h-11"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Calendar Link (for AI Booking)</Label>
+                  <Input
+                    placeholder="https://calendly.com/your-link"
+                    value={formData.calendarLink}
+                    onChange={e => handleFieldChange('calendarLink', e.target.value)}
+                    className="rounded-xl h-11"
+                  />
+                  <p className="text-[10px] text-muted-foreground italic">AI will use this link to book calls with leads.</p>
                 </div>
               </CardContent>
             </Card>

@@ -507,6 +507,17 @@ export async function generateSmartMessage(
   const brandCompanyName = (brandContext as SalesBrandContext).companyName || brandContext.businessName || "This Business";
   const firstName = leadProfile.firstName || "";
   const painPoint = leadProfile.painPoint || "Unknown - find out";
+  
+  // Fetch deep brand context from user metadata if available
+  let deepBrandContext = "";
+  if (brandContext.userId) {
+    const user = await storage.getUserById(brandContext.userId);
+    if (user?.metadata?.brandContext) {
+      deepBrandContext = user.metadata.brandContext;
+    }
+  }
+  
+  const pdfContext = (leadProfile as any).pdfContext || deepBrandContext;
 
   const stageText = stage === "cold"
     ? "First touch - grab attention"
@@ -516,12 +527,21 @@ export async function generateSmartMessage(
         ? "Handle objection - lead frame"
         : "Close them - make it easy to say yes";
 
+  // Inject Lead History and Tags for better intent analysis
+  const leadHistory = leadProfile.metadata?.conversationHistory || "No previous history";
+  const leadTags = leadProfile.tags?.join(", ") || "No tags";
+
   const prompt = `You are a world-class sales closer who closes million-dollar deals.
 Your goal: Make ${companyName} their first $1,000 close TODAY.
+
+LEAD CONTEXT:
+- History: ${leadHistory}
+- Tags: ${leadTags}
 
 BRAND: ${brandCompanyName}
 UVP: ${uvp.uvp}
 DIFFERENTIATORS: ${uvp.differentiators.join(", ")}
+${pdfContext ? `BRAND PDF CONTEXT: ${pdfContext.substring(0, 3000)}` : ""}
 
 LEAD: ${firstName} at ${companyName}
 INDUSTRY: ${industry}

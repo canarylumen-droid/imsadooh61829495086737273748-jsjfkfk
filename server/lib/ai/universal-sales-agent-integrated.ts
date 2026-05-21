@@ -193,8 +193,17 @@ export async function generateContextAwareMessage(
   else if (score >= 60 && intent.buyerStage === "decision") stage = "objection";
   else if (score >= 50) stage = "follow_up";
 
+  // INJECT BRAND PDF CONTEXT IF AVAILABLE
+  const user = await storage.getUserById(lead.userId);
+  const pdfContext = (user?.metadata as any)?.businessDescription || (user?.metadata as any)?.extracted_text || "";
+  
+  const enhancedLead = {
+    ...lead,
+    pdfContext: pdfContext || lead.pdfContext
+  };
+
   // Generate base message
-  const baseMessage = await generateOptimizedMessage(lead, brandContext, testimonials, stage);
+  const baseMessage = await generateOptimizedMessage(enhancedLead, brandContext, testimonials, stage);
 
   // Enhance message based on intelligence
   let enhancedMessage = baseMessage.message;

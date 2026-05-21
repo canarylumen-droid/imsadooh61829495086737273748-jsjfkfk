@@ -55,6 +55,9 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastLogin: timestamp("last_login"),
   updatedAt: timestamp("updated_at").defaultNow(),
+  calendarLink: text("calendar_link"),
+  brandGuidelinePdfUrl: text("brand_guideline_pdf_url"),
+  brandGuidelinePdfText: text("brand_guideline_pdf_text"),
   filteredLeadsCount: integer("filtered_leads_count").notNull().default(0),
 });
 
@@ -125,6 +128,8 @@ export const deals = pgTable("deals", {
   meetingScheduled: boolean("meeting_scheduled").notNull().default(false),
   meetingUrl: text("meeting_url"),
   dealValue: integer("deal_value").default(0),
+  source: text("source").default("manual"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
   aiAnalysis: jsonb("ai_analysis").default({}),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

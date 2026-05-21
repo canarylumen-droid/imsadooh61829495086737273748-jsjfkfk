@@ -5,6 +5,35 @@ import { decrypt } from "../crypto/encryption.js";
 import type { Lead, Message } from "../../../shared/schema.js";
 
 /**
+ * Neural CSV Mapper - Maps dynamic column names to internal lead keys
+ */
+function mapCsvToLeadMetadata(row: Record<string, any>): Record<string, any> {
+  const metadata: Record<string, any> = { ...row };
+  const mappings: Record<string, string[]> = {
+    industry: ['industry', 'sector', 'business type', 'niche'],
+    companySize: ['company size', 'size', 'employees', 'team size', 'headcount'],
+    painPoint: ['pain point', 'challenge', 'problem', 'needs', 'pain'],
+    role: ['role', 'title', 'job title', 'position'],
+    company: ['company', 'organization', 'business name', 'company name']
+  };
+
+  for (const [key, aliases] of Object.entries(mappings)) {
+    for (const alias of aliases) {
+      const normalizedAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const rowKey of Object.keys(row)) {
+        const normalizedRowKey = rowKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (normalizedRowKey === normalizedAlias && row[rowKey]) {
+          metadata[key] = row[rowKey];
+          break;
+        }
+      }
+      if (metadata[key]) break;
+    }
+  }
+  return metadata;
+}
+
+/**
  * Import leads and conversation history from Instagram
  */
 export async function importInstagramLeads(userId: string): Promise<{
@@ -122,7 +151,7 @@ export async function importManychatLeads(userId: string): Promise<{
           phone: sub.phone || null,
           channel: 'instagram',
           status: 'new',
-          metadata: { manychat_id: sub.id, imported_from_manychat: true }
+          metadata: { manychat_id: sub.id, imported_from_manychat: true, industry: sub.industry || 'unknown', companySize: sub.company_size || 'unknown' }
         });
         results.leadsImported++;
       } catch (e) { }

@@ -403,9 +403,13 @@ Only include fields you can confidently extract. Return valid JSON only.`
       // Use deep merge to preserve existing nested data
       const updatedMetadata = deepMerge(existingMetadata, brandMetadata);
 
-      // Save to user profile
+      // Save to user profile - PERSIST FULL EXTRACTED TEXT
       await storage.updateUser(userId, {
-        metadata: updatedMetadata,
+        metadata: {
+          ...updatedMetadata,
+          brandContext: pdfText.substring(0, 50000), // Store first 50k chars
+        },
+        brandGuidelinePdfText: pdfText,
         businessName: brandContext.companyName || user.businessName,
       });
 

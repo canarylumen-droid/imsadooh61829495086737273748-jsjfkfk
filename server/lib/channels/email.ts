@@ -246,6 +246,146 @@ export async function importCustomEmails(
 }
 
 /**
+ * Verify SMTP and IMAP settings
+ */
+export async function verifyEmailSettings(config: EmailConfig): Promise<{ success: boolean; error?: string }> {
+  const nodemailer = await import('nodemailer');
+  const Imap = (await import('imap')).default;
+
+  // 1. Test SMTP
+  // Start with provided port, but fallback to common ones
+  const basePorts = [587, 465, 25];
+  const smtpPorts = config.smtp_port && !basePorts.includes(config.smtp_port) 
+    ? [config.smtp_port, ...basePorts] 
+    : basePorts;
+    
+  let smtpSuccess = false;
+  let lastSmtpError = '';
+
+  for (const port of smtpPorts) {
+    try {
+      console.log(`[Email Verify] Testing SMTP ${config.smtp_host}:${port}...`);
+      
+      const transporterOptions: any = {
+        host: config.smtp_host,
+        port: port,
+        secure: port === 465,
+        auth: {
+          user: config.smtp_user,
+          pass: config.smtp_pass,
+        },
+        connectionTimeout: 8000,
+        greetingTimeout: 8000,
+      };
+
+      // Special handling for Gmail/Outlook to ensure compatibility
+      if (config.smtp_host?.includes('gmail.com')) {
+        transporterOptions.service = 'gmail';
+      } else if (config.smtp_host?.includes('office365.com') || config.smtp_host?.includes('outlook.com')) {
+        transporterOptions.service = 'Outlook365';
+      }
+
+      const transporter = nodemailer.createTransport(transporterOptions);
+
+      await transporter.verify();
+      smtpSuccess = true;
+      config.smtp_port = port; // Update with the successful port
+      console.log(`[Email Verify] SMTP Success for ${config.smtp_user} on port ${port}`);
+      break;
+    } catch (smtpErr: any) {
+      console.warn(`[Email Verify] SMTP Failed for ${config.smtp_user} on port ${port}:`, smtpErr.message);
+      lastSmtpError = smtpErr.message;
+      
+      // If it's an auth error, don't keep trying other ports
+      const isAuthError = smtpErr.message.includes('Application-specific password required') || 
+                         smtpErr.message.includes('Invalid login') ||
+                         smtpErr.message.includes('Authentication failed') ||
+                         smtpErr.message.includes('Username and Password not accepted');
+      
+      if (isAuthError) {
+        break;
+      }
+    }
+  }
+
+  if (!smtpSuccess) {
+    let error = `SMTP Error: ${lastSmtpError}`;
+    if (lastSmtpError.includes('Application-specific password required') || 
+        lastSmtpError.includes('Username and Password not accepted')) {
+      error = "Gmail/Outlook requires an App Password. Please generate one in your account settings (Security -> App Passwords).";
+    } else if (lastSmtpError.includes('Invalid login') || lastSmtpError.includes('Authentication failed')) {
+      error = "Invalid email or password. If using Gmail/Outlook with 2FA, you MUST use an App Password.";
+    } else if (lastSmtpError.includes('ETIMEDOUT') || lastSmtpError.includes('ECONNREFUSED')) {
+      error = `Could not connect to ${config.smtp_host}. Please ensure your email provider allows SMTP connections and check your firewall.`;
+    }
+    return { success: false, error };
+  }
+
+  // 2. Test IMAP
+  const baseImapPorts = [993, 143];
+  const imapPorts = config.imap_port && !baseImapPorts.includes(config.imap_port)
+    ? [config.imap_port, ...baseImapPorts]
+    : baseImapPorts;
+
+  let imapSuccess = false;
+  let lastImapError = '';
+
+  for (const port of imapPorts) {
+    try {
+      const host = config.imap_host || config.smtp_host?.replace('smtp', 'imap') || '';
+      console.log(`[Email Verify] Testing IMAP ${host}:${port}...`);
+      
+      await new Promise((resolve, reject) => {
+        const imap = new Imap({
+          user: config.smtp_user!,
+          password: config.smtp_pass!,
+          host: host,
+          port: port,
+          tls: port === 993,
+          tlsOptions: { rejectUnauthorized: false },
+          connTimeout: 8000,
+          authTimeout: 8000
+        });
+
+        imap.once('ready', () => {
+          imap.end();
+          resolve(true);
+        });
+
+        imap.once('error', (err: Error) => {
+          reject(err);
+        });
+
+        imap.connect();
+      });
+      imapSuccess = true;
+      config.imap_port = port; // Update with successful port
+      console.log(`[Email Verify] IMAP Success for ${config.smtp_user} on port ${port}`);
+      break;
+    } catch (imapErr: any) {
+      console.warn(`[Email Verify] IMAP Failed for ${config.smtp_user} on port ${port}:`, imapErr.message);
+      lastImapError = imapErr.message;
+
+      // If it's an auth error, don't keep trying other ports
+      const isAuthError = imapErr.message.includes('Invalid login') || 
+                         imapErr.message.includes('AUTHENTICATIONFAILED') ||
+                         imapErr.message.includes('Application-specific password required') ||
+                         imapErr.message.includes('Username and Password not accepted');
+
+      if (isAuthError) {
+        break;
+      }
+    }
+  }
+
+  if (!imapSuccess) {
+    return { success: false, error: `IMAP Error: ${lastImapError}` };
+  }
+
+  return { success: true };
+}
+
+/**
  * Get brand colors from user's extracted PDF data
  */
 async function getUserBrandColors(userId: string): Promise<BrandColors | undefined> {

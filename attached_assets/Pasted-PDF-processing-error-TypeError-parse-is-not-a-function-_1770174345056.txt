@@ -1,0 +1,69 @@
+PDF processing error: TypeError: parse is not a function
+    at processPDF (/vercel/path0/server/lib/pdf-processor.ts:44:27)
+    at <anonymous> (/vercel/path0/server/routes/ai-routes.ts:1168:26)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+Error fetching deal analytics: error: column "deal_value" does not exist
+    at file:///var/task/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///var/task/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DrizzleStorage.calculateRevenue (/vercel/path0/server/drizzle-storage.ts:804:22)
+    at async <anonymous> (/vercel/path0/server/routes/deals-routes.ts:31:21) {
+  length: 111,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '155',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3716',
+  routine: 'errorMissingColumn'
+}
+
+[AutoOutreach] Error checking users: Error: Connection terminated unexpectedly
+    at file:///var/task/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///var/task/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async AutonomousOutreachWorker.checkAndProcessUsers (/vercel/path0/server/lib/workers/outreach-worker.ts:173:30)
+    at async Timeout._onTimeout (/vercel/path0/server/lib/workers/outreach-worker.ts:146:7)
+
+Dashboard stats error: error: column "timestamp" does not exist
+    at file:///var/task/node_modules/@neondatabase/serverless/index.mjs:1345:74
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async NeonPreparedQuery.execute (file:///var/task/node_modules/drizzle-orm/neon-serverless/session.js:76:20)
+    at async DrizzleStorage.getRecentBounces (/vercel/path0/server/drizzle-storage.ts:1148:12)
+    at async <anonymous> (/vercel/path0/server/routes/dashboard-routes.ts:73:27) {
+  length: 109,
+  severity: 'ERROR',
+  code: '42703',
+  detail: undefined,
+  hint: undefined,
+  position: '60',
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'parse_relation.c',
+  line: '3716',
+  routine: 'errorMissingColumn'
+}
+
+
+19:38:34.267 server/lib/workers/outreach-worker.ts(193,60): error TS7006: Parameter 'u' implicitly has an 'any' type.
+19:38:34.268 server/lib/workers/outreach-worker.ts(197,42): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.268 server/lib/workers/outreach-worker.ts(202,65): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.271 server/lib/workers/outreach-worker.ts(208,40): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.271 server/lib/workers/outreach-worker.ts(211,38): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.272 

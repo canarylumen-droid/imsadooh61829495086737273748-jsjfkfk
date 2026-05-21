@@ -70,7 +70,15 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     // Real-time Engine Status & Synchronization
     const integrations = await storage.getIntegrations(userId);
     const monitors = await storage.getVideoMonitors(userId);
-    const recentBounces = await storage.getRecentBounces(userId, 168); // Last 7 days
+    
+    // Get recent bounces - Handle potential column mapping issues
+    let recentBounces = [];
+    try {
+      recentBounces = await storage.getRecentBounces(userId, 168); // Last 7 days
+    } catch (bounceError) {
+      console.warn('⚠️ Failed to fetch recent bounces, using empty list:', bounceError);
+    }
+    
     const domainVerifications = await storage.getDomainVerifications(userId, 5);
 
     // Calculate most recent sync time from all integrations

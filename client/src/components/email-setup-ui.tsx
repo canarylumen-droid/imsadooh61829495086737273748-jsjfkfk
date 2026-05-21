@@ -20,6 +20,7 @@ interface EmailConfig {
   imapPort: number;
   email: string;
   password: string;
+  fromName: string;
 }
 
 export function EmailSetupUI() {
@@ -31,7 +32,8 @@ export function EmailSetupUI() {
     imapHost: '',
     imapPort: 993,
     email: '',
-    password: ''
+    password: '',
+    fromName: ''
   });
   const [connecting, setConnecting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
@@ -39,6 +41,73 @@ export function EmailSetupUI() {
   const [importStats, setImportStats] = useState({ imported: 0, skipped: 0, errors: 0 });
   const [showSetup, setShowSetup] = useState(false);
   const [showFilterInfo, setShowFilterInfo] = useState(false);
+
+  // Auto-fill common email providers
+  useEffect(() => {
+    const email = config.email.toLowerCase();
+    if (!email.includes('@')) return;
+
+    const domain = email.split('@')[1];
+    if (!domain) return;
+
+    const providers: Record<string, Partial<EmailConfig>> = {
+      'gmail.com': {
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 587,
+        imapHost: 'imap.gmail.com',
+        imapPort: 993,
+      },
+      'outlook.com': {
+        smtpHost: 'smtp-mail.outlook.com',
+        smtpPort: 587,
+        imapHost: 'outlook.office365.com',
+        imapPort: 993,
+      },
+      'hotmail.com': {
+        smtpHost: 'smtp-mail.outlook.com',
+        smtpPort: 587,
+        imapHost: 'outlook.office365.com',
+        imapPort: 993,
+      },
+      'live.com': {
+        smtpHost: 'smtp-mail.outlook.com',
+        smtpPort: 587,
+        imapHost: 'outlook.office365.com',
+        imapPort: 993,
+      },
+      'office365.com': {
+        smtpHost: 'smtp.office365.com',
+        smtpPort: 587,
+        imapHost: 'outlook.office365.com',
+        imapPort: 993,
+      },
+      'icloud.com': {
+        smtpHost: 'smtp.mail.me.com',
+        smtpPort: 587,
+        imapHost: 'imap.mail.me.com',
+        imapPort: 993,
+      },
+      'yahoo.com': {
+        smtpHost: 'smtp.mail.yahoo.com',
+        smtpPort: 465,
+        imapHost: 'imap.mail.yahoo.com',
+        imapPort: 993,
+      },
+    };
+
+    // Check if we have a matching provider for the domain
+    if (providers[domain]) {
+      const match = providers[domain];
+      // Only auto-fill if the fields are currently empty or matching another provider's defaults
+      setConfig(prev => ({
+        ...prev,
+        smtpHost: prev.smtpHost === '' ? match.smtpHost! : prev.smtpHost,
+        smtpPort: prev.smtpPort === 587 || prev.smtpPort === 0 ? match.smtpPort! : prev.smtpPort,
+        imapHost: prev.imapHost === '' ? match.imapHost! : prev.imapHost,
+        imapPort: prev.imapPort === 993 || prev.imapPort === 0 ? match.imapPort! : prev.imapPort,
+      }));
+    }
+  }, [config.email]);
 
   useEffect(() => {
     fetchStatus();
@@ -87,7 +156,8 @@ export function EmailSetupUI() {
           imapHost: config.imapHost,
           imapPort: config.imapPort,
           email: config.email,
-          password: config.password
+          password: config.password,
+          fromName: config.fromName
         })
       });
 
@@ -112,16 +182,57 @@ export function EmailSetupUI() {
           description: `Email connected! ${data.leadsImported} contacts imported.`
         });
 
-        setConfig({ smtpHost: '', smtpPort: 587, imapHost: '', imapPort: 993, email: '', password: '' });
+        setConfig({ smtpHost: '', smtpPort: 587, imapHost: '', imapPort: 993, email: '', password: '', fromName: '' });
         setShowFilterInfo(false);
         setShowSetup(false);
         await fetchStatus();
       } else {
         const error = await res.json();
-        toast({ title: 'Error', description: error.error, variant: 'destructive' });
+        const details = error.details ? `: ${error.details}` : '';
+        const errorMessage = `${error.error}${details}`;
+        
+        // Check if it's a Gmail/Outlook auth error to provide better guidance
+        const isGmail = config.email.toLowerCase().includes('gmail.com');
+        const isOutlook = config.email.toLowerCase().includes('outlook.com') || config.email.toLowerCase().includes('office365.com');
+        const isAuthError = errorMessage.toLowerCase().includes('app password') || 
+                           errorMessage.toLowerCase().includes('password not accepted') ||
+                           errorMessage.toLowerCase().includes('invalid login');
+
+        if ((isGmail || isOutlook) && isAuthError) {
+          toast({
+            title: 'App Password Required',
+            description: (
+              <div className="space-y-2">
+                <p>It looks like you're using {isGmail ? 'Gmail' : 'Outlook'} with 2FA enabled. You MUST use an <strong>App Password</strong>, not your regular password.</p>
+                <a 
+                  href={isGmail ? "https://myaccount.google.com/apppasswords" : "https://account.microsoft.com/security"} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="text-cyan-600 hover:underline font-bold block mt-2"
+                >
+                  Click here to generate one →
+                </a>
+              </div>
+            ) as any,
+            variant: 'destructive',
+            duration: 15000
+          });
+        } else {
+          toast({ 
+            title: 'Connection Failed', 
+            description: `${errorMessage}. 💡 Double-check your host and port. We tried common ports (587, 465) automatically but none responded.`, 
+            variant: 'destructive',
+            duration: 10000 
+          });
+        }
       }
-    } catch (error) {
-      toast({ title: 'Error', description: 'Failed to connect email', variant: 'destructive' });
+    } catch (error: any) {
+      console.error('Email connection error:', error);
+      toast({ 
+        title: 'Network Error', 
+        description: 'Could not reach the server. Please check your internet connection and try again.', 
+        variant: 'destructive' 
+      });
     } finally {
       setConnecting(false);
       setImporting(false);
@@ -216,6 +327,16 @@ export function EmailSetupUI() {
 
             {/* Form Inputs */}
             <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium mb-1">Display Name (Optional)</label>
+                <Input
+                  placeholder="Your Name or Business Name"
+                  value={config.fromName}
+                  onChange={(e) => setConfig({ ...config, fromName: e.target.value })}
+                  className="font-mono text-sm"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium mb-1">Email Address</label>
                 <Input
@@ -346,7 +467,7 @@ export function EmailSetupUI() {
                   variant="outline"
                   onClick={() => {
                     setShowSetup(false);
-                    setConfig({ smtpHost: '', smtpPort: 587, imapHost: '', imapPort: 993, email: '', password: '' });
+                    setConfig({ ...config, smtpHost: '', smtpPort: 587, imapHost: '', imapPort: 993, email: '', password: '', fromName: '' });
                   }}
                 >
                   Cancel

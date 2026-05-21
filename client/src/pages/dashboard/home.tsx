@@ -296,39 +296,39 @@ export default function DashboardHome() {
                 transition={{ delay: index * 0.1, duration: 0.5, ease: "easeOut" }}
               >
                 <Card className={cn(
-                  "relative transition-all duration-500 border-border/40 rounded-[2.5rem] overflow-hidden group bg-card/40 backdrop-blur-2xl hover:border-primary/30",
+                  "relative transition-all duration-500 border-border/40 rounded-[2.5rem] overflow-hidden group bg-card/40 backdrop-blur-2xl hover:border-primary/30 h-full",
                   kpi.glow
                 )}>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-[10px] font-bold uppercase tracking-[0.25em] text-muted-foreground/50">{kpi.label}</CardTitle>
-                    <div className={cn("p-2 rounded-2xl transition-colors bg-muted/5 group-hover:bg-muted/10", kpi.color)}>
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50 truncate pr-2">{kpi.label}</CardTitle>
+                    <div className={cn("p-2 rounded-2xl transition-colors bg-muted/5 group-hover:bg-muted/10 shrink-0", kpi.color)}>
                       <Icon className="h-4 w-4" />
                     </div>
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-4xl font-extrabold tracking-tighter mb-2">{kpi.value}{kpi.suffix || ''}</div>
+                  <CardContent className="flex flex-col h-[calc(100%-60px)]">
+                    <div className="text-3xl font-extrabold tracking-tighter mb-2 truncate">{kpi.value}{kpi.suffix || ''}</div>
                     {kpi.percentage !== "—" && (
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[11px] font-bold flex items-center px-2 py-0.5 rounded-full ${kpi.trend === "up" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-bold flex items-center px-2 py-0.5 rounded-full shrink-0 ${kpi.trend === "up" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
                           <TrendIcon className="h-3 w-3 mr-0.5" />
                           {kpi.percentage}
                         </span>
-                        <span className="text-[10px] font-bold text-muted-foreground/30 uppercase tracking-widest">Growth</span>
+                        <span className="text-[9px] font-bold text-muted-foreground/30 uppercase tracking-widest truncate">Growth</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between mt-8 opacity-0 group-hover:opacity-100 transition-all transform translate-y-3 group-hover:translate-y-0 duration-300">
+                    <div className="flex items-center justify-between mt-auto pt-4 opacity-0 group-hover:opacity-100 transition-all transform translate-y-3 group-hover:translate-y-0 duration-300">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 text-[10px] font-bold uppercase tracking-widest p-0 px-3 rounded-full hover:bg-primary/5 text-primary"
+                        className="h-8 text-[9px] font-bold uppercase tracking-widest p-0 px-3 rounded-full hover:bg-primary/5 text-primary truncate max-w-[120px]"
                         onClick={(e) => {
                           e.stopPropagation();
                           window.location.href = '/api/bulk/export';
                         }}
                       >
-                        <Download className="h-3 w-3 mr-1.5" /> Export Data
+                        <Download className="h-3 w-3 mr-1.5 shrink-0" /> Export
                       </Button>
-                      <div className="h-8 w-8 rounded-full bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary/10 transition-colors">
+                      <div className="h-8 w-8 rounded-full bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary/10 transition-colors shrink-0 ml-2">
                         <ArrowRight className="h-3.5 w-3.5" />
                       </div>
                     </div>

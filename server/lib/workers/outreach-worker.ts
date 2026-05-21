@@ -15,7 +15,9 @@ import { sendEmail } from '../channels/email.js';
 import { workerHealthMonitor } from '../monitoring/worker-health.js';
 import OpenAI from 'openai';
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const openai = process.env.OPENAI_API_KEY 
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 interface UserWithEmail {
   id: string;
@@ -83,27 +85,29 @@ Return JSON only:
   "body": "..."
 }`;
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are a cold email expert. Return only valid JSON." },
-        { role: "user", content: prompt }
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.8
-    });
+  if (openai) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: "You are a cold email expert. Return only valid JSON." },
+          { role: "user", content: prompt }
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0.8
+      });
 
-    const content = response.choices[0].message.content;
-    if (content) {
-      const parsed = JSON.parse(content);
-      return {
-        subject: parsed.subject || `Quick question, ${firstName}`,
-        body: parsed.body || `Hey ${firstName},\n\nWanted to reach out about something that might help ${leadCompany || 'your business'}.\n\nWould love to share a quick idea - mind if I send it over?\n\nBest,\n${businessName}`
-      };
+      const content = response.choices[0].message.content;
+      if (content) {
+        const parsed = JSON.parse(content);
+        return {
+          subject: parsed.subject || `Quick question, ${firstName}`,
+          body: parsed.body || `Hey ${firstName},\n\nWanted to reach out about something that might help ${leadCompany || 'your business'}.\n\nWould love to share a quick idea - mind if I send it over?\n\nBest,\n${businessName}`
+        };
+      }
+    } catch (error) {
+      console.error('[AutoOutreach] AI generation error:', error);
     }
-  } catch (error) {
-    console.error('[AutoOutreach] AI generation error:', error);
   }
 
   // Fallback template
@@ -190,25 +194,25 @@ export class AutonomousOutreachWorker {
         return; // No users with email integrations
       }
 
-      const uniqueUserIds = [...new Set(usersWithEmail.map(u => u.userId))];
+      const uniqueUserIds = [...new Set(usersWithEmail.map((u: { userId: string }) => u.userId))];
       
       for (const userId of uniqueUserIds) {
         // Skip if this user is already being processed
-        if (this.activeOutreachQueue.has(userId)) {
+        if (this.activeOutreachQueue.has(userId as string)) {
           continue;
         }
 
         // Find uncontacted leads for this user
-        const uncontactedLeads = await this.getUncontactedLeads(userId);
+        const uncontactedLeads = await this.getUncontactedLeads(userId as string);
 
         if (uncontactedLeads.length > 0) {
           console.log(`[AutoOutreach] User ${userId} has ${uncontactedLeads.length} uncontacted leads`);
           
           // Mark user as being processed
-          this.activeOutreachQueue.set(userId, true);
+          this.activeOutreachQueue.set(userId as string, true);
           
           // Process leads asynchronously with delays
-          this.processLeadsWithDelay(userId, uncontactedLeads);
+          this.processLeadsWithDelay(userId as string, uncontactedLeads);
         }
       }
 
@@ -266,18 +270,18 @@ export class AutonomousOutreachWorker {
           .limit(1);
 
         // Check if already marked as outreach_sent in metadata
-        const metadata = (lead.metadata as Record<string, unknown>) || {};
+        const metadata = (lead.metadata as Record<string, any>) || {};
         const alreadySent = metadata.outreach_sent === true;
 
         if (existingMessages.length === 0 && !alreadySent) {
           uncontactedLeads.push({
             id: lead.id,
             name: lead.name,
-            email: lead.email,
-            channel: lead.channel,
-            status: lead.status,
+            email: lead.email as string,
+            channel: lead.channel as string,
+            status: lead.status as string,
             metadata: metadata,
-            userId: lead.userId,
+            userId: lead.userId as string,
           });
         }
       }

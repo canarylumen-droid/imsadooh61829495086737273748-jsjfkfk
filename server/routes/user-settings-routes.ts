@@ -301,7 +301,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
       return;
     }
 
-    const { meetingLink, brandContext } = req.body;
+    const { meetingLink, brandContext, calendarLink, brandGuidelinePdfUrl, brandGuidelinePdfText } = req.body;
 
     await db.execute(sql`
       INSERT INTO user_settings (user_id, meeting_link, brand_context)
@@ -311,6 +311,13 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
         brand_context = ${brandContext || '{}'},
         updated_at = NOW()
     `);
+
+    // Update user table for main fields
+    await storage.updateUser(userId, {
+      calendarLink: calendarLink,
+      brandGuidelinePdfUrl: brandGuidelinePdfUrl,
+      brandGuidelinePdfText: brandGuidelinePdfText
+    });
 
     res.json({ success: true, message: 'Profile settings saved' });
   } catch (error) {

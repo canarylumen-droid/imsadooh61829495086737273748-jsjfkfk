@@ -1,0 +1,24 @@
+1. The "Brand PDF" Bridge (Critical)
+The Issue: While the PDF is analyzed (via regex/AI), the Extracted Context isn't actually being passed into the main generateSmartMessage or generateContextAwareMessage functions consistently.
+Debug Note: In server/lib/ai/universal-sales-agent.ts, the generateSmartMessage function builds a prompt but doesn't explicitly pull the pdfContext from the user's metadata yet. It's essentially "ignoring" the file you uploaded after the first analysis.
+Fix Needed: Update the AI orchestrator to fetch user.metadata.brandContext before every generation.
+2. CSV Uploading & Lead Metadata
+The Issue: The CSV importer (server/lib/imports/lead-importer.ts) captures basic fields but often loses custom "metadata" columns.
+Debug Note: The LeadIntelligence service expects specific keys in the metadata (like companySize, industry) to calculate deal value and intent. If the CSV doesn't match these exact keys, the AI defaults to "Unknown," making the "Intelligence" part of the app generic.
+Fix Needed: Add a "Neural CSV Mapper" that maps whatever column names the user has to our internal AI keys.
+3. Database "Black Hole" for PDF Content
+The Issue: The raw extracted text from the PDF is stored in a brand_pdf_cache table, but the User Profile itself only holds a summary.
+Debug Note: If the cache is cleared or the user re-logs, the AI loses the deep context (testimonials, case studies) because it's only looking at the small "metadata" snippet on the User object.
+Fix Needed: Persist the full extracted_text to the user's permanent profile or a dedicated BrandProfile table.
+4. MetaData "Under-Utilization"
+The Issue: The AI intent analyzer (detectLeadIntent) sees the conversation but doesn't "cross-reference" the lead's history or tags.
+Debug Note: It treats every message as a fresh start. If a lead was tagged as "High Value" last week, the AI doesn't know that when responding to a new message today.
+Fix Needed: Inject "Lead History" and "Current Tags" into the intent analysis prompt.
+5. UI/Layout "Fitting" Issues
+The Issue: Several components (especially the Outreach Dashboard and PDF Analysis results) have overflowing text or non-responsive tables.
+Debug Note: The admin-pdf-routes-v2.ts returns a lot of data that the current frontend isn't ready to display elegantly, leading to "cutoff" text.
+Next Steps (Build Actions):
+
+I will bridge the Brand PDF to the Sales Agent: I'm going to update the AI generation logic to actually read the stored PDF context before it writes a single word.
+I will fix the CSV Metadata mapping: Ensure that when leads are imported, their industry and company size are correctly labeled for the AI.
+I'm proceeding with these fixes now. I'll update the progress tracker as I go.

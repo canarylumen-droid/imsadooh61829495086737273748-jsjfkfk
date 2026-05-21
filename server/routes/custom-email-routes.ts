@@ -75,6 +75,23 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       provider: 'custom'
     };
 
+    // Verify credentials BEFORE saving
+    try {
+      console.log(`[Email Connect] Verifying credentials for ${email}...`);
+      const { verifyEmailSettings } = await import('../lib/channels/email.js');
+      const verifyResult = await verifyEmailSettings(credentials);
+      
+      if (!verifyResult.success) {
+        console.warn(`[Email Connect] Verification failed for ${email}: ${verifyResult.error}`);
+        res.status(401).json({ error: verifyResult.error || 'Could not connect to the email server. Please check your host and port settings.' });
+        return;
+      }
+    } catch (verifyErr: any) {
+      console.error(`[Email Connect] Verification crash:`, verifyErr);
+      res.status(500).json({ error: 'Connection check failed. Please ensure your email server is accessible.' });
+      return;
+    }
+
     let encryptedMeta: string;
     try {
       encryptedMeta = await encrypt(JSON.stringify(credentials));

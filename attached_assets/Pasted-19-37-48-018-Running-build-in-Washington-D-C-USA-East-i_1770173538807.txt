@@ -1,0 +1,291 @@
+19:37:48.018 Running build in Washington, D.C., USA (East) – iad1
+19:37:48.019 Build machine configuration: 2 cores, 8 GB
+19:37:48.147 Cloning github.com/canarylumen-droid/audnix-ai-project (Branch: main, Commit: d67d56c)
+19:37:49.549 Cloning completed: 1.402s
+19:37:49.641 Found .vercelignore
+19:37:49.652 Removed 2 ignored files defined in .vercelignore
+19:37:49.652   /.replit
+19:37:49.652   /.vscode/settings.json
+19:37:49.793 Restored build cache from previous deployment (Fbc2weeLhUAQEsFvviCakezfpoFW)
+19:37:50.097 Running "vercel build"
+19:37:50.974 Vercel CLI 50.9.6
+19:37:51.667 Running "install" command: `npm install --legacy-peer-deps`...
+19:37:51.944 npm warn config optional Use `--omit=optional` to exclude optional dependencies, or
+19:37:51.944 npm warn config `--include=optional` to include them.
+19:37:51.944 npm warn config
+19:37:51.945 npm warn config       Default value does install optional deps unless otherwise omitted.
+19:37:54.633 
+19:37:54.633 up to date, audited 1105 packages in 3s
+19:37:54.633 
+19:37:54.633 144 packages are looking for funding
+19:37:54.634   run `npm fund` for details
+19:37:54.645 
+19:37:54.645 8 vulnerabilities (2 moderate, 6 high)
+19:37:54.646 
+19:37:54.646 To address issues that do not require attention, run:
+19:37:54.646   npm audit fix
+19:37:54.646 
+19:37:54.646 Some issues need review, and may require choosing
+19:37:54.647 a different dependency.
+19:37:54.647 
+19:37:54.647 Run `npm audit` for details.
+19:37:54.849 npm warn config optional Use `--omit=optional` to exclude optional dependencies, or
+19:37:54.850 npm warn config `--include=optional` to include them.
+19:37:54.850 npm warn config
+19:37:54.850 npm warn config       Default value does install optional deps unless otherwise omitted.
+19:37:54.873 
+19:37:54.874 > rest-express@1.0.0 build
+19:37:54.874 > vite build && node scripts/migrate-manual.js
+19:37:54.874 
+19:37:55.222 [36mvite v6.4.1 [32mbuilding for production...[36m[39m
+19:37:55.293 transforming...
+19:37:57.021 
+19:37:57.022 [1m[33mwarn[39m[22m - The class `ease-[cubic-bezier(0.16,1,0.3,1)]` is ambiguous and matches multiple utilities.
+19:37:57.022 [1m[33mwarn[39m[22m - If this is content and not a class, replace it with `ease-&lsqb;cubic-bezier(0.16,1,0.3,1)&rsqb;` to silence this warning.
+19:37:57.435 
+19:37:57.436 A PostCSS plugin did not pass the `from` option to `postcss.parse`. This may cause imported assets to be incorrectly transformed. If you've recently added a PostCSS plugin that raised this warning, please contact the package author to fix the issue.
+19:37:57.438 
+19:37:57.438 /grid.svg referenced in /grid.svg didn't resolve at build time, it will remain unchanged to be resolved at runtime
+19:38:06.714 [32m✓[39m 3233 modules transformed.
+19:38:07.457 rendering chunks...
+19:38:08.316 computing gzip size...
+19:38:08.429 [2m../dist/public/[22m[32mindex.html                                   [39m[1m[2m    4.01 kB[22m[1m[22m[2m │ gzip:   1.58 kB[22m
+19:38:08.429 [2m../dist/public/[22m[2massets/[22m[35mindex-BbZA08sQ.css                    [39m[1m[2m  205.18 kB[22m[1m[22m[2m │ gzip:  28.96 kB[22m
+19:38:08.430 [2m../dist/public/[22m[2massets/[22m[36mindex-zWLWarWw.js                     [39m[1m[2m    0.23 kB[22m[1m[22m[2m │ gzip:   0.17 kB[22m
+19:38:08.430 [2m../dist/public/[22m[2massets/[22m[36mskeleton-Bz29BaXr.js                  [39m[1m[2m    0.28 kB[22m[1m[22m[2m │ gzip:   0.24 kB[22m
+19:38:08.430 [2m../dist/public/[22m[2massets/[22m[36mchevron-up-DsrYeATD.js                [39m[1m[2m    0.30 kB[22m[1m[22m[2m │ gzip:   0.25 kB[22m
+19:38:08.430 [2m../dist/public/[22m[2massets/[22m[36mfilter-DWffsZuJ.js                    [39m[1m[2m    0.33 kB[22m[1m[22m[2m │ gzip:   0.26 kB[22m
+19:38:08.431 [2m../dist/public/[22m[2massets/[22m[36marrow-right-BThcCG7L.js               [39m[1m[2m    0.33 kB[22m[1m[22m[2m │ gzip:   0.27 kB[22m
+19:38:08.431 [2m../dist/public/[22m[2massets/[22m[36mcode-Cr1b3OBr.js                      [39m[1m[2m    0.35 kB[22m[1m[22m[2m │ gzip:   0.27 kB[22m
+19:38:08.431 [2m../dist/public/[22m[2massets/[22m[36mcircle-check-big-Cc674xmt.js          [39m[1m[2m    0.36 kB[22m[1m[22m[2m │ gzip:   0.28 kB[22m
+19:38:08.431 [2m../dist/public/[22m[2massets/[22m[36mterminal-XEJLnmvS.js                  [39m[1m[2m    0.36 kB[22m[1m[22m[2m │ gzip:   0.28 kB[22m
+19:38:08.432 [2m../dist/public/[22m[2massets/[22m[36msmartphone-DRJ2mCg5.js                [39m[1m[2m    0.37 kB[22m[1m[22m[2m │ gzip:   0.29 kB[22m
+19:38:08.432 [2m../dist/public/[22m[2massets/[22m[36mcircle-x-BnhFLFGz.js                  [39m[1m[2m    0.37 kB[22m[1m[22m[2m │ gzip:   0.28 kB[22m
+19:38:08.432 [2m../dist/public/[22m[2massets/[22m[36mtrending-up-CZpaQGDv.js               [39m[1m[2m    0.37 kB[22m[1m[22m[2m │ gzip:   0.28 kB[22m
+19:38:08.432 [2m../dist/public/[22m[2massets/[22m[36mdollar-sign-BNKKvVq4.js               [39m[1m[2m    0.39 kB[22m[1m[22m[2m │ gzip:   0.30 kB[22m
+19:38:08.433 [2m../dist/public/[22m[2massets/[22m[36mtarget-DiRLWpD5.js                    [39m[1m[2m    0.39 kB[22m[1m[22m[2m │ gzip:   0.26 kB[22m
+19:38:08.433 [2m../dist/public/[22m[2massets/[22m[36mvideo-BJ7BsN2j.js                     [39m[1m[2m    0.42 kB[22m[1m[22m[2m │ gzip:   0.32 kB[22m
+19:38:08.439 [2m../dist/public/[22m[2massets/[22m[36mlinkedin-C3sYNSNX.js                  [39m[1m[2m    0.46 kB[22m[1m[22m[2m │ gzip:   0.34 kB[22m
+19:38:08.440 [2m../dist/public/[22m[2massets/[22m[36minstagram-C528_4Ft.js                 [39m[1m[2m    0.47 kB[22m[1m[22m[2m │ gzip:   0.34 kB[22m
+19:38:08.440 [2m../dist/public/[22m[2massets/[22m[36musers-D47zgTAX.js                     [39m[1m[2m    0.47 kB[22m[1m[22m[2m │ gzip:   0.32 kB[22m
+19:38:08.442 [2m../dist/public/[22m[2massets/[22m[36mrefresh-cw-BMsOixTM.js                [39m[1m[2m    0.49 kB[22m[1m[22m[2m │ gzip:   0.33 kB[22m
+19:38:08.442 [2m../dist/public/[22m[2massets/[22m[36mbot-DA8awKDf.js                       [39m[1m[2m    0.50 kB[22m[1m[22m[2m │ gzip:   0.33 kB[22m
+19:38:08.443 [2m../dist/public/[22m[2massets/[22m[36mcrown-L6RUUFGl.js                     [39m[1m[2m    0.53 kB[22m[1m[22m[2m │ gzip:   0.36 kB[22m
+19:38:08.443 [2m../dist/public/[22m[2massets/[22m[36mlayers-kYQ3k8md.js                    [39m[1m[2m    0.53 kB[22m[1m[22m[2m │ gzip:   0.34 kB[22m
+19:38:08.443 [2m../dist/public/[22m[2massets/[22m[36munplug-D2ppOQxf.js                    [39m[1m[2m    0.61 kB[22m[1m[22m[2m │ gzip:   0.37 kB[22m
+19:38:08.443 [2m../dist/public/[22m[2massets/[22m[36mtextarea-BLw5VjOE.js                  [39m[1m[2m    0.61 kB[22m[1m[22m[2m │ gzip:   0.40 kB[22m
+19:38:08.443 [2m../dist/public/[22m[2massets/[22m[36mplay-BM6gDutM.js                      [39m[1m[2m    0.63 kB[22m[1m[22m[2m │ gzip:   0.32 kB[22m
+19:38:08.444 [2m../dist/public/[22m[2massets/[22m[36mcpu-7NwYMJZd.js                       [39m[1m[2m    0.67 kB[22m[1m[22m[2m │ gzip:   0.36 kB[22m
+19:38:08.444 [2m../dist/public/[22m[2massets/[22m[36muse-access-gate-BuOpnAkA.js           [39m[1m[2m    0.77 kB[22m[1m[22m[2m │ gzip:   0.43 kB[22m
+19:38:08.444 [2m../dist/public/[22m[2massets/[22m[36mlightbulb-D0mzAlqS.js                 [39m[1m[2m    0.85 kB[22m[1m[22m[2m │ gzip:   0.42 kB[22m
+19:38:08.444 [2m../dist/public/[22m[2massets/[22m[36mlabel-D_91wT9i.js                     [39m[1m[2m    1.03 kB[22m[1m[22m[2m │ gzip:   0.65 kB[22m
+19:38:08.444 [2m../dist/public/[22m[2massets/[22m[36mplan-utils-CTTMCZum.js                [39m[1m[2m    2.70 kB[22m[1m[22m[2m │ gzip:   1.16 kB[22m
+19:38:08.444 [2m../dist/public/[22m[2massets/[22m[36mswitch-cg66dPgk.js                    [39m[1m[2m    2.71 kB[22m[1m[22m[2m │ gzip:   1.33 kB[22m
+19:38:08.445 [2m../dist/public/[22m[2massets/[22m[36mtabs-ByzV_y3A.js                      [39m[1m[2m    3.54 kB[22m[1m[22m[2m │ gzip:   1.44 kB[22m
+19:38:08.445 [2m../dist/public/[22m[2massets/[22m[36mprogress-Cz2kyHQF.js                  [39m[1m[2m    3.56 kB[22m[1m[22m[2m │ gzip:   1.65 kB[22m
+19:38:08.445 [2m../dist/public/[22m[2massets/[22m[36mFounders-BZ7Isv3B.js                  [39m[1m[2m    3.92 kB[22m[1m[22m[2m │ gzip:   2.02 kB[22m
+19:38:08.445 [2m../dist/public/[22m[2massets/[22m[36mAgencies-DV-5h51T.js                  [39m[1m[2m    4.31 kB[22m[1m[22m[2m │ gzip:   2.27 kB[22m
+19:38:08.445 [2m../dist/public/[22m[2massets/[22m[36mCreators-DLAwD_Qp.js                  [39m[1m[2m    4.41 kB[22m[1m[22m[2m │ gzip:   2.28 kB[22m
+19:38:08.445 [2m../dist/public/[22m[2massets/[22m[36mtable-qnHlBxMn.js                     [39m[1m[2m    4.83 kB[22m[1m[22m[2m │ gzip:   1.51 kB[22m
+19:38:08.446 [2m../dist/public/[22m[2massets/[22m[36mCartesianGrid-Bkr98cOK.js             [39m[1m[2m    6.77 kB[22m[1m[22m[2m │ gzip:   2.36 kB[22m
+19:38:08.446 [2m../dist/public/[22m[2massets/[22m[36mchart-BhgtdOAa.js                     [39m[1m[2m    6.90 kB[22m[1m[22m[2m │ gzip:   2.16 kB[22m
+19:38:08.446 [2m../dist/public/[22m[2massets/[22m[36mAdminLayout-CzkxPOuV.js               [39m[1m[2m    7.39 kB[22m[1m[22m[2m │ gzip:   1.66 kB[22m
+19:38:08.446 [2m../dist/public/[22m[2massets/[22m[36men-US-CXXYYhpC.js                     [39m[1m[2m    7.70 kB[22m[1m[22m[2m │ gzip:   2.69 kB[22m
+19:38:08.446 [2m../dist/public/[22m[2massets/[22m[36mCustomIcons-DhHsSOzp.js               [39m[1m[2m    7.70 kB[22m[1m[22m[2m │ gzip:   2.22 kB[22m
+19:38:08.446 [2m../dist/public/[22m[2massets/[22m[36mapi-docs-DZpL-rRv.js                  [39m[1m[2m    8.59 kB[22m[1m[22m[2m │ gzip:   1.97 kB[22m
+19:38:08.447 [2m../dist/public/[22m[2massets/[22m[36mslider-i0SjIXGJ.js                    [39m[1m[2m    8.74 kB[22m[1m[22m[2m │ gzip:   3.46 kB[22m
+19:38:08.447 [2m../dist/public/[22m[2massets/[22m[36mDocumentationLayout-C6zEjt9z.js       [39m[1m[2m   10.86 kB[22m[1m[22m[2m │ gzip:   2.34 kB[22m
+19:38:08.447 [2m../dist/public/[22m[2massets/[22m[36mLineChart-B971zIri.js                 [39m[1m[2m   11.13 kB[22m[1m[22m[2m │ gzip:   4.29 kB[22m
+19:38:08.447 [2m../dist/public/[22m[2massets/[22m[36moutreach-playbooks-Cb7-uap2.js        [39m[1m[2m   11.42 kB[22m[1m[22m[2m │ gzip:   2.42 kB[22m
+19:38:08.447 [2m../dist/public/[22m[2massets/[22m[36mpricing-hEbZVOlM.js                   [39m[1m[2m   11.93 kB[22m[1m[22m[2m │ gzip:   2.59 kB[22m
+19:38:08.447 [2m../dist/public/[22m[2massets/[22m[36mCookieConsent-PwbvdI0U.js             [39m[1m[2m   12.07 kB[22m[1m[22m[2m │ gzip:   4.61 kB[22m
+19:38:08.447 [2m../dist/public/[22m[2massets/[22m[36mleads-O6ZDN3tS.js                     [39m[1m[2m   12.29 kB[22m[1m[22m[2m │ gzip:   2.08 kB[22m
+19:38:08.448 [2m../dist/public/[22m[2massets/[22m[36mniche-vault-ClQ5RpgE.js               [39m[1m[2m   12.63 kB[22m[1m[22m[2m │ gzip:   3.19 kB[22m
+19:38:08.448 [2m../dist/public/[22m[2massets/[22m[36mindex-DbkrcXtg.js                     [39m[1m[2m   15.60 kB[22m[1m[22m[2m │ gzip:   2.52 kB[22m
+19:38:08.448 [2m../dist/public/[22m[2massets/[22m[36mobjections-library-PDZhj7Qb.js        [39m[1m[2m   15.79 kB[22m[1m[22m[2m │ gzip:   3.69 kB[22m
+19:38:08.448 [2m../dist/public/[22m[2massets/[22m[36minsights-ChyokZxD.js                  [39m[1m[2m   17.49 kB[22m[1m[22m[2m │ gzip:   3.57 kB[22m
+19:38:08.448 [2m../dist/public/[22m[2massets/[22m[36msettings-C2-UZa0K.js                  [39m[1m[2m   19.44 kB[22m[1m[22m[2m │ gzip:   4.36 kB[22m
+19:38:08.448 [2m../dist/public/[22m[2massets/[22m[36msales-assistant-DGgM2f1K.js           [39m[1m[2m   20.78 kB[22m[1m[22m[2m │ gzip:   4.17 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36mdeals-KxIYWuLw.js                     [39m[1m[2m   21.27 kB[22m[1m[22m[2m │ gzip:   3.96 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36mNavigation-CkWo6F0Q.js                [39m[1m[2m   21.31 kB[22m[1m[22m[2m │ gzip:   3.48 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36musers-oiI3-3zE.js                     [39m[1m[2m   21.64 kB[22m[1m[22m[2m │ gzip:   3.43 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36mcontent-library-nIMMCGx4.js           [39m[1m[2m   23.05 kB[22m[1m[22m[2m │ gzip:   4.46 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36msettings-BGNdnRLn.js                  [39m[1m[2m   23.63 kB[22m[1m[22m[2m │ gzip:   4.27 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36mselect-U6x3R4zF.js                    [39m[1m[2m   24.72 kB[22m[1m[22m[2m │ gzip:   8.07 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36mcompare-ZmKoNJkB.js                   [39m[1m[2m   25.70 kB[22m[1m[22m[2m │ gzip:   7.55 kB[22m
+19:38:08.449 [2m../dist/public/[22m[2massets/[22m[36manalytics-IAYdEhrb.js                 [39m[1m[2m   25.84 kB[22m[1m[22m[2m │ gzip:   7.19 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36mcloser-engine-DD0VWQkT.js             [39m[1m[2m   27.22 kB[22m[1m[22m[2m │ gzip:   4.98 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36mautomation-builder-BH7KZxQk.js        [39m[1m[2m   27.24 kB[22m[1m[22m[2m │ gzip:   3.93 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36mSolutionPageTemplate-BQA9qIYA.js      [39m[1m[2m   29.78 kB[22m[1m[22m[2m │ gzip:   4.66 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36mai-decisions-BOZfNtA8.js              [39m[1m[2m   32.66 kB[22m[1m[22m[2m │ gzip:   6.61 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36mvideo-automation-CIt7X2U7.js          [39m[1m[2m   33.38 kB[22m[1m[22m[2m │ gzip:   6.58 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36mlead-import-C998BzB-.js               [39m[1m[2m   35.41 kB[22m[1m[22m[2m │ gzip:   6.71 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36mfind-leads-CohS1JF1.js                [39m[1m[2m   37.32 kB[22m[1m[22m[2m │ gzip:   7.25 kB[22m
+19:38:08.450 [2m../dist/public/[22m[2massets/[22m[36manalytics-DJ9zFnKB.js                 [39m[1m[2m   38.31 kB[22m[1m[22m[2m │ gzip:   9.05 kB[22m
+19:38:08.451 [2m../dist/public/[22m[2massets/[22m[36mprospecting-B3XcPeDI.js               [39m[1m[2m   40.01 kB[22m[1m[22m[2m │ gzip:   7.57 kB[22m
+19:38:08.451 [2m../dist/public/[22m[2massets/[22m[36mcalendar-D7Vb6K4n.js                  [39m[1m[2m   41.17 kB[22m[1m[22m[2m │ gzip:   6.54 kB[22m
+19:38:08.451 [2m../dist/public/[22m[2massets/[22m[36mintegrations-DL16D-5u.js              [39m[1m[2m   43.05 kB[22m[1m[22m[2m │ gzip:   9.12 kB[22m
+19:38:08.451 [2m../dist/public/[22m[2massets/[22m[36minbox-BKiIURwj.js                     [39m[1m[2m   47.94 kB[22m[1m[22m[2m │ gzip:   8.60 kB[22m
+19:38:08.451 [2m../dist/public/[22m[2massets/[22m[36mhome-By0jSMnl.js                      [39m[1m[2m   68.18 kB[22m[1m[22m[2m │ gzip:  15.03 kB[22m
+19:38:08.451 [2m../dist/public/[22m[2massets/[22m[36mlanding-BglFonRl.js                   [39m[1m[2m  251.89 kB[22m[1m[22m[2m │ gzip:  68.38 kB[22m
+19:38:08.451 [2m../dist/public/[22m[2massets/[22m[36mgenerateCategoricalChart-HFkRqm8B.js  [39m[1m[2m  392.32 kB[22m[1m[22m[2m │ gzip: 109.59 kB[22m
+19:38:08.452 [2m../dist/public/[22m[2massets/[22m[36mindex-CfAXIEck.js                     [39m[1m[33m1,085.40 kB[39m[22m[2m │ gzip: 286.74 kB[22m
+19:38:08.452 [2m../dist/public/[22m[2massets/[22m[36mauth--n5urV5S.js                      [39m[1m[33m1,731.46 kB[39m[22m[2m │ gzip: 803.87 kB[22m
+19:38:08.452 [32m✓ built in 13.18s[39m
+19:38:08.452 [33m
+19:38:08.452 (!) Some chunks are larger than 500 kB after minification. Consider:
+19:38:08.452 - Using dynamic import() to code-split the application
+19:38:08.452 - Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+19:38:08.453 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+19:38:08.573 🔌 Connecting to CORRECT database (ep-wispy-frost)...
+19:38:08.623 ✅ Connected successfully at: 2026-02-03T18:38:08.639Z
+19:38:08.624 📦 Found 37 migrations
+19:38:08.624 🚀 Running 0000_fancy_liz_osborn.sql...
+19:38:08.628    ℹ️  Skipped (already exists)
+19:38:08.628 🚀 Running 0002_spicy_mandrill.sql...
+19:38:08.648    ℹ️  Skipped (already exists)
+19:38:08.648 🚀 Running 000_SETUP_SUPABASE.sql...
+19:38:08.675    ℹ️  Skipped (already exists)
+19:38:08.675 🚀 Running 001_create_users.sql...
+19:38:08.701    ✅ Success
+19:38:08.701 🚀 Running 002_audnix_schema.sql...
+19:38:08.829    ℹ️  Skipped (already exists)
+19:38:08.829 🚀 Running 003_production_upgrade.sql...
+19:38:08.849    ✅ Success
+19:38:08.850 🚀 Running 004_add_user_fields.sql...
+19:38:08.853    ✅ Success
+19:38:08.853 🚀 Running 005_voice_minutes_migration.sql...
+19:38:08.858    ✅ Success
+19:38:08.859 🚀 Running 006_comment_automation.sql...
+19:38:08.870    ✅ Success
+19:38:08.870 🚀 Running 007_video_monitors.sql...
+19:38:08.873    ✅ Success
+19:38:08.874 🚀 Running 009_onboarding_profiles.sql...
+19:38:08.879    ✅ Success
+19:38:08.880 🚀 Running 010_add_user_metadata.sql...
+19:38:08.882    ✅ Success
+19:38:08.882 🚀 Running 011_create_oauth_accounts.sql...
+19:38:08.884    ✅ Success
+19:38:08.885 🚀 Running 012_create_otp_codes.sql...
+19:38:08.886    ✅ Success
+19:38:08.887 🚀 Running 013_fix_deals_status_enum.sql...
+19:38:08.889    ✅ Success
+19:38:08.890 🚀 Running 014_admin_whitelist.sql...
+19:38:08.892    ✅ Success
+19:38:08.895 🚀 Running 015_admin_analytics.sql...
+19:38:08.973    ✅ Success
+19:38:08.973 🚀 Running 016_add_password_field.sql...
+19:38:08.975    ✅ Success
+19:38:08.976 🚀 Running 017_add_payment_tracking.sql...
+19:38:08.979    ✅ Success
+19:38:08.980 🚀 Running 018_add_subscription_tier.sql...
+19:38:08.982    ✅ Success
+19:38:08.982 🚀 Running 019_sync_schema_columns.sql...
+19:38:08.988    ✅ Success
+19:38:08.988 🚀 Running 020_add_otp_passwordhash.sql...
+19:38:08.991    ✅ Success
+19:38:08.991 🚀 Running 021_fix_integrations_provider_check.sql...
+19:38:08.994    ✅ Success
+19:38:08.994 🚀 Running 022_calendar_video_automation.sql...
+19:38:08.997    ✅ Success
+19:38:08.998 🚀 Running 022_remove_whatsapp_rest.sql...
+19:38:09.001    ✅ Success
+19:38:09.001 🚀 Running 023_automation_rules_content_library.sql...
+19:38:09.004    ✅ Success
+19:38:09.004 🚀 Running 024_add_rule_type_column.sql...
+19:38:09.008    ✅ Success
+19:38:09.009 🚀 Running 025_brand_pdf_cache.sql...
+19:38:09.012    ✅ Success
+19:38:09.012 🚀 Running 026_user_settings_smtp.sql...
+19:38:09.015    ✅ Success
+19:38:09.016 🚀 Running 027_seed_objections_library.sql...
+19:38:09.039    ✅ Success
+19:38:09.039 🚀 Running 028_add_prospecting_engine.sql...
+19:38:09.042    ✅ Success
+19:38:09.042 🚀 Running 029_latest_updates.sql...
+19:38:09.044    ℹ️  Skipped (already exists)
+19:38:09.045 🚀 Running 030_complete_schema.sql...
+19:38:09.074    ✅ Success
+19:38:09.074 🚀 Running 031_sync_social_automation.sql...
+19:38:09.095    ✅ Success
+19:38:09.095 🚀 Running 032_fix_schema_mismatches.sql...
+19:38:09.111    ✅ Success
+19:38:09.111 🚀 Running 033_add_filtered_leads_count.sql...
+19:38:09.114    ✅ Success
+19:38:09.114 🚀 Running 034_add_company_column.sql...
+19:38:09.122    ✅ Success
+19:38:09.123 ✨ All migrations processed
+19:38:09.123 🔍 Verifying schema...
+19:38:09.126 📊 Found 48 tables:
+19:38:09.126  - admin_whitelist
+19:38:09.126  - ai_action_logs
+19:38:09.126  - api_keys
+19:38:09.126  - audit_trail
+19:38:09.126  - automation_rules
+19:38:09.126  - automations
+19:38:09.126  - bounce_tracker
+19:38:09.126  - brand_embeddings
+19:38:09.126  - brand_pdf_cache
+19:38:09.126  - calendar_bookings
+19:38:09.127  - calendar_events
+19:38:09.127  - calendar_settings
+19:38:09.127  - content_library
+19:38:09.127  - conversation_events
+19:38:09.127  - deals
+19:38:09.127  - email_warmup_schedules
+19:38:09.127  - follow_up_queue
+19:38:09.127  - insights
+19:38:09.127  - integrations
+19:38:09.127  - leads
+19:38:09.127  - messages
+19:38:09.127  - notifications
+19:38:09.127  - oauth_accounts
+19:38:09.127  - oauth_tokens
+19:38:09.127  - onboarding_profiles
+19:38:09.127  - organizations
+19:38:09.127  - otp_codes
+19:38:09.127  - payment_approvals
+19:38:09.127  - payments
+19:38:09.127  - pdf_analytics
+19:38:09.127  - playing_with_neon
+19:38:09.127  - processed_comments
+19:38:09.127  - prospects
+19:38:09.127  - revenue_events
+19:38:09.127  - scraping_sessions
+19:38:09.127  - semantic_memory
+19:38:09.127  - system_metrics
+19:38:09.127  - team_members
+19:38:09.127  - upload_rate_limit
+19:38:09.127  - usage_topups
+19:38:09.127  - user_activity_log
+19:38:09.127  - user_sessions
+19:38:09.127  - user_settings
+19:38:09.128  - users
+19:38:09.128  - video_assets
+19:38:09.128  - video_monitors
+19:38:09.128  - voice_settings
+19:38:09.128  - webhooks
+19:38:09.172 Installing dependencies...
+19:38:09.295 npm warn config optional Use `--omit=optional` to exclude optional dependencies, or
+19:38:09.295 npm warn config `--include=optional` to include them.
+19:38:09.295 npm warn config
+19:38:09.295 npm warn config       Default value does install optional deps unless otherwise omitted.
+19:38:10.840 
+19:38:10.841 up to date in 2s
+19:38:10.842 
+19:38:10.842 144 packages are looking for funding
+19:38:10.842   run `npm fund` for details
+19:38:11.090 Using TypeScript 5.6.3 (local user-provided)
+19:38:34.267 server/lib/workers/outreach-worker.ts(193,60): error TS7006: Parameter 'u' implicitly has an 'any' type.
+19:38:34.268 server/lib/workers/outreach-worker.ts(197,42): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.268 server/lib/workers/outreach-worker.ts(202,65): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.271 server/lib/workers/outreach-worker.ts(208,40): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.271 server/lib/workers/outreach-worker.ts(211,38): error TS2345: Argument of type 'unknown' is not assignable to parameter of type 'string'.
+19:38:34.272 
+19:39:15.328 Build Completed in /vercel/output [1m]
+19:39:16.227 Deploying outputs...
+19:39:27.816 Deployment completed
+19:39:28.693 Creating build cache...
+19:40:14.354 Created build cache: 45.654s
+19:40:14.354 Uploading build cache [212.43 MB]
+19:40:17.994 Build cache uploaded: 3.645s

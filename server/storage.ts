@@ -378,6 +378,9 @@ export class MemStorage implements IStorage {
       createdAt: now,
       lastLogin: now,
       updatedAt: now,
+      calendarLink: insertUser.calendarLink || null,
+      brandGuidelinePdfUrl: insertUser.brandGuidelinePdfUrl || null,
+      brandGuidelinePdfText: insertUser.brandGuidelinePdfText || null,
       filteredLeadsCount: insertUser.filteredLeadsCount || 0,
     };
 
@@ -392,6 +395,9 @@ export class MemStorage implements IStorage {
     const updatedUser = {
       ...user,
       ...updates,
+      calendarLink: updates.calendarLink !== undefined ? updates.calendarLink : user.calendarLink,
+      brandGuidelinePdfUrl: updates.brandGuidelinePdfUrl !== undefined ? updates.brandGuidelinePdfUrl : user.brandGuidelinePdfUrl,
+      brandGuidelinePdfText: updates.brandGuidelinePdfText !== undefined ? updates.brandGuidelinePdfText : user.brandGuidelinePdfText,
       metadata: updates.metadata ? { ...user.metadata, ...updates.metadata } : user.metadata
     };
     this.users.set(id, updatedUser);

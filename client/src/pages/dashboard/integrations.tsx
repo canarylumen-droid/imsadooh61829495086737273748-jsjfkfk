@@ -223,6 +223,71 @@ export default function IntegrationsPage() {
 
   const [tickerTime, setTickerTime] = useState(Date.now());
 
+  // Auto-fill common email providers
+  useEffect(() => {
+    const email = customEmailConfig.email.toLowerCase();
+    if (!email.includes('@')) return;
+
+    const domain = email.split('@')[1];
+    if (!domain) return;
+
+    const providers: Record<string, any> = {
+      'gmail.com': {
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: '587',
+        imapHost: 'imap.gmail.com',
+        imapPort: '993',
+      },
+      'outlook.com': {
+        smtpHost: 'smtp-mail.outlook.com',
+        smtpPort: '587',
+        imapHost: 'outlook.office365.com',
+        imapPort: '993',
+      },
+      'hotmail.com': {
+        smtpHost: 'smtp-mail.outlook.com',
+        smtpPort: '587',
+        imapHost: 'outlook.office365.com',
+        imapPort: '993',
+      },
+      'live.com': {
+        smtpHost: 'smtp-mail.outlook.com',
+        smtpPort: '587',
+        imapHost: 'outlook.office365.com',
+        imapPort: '993',
+      },
+      'office365.com': {
+        smtpHost: 'smtp.office365.com',
+        smtpPort: '587',
+        imapHost: 'outlook.office365.com',
+        imapPort: '993',
+      },
+      'icloud.com': {
+        smtpHost: 'smtp.mail.me.com',
+        smtpPort: '587',
+        imapHost: 'imap.mail.me.com',
+        imapPort: '993',
+      },
+      'yahoo.com': {
+        smtpHost: 'smtp.mail.yahoo.com',
+        smtpPort: '465',
+        imapHost: 'imap.mail.yahoo.com',
+        imapPort: '993',
+      },
+    };
+
+    if (providers[domain]) {
+      const match = providers[domain];
+      setCustomEmailConfig(prev => ({
+        ...prev,
+        smtpHost: prev.smtpHost === '' ? match.smtpHost : prev.smtpHost,
+        smtpPort: prev.smtpPort === '587' || prev.smtpPort === '' ? match.smtpPort : prev.smtpPort,
+        imapHost: prev.imapHost === '' ? match.imapHost : prev.imapHost,
+        imapPort: prev.imapPort === '993' || prev.imapPort === '' ? match.imapPort : prev.imapPort,
+      }));
+    }
+  }, [customEmailConfig.email]);
+
   useEffect(() => {
     const timer = setInterval(() => setTickerTime(Date.now()), 47); // ~21fps for high-fidelity ticker
     return () => clearInterval(timer);
@@ -255,8 +320,19 @@ export default function IntegrationsPage() {
 
   const connectCustomEmailMutation = useMutation({
     mutationFn: async (config: typeof customEmailConfig) => {
-      const response = await apiRequest("POST", "/api/custom-email/connect", config);
-      return response.json();
+      // Use standard fetch to handle response status and get error body
+      const response = await fetch("/api/custom-email/connect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+        credentials: "include"
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to connect mailbox");
+      }
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
@@ -265,7 +341,35 @@ export default function IntegrationsPage() {
       toast({ title: "Email Connected", description: "SMTP settings saved successfully." });
     },
     onError: (error: Error) => {
-      toast({ title: "Connection Failed", description: error.message, variant: "destructive" });
+      const errorMessage = error.message;
+      const isGmail = customEmailConfig.email.toLowerCase().includes('gmail.com');
+      const isOutlook = customEmailConfig.email.toLowerCase().includes('outlook.com') || customEmailConfig.email.toLowerCase().includes('office365.com');
+      const isAuthError = errorMessage.toLowerCase().includes('app password') || 
+                         errorMessage.toLowerCase().includes('password not accepted') ||
+                         errorMessage.toLowerCase().includes('invalid login');
+
+      if ((isGmail || isOutlook) && isAuthError) {
+        toast({
+          title: 'App Password Required',
+          description: (
+            <div className="space-y-2">
+              <p>It looks like you're using {isGmail ? 'Gmail' : 'Outlook'} with 2FA enabled. You MUST use an <strong>App Password</strong>, not your regular password.</p>
+              <a 
+                href={isGmail ? "https://myaccount.google.com/apppasswords" : "https://account.microsoft.com/security"} 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-cyan-600 hover:underline font-bold block mt-2"
+              >
+                Click here to generate one →
+              </a>
+            </div>
+          ) as any,
+          variant: 'destructive',
+          duration: 15000
+        });
+      } else {
+        toast({ title: "Connection Failed", description: errorMessage, variant: "destructive", duration: 10000 });
+      }
     }
   });
 
@@ -597,12 +701,12 @@ export default function IntegrationsPage() {
                   </div>
                   <div className="flex gap-4">
                     <Button
-                      className="rounded-xl px-8 font-semibold h-11 flex-1"
+                      className="rounded-xl px-8 font-semibold h-11 flex-1 bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20"
                       disabled={connectCustomEmailMutation.isPending}
                       onClick={() => connectCustomEmailMutation.mutate(customEmailConfig)}
                     >
                       {connectCustomEmailMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      Save Configuration
+                      {connectCustomEmailMutation.isPending ? "Connecting..." : "Add Mailbox"}
                     </Button>
                     {isEditingCustomEmail && (
                       <Button variant="outline" className="rounded-xl px-8 font-semibold h-11" onClick={() => setIsEditingCustomEmail(false)}>Cancel</Button>
