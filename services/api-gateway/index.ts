@@ -510,14 +510,28 @@ async function runMigrations() {
       res.status(503).json({ status: "error", message: "Database unreachable" });
     }
   });
+
+  app.get("/metrics", async (_req, res) => {
+    try {
+      await getQueueHealthStatus();
+      const { metricsService } = await import('@shared/lib/monitoring/metrics-service.js');
+      res.set('Content-Type', metricsService.getContentType());
+      res.end(await metricsService.getMetrics());
+    } catch (error: any) {
+      res.status(500).send(error?.message || 'metrics unavailable');
+    }
+  });
   const server = await registerRoutes(app);
 
-  // Phase 8: Initialize real-time event broadcaster
-  try {
-    const { socketService } = await import('@shared/lib/realtime/socket-service.js');
-    socketService.init(server);
-  } catch (e) {
-    log(`[System] Socket.io broadcaster could not be started: ${(e as any)?.message}`, 'error');
+  // Phase 8: Initialize real-time event broadcaster unless the API is running
+  // as the API-only Railway service. Dedicated sockets boot via start:socket.
+  if (process.env.API_DISABLE_SOCKET !== 'true') {
+    try {
+      const { socketService } = await import('@shared/lib/realtime/socket-service.js');
+      socketService.init(server);
+    } catch (e) {
+      log(`[System] Socket.io broadcaster could not be started: ${(e as any)?.message}`, 'error');
+    }
   }
   
   const isProduction = process.env.NODE_ENV === "production" || !!process.env.RAILWAY_ENVIRONMENT || !!process.env.RAILWAY_PROJECT_ID;

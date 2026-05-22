@@ -39,6 +39,9 @@ class SocketService {
         credentials: true,
       },
       transports: ['websocket'],
+      pingInterval: 15000,
+      pingTimeout: 10000,
+      connectTimeout: 5000,
     });
 
     // Multi-node scaling: Connect to Redis Pub/Sub for cross-server event broadcasting
@@ -67,6 +70,17 @@ class SocketService {
       } else {
         console.log(`[SocketService] 🔌 Anonymous client connected: ${socket.id}`);
       }
+
+      socket.on('client:ready', () => {
+        socket.emit('server:ready', { timestamp: Date.now() });
+      });
+
+      socket.on('client:heartbeat', (payload?: { timestamp?: number }) => {
+        socket.emit('server:heartbeat', {
+          timestamp: Date.now(),
+          clientTimestamp: payload?.timestamp,
+        });
+      });
 
       socket.on('disconnect', () => {
         console.log(`[SocketService] 🔌 Client disconnected: ${socket.id}`);

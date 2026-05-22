@@ -10,7 +10,7 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - app
+      - api-gateway
     restart: always
 
   # --- Main API Gateway ---
@@ -58,6 +58,76 @@ services:
           memory: 512M
     restart: always
 
+  # --- IMAP Mailbox Worker ---
+  imap-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-imap-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=imap
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: always
+
+  # --- Socket.io Real-Time Server ---
+  socket-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-socket-server
+    environment:
+      - NODE_ENV=production
+      - PORT=5001
+      - APP_ROLE=socket
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "5001:5001"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: always
+
+  # --- AI Worker ---
+  ai-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-ai-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=ai
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    restart: always
+
   # --- Outreach Worker ---
   outreach-worker:
     build:
@@ -68,6 +138,102 @@ services:
     environment:
       - NODE_ENV=production
       - APP_ROLE=outreach
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    restart: always
+
+  # --- Lead Recovery Worker (Mongo-backed 90-day read-only sync) ---
+  lead-recovery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-lead-recovery-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=lead-recovery
+      - DATABASE_URL=${DATABASE_URL}
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGO_URL=${MONGO_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - ZAI_API_KEY=${ZAI_API_KEY}
+      - LEAD_RECOVERY_WORKER_POLL_MS=${LEAD_RECOVERY_WORKER_POLL_MS:-300000}
+      - LEAD_RECOVERY_MAX_MESSAGES_PER_MAILBOX=${LEAD_RECOVERY_MAX_MESSAGES_PER_MAILBOX:-500}
+      - LEAD_RECOVERY_SYSTEM_PROMPT=${LEAD_RECOVERY_SYSTEM_PROMPT}
+      - LEAD_RECOVERY_USER_PROMPT_TEMPLATE=${LEAD_RECOVERY_USER_PROMPT_TEMPLATE}
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+    restart: always
+
+  # --- Social Worker ---
+  social-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-social-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=social
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: always
+
+  # --- Billing Worker ---
+  billing-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-billing-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=billing
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: always
+
+  # --- Orchestrator Worker ---
+  orchestrator-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-orchestrator-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=orchestrator
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
     depends_on:
@@ -117,19 +283,76 @@ services:
       - redis
     restart: always
 
+  # --- Audit Worker ---
+  audit-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-audit-worker
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=audit
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: always
+
+  # --- Queue-Based Infrastructure Scaler ---
+  infra-scaler:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-infra-scaler
+    environment:
+      - NODE_ENV=production
+      - APP_ROLE=infra-scaler
+      - QUEUE_AUTOSCALER_ENABLED=true
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - RAILWAY_SCALE_WEBHOOK_TOKEN=${RAILWAY_SCALE_WEBHOOK_TOKEN}
+      - RAILWAY_SCALE_WEBHOOK_AI=${RAILWAY_SCALE_WEBHOOK_AI}
+      - RAILWAY_SCALE_WEBHOOK_SOCIAL=${RAILWAY_SCALE_WEBHOOK_SOCIAL}
+      - RAILWAY_SCALE_WEBHOOK_BILLING=${RAILWAY_SCALE_WEBHOOK_BILLING}
+      - RAILWAY_SCALE_WEBHOOK_ORCHESTRATOR=${RAILWAY_SCALE_WEBHOOK_ORCHESTRATOR}
+      - RAILWAY_SCALE_WEBHOOK_KNOWLEDGE=${RAILWAY_SCALE_WEBHOOK_KNOWLEDGE}
+      - RAILWAY_SCALE_WEBHOOK_AUDIT=${RAILWAY_SCALE_WEBHOOK_AUDIT}
+      - RAILWAY_SCALE_WEBHOOK_EMAIL=${RAILWAY_SCALE_WEBHOOK_EMAIL}
+      - RAILWAY_SCALE_WEBHOOK_IMAP=${RAILWAY_SCALE_WEBHOOK_IMAP}
+      - RAILWAY_SCALE_WEBHOOK_OUTREACH=${RAILWAY_SCALE_WEBHOOK_OUTREACH}
+      - RAILWAY_SCALE_WEBHOOK_LEAD_RECOVERY=${RAILWAY_SCALE_WEBHOOK_LEAD_RECOVERY}
+      - RAILWAY_SCALE_WEBHOOK_VECTOR_DB=${RAILWAY_SCALE_WEBHOOK_VECTOR_DB}
+    depends_on:
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    restart: always
+
   # --- Redis for Queues (BullMQ) & Locking ---
   redis:
     image: redis:7-alpine
     container_name: audnix-redis
-    command: redis-server --requirepass ${REDIS_PASSWORD:-devpassword}
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-devpassword}
+    command: redis-server --requirepass ${REDIS_PASSWORD:-devpassword} --appendonly yes --appendfsync everysec --save 60 1000
     ports:
       - "6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping"]
+      interval: 10s
+      timeout: 5s
       retries: 5
     restart: always
 
@@ -149,3 +372,4 @@ services:
 volumes:
   redis_data:
   postgres_data:
+

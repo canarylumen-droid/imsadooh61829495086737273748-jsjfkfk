@@ -29,7 +29,10 @@ class WebSocketSyncServer {
         methods: ["GET", "POST"],
         credentials: true
       },
-      path: '/socket.io'
+      path: '/socket.io',
+      pingInterval: 15000,
+      pingTimeout: 10000,
+      connectTimeout: 5000
     });
 
     // Phase 50 Fix: Multi-node scaling with Redis Adapter
@@ -61,6 +64,17 @@ class WebSocketSyncServer {
       // Join a room specific to this user
       socket.join(`user:${userId}`);
       console.log(`Socket connected: User ${userId} (${socket.id})`);
+
+      socket.on('client:ready', () => {
+        socket.emit('server:ready', { timestamp: Date.now() });
+      });
+
+      socket.on('client:heartbeat', (payload?: { timestamp?: number }) => {
+        socket.emit('server:heartbeat', {
+          timestamp: Date.now(),
+          clientTimestamp: payload?.timestamp,
+        });
+      });
 
       socket.on('disconnect', () => {
         console.log(`Socket disconnected: User ${userId} (${socket.id})`);

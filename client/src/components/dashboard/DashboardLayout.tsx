@@ -17,7 +17,6 @@ import {
   BarChart3,
   Settings,
   Shield,
-  Menu,
   X,
   Search,
   Bell,
@@ -45,7 +44,8 @@ import {
   Users,
   ShieldAlert,
   Clock,
-  Terminal
+  Terminal,
+  LifeBuoy
 } from "lucide-react";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -240,6 +240,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
       label: "Tools",
       items: [
         { label: "Inbox", icon: Inbox, path: "/dashboard/inbox" },
+        { label: "Lead Recovery", icon: LifeBuoy, path: "/dashboard/lead-recovery" },
         { label: "Pending Payments", icon: DollarSign, path: "/dashboard/pending-payments" },
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
@@ -314,21 +315,35 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
     setExpandedGroups(prev => ({ ...prev, [groupLabel]: !prev[groupLabel] }));
   }, []);
 
+  const handleOpenNavigation = useCallback(() => {
+    setSidebarCollapsed(false);
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches) {
+      setMobileMenuOpen(true);
+    }
+  }, []);
+
+  const handleNavigate = useCallback((path: string) => {
+    setLocation(path);
+    setSidebarCollapsed(true);
+    setMobileMenuOpen(false);
+  }, [setLocation]);
+
   const isPathActive = (path: string) => {
     if (path === "/dashboard") return location === "/dashboard";
     return location.startsWith(path);
   };
 
-  const renderNavItem = (item: NavItem, isLocked: boolean = false) => {
+  const renderNavItem = (item: NavItem, isLocked: boolean = false, forceExpanded: boolean = false) => {
     const Icon = item.icon;
     const isActive = isPathActive(item.path);
+    const showLabel = forceExpanded || !sidebarCollapsed;
 
     if (isLocked) {
       return (
         <div key={item.path} className="px-2 mb-1 opacity-50 cursor-not-allowed group relative">
           <div className="flex items-center gap-3 px-3 py-2 rounded-lg transition-all">
             <Lock className="h-4 w-4 text-muted-foreground" />
-            {!sidebarCollapsed && <span className="text-sm font-bold text-muted-foreground">{item.label}</span>}
+            {showLabel && <span className="text-sm font-bold text-muted-foreground">{item.label}</span>}
           </div>
         </div>
       );
@@ -338,19 +353,19 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
       <div
         key={item.path}
         data-testid={`nav-item-${item.label.toLowerCase()}`}
-        onClick={() => setLocation(item.path)}
+        onClick={() => handleNavigate(item.path)}
         className={`relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all cursor-pointer group mb-1 hover-bounce ${isActive
           ? "bg-primary/10 text-primary font-bold shadow-sm"
           : "text-muted-foreground hover:bg-white/5 dark:hover:bg-white/10 hover:text-foreground dark:hover:text-white"
           }`}
       >
         <Icon className={`h-4 w-4 transition-colors ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
-        {!sidebarCollapsed && (
+        {showLabel && (
           <span className="text-sm truncate flex-1 font-semibold">
             {item.label}
           </span>
         )}
-        {isActive && !sidebarCollapsed && (
+        {isActive && showLabel && (
           <motion.div layoutId="active-pill" className="absolute right-2 w-1.5 h-1.5 bg-primary rounded-full" />
         )}
       </div>
@@ -615,11 +630,11 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                   </div>
 
                   <DropdownMenuGroup>
-                    <DropdownMenuItem onClick={() => setLocation('/dashboard/settings')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
+                    <DropdownMenuItem onClick={() => handleNavigate('/dashboard/settings')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
                       <User className="mr-3 h-4 w-4" />
                       Profile Settings
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setLocation('/dashboard/pricing')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
+                    <DropdownMenuItem onClick={() => handleNavigate('/dashboard/pricing')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
                       <CreditCard className="mr-3 h-4 w-4" />
                       Subscription
                     </DropdownMenuItem>
@@ -642,12 +657,17 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
           {/* Top Header */}
           <header className="h-16 md:h-20 border-b border-border/10 bg-background/60 backdrop-blur-3xl flex items-center justify-between px-4 md:px-10 sticky top-0 z-40 transition-all duration-300">
             <div className="flex items-center gap-6 flex-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 -ml-1 text-foreground/80 hover:bg-primary/10 hover:text-primary rounded-xl w-9 h-9 transition-all border border-border/10"
+                onClick={handleOpenNavigation}
+                aria-label="Open navigation"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="icon" className="md:hidden -ml-1 text-foreground/80 hover:bg-primary/10 hover:text-primary rounded-xl w-10 h-10 transition-all border border-border/5">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
                 <SheetContent side="left" className="p-0 w-[85%] sm:w-[380px] bg-background border-r border-border/40 flex flex-col pt-0">
                   <div className="h-24 flex items-center px-8 border-b border-border/40 bg-background text-foreground">
                     <Logo className="h-10 w-10" textClassName="text-2xl font-black tracking-tighter text-foreground" />
@@ -657,19 +677,19 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                       <div>
                         <h4 className="px-6 text-[10px] font-black text-muted-foreground/30 uppercase tracking-[0.3em] mb-4">Command Center</h4>
                         <div className="space-y-1">
-                          {renderNavItem({ label: "Overview", icon: Home, path: "/dashboard" })}
+                          {renderNavItem({ label: "Overview", icon: Home, path: "/dashboard" }, false, true)}
                         </div>
                       </div>
                       {navGroups.map(group => (
                         <div key={group.label} className="space-y-2">
                           <h4 className="px-6 text-[10px] font-black text-muted-foreground/30 uppercase tracking-[0.3em] mb-4">{group.label}</h4>
                           <div className="space-y-1">
-                            {group.items.map(item => renderNavItem(item, !!(item.requiresStep && !isFeatureUnlocked(item.requiresStep))))}
+                            {group.items.map(item => renderNavItem(item, !!(item.requiresStep && !isFeatureUnlocked(item.requiresStep)), true))}
                           </div>
                         </div>
                       ))}
                       <div className="pt-6 border-t border-border/10">
-                        {renderNavItem({ label: "Settings", icon: Settings, path: "/dashboard/settings" })}
+                        {renderNavItem({ label: "Settings", icon: Settings, path: "/dashboard/settings" }, false, true)}
                       </div>
                     </div>
                   </ScrollArea>

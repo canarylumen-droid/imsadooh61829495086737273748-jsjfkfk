@@ -22,6 +22,7 @@ import dashboardRoutes from "./dashboard-routes.js";
 import emailOtpRoutes from "./email-otp-routes.js";
 import emailStatsRoutes from "./email-stats-routes.js";
 import leadIntelligence from "./lead-intelligence.js";
+import leadRecoveryRoutes from "./lead-recovery-routes.js";
 import oauthRoutes from "./oauth.js";
 import otpRoutes from "./otp-routes.js";
 import outreach from "./outreach.js";
@@ -122,6 +123,7 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/email/stats", emailStatsRoutes);
   app.use("/api/smtp", customEmailRoutes); // Mount at /api/smtp to handle /api/smtp/settings
   app.use("/api/leads/intelligence", leadIntelligence);
+  app.use("/api/lead-recovery", leadRecoveryRoutes);
   app.use("/api/leads", aiRoutes);
   app.use("/api/messages", messagesRoutes);
   app.use("/api/brand-pdf", adminPdfRoutes);
@@ -169,8 +171,11 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   // Create HTTP server
   const server = http.createServer(app);
 
-  // Initialize WebSocket server for real-time sync
-  wsSync.initialize(server);
+  // Initialize WebSocket server for real-time sync unless this process is the
+  // API-only Railway service. Dedicated sockets boot via start:socket.
+  if (process.env.API_DISABLE_SOCKET !== 'true') {
+    wsSync.initialize(server);
+  }
 
   // Outreach engine is initialized in server/index.ts
 

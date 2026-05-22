@@ -13,6 +13,12 @@
 
 import { Queue } from 'bullmq';
 import { getSharedRedisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
+import {
+  bullmqActiveJobs,
+  bullmqDelayedJobs,
+  bullmqFailedJobs,
+  bullmqWaitingJobs,
+} from '@shared/lib/monitoring/metrics-service.js';
 
 /**
  * Default robust job options shared by all queues.
@@ -121,6 +127,16 @@ export const sentimentAnalysisQueue = createLazyQueue('audnix-sentiment-analysis
 // Producers: All services (replacing direct DB writes where possible)
 export const internalCrmQueue = createLazyQueue('audnix-internal-crm', { defaultJobOptions });
 
+// Legacy/shared queue names still used by existing workers. They are registered
+// here so health checks and autoscalers see the full BullMQ backlog surface.
+export const campaignEngineQueue = createLazyQueue('campaign-engine', { defaultJobOptions });
+export const mailSyncQueue = createLazyQueue('mailSyncQueue', { defaultJobOptions });
+export const vectorOpsQueue = createLazyQueue('vectorOpsQueue', { defaultJobOptions });
+export const emailVerificationQueue = createLazyQueue('email-verification', { defaultJobOptions });
+export const emailRoutingQueue = createLazyQueue('email-routing', { defaultJobOptions });
+export const emailReassignQueue = createLazyQueue('email-reassign', { defaultJobOptions });
+export const webhookProcessingQueue = createLazyQueue('webhook-processing', { defaultJobOptions });
+
 /**
  * Registry of all queues for health check reporting
  */
@@ -137,8 +153,76 @@ export const ALL_QUEUES = {
   leadScoring: leadScoringQueue,
   sentimentAnalysis: sentimentAnalysisQueue,
   internalCrm: internalCrmQueue,
+  campaignEngine: campaignEngineQueue,
+  mailSync: mailSyncQueue,
+  vectorOps: vectorOpsQueue,
+  emailVerification: emailVerificationQueue,
+  emailRouting: emailRoutingQueue,
+  emailReassign: emailReassignQueue,
+  webhookProcessing: webhookProcessingQueue,
 } as const;
 
+export interface QueueBacklogMetric {
+  status: 'ok' | 'disabled' | 'error';
+  queue: string;
+  waiting: number;
+  delayed: number;
+  active: number;
+  failed: number;
+  backlog: number;
+  error?: string;
+}
+
+async function readQueueBacklog(name: string, queue: Queue | undefined): Promise<QueueBacklogMetric> {
+  if (!queue || !hasRedis) {
+    return {
+      status: 'disabled',
+      queue: name,
+      waiting: 0,
+      delayed: 0,
+      active: 0,
+      failed: 0,
+      backlog: 0,
+    };
+  }
+
+  try {
+    const [waiting, delayed, active, failed] = await Promise.all([
+      queue.getWaitingCount(),
+      queue.getDelayedCount(),
+      queue.getActiveCount(),
+      queue.getFailedCount(),
+    ]);
+
+    return {
+      status: 'ok',
+      queue: name,
+      waiting,
+      delayed,
+      active,
+      failed,
+      backlog: waiting + delayed,
+    };
+  } catch (err: any) {
+    return {
+      status: 'error',
+      queue: name,
+      waiting: 0,
+      delayed: 0,
+      active: 0,
+      failed: 0,
+      backlog: 0,
+      error: err.message,
+    };
+  }
+}
+
+function recordQueueMetric(metric: QueueBacklogMetric): void {
+  bullmqWaitingJobs.set({ queue: metric.queue }, metric.waiting);
+  bullmqDelayedJobs.set({ queue: metric.queue }, metric.delayed);
+  bullmqActiveJobs.set({ queue: metric.queue }, metric.active);
+  bullmqFailedJobs.set({ queue: metric.queue }, metric.failed);
+}
 
 /**
  * Get health status for all queues (for /health endpoint)
@@ -147,23 +231,29 @@ export async function getQueueHealthStatus(): Promise<Record<string, any>> {
   const results: Record<string, any> = {};
 
   for (const [name, queue] of Object.entries(ALL_QUEUES)) {
-    if (!queue) {
-      results[name] = { status: 'disabled', reason: 'No Redis' };
-      continue;
-    }
-    try {
-      const [waiting, active, failed] = await Promise.all([
-        queue.getWaitingCount(),
-        queue.getActiveCount(),
-        queue.getFailedCount(),
-      ]);
-      results[name] = { status: 'ok', waiting, active, failed };
-    } catch (err: any) {
-      results[name] = { status: 'error', error: err.message };
-    }
+    const metric = await readQueueBacklog(name, queue as Queue);
+    recordQueueMetric(metric);
+    results[name] = metric;
   }
 
   return results;
+}
+
+export async function getQueueBacklogSnapshot(): Promise<{
+  totalBacklog: number;
+  queues: Record<string, QueueBacklogMetric>;
+}> {
+  const queues: Record<string, QueueBacklogMetric> = {};
+  let totalBacklog = 0;
+
+  for (const [name, queue] of Object.entries(ALL_QUEUES)) {
+    const metric = await readQueueBacklog(name, queue as Queue);
+    recordQueueMetric(metric);
+    queues[name] = metric;
+    totalBacklog += metric.backlog;
+  }
+
+  return { totalBacklog, queues };
 }
 
 if (hasRedis) {

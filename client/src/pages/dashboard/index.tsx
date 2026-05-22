@@ -24,6 +24,7 @@ const SandboxPage = lazy(() => import("./sandbox"));
 const ProspectingPage = lazy(() => import("./prospecting"));
 const LeadProfilePage = lazy(() => import("./lead-profile"));
 const PendingPaymentsPage = lazy(() => import("./pending-payments"));
+const LeadRecoveryPage = lazy(() => import("./lead-recovery"));
 
 export default function DashboardRoutes() {
   const [location] = useLocation();
@@ -56,6 +57,7 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/sandbox" component={SandboxPage} />
           <Route path="/dashboard/prospecting" component={ProspectingPage} />
           <Route path="/dashboard/pending-payments" component={PendingPaymentsPage} />
+          <Route path="/dashboard/lead-recovery" component={LeadRecoveryPage} />
         </Switch>
       </Suspense>
     </DashboardLayout>

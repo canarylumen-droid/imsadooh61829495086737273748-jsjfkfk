@@ -6,6 +6,10 @@ import { sendInstagramMessage } from "@shared/lib/channels/instagram.js";
 
 const router = Router();
 
+function normalizeReplySubject(subject?: string | null, fallback?: string): string {
+  const clean = (subject || fallback || "Follow up").trim();
+  return clean.toLowerCase().startsWith("re:") ? clean : `Re: ${clean}`;
+}
 
 /**
  * GET /api/messages/:leadId
@@ -70,6 +74,8 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
     const messageBody = content.trim();
 
     let trackingId: string | undefined = undefined;
+    let emailSubject: string | undefined = subject;
+    let externalMessageId: string | undefined = undefined;
 
     // Actual sending logic
     try {
@@ -78,7 +84,38 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
           res.status(400).json({ error: "Lead has no email address" });
           return;
         }
-        let emailSubject = subject;
+
+        // Resolve thread metadata before subject generation so manual replies stay in the active conversation.
+        try {
+          const history = await storage.getMessagesByLeadId(lead.id);
+          if (history.length > 0) {
+            const lastMsg = history.find((msg: any) => msg.direction === "inbound") || history[0];
+            const meta = (lastMsg.metadata as any) || {};
+            const leadMeta = (lead.metadata as any) || {};
+
+            inReplyTo = lastMsg.externalId || meta.externalId;
+            threadId = meta.providerThreadId || meta.threadId || leadMeta.providerThreadId || leadMeta.threadId;
+
+            if (inReplyTo) {
+              const prevRefs = meta.references || "";
+              references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+            }
+
+            const existingSubject =
+              lastMsg.subject ||
+              meta.subject ||
+              leadMeta.subject ||
+              leadMeta.lastSubject ||
+              leadMeta.emailSubject;
+
+            if (!emailSubject && existingSubject) {
+              emailSubject = normalizeReplySubject(existingSubject);
+            }
+          }
+        } catch (threadErr) {
+          console.warn("[MessagesRoute] Failed to fetch threading headers:", threadErr);
+        }
+
         if (!emailSubject) {
           // Z AI: Craft a killer subject based on the email body and lead context
           try {
@@ -94,28 +131,7 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
         const { generateTrackingToken } = await import('@services/email-service/src/email/email-tracking.js');
         trackingId = generateTrackingToken();
 
-        // --- REFINED THREADING LOGIC ---
-        try {
-          const history = await storage.getMessagesByLeadId(lead.id);
-          if (history.length > 0) {
-            // History is ordered by createdAt DESC in getMessagesByLeadId (usually)
-            // Let's verify sort order or just find the most recent
-            const lastMsg = history[0]; // storage.ts shows orderBy(desc(messages.createdAt))
-            const meta = (lastMsg.metadata as any) || {};
-            
-            inReplyTo = lastMsg.externalId || meta.externalId;
-            threadId = meta.providerThreadId || meta.threadId || (lead.metadata as any)?.providerThreadId;
-
-            if (inReplyTo) {
-              const prevRefs = meta.references || "";
-              references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
-            }
-          }
-        } catch (threadErr) {
-          console.warn("[MessagesRoute] Failed to fetch threading headers:", threadErr);
-        }
-
-        await sendEmail(userId, lead.email, messageBody, emailSubject, {
+        const sendResult = await sendEmail(userId, lead.email, messageBody, emailSubject, {
           isRaw: true,
           isHtml: true, // Force HTML for tracking pixel
           trackingId,
@@ -124,6 +140,7 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
           references,
           threadId
         });
+        externalMessageId = (sendResult as any)?.messageId || (sendResult as any)?.id;
 
         // metadata should include trackingId for consistency if storage doesn't auto-handle it
         // and we will update the message record created below
@@ -164,13 +181,15 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
       provider: selectedChannel,
       direction: "outbound",
       body: messageBody,
-      subject: subject || undefined, // Store subject if provided
+      subject: selectedChannel === 'email' ? emailSubject : subject || undefined,
       audioUrl: null,
       trackingId: selectedChannel === 'email' ? trackingId : undefined,
+      externalId: externalMessageId,
       metadata: {
         manual: true,
         sentAt: new Date(),
         ...(trackingId ? { trackingId } : {}),
+        ...(externalMessageId ? { externalId: externalMessageId } : {}),
         inReplyTo,
         references,
         providerThreadId: threadId

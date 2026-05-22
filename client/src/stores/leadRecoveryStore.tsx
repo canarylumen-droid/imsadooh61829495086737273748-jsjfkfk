@@ -1,0 +1,229 @@
+import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import { apiRequest } from "@/lib/queryClient";
+
+export interface LeadRecoveryMailbox {
+  id: string;
+  provider: string;
+  accountType?: string | null;
+  healthStatus?: string;
+  reputationScore?: number;
+  isBusy: boolean;
+  availableAt: string | null;
+  activeCampaignIds: string[];
+  isRecoveryActive?: boolean;
+  lastSyncAt?: string | null;
+  syncRequestedAt?: string | null;
+  syncStatus?: "idle" | "queued" | "syncing" | "completed" | "failed";
+}
+
+export interface RecoveredLead {
+  _id: string;
+  email: string;
+  subject: string;
+  intent: "Converted" | "Ghosted" | "Not-Interested" | "Reply-Needed";
+  deliverabilityStatus: "safe" | "risky" | "invalid" | "unknown";
+  followUpDraft?: string;
+  mailboxId?: string;
+  sourceMailboxSnapshot?: {
+    provider?: string;
+    accountType?: string;
+  };
+  conversationSummary?: string;
+  lastMessageText?: string;
+  lastMessageAt?: string;
+  brainstormedObjections?: Array<{
+    category: string;
+    rule: string;
+    evidence?: string;
+    syncedAt?: string;
+  }>;
+  createdAt: string;
+}
+
+export interface RecoveryEventLog {
+  _id: string;
+  action: string;
+  payload: Record<string, unknown>;
+  timestamp: string;
+}
+
+interface LeadRecoveryState {
+  isActive: boolean;
+  hasAvailableMailbox: boolean;
+  availableAt: string | null;
+  mailboxDetails: LeadRecoveryMailbox[];
+  skipWarning: string;
+  promptConfigured: boolean;
+  leads: RecoveredLead[];
+  events: RecoveryEventLog[];
+  selectedLead: RecoveredLead | null;
+  draftModalOpen: boolean;
+  loading: boolean;
+  warningOpen: boolean;
+  loadAll: () => Promise<void>;
+  activate: (mailboxId?: string) => Promise<void>;
+  deactivate: () => Promise<void>;
+  syncNow: (mailboxId?: string) => Promise<void>;
+  recoverLead: (leadId: string) => Promise<void>;
+  syncObjections: (leadIds?: string[]) => Promise<number>;
+  setSelectedLead: (lead: RecoveredLead | null) => void;
+  setDraftModalOpen: (open: boolean) => void;
+  setWarningOpen: (open: boolean) => void;
+}
+
+const LeadRecoveryContext = createContext<LeadRecoveryState | null>(null);
+
+export function LeadRecoveryProvider({ children }: { children: React.ReactNode }) {
+  const [isActive, setIsActive] = useState(false);
+  const [hasAvailableMailbox, setHasAvailableMailbox] = useState(false);
+  const [availableAt, setAvailableAt] = useState<string | null>(null);
+  const [mailboxDetails, setMailboxDetails] = useState<LeadRecoveryMailbox[]>([]);
+  const [skipWarning, setSkipWarning] = useState("");
+  const [promptConfigured, setPromptConfigured] = useState(false);
+  const [leads, setLeads] = useState<RecoveredLead[]>([]);
+  const [events, setEvents] = useState<RecoveryEventLog[]>([]);
+  const [selectedLead, setSelectedLead] = useState<RecoveredLead | null>(null);
+  const [draftModalOpen, setDraftModalOpen] = useState(false);
+  const [warningOpen, setWarningOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const loadStatus = useCallback(async () => {
+    const res = await apiRequest("GET", "/api/lead-recovery/status");
+    const data = await res.json();
+    setIsActive(data.isActive);
+    setHasAvailableMailbox(data.hasAvailableMailbox);
+    setAvailableAt(data.availableAt);
+    setMailboxDetails(data.mailboxDetails || []);
+    setSkipWarning(data.skipWarning || "");
+    setPromptConfigured(Boolean(data.promptConfigured));
+  }, []);
+
+  const loadLeads = useCallback(async () => {
+    const res = await apiRequest("GET", "/api/lead-recovery/leads");
+    const data = await res.json();
+    setLeads(data.leads || []);
+  }, []);
+
+  const loadEvents = useCallback(async () => {
+    const res = await apiRequest("GET", "/api/lead-recovery/events");
+    const data = await res.json();
+    setEvents(data.events || []);
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      await Promise.all([loadStatus(), loadLeads(), loadEvents()]);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadStatus, loadLeads, loadEvents]);
+
+  const activate = useCallback(async (mailboxId?: string) => {
+    setLoading(true);
+    try {
+      await apiRequest("POST", "/api/lead-recovery/activate", mailboxId ? { mailboxId } : {});
+      await loadAll();
+    } finally {
+      setLoading(false);
+    }
+  }, [loadAll]);
+
+  const deactivate = useCallback(async () => {
+    setLoading(true);
+    try {
+      await apiRequest("POST", "/api/lead-recovery/deactivate", {});
+      await loadAll();
+    } finally {
+      setLoading(false);
+    }
+  }, [loadAll]);
+
+  const syncNow = useCallback(async (mailboxId?: string) => {
+    setLoading(true);
+    try {
+      await apiRequest("POST", "/api/lead-recovery/sync", mailboxId ? { mailboxId } : {});
+      await loadAll();
+    } finally {
+      setLoading(false);
+    }
+  }, [loadAll]);
+
+  const recoverLead = useCallback(async (leadId: string) => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", `/api/lead-recovery/recover/${leadId}`, {});
+      const data = await res.json();
+      setSelectedLead(data.lead);
+      setDraftModalOpen(true);
+      await Promise.all([loadLeads(), loadEvents()]);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadLeads, loadEvents]);
+
+  const syncObjections = useCallback(async (leadIds?: string[]) => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/lead-recovery/brainstorm-sync", { leadIds });
+      const data = await res.json();
+      await Promise.all([loadLeads(), loadEvents()]);
+      return Number(data.synced || 0);
+    } finally {
+      setLoading(false);
+    }
+  }, [loadLeads, loadEvents]);
+
+  const value = useMemo<LeadRecoveryState>(() => ({
+    isActive,
+    hasAvailableMailbox,
+    availableAt,
+    mailboxDetails,
+    skipWarning,
+    promptConfigured,
+    leads,
+    events,
+    selectedLead,
+    draftModalOpen,
+    loading,
+    warningOpen,
+    loadAll,
+    activate,
+    deactivate,
+    syncNow,
+    recoverLead,
+    syncObjections,
+    setSelectedLead,
+    setDraftModalOpen,
+    setWarningOpen,
+  }), [
+    isActive,
+    hasAvailableMailbox,
+    availableAt,
+    mailboxDetails,
+    skipWarning,
+    promptConfigured,
+    leads,
+    events,
+    selectedLead,
+    draftModalOpen,
+    loading,
+    warningOpen,
+    loadAll,
+    activate,
+    deactivate,
+    syncNow,
+    recoverLead,
+    syncObjections,
+  ]);
+
+  return <LeadRecoveryContext.Provider value={value}>{children}</LeadRecoveryContext.Provider>;
+}
+
+export function useLeadRecoveryStore() {
+  const context = useContext(LeadRecoveryContext);
+  if (!context) {
+    throw new Error("useLeadRecoveryStore must be used within LeadRecoveryProvider");
+  }
+  return context;
+}

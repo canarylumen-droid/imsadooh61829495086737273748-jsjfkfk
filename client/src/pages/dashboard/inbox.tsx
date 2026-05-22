@@ -143,6 +143,8 @@ export default function InboxPage() {
   const [filterChannel, setFilterChannel] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [allLeads, setAllLeads] = useState<any[]>([]);
+  const hasLoadedLeadsRef = useRef(false);
+  const sendInFlightRef = useRef(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
   const [isCampaignListOpen, setIsCampaignListOpen] = useState(false);
@@ -399,15 +401,17 @@ export default function InboxPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const { data: leadsData, isLoading: leadsLoading } = useQuery<any>({
+  const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching } = useQuery<any>({
     queryKey: ["/api/leads", { limit: PAGE_SIZE, offset: page * PAGE_SIZE, includeArchived: showArchived, integrationId: selectedMailboxId }],
     placeholderData: (prev: any) => prev,
+    staleTime: 15_000,
   });
 
-  const { data: messagesData, isLoading: messagesLoading } = useQuery<any>({
+  const { data: messagesData, isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<any>({
     queryKey: ["/api/messages", leadId, { integrationId: selectedMailboxId }],
     enabled: !!leadId,
     placeholderData: (prev: any) => prev,
+    staleTime: 10_000,
   });
 
   const { data: channelStatus, isLoading: channelsLoading } = useQuery<any>({
@@ -427,7 +431,7 @@ export default function InboxPage() {
   }, [channelStatus]);
 
   const showDisconnectedAlert = !channelsLoading && !leadsLoading && !hasAnyChannel && allLeads.length > 0;
-  const isSyncing = leadsLoading || channelsLoading;
+  const isSyncing = leadsFetching || channelsLoading;
 
   const activeLead = useMemo(() =>
     leadsData?.leads?.find((l: any) => l.id === leadId) || allLeads.find((l: any) => l.id === leadId),
@@ -435,11 +439,10 @@ export default function InboxPage() {
   );
 
   useEffect(() => {
-    if (leadsData?.leads) {
+    if (Array.isArray(leadsData?.leads)) {
+      hasLoadedLeadsRef.current = true;
       setTypingLeadId(null);
       setAllLeads(leadsData.leads);
-    } else if (leadsData?.leads?.length === 0) {
-      setAllLeads([]);
     }
   }, [leadsData]);
 
@@ -608,44 +611,82 @@ export default function InboxPage() {
       return apiRequest("POST", `/api/messages/${leadId}`, { content, channel: activeLead?.channel });
     },
     onMutate: async (newContent) => {
-      // Cancel refetches
+      sendInFlightRef.current = true;
       await queryClient.cancelQueries({ queryKey: ["/api/messages", leadId] });
+      await queryClient.cancelQueries({ queryKey: ["/api/leads"] });
 
-      // Snapshot previous value
-      const previousMessages = queryClient.getQueryData(["/api/messages", leadId]);
+      const previousMessages = queryClient.getQueriesData({ queryKey: ["/api/messages", leadId] });
+      const previousLeads = allLeads;
+      const tempId = `temp-${Date.now()}`;
 
-      // Optimistically update to the new value
-      if (previousMessages && (previousMessages as any).messages) {
-        const optimisticMsg = {
-          id: `temp-${Date.now()}`,
-          content: newContent,
-          direction: 'outbound',
-          createdAt: new Date().toISOString(),
-          userId: user?.id,
-          leadId: leadId
-        };
-        queryClient.setQueryData(["/api/messages", leadId], {
-          ...previousMessages as any,
-          messages: [...(previousMessages as any).messages, optimisticMsg]
-        });
-      }
+      const optimisticMsg = {
+        id: tempId,
+        body: newContent,
+        content: newContent,
+        direction: 'outbound',
+        createdAt: new Date().toISOString(),
+        userId: user?.id,
+        leadId,
+        metadata: { optimistic: true }
+      };
+
+      queryClient.setQueriesData(
+        { queryKey: ["/api/messages", leadId] },
+        (oldData: any) => ({
+          ...(oldData || { messages: [], total: 0, hasMore: false }),
+          messages: [...(oldData?.messages || []), optimisticMsg],
+          total: (oldData?.total || oldData?.messages?.length || 0) + 1,
+        })
+      );
+
+      setAllLeads(prev => prev.map((lead: any) =>
+        lead.id === leadId
+          ? {
+              ...lead,
+              snippet: newContent,
+              lastMessageAt: new Date().toISOString(),
+              status: lead.status === "new" ? "open" : lead.status,
+              metadata: { ...lead.metadata, isUnread: false },
+            }
+          : lead
+      ));
 
       setReplyMessage("");
       if (leadId) localStorage.removeItem(`draft_${leadId}`);
 
-      return { previousMessages };
+      return { previousMessages, previousLeads, tempId };
     },
-    onError: (err, newContent, context) => {
-      if (context?.previousMessages) {
-        queryClient.setQueryData(["/api/messages", leadId], context.previousMessages);
-      }
+    onError: (_err, _newContent, context) => {
+      context?.previousMessages?.forEach(([key, data]) => queryClient.setQueryData(key, data));
+      if (context?.previousLeads) setAllLeads(context.previousLeads);
       toast({ title: "Failed to send", variant: "destructive" });
     },
+    onSuccess: async (res, _newContent, context) => {
+      const data = await res.json().catch(() => null);
+      if (!data?.message || !context?.tempId) return;
+      queryClient.setQueriesData(
+        { queryKey: ["/api/messages", leadId] },
+        (oldData: any) => ({
+          ...(oldData || { messages: [], total: 0, hasMore: false }),
+          messages: (oldData?.messages || []).map((msg: any) =>
+            msg.id === context.tempId ? data.message : msg
+          ),
+        })
+      );
+    },
     onSettled: () => {
+      sendInFlightRef.current = false;
       queryClient.invalidateQueries({ queryKey: ["/api/messages", leadId] });
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
     }
   });
+
+  const submitReply = useCallback(() => {
+    const message = replyMessage.trim();
+    if (!message || sendMutation.isPending || sendInFlightRef.current) return;
+    sendMutation.mutate(message);
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  }, [replyMessage, sendMutation]);
 
   const handleMagicPencil = async () => {
     if (!replyMessage || isPolishing) return;
@@ -753,7 +794,16 @@ export default function InboxPage() {
     mutationFn: async ({ id, paused }: { id: string; paused: boolean }) => {
       await apiRequest("PATCH", `/api/leads/${id}`, { aiPaused: paused });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })
+    onMutate: async ({ id, paused }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/leads"] });
+      const previousLeads = allLeads;
+      setAllLeads(prev => prev.map((lead: any) => lead.id === id ? { ...lead, aiPaused: paused } : lead));
+      return { previousLeads };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previousLeads) setAllLeads(context.previousLeads);
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })
   });
 
   const handleMenuAction = useCallback(async (action: string, data: any) => {
@@ -1086,11 +1136,11 @@ export default function InboxPage() {
             )}
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-border/5">
-            {leadsLoading && page === 0 ? (
+            {(!hasLoadedLeadsRef.current || (leadsFetching && allLeads.length === 0) || channelsLoading) && page === 0 ? (
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
-            ) : filteredLeads.length === 0 ? (
+            ) : filteredLeads.length === 0 && !leadsFetching ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
                 {/* Only show "Connect Sources" if loading is DONE and ABSOLUTELY no channels are connected AND no leads exist */}
                 {!channelsLoading && !hasAnyChannel && allLeads.length === 0 ? (
@@ -1126,6 +1176,10 @@ export default function InboxPage() {
                     </p>
                   </div>
                 )}
+              </div>
+            ) : filteredLeads.length === 0 ? (
+              <div className="p-4 space-y-4">
+                {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
             ) : (
               <>
@@ -1635,7 +1689,7 @@ export default function InboxPage() {
 
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 min-h-0 scroll-smooth flex flex-col bg-muted/5 scrollbar-hide">
-                  {messagesLoading ? (
+                  {(messagesLoading || messagesFetching) && !messagesData?.messages?.length ? (
                     <div className="space-y-6">
                       <div className="flex justify-start"><Skeleton className="h-16 w-64 rounded-2xl rounded-tl-none" /></div>
                       <div className="flex justify-end"><Skeleton className="h-16 w-64 rounded-2xl rounded-tr-none" /></div>
@@ -1770,10 +1824,7 @@ export default function InboxPage() {
                           onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
-                              if (replyMessage.trim() && !sendMutation.isPending) {
-                                sendMutation.mutate(replyMessage);
-                                (e.target as HTMLTextAreaElement).style.height = 'auto';
-                              }
+                              submitReply();
                             }
                           }}
                           placeholder="Compose a response..."
@@ -1805,7 +1856,7 @@ export default function InboxPage() {
                         </div>
                       </div>
                       <Button
-                        onClick={() => sendMutation.mutate(replyMessage)}
+                        onClick={submitReply}
                         disabled={!replyMessage.trim() || sendMutation.isPending}
                         className="rounded-2xl h-14 w-14 p-0 shadow-xl shadow-primary/20 shrink-0 transition-transform active:scale-95"
                       >

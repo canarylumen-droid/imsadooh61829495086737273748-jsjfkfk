@@ -1,13 +1,212 @@
 {
-    "$schema": "https://railway.app/railway.schema.json",
-    "build": {
-        "builder": "NIXPACKS"
-    },
-    "deploy": {
-        "startCommand": "npm run start",
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile.production"
+  },
+  "services": [
+    {
+      "name": "audnix-api-gateway",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:api-gateway",
         "restartPolicyType": "ON_FAILURE",
         "restartPolicyMaxRetries": 5,
         "healthcheckPath": "/health",
         "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-socket-server",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:socket-server",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-email",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:email",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-imap",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:imap",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-ai",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:ai",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-social",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:social",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-billing",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:billing",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-orchestrator",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:orchestrator",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-knowledge",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:knowledge",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-audit",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:audit",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-outreach",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:outreach",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-worker-lead-recovery",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:lead-recovery",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-infra-scaler",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:infra:scaler",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
+    },
+    {
+      "name": "audnix-vector-db",
+      "build": {
+        "builder": "DOCKERFILE",
+        "dockerfilePath": "Dockerfile.production"
+      },
+      "deploy": {
+        "startCommand": "npm run start:worker:vectordb",
+        "restartPolicyType": "ON_FAILURE",
+        "restartPolicyMaxRetries": 5,
+        "healthcheckPath": "/health",
+        "healthcheckTimeout": 30
+      }
     }
+  ],
+  "deploy": {
+    "startCommand": "npm run start:api-gateway",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 5,
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30
+  }
 }

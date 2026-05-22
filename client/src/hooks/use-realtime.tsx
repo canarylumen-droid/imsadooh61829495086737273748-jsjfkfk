@@ -150,9 +150,14 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       path: '/socket.io',
       query: { userId },
       reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 1000,
-      transports: ['websocket', 'polling']
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 300,
+      reconnectionDelayMax: 3000,
+      randomizationFactor: 0.25,
+      timeout: 5000,
+      ackTimeout: 5000,
+      transports: ['websocket', 'polling'],
+      upgrade: true
     });
 
     socketRef.current = socketInstance;
@@ -161,6 +166,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       console.log('✅ Socket connected');
       setSocket(socketInstance);
       setConnectionStatus('connected');
+      socketInstance.emit('client:ready', { userId, timestamp: Date.now() });
     });
 
     socketInstance.on('disconnect', () => {
@@ -172,6 +178,12 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       console.error('Socket connection error:', err);
       setConnectionStatus('disconnected');
     });
+
+    const heartbeat = window.setInterval(() => {
+      if (socketInstance.connected) {
+        socketInstance.emit('client:heartbeat', { userId, timestamp: Date.now() });
+      }
+    }, 15_000);
 
     // SYNC STATUS
     let syncTimeout: NodeJS.Timeout | null = null;
@@ -448,6 +460,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     });
 
     return () => {
+      window.clearInterval(heartbeat);
       if (socketInstance) {
         socketInstance.disconnect();
       }

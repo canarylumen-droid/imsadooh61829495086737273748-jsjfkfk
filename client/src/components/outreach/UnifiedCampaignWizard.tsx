@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Send, Wand2, Mail, Clock, Users, Smartphone, Monitor,
   Upload, CheckCircle2, ChevronRight, ChevronLeft, Sparkles,
-  FileText, Plus, Database, Inbox, Tags, Trash2, X
+  FileText, Plus, Database, Inbox, Tags, Trash2, X, AlertTriangle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -53,6 +53,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [previewDevice, setPreviewDevice] = useState<"ios" | "android">("ios");
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   const [cleanMode, setCleanMode] = useState(false);
+  const [showLeadRecoveryPreflight, setShowLeadRecoveryPreflight] = useState(false);
+  const [leadRecoveryWarning, setLeadRecoveryWarning] = useState("");
 
   // State Management
   const [sourceType, setSourceType] = useState<'upload' | 'database'>('upload');
@@ -214,7 +216,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     }
   };
 
-  const handleLaunch = async () => {
+  const handleLaunch = async (skipLeadRecoveryPreflight = false) => {
     if (!campaignName) {
       toast({ title: "Name Required", description: "Please name your campaign before launching.", variant: "destructive" });
       return;
@@ -222,6 +224,20 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     if (selectedMailboxes.length === 0) {
       toast({ title: "Mailbox Required", description: "Please select at least one connected mailbox.", variant: "destructive" });
       return;
+    }
+
+    if (!skipLeadRecoveryPreflight) {
+      try {
+        const preflightRes = await apiRequest("GET", "/api/lead-recovery/preflight");
+        const preflight = await preflightRes.json();
+        if (preflight.shouldSuggest) {
+          setLeadRecoveryWarning(preflight.warning || "");
+          setShowLeadRecoveryPreflight(true);
+          return;
+        }
+      } catch {
+        // Lead Recovery can be gated or unavailable; do not block campaign creation.
+      }
     }
 
     setIsLoading(true);
@@ -409,6 +425,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   };
 
   return (
+    <>
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-full sm:max-w-[95vw] w-full h-[100dvh] sm:h-[95vh] rounded-none sm:rounded-[2rem] p-0 overflow-hidden bg-background border-border/40 flex flex-col shadow-2xl">
         <div className="p-6 md:p-8 flex items-center justify-between border-b border-border/40 bg-card/50 backdrop-blur-xl shrink-0 z-10">
@@ -870,7 +887,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                   </span>
                 </Button>
               ) : (
-                <Button onClick={handleLaunch} disabled={isLoading || !subject || !body} className="h-12 px-12 rounded-xl font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-3 transition-all font-sans relative">
+                <Button onClick={() => handleLaunch()} disabled={isLoading || !subject || !body} className="h-12 px-12 rounded-xl font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-3 transition-all font-sans relative">
                   {isLoading ? "LAUNCHING..." : "LAUNCH CAMPAIGN"} <Plus className="h-4 w-4" />
                 </Button>
               )}
@@ -890,5 +907,39 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         </div>
       </DialogContent>
     </Dialog>
+    <Dialog open={showLeadRecoveryPreflight} onOpenChange={setShowLeadRecoveryPreflight}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            Activate Lead Recovery first?
+          </DialogTitle>
+          <DialogDescription>
+            Lead Recovery works best before outbound sending starts, so recovery syncs do not compete with active campaign mailboxes.
+          </DialogDescription>
+        </DialogHeader>
+        <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-200">
+          {leadRecoveryWarning}
+        </p>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { setShowLeadRecoveryPreflight(false); void handleLaunch(true); }}>
+            Skip for now
+          </Button>
+          <Button onClick={async () => {
+            try {
+              await apiRequest("POST", "/api/lead-recovery/activate", {});
+              toast({ title: "Lead Recovery activated", description: "Starting the read-only 90-day email sync." });
+            } catch (error: any) {
+              toast({ title: "Lead Recovery unavailable", description: error.message, variant: "destructive" });
+            } finally {
+              setShowLeadRecoveryPreflight(false);
+            }
+          }}>
+            Activate Recovery
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
