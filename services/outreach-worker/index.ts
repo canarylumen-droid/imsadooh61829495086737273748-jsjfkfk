@@ -116,21 +116,27 @@ eventScheduler('autonomous-scaler', async () => {
     try { outreachEngine.stop(); }             catch (_e) {}
     try { autonomousOutreachWorker.stop(); }   catch (_e) {}
     try { meetingReminderWorker.stop(); }      catch (_e) {}
-    setTimeout(() => process.exit(0), 5000);
+    if (process.env.UNIFIED_MODE !== 'true') setTimeout(() => process.exit(0), 5000);
   };
-  process.on('SIGTERM', async () => {
-    await serviceRegistry.deregister();
-    shutdown('SIGTERM');
-  });
-  process.on('SIGINT', async () => {
-    await serviceRegistry.deregister();
-    shutdown('SIGINT');
-  });
+  if (process.env.UNIFIED_MODE !== 'true') {
+    process.on('SIGTERM', async () => {
+      await serviceRegistry.deregister();
+      shutdown('SIGTERM');
+    });
+    process.on('SIGINT', async () => {
+      await serviceRegistry.deregister();
+      shutdown('SIGINT');
+    });
+  }
 
   log.info('🚀 Outreach Worker Service fully online');
 }
 
-startOutreachService().catch(err => {
-  console.error('[OUTREACH-WORKER] Fatal startup error:', err);
-  process.exit(1);
-});
+export { startOutreachService };
+
+if (process.env.UNIFIED_MODE !== 'true') {
+  startOutreachService().catch(err => {
+    console.error('[OUTREACH-WORKER] Fatal startup error:', err);
+    process.exit(1);
+  });
+}

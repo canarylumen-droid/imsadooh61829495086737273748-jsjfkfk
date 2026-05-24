@@ -93,16 +93,22 @@ async function startBillingService() {
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Billing service...`);
     try { paymentAutoApprovalWorker.stop(); } catch (_e) {}
-    setTimeout(() => process.exit(0), 5000);
+    if (process.env.UNIFIED_MODE !== 'true') setTimeout(() => process.exit(0), 5000);
   };
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT',  () => shutdown('SIGINT'));
+  if (process.env.UNIFIED_MODE !== 'true') {
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT',  () => shutdown('SIGINT'));
+  }
 
   log.info('🚀 Billing Service fully online');
 }
 
-startBillingService().catch(err => {
-  console.error('[BILLING] Fatal startup error:', err);
-  process.exit(1);
-});
+export { startBillingService };
+
+if (process.env.UNIFIED_MODE !== 'true') {
+  startBillingService().catch(err => {
+    console.error('[BILLING] Fatal startup error:', err);
+    process.exit(1);
+  });
+}
 

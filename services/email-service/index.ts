@@ -114,15 +114,21 @@ async function startEmailService() {
     try { verificationWorker && await verificationWorker.close(); } catch (_e) {}
     try { routingWorker      && await routingWorker.close();      } catch (_e) {}
     try { reassignWorker     && await reassignWorker.close();     } catch (_e) {}
-    setTimeout(() => process.exit(0), 5000);
+    if (process.env.UNIFIED_MODE !== 'true') setTimeout(() => process.exit(0), 5000);
   };
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT',  () => shutdown('SIGINT'));
+  if (process.env.UNIFIED_MODE !== 'true') {
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT',  () => shutdown('SIGINT'));
+  }
 
   log.info('🚀 Email Sync Service fully online');
 }
 
-startEmailService().catch(err => {
-  console.error('[EMAIL-SYNC] Fatal startup error:', err);
-  process.exit(1);
-});
+export { startEmailService };
+
+if (process.env.UNIFIED_MODE !== 'true') {
+  startEmailService().catch(err => {
+    console.error('[EMAIL-SYNC] Fatal startup error:', err);
+    process.exit(1);
+  });
+}

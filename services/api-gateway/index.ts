@@ -596,17 +596,20 @@ async function runMigrations() {
           }
 
           // â”€â”€ API Gateway Role â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-          // This process ONLY serves HTTP + WebSocket traffic.
-          // All background processing runs in dedicated Railway worker services:
-          //   - start:worker:email  â†’ server/services/email/index.ts
-          //   - start:worker:ai     â†’ server/services/ai/index.ts
-          //   - start:worker:outreach â†’ server/services/outreach/index.ts
-          //   - start:worker:social â†’ server/services/social/index.ts
-          //   - start:worker:billing â†’ server/services/billing/index.ts
-          //
-          // Jobs are dispatched via Redis (BullMQ) queues defined in server/core/queues.ts
-          // If any worker service crashes, this API continues serving users unaffected.
-          log("âœ… [API Gateway] HTTP server ready. Worker services are isolated.", "api");
+          // In production (separate services), background processing runs in dedicated workers.
+          // In unified mode (Railway Free), all workers run inside this process via Redis BullMQ.
+          log("âœ… [API Gateway] HTTP server ready.", "api");
+
+          if (process.env.UNIFIED_MODE === 'true') {
+            try {
+              const { startUnifiedWorkers } = await import('./src/core/unified-worker-starter.js');
+              await startUnifiedWorkers();
+            } catch (err: any) {
+              log(`âš ï¸ Unified worker starter failed: ${err.message}`, "error");
+            }
+          } else {
+            log("ðŸ”Œ Worker services are isolated (UNIFIED_MODE=false).", "api");
+          }
         }
       })();
 

@@ -168,16 +168,22 @@ async function startAIService() {
     if (fathomWorker) await fathomWorker.close().catch(err => console.error('[Brain Worker] Fathom worker shutdown failed:', err));
     if (calendlyWorker) await calendlyWorker.close().catch(err => console.error('[Brain Worker] Calendly worker shutdown failed:', err));
     if (billingWorker) await billingWorker.close().catch(err => console.error('[Brain Worker] Billing worker shutdown failed:', err));
-    process.exit(0);
+    if (process.env.UNIFIED_MODE !== 'true') process.exit(0);
   };
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT',  () => shutdown('SIGINT'));
+  if (process.env.UNIFIED_MODE !== 'true') {
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT',  () => shutdown('SIGINT'));
+  }
 
   log.info('🚀 AI Agent Service fully online');
 }
 
-startAIService().catch(err => {
-  console.error('[AI-AGENT] Fatal startup error:', err);
-  process.exit(1);
-});
+export { startAIService };
+
+if (process.env.UNIFIED_MODE !== 'true') {
+  startAIService().catch(err => {
+    console.error('[AI-AGENT] Fatal startup error:', err);
+    process.exit(1);
+  });
+}
 
