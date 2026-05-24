@@ -410,14 +410,14 @@ export default function DashboardHome() {
   const cleanInsightSummary = insightsData?.summary ? insightsData.summary.split('**').join('') : "";
 
   return (
-    <PageWrapper className="space-y-8">
+    <PageWrapper className="space-y-5">
       {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-border/20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-border/20">
           <div className="space-y-1">
-            <h1 className="text-2xl md:text-5xl font-black tracking-tighter text-foreground break-words sm:break-normal">
+            <h1 className="text-2xl md:text-3xl font-black text-foreground break-words sm:break-normal">
                 Welcome, {user?.name?.split(' ')[0] || user?.username || 'Partner'}
             </h1>
-            <p className="text-muted-foreground/60 text-base md:text-lg font-medium tracking-tight">
+            <p className="text-muted-foreground/60 text-sm font-medium tracking-tight">
               {isSmtpConnected ? "Outreach engine performing optimally." : "Connect SMTP to start automation."}
             </p>
           </div>
@@ -425,7 +425,7 @@ export default function DashboardHome() {
             <Button
               variant="outline"
               size="sm"
-              className="rounded-2xl border-border/40 hover:bg-muted/50 transition-all font-bold uppercase tracking-wider text-[10px] h-10 px-6 backdrop-blur-md"
+              className="rounded-lg border-border/40 hover:bg-muted/50 transition-all font-bold uppercase tracking-wider text-[10px] h-9 px-4 backdrop-blur-md"
               onClick={() => {
                 queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
                 queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activity"] });
@@ -439,13 +439,13 @@ export default function DashboardHome() {
               className="flex w-full md:w-auto"
             />
             {stats?.lastSync && (
-              <Badge variant="outline" className="px-4 py-2 bg-muted/30 text-muted-foreground border-border/40 rounded-2xl font-bold text-xs">
+              <Badge variant="outline" className="px-3 py-1.5 bg-muted/30 text-muted-foreground border-border/40 rounded-lg font-bold text-[11px]">
                 <RefreshCw className="w-3 h-3 mr-2 opacity-50" />
                 Synced {formatTimeAgo(stats.lastSync)}
               </Badge>
             )}
             {trialDaysLeft > 0 && (
-              <Badge variant="outline" className="px-6 py-2 bg-primary/5 text-primary border-primary/20 rounded-2xl font-bold text-xs shadow-sm shadow-primary/5">
+              <Badge variant="outline" className="px-3 py-1.5 bg-primary/5 text-primary border-primary/20 rounded-lg font-bold text-[11px] shadow-sm shadow-primary/5">
                 <Sparkles className="w-4 h-4 mr-2" />
                 {trialDaysLeft} DAYS REMAINING
               </Badge>
@@ -458,16 +458,16 @@ export default function DashboardHome() {
           <motion.div
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="relative overflow-hidden group bg-primary/10 border border-primary/20 rounded-2xl p-6 shadow-lg shadow-primary/5 mb-8"
+            className="relative overflow-hidden group bg-primary/10 border border-primary/20 rounded-lg p-4 shadow-sm shadow-primary/5 mb-5"
           >
             <div className="absolute top-0 right-0 w-64 h-64 bg-primary/10 blur-[40px] md:blur-[80px] rounded-full translate-x-1/2 -translate-y-1/2 group-hover:bg-primary/20 transition-all duration-700" />
             <div className="flex flex-col md:flex-row items-center gap-6 relative z-10">
-              <div className="h-12 w-12 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0 animate-pulse">
-                <Brain className="h-6 w-6" />
+              <div className="h-10 w-10 rounded-lg bg-primary/20 flex items-center justify-center text-primary shrink-0 animate-pulse">
+                <Brain className="h-5 w-5" />
               </div>
               <div className="flex-1 space-y-1 text-center md:text-left">
                 <h3 className="text-[10px] font-semibold uppercase tracking-wider text-primary/60">Standard Peak Window</h3>
-                <p className="text-sm md:text-base font-bold text-foreground/90">
+                <p className="text-sm font-bold text-foreground/90">
                   AI predicts your optimal sending window is <span className="text-primary font-bold uppercase tracking-wider">{insightsData.bestReplyHour || 14}:00 - {((insightsData.bestReplyHour || 14) + 2) % 24}:00</span> based on recent patterns.
                 </p>
                 <div className="flex items-center justify-center md:justify-start gap-4 mt-2">
@@ -481,7 +481,7 @@ export default function DashboardHome() {
               </div>
               <Button
                 variant="default"
-                className="rounded-xl bg-primary hover:bg-primary/90 text-[10px] font-bold uppercase tracking-wider h-10 px-6 shadow-md"
+                className="rounded-lg bg-primary hover:bg-primary/90 text-[10px] font-bold uppercase tracking-wider h-9 px-4 shadow-md"
                 onClick={() => setLocation('/dashboard/ai-analytics')}
               >
                 View Full Analysis
@@ -491,7 +491,7 @@ export default function DashboardHome() {
         )}
 
         {/* KPI Grid */}
-        <ResponsiveGrid className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+        <ResponsiveGrid className="grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           {kpis.map((kpi, index) => {
             const Icon = kpi.icon;
             const TrendIcon = kpi.trend === "up" ? ArrowUp : kpi.trend === "down" ? ArrowDown : Minus;
@@ -503,17 +503,17 @@ export default function DashboardHome() {
                 transition={{ delay: index * 0.1, duration: 0.5, ease: "easeOut" }}
               >
                 <Card className={cn(
-                  "relative transition-all duration-500 border-border/40 rounded-2xl overflow-hidden group bg-card/40 backdrop-blur-2xl hover:border-primary/30 h-full",
+                  "relative transition-all duration-300 border-border/40 rounded-lg overflow-hidden group bg-card/40 backdrop-blur-xl hover:border-primary/30 h-full",
                   kpi.glow
                 )}>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/50 truncate pr-2">{kpi.label}</CardTitle>
-                    <div className={cn("p-2 rounded-2xl transition-colors bg-muted/5", kpi.color)}>
+                    <CardTitle className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 truncate pr-2">{kpi.label}</CardTitle>
+                    <div className={cn("p-1.5 rounded-lg transition-colors bg-muted/5", kpi.color)}>
                       <Icon className="h-4 w-4" />
                     </div>
                   </CardHeader>
-                  <CardContent className="flex flex-col h-[calc(100%-60px)]">
-                    <div className="text-3xl font-extrabold tracking-tighter mb-2 truncate">
+                  <CardContent className="flex flex-col h-[calc(100%-52px)]">
+                    <div className="text-2xl font-extrabold mb-2 truncate">
                       {kpi.prefix || ''}{kpi.value}{kpi.suffix || ''}
                     </div>
                     {kpi.percentage !== "—" && (
@@ -529,7 +529,7 @@ export default function DashboardHome() {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-8 text-[9px] font-bold uppercase tracking-widest p-0 px-3 rounded-full hover:bg-primary/5 text-primary truncate max-w-[120px]"
+                        className="h-7 text-[9px] font-bold uppercase tracking-widest p-0 px-2 rounded-lg hover:bg-primary/5 text-primary truncate max-w-[110px]"
                         onClick={(e) => {
                           e.stopPropagation();
                           window.location.href = '/api/bulk/export';
@@ -554,13 +554,13 @@ export default function DashboardHome() {
         </ResponsiveGrid>
 
         {/* Main Content Split */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="space-y-5">
             {activities.length > 0 && insightsData?.summary && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-primary/5 border border-primary/20 rounded-2xl p-5 relative overflow-hidden group"
+                className="bg-primary/5 border border-primary/20 rounded-lg p-4 relative overflow-hidden group"
               >
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 blur-[50px] rounded-full group-hover:bg-primary/20 transition-colors" />
                 <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary mb-2">
@@ -569,7 +569,7 @@ export default function DashboardHome() {
                 {cleanInsightSummary ? cleanInsightSummary : ""}
               </motion.div>
             )}
-            <div className="h-[600px]">
+            <div className="h-[480px]">
               <RecentConversations />
             </div>
             <div className="mt-6">
@@ -577,24 +577,24 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          <div className="space-y-6">
-            <Card className="border-border/50 rounded-2xl bg-muted/20">
+          <div className="space-y-5">
+            <Card className="border-border/50 rounded-lg bg-muted/20">
               <CardHeader>
-                <CardTitle className="text-base font-semibold">Quick Actions</CardTitle>
+                <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {[
-                  { label: "Find Prospects", icon: Users, path: "/dashboard/prospecting" },
+                  { label: "Import Prospects", icon: Users, path: "/dashboard/lead-import" },
                   { label: "Create Automation", icon: Zap, path: "/dashboard/video-automation" },
                   { label: "Connect Channels", icon: Mail, path: "/dashboard/integrations" },
                 ].map((action) => (
                   <Button
                     key={action.label}
                     variant="outline"
-                    className="w-full justify-between h-12 px-4 rounded-xl border-border/40 hover:bg-background transition-all group"
+                    className="w-full justify-between h-10 px-3 rounded-lg border-border/40 hover:bg-background transition-all group"
                     onClick={() => setLocation(action.path)}
                   >
-                    <span className="flex items-center text-sm font-medium">
+                    <span className="flex items-center text-xs font-medium">
                       <action.icon className="h-4 w-4 mr-3 text-muted-foreground group-hover:text-primary transition-colors" />
                       {action.label}
                     </span>
@@ -614,7 +614,7 @@ export default function DashboardHome() {
 
             <ReputationTrendChart data={stats?.reputationTrend || []} />
 
-            <Card className="border-border/50 rounded-2xl">
+            <Card className="border-border/50 rounded-lg">
               <CardHeader className="pb-3 border-b border-border/40">
                 <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">System Health</CardTitle>
               </CardHeader>

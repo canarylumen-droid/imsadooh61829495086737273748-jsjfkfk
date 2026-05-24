@@ -31,24 +31,29 @@ async function getReputationInfo() {
       console.log('No mailboxes connected for this user.');
     } else {
       mailboxes.forEach(m => {
-        const score = m.reputationScore !== null ? m.reputationScore : 100;
-        let healthColor = '🟢 Excellent';
-        let recommendation = 'Keep sending at current volume.';
+        const score = m.reputationScore ?? null;
+        let healthColor = '⚪ Unknown';
+        let recommendation = 'Reputation has not been calculated yet. Monitor sends carefully.';
         
-        if (score < 40) {
-          healthColor = '🔴 Critical';
-          recommendation = 'IMMEDIATE ACTION REQUIRED: Pause outreach and start a 14-day warmup cycle at low volume (5-10 emails/day).';
-        } else if (score < 70) {
-          healthColor = '🟠 Caution';
-          recommendation = 'ACTION ADVISED: Reduce sending volume by 50% and monitor bounce rates closely for the next 72 hours.';
-        } else if (score < 90) {
-          healthColor = '🟡 Good';
-          recommendation = 'Maintain volume but avoid dramatic spikes in daily send limits.';
+        if (score !== null) {
+          healthColor = '🟢 Excellent';
+          recommendation = 'Keep sending at current volume.';
+          
+          if (score < 40) {
+            healthColor = '🔴 Critical';
+            recommendation = 'IMMEDIATE ACTION REQUIRED: Pause outreach and start a 14-day warmup cycle at low volume (5-10 emails/day).';
+          } else if (score < 70) {
+            healthColor = '🟠 Caution';
+            recommendation = 'ACTION ADVISED: Reduce sending volume by 50% and monitor bounce rates closely for the next 72 hours.';
+          } else if (score < 90) {
+            healthColor = '🟡 Good';
+            recommendation = 'Maintain volume but avoid dramatic spikes in daily send limits.';
+          }
         }
 
         console.log(`- Mailbox: ${m.email || m.provider} (${m.id})`);
         console.log(`  Health: ${healthColor}`);
-        console.log(`  Score: ${score}/100`);
+        console.log(`  Score: ${score !== null ? score + '/100' : 'Unscored'}`);
         console.log(`  Status: ${m.warmupStatus || 'active'}`);
         console.log(`  Daily Limit: ${m.dailyLimit}`);
         console.log(`  Recommendation: ${recommendation}`);

@@ -47,16 +47,15 @@ export function Navigation() {
   }, []);
 
   const navLinks = [
-    { name: "Find Leads", href: "/find-leads" },
     { name: "How it works", href: "/#how-it-works" },
     { name: "ROI Calculator", href: "/#calc" },
     { name: "Pricing", href: "/#pricing" },
   ];
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[100] flex justify-center p-4 pointer-events-none">
+    <div className="fixed top-0 left-0 right-0 z-[100] flex justify-center p-3 pointer-events-none">
       <motion.nav
-        className={`pointer-events-auto flex items-center justify-between px-6 md:px-8 py-2 transition-all duration-700 rounded-2xl border ${scrolled
+        className={`pointer-events-auto flex items-center justify-between px-4 md:px-6 py-2 transition-all duration-500 rounded-xl border ${scrolled
           ? "glass-premium w-[95%] max-w-7xl shadow-2xl border-primary/20"
           : "bg-transparent backdrop-blur-none w-full border-transparent"
           }`}
@@ -71,7 +70,7 @@ export function Navigation() {
             </Link>
           </Magnetic>
 
-          <div className="hidden lg:flex items-center gap-6 xl:gap-10">
+          <div className="hidden lg:flex items-center gap-5 xl:gap-7">
             {/* Solutions Dropdown */}
             <div
               className="relative py-2 group"
@@ -90,14 +89,14 @@ export function Navigation() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full left-0 mt-2 glass-premium rounded-[2.5rem] p-4 min-w-[360px] shadow-[0_25px_60px_rgba(0,0,0,0.6)]"
+                    className="absolute top-full left-0 mt-2 glass-premium rounded-xl p-2 min-w-[320px] shadow-xl"
                   >
                     <div className="grid gap-2">
                       {SOLUTIONS.map((sol) => (
                         <Link key={sol.name} href={sol.href}>
-                          <div className="flex items-start gap-4 p-4 rounded-2xl hover:bg-white/5 transition-all group/item border border-transparent hover:border-white/5">
-                            <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary transition-colors">
-                              <sol.icon className="w-6 h-6" />
+                          <div className="flex items-start gap-3 p-3 rounded-lg hover:bg-white/5 transition-all group/item border border-transparent hover:border-white/5">
+                            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary transition-colors">
+                              <sol.icon className="w-4 h-4" />
                             </div>
                             <div className="flex flex-col">
                               <div className="flex items-center gap-2">
@@ -156,36 +155,36 @@ export function Navigation() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ duration: 0.2 }}
-                    className="absolute top-full left-0 mt-2 glass-premium rounded-[2.5rem] p-4 min-w-[240px] shadow-[0_25px_60px_rgba(0,0,0,0.6)]"
+                    className="absolute top-full left-0 mt-2 glass-premium rounded-xl p-2 min-w-[220px] shadow-xl"
                   >
                     <div className="grid gap-2">
                       <Link href="/resources/niche-vault">
-                        <div className="flex items-center gap-3 p-4 rounded-xl cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                        <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
                           <LayoutGrid className="w-5 h-5 text-primary" />
                           <span className="text-xs font-black uppercase tracking-wider text-white/60">Niche Vault (20+)</span>
                         </div>
                       </Link>
                       <Link href="/resources/outreach-playbooks">
-                        <div className="flex items-center gap-3 p-4 rounded-xl cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                        <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
                           <Zap className="w-5 h-5 text-primary" />
                           <span className="text-xs font-black uppercase tracking-wider text-white/60">Outreach Playbooks</span>
                         </div>
                       </Link>
                       <Link href="/resources/api-docs">
-                        <div className="flex items-center gap-3 p-4 rounded-xl cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                        <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
                           <Brain className="w-5 h-5 text-primary" />
                           <span className="text-xs font-black uppercase tracking-wider text-white/60">Engineering Docs</span>
                         </div>
                       </Link>
                       <div
-                        className="flex items-center gap-3 p-4 rounded-xl cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5"
+                        className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5"
                         onClick={() => document.getElementById('privacy-modal')?.classList.remove('hidden')}
                       >
                         <Shield className="w-5 h-5 text-primary" />
                         <span className="text-xs font-black uppercase tracking-wider text-white/60">Privacy Policy</span>
                       </div>
                       <Link href="/terms-of-service">
-                        <div className="flex items-center gap-3 p-4 rounded-xl cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                        <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
                           <FileText className="w-5 h-5 text-primary" />
                           <span className="text-xs font-black uppercase tracking-wider text-white/60">Terms of Service</span>
                         </div>
@@ -200,7 +199,7 @@ export function Navigation() {
           <Link href="/auth">
             <Button
               variant="ghost"
-              className="hidden sm:flex text-[11px] font-bold uppercase tracking-widest px-6 h-10 rounded-full hover:bg-muted"
+              className="hidden sm:flex text-[11px] font-bold uppercase tracking-widest px-4 h-9 rounded-full hover:bg-muted"
             >
               Log in
             </Button>
@@ -208,7 +207,7 @@ export function Navigation() {
           <Magnetic>
             <Link href="/auth">
               <Button
-                className="h-9 sm:h-10 px-5 lg:px-8 rounded-full text-[10px] lg:text-[11px] font-bold uppercase tracking-widest shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all bg-primary text-white hover:scale-105"
+                className="h-9 px-4 lg:px-6 rounded-full text-[10px] lg:text-[11px] font-bold uppercase tracking-widest shadow-md shadow-primary/20 hover:shadow-primary/40 transition-all bg-primary text-white hover:scale-[1.02]"
               >
                 Get Started
               </Button>

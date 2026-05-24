@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
-import { videoAssets, aiActionLogs } from '@audnix/shared';
-import { eq, desc, and } from 'drizzle-orm';
+import { videoAssets, aiActionLogs, processedComments, videoMonitors } from '@audnix/shared';
+import { eq, desc, and, sql, count } from 'drizzle-orm';
 import { detectBuyingIntent, generateSalesmanDM } from '@services/brain-worker/src/ai-lib/specialized/video-comment-monitor.js';
 import { InstagramProvider } from '@shared/lib/providers/instagram.js';
 
@@ -490,6 +490,76 @@ router.get('/ai-logs', requireAuth, async (req: Request, res: Response): Promise
   } catch (error: any) {
     console.error('Error getting AI logs:', error.message);
     res.status(500).json({ error: 'Failed to get logs' });
+  }
+});
+
+/**
+ * Get video automation stats including intent accuracy
+ * GET /api/video-automation/stats
+ */
+router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req)!;
+
+    // Get user's video monitors
+    const monitors = await db
+      .select({ id: videoMonitors.id })
+      .from(videoMonitors)
+      .where(eq(videoMonitors.userId, userId));
+
+    const monitorIds = monitors.map(m => m.id);
+
+    if (monitorIds.length === 0) {
+      res.json({
+        intentAccuracy: null,
+        totalProcessed: 0,
+        dmsSent: 0,
+        ignored: 0,
+        failed: 0,
+        impactLevel: 'none'
+      });
+      return;
+    }
+
+    // Count processed comments by status
+    const stats = await db
+      .select({
+        status: processedComments.status,
+        count: count()
+      })
+      .from(processedComments)
+      .where(sql`${processedComments.videoMonitorId} = ANY(${monitorIds})`)
+      .groupBy(processedComments.status);
+
+    const dmsSent = stats.find(s => s.status === 'dm_sent')?.count || 0;
+    const ignored = stats.find(s => s.status === 'ignored')?.count || 0;
+    const failed = stats.find(s => s.status === 'failed')?.count || 0;
+    const totalProcessed = dmsSent + ignored + failed;
+
+    // Intent accuracy = DMs sent / (DMs sent + ignored) - failed are errors, not intent misses
+    const intentPool = dmsSent + ignored;
+    const intentAccuracy = intentPool > 0 ? Math.round((dmsSent / intentPool) * 100) : null;
+
+    // Impact level based on DM success rate
+    let impactLevel: 'none' | 'low' | 'medium' | 'high' = 'none';
+    if (totalProcessed > 0) {
+      const successRate = dmsSent / totalProcessed;
+      if (successRate >= 0.7) impactLevel = 'high';
+      else if (successRate >= 0.4) impactLevel = 'medium';
+      else impactLevel = 'low';
+    }
+
+    res.json({
+      intentAccuracy,
+      totalProcessed,
+      dmsSent,
+      ignored,
+      failed,
+      impactLevel
+    });
+  } catch (error: any) {
+    console.error('Error getting video automation stats:', error.message);
+    res.status(500).json({ error: 'Failed to get stats' });
   }
 });
 

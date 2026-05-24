@@ -85,49 +85,9 @@ export async function getCalendlySlots(
     const endDate = new Date(now);
     endDate.setDate(endDate.getDate() + daysAhead);
 
-    const availabilityResponse = await fetch(
-      'https://api.calendly.com/user_availability_schedules',
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiToken}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          user_id: userUri,
-          start_date: now.toISOString().split('T')[0],
-          end_date: endDate.toISOString().split('T')[0],
-          timezone: 'America/New_York'
-        })
-      }
-    );
-
-    if (!availabilityResponse.ok) {
-      // Fallback: Return empty slots if API doesn't support this endpoint
-      return generateDefaultSlots(now, daysAhead, duration);
-    }
-
-    const availabilityData = await availabilityResponse.json();
-    
-    // Parse available slots
-    const slots: CalendlySlot[] = [];
-    
-    if (availabilityData.days) {
-      for (const day of availabilityData.days) {
-        if (day.spots) {
-          for (const spot of day.spots) {
-            if (spot.status === 'available') {
-              slots.push({
-                time: spot.start_time,
-                available: true
-              });
-            }
-          }
-        }
-      }
-    }
-
-    return slots;
+    // Calendly API v2 does not have a POST /user_availability_schedules endpoint.
+    // Use the existing fallback to generate default slots from schedule rules.
+    return generateDefaultSlots(now, daysAhead, duration);
   } catch (error: any) {
     console.error('Error fetching Calendly slots:', error);
     // Return empty array on error - will fallback to Google Calendar
@@ -158,8 +118,21 @@ export async function createCalendlyEvent(
     // If no event type URI provided, get the first event type
     let eventUri = eventTypeUri;
     if (!eventUri) {
+      // Fetch user URI first (required for event_types endpoint)
+      const userResponse = await fetch('https://api.calendly.com/users/me', {
+        headers: { Authorization: `Bearer ${apiToken}` }
+      });
+      if (!userResponse.ok) {
+        throw new Error('Failed to fetch Calendly user info');
+      }
+      const userData = await userResponse.json();
+      const userUri = userData.resource?.uri;
+      if (!userUri) {
+        throw new Error('No Calendly user URI found');
+      }
+
       const eventTypesResponse = await fetch(
-        'https://api.calendly.com/user_event_types',
+        `https://api.calendly.com/event_types?user=${encodeURIComponent(userUri)}`,
         {
           headers: {
             Authorization: `Bearer ${apiToken}`,
@@ -279,6 +252,7 @@ export async function validateCalendlyToken(apiToken: string): Promise<{
   userName?: string;
   userUri?: string;
   organizationUri?: string;
+  schedulingUrl?: string;
   error?: string;
 }> {
   try {
@@ -302,7 +276,8 @@ export async function validateCalendlyToken(apiToken: string): Promise<{
       valid: true,
       userName: data.resource.name,
       userUri: data.resource.uri,
-      organizationUri: data.resource.current_organization
+      organizationUri: data.resource.current_organization,
+      schedulingUrl: data.resource.scheduling_url
     };
   } catch (error: any) {
     return {

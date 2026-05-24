@@ -5,7 +5,6 @@ Sitemap: https://audnixai.com/sitemap.xml
 
 # Allow public landing and feature pages
 Allow: /
-Allow: /find-leads
 Allow: /compare
 Allow: /solutions/agencies
 Allow: /solutions/sales-teams
@@ -22,6 +21,7 @@ Allow: /data-deletion
 
 # Disallow private user-authenticated areas and APIs
 Disallow: /dashboard/
+Disallow: /find-leads
 Disallow: /onboarding/
 Disallow: /api/
 Disallow: /admin/

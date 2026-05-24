@@ -308,6 +308,10 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
         distributeLeadsFromPool(userId, customEmail.id).catch(err =>
           console.error('[Email Connect] Lead distribution failed:', err)
         );
+        const { notifyMailboxConnected } = await import('@shared/lib/queues/verification-routing-queue.js');
+        notifyMailboxConnected(userId, customEmail.id).catch(err =>
+          console.error('[Email Connect] Smart reroute failed:', err)
+        );
       }
     } catch (idleErr) {
       console.warn('[Email Connect] Could not trigger background sync:', idleErr);
@@ -614,7 +618,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
           provider: i.provider, // 'custom_email' | 'gmail' | 'outlook'
           healthStatus: (i as any).healthStatus || 'connected',
           lastSync: i.lastSync,
-          reputationScore: (i as any).reputationScore || 100,
+          reputationScore: (i as any).reputationScore ?? null,
           bounceRate: calculatedBounceRate,
         };
       }));

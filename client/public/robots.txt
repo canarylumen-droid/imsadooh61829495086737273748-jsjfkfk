@@ -3,6 +3,7 @@ Allow: /
 Disallow: /admin
 Disallow: /dashboard
 Disallow: /auth
+Disallow: /find-leads
 
 # AI Crawler Support
 User-agent: GPTBot

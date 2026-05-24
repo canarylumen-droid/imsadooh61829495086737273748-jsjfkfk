@@ -85,7 +85,7 @@ export default function ProspectingPage() {
 
         const handleLog = (payload: any) => {
             setLogs(prev => [...prev, {
-                id: payload.id || Math.random().toString(),
+                id: payload.id || crypto.randomUUID(),
                 text: payload.text,
                 type: payload.type,
                 timestamp: new Date(payload.timestamp || Date.now())

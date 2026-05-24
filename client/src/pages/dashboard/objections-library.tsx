@@ -73,6 +73,7 @@ interface ObjectionsResponse {
 }
 
 interface CustomObjection {
+  id?: string;
   objection: string;
   response: string;
   category: string;
@@ -180,9 +181,12 @@ export default function ObjectionsLibraryPage() {
   });
 
   // Custom objections queries
-  const { data: customObjections = [], isLoading: isLoadingCustom } = useQuery<CustomObjection[]>({
+  const { data: customTrainingResponse, isLoading: isLoadingCustom } = useQuery<CustomObjection[] | { objections: CustomObjection[] }>({
     queryKey: ["/api/custom-training/objections"],
   });
+  const customObjections = Array.isArray(customTrainingResponse)
+    ? customTrainingResponse
+    : customTrainingResponse?.objections || [];
 
   const updateCustomObjections = useMutation({
     mutationFn: async (newObjections: CustomObjection[]) => {

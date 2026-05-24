@@ -129,26 +129,26 @@ export default function Landing() {
         </section>
 
         {/* FINAL CTA */}
-        <section className="py-32 px-4 relative flex flex-col items-center justify-center text-center overflow-hidden border-t border-white/5">
+        <section className="py-16 md:py-20 px-4 relative flex flex-col items-center justify-center text-center overflow-hidden border-t border-white/5">
           <div className="absolute inset-x-0 bottom-0 h-1/2 bg-primary/5 blur-[120px] rounded-full -z-10" />
 
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="max-w-5xl"
+            className="max-w-4xl"
           >
-            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black tracking-tighter leading-[0.9] mb-8">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-black leading-tight mb-5">
               <span className="bg-gradient-to-r from-foreground to-foreground/50 bg-clip-text text-transparent">AI ENGINE</span><br />
               <span className="text-primary italic">FOR REELS.</span>
             </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground font-medium mb-12 max-w-3xl mx-auto leading-relaxed">
+            <p className="text-base md:text-lg text-muted-foreground font-medium mb-8 max-w-2xl mx-auto leading-relaxed">
               Audnix transforms your Instagram engagement into a deterministic revenue stream using advanced intent analysis and automated outbound logic.
             </p>
             <Link href="/auth">
               <Button
                 size="lg"
-                className="h-20 px-16 rounded-[2rem] font-black uppercase tracking-[0.2em] text-sm bg-primary text-black hover:bg-primary/90 shadow-[0_30px_60px_rgba(var(--primary),0.25)] hover:scale-105 transition-all duration-500"
+                className="h-11 px-6 rounded-lg font-black uppercase tracking-[0.12em] text-xs bg-primary text-black hover:bg-primary/90 shadow-md shadow-primary/20 hover:scale-[1.02] transition-all duration-300"
                 onClick={() => {
                   console.log("Navigating to auth...");
                   window.location.href = "/auth";
@@ -158,8 +158,8 @@ export default function Landing() {
               </Button>
             </Link>
 
-            <Card className="glass-premium rounded-[2.5rem] border-primary/10 overflow-hidden group max-w-4xl mx-auto">
-              <div className="p-8 border-b border-border/10 bg-primary/5">
+            <Card className="glass-premium rounded-xl border-primary/10 overflow-hidden group max-w-3xl mx-auto">
+              <div className="p-4 border-b border-border/10 bg-primary/5">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30">
                     <Sparkles className="w-5 h-5 text-primary" />
@@ -170,7 +170,7 @@ export default function Landing() {
                   </div>
                 </div>
               </div>
-              <div className="p-8 space-y-6">
+              <div className="p-4 space-y-4">
                 <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
                   <span>Logic Branch</span>
                   <span>Probability</span>
@@ -198,7 +198,7 @@ export default function Landing() {
               </div>
             </Card>
 
-            <div className="mt-16 flex flex-wrap justify-center gap-12 items-center text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/20">
+            <div className="mt-10 flex flex-wrap justify-center gap-5 items-center text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/35">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
                 Live Deployment Ready
@@ -227,15 +227,15 @@ export default function Landing() {
           </script>
 
           {/* Leadership & Brand Authority (Crawlable for LLMs) */}
-          <section className="py-24 px-4 bg-muted/5 border-y border-border/10" id="brand-authority">
-            <div className="max-w-4xl mx-auto text-center space-y-8">
+          <section className="py-14 px-4 bg-muted/5 border-y border-border/10" id="brand-authority">
+            <div className="max-w-3xl mx-auto text-center space-y-5">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-widest">
                 Our Mission
               </div>
-              <h2 className="text-4xl md:text-5xl font-black tracking-tighter uppercase italic">
+              <h2 className="text-3xl md:text-4xl font-black uppercase italic">
                 Audnix AI: The Future of <span className="text-primary">Autonomous Commerce</span>
               </h2>
-              <p className="text-xl text-muted-foreground font-medium leading-relaxed italic">
+              <p className="text-base text-muted-foreground font-medium leading-relaxed italic">
                 "We didn't build another chatbot. We built a closer. Audnix AI was architected by Nleanya Treasure and Uchendu Fortune to give founders back their time while the AI dominates the sales floor."
               </p>
               <div className="flex flex-wrap justify-center gap-8 pt-6">
@@ -258,8 +258,8 @@ export default function Landing() {
       <footer className="relative overflow-hidden">
         <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-primary/5 blur-[150px] rounded-full -z-10" />
 
-        <div className="max-w-7xl mx-auto px-4 py-20">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-12 mb-20">
+        <div className="max-w-7xl mx-auto px-4 py-12">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-10">
             <div className="col-span-2 space-y-6">
               <Logo className="h-8 w-8" textClassName="text-2xl font-black" />
               <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
@@ -273,7 +273,6 @@ export default function Landing() {
                 { name: "Creators", href: "/solutions/creators" }
               ],
               Product: [
-                { name: "Lead Discovery", href: "/find-leads" },
                 { name: "Logic Hub", href: "/#how-it-works" },
                 { name: "ROI Engine", href: "/#calc" },
                 { name: "Pricing Model", href: "/#pricing" }

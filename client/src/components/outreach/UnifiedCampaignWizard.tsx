@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -91,53 +91,91 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     queryKey: ['/api/integrations'],
   });
 
-  const availableMailboxes = (integrations || []).filter((i: any) =>
-    ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected
-  );
+  const availableMailboxes = useMemo(() => (
+    (integrations || [])
+      .filter((i: any) => ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected)
+      .sort((a: any, b: any) => String(a.email || a.accountType || a.id).localeCompare(String(b.email || b.accountType || b.id)))
+  ), [integrations]);
+
+  const getMailboxAddress = (mb: any) => mb.email || mb.accountType || mb.metadata?.email || mb.metadata?.smtp_user || "Connected mailbox";
+  const getDefaultMailboxLimit = (mb: any) => {
+    // Single source of truth: integrations.dailyLimit DB column
+    const storedLimit = Number(mb.dailyLimit || 0);
+    if (Number.isFinite(storedLimit) && storedLimit > 0) {
+      // Apply graceful throttle from reputation system if set
+      const graceful = mb.gracefulDailyLimit != null ? Number(mb.gracefulDailyLimit) : null;
+      if (graceful !== null && graceful > 0 && graceful < storedLimit) return graceful;
+      return storedLimit;
+    }
+    if (mb.provider === 'custom_email') return 250;
+    return 50;
+  };
+  const getSafeMailboxCeiling = (mb: any) => mb.provider === 'custom_email' ? 500 : 60;
 
   useEffect(() => {
     if (availableMailboxes.length > 0) {
-      const initialLimits: Record<string, number> = {};
-      const initialMultipliers: Record<string, number> = {};
-      availableMailboxes.forEach((mb: any) => {
-        initialLimits[mb.id] = mb.metadata?.dailyLimit || 50;
-        initialMultipliers[mb.id] = 3;
+      setMailboxLimits(prev => {
+        const next = { ...prev };
+        availableMailboxes.forEach((mb: any) => {
+          if (!next[mb.id]) next[mb.id] = Math.min(getDefaultMailboxLimit(mb), getSafeMailboxCeiling(mb));
+        });
+        return next;
       });
-      setMailboxLimits(initialLimits);
-      setMailboxMaxMultipliers(initialMultipliers);
+      setMailboxMaxMultipliers(prev => {
+        const next = { ...prev };
+        availableMailboxes.forEach((mb: any) => {
+          if (!next[mb.id]) next[mb.id] = 1;
+        });
+        return next;
+      });
     }
   }, [availableMailboxes]);
 
   useEffect(() => {
     if (availableMailboxes.length > 0 && selectedMailboxes.length === 0) {
-      setSelectedMailboxes([availableMailboxes[0].id]);
+      setSelectedMailboxes(availableMailboxes.map((mb: any) => mb.id));
     }
   }, [availableMailboxes]);
 
   // Forecast & Scaling Intelligence
-  const totalEmailsPerLead = 1 + followups.filter(f => f.body).length;
+  const activeFollowups = followups.filter(f => f.body.trim());
+  const totalEmailsPerLead = 1 + activeFollowups.length;
   const totalCampaignVolume = leads.length * totalEmailsPerLead;
   
   const totalDailyVolume = selectedMailboxes.reduce((sum, id) => sum + (mailboxLimits[id] || 50), 0);
   const maxTotalVolume = selectedMailboxes.reduce((sum, id) => sum + (mailboxLimits[id] || 50) * (mailboxMaxMultipliers[id] || 1), 0);
 
-  const estimatedDays = leads.length > 0 && totalDailyVolume > 0 ? Math.ceil(leads.length / totalDailyVolume) : 0;
+  const sendingDaysPerWeek = excludeWeekends ? 5 : 7;
+  const calendarDayMultiplier = excludeWeekends ? 7 / 5 : 1;
+  const estimatedSendingDays = leads.length > 0 && totalDailyVolume > 0 ? Math.ceil(leads.length / totalDailyVolume) : 0;
+  const estimatedDays = Math.ceil(estimatedSendingDays * calendarDayMultiplier);
   const isExtendedTimeline = estimatedDays > targetDays;
-  const mailboxesNeeded = isExtendedTimeline ? Math.ceil((leads.length / targetDays - totalDailyVolume) / 50) : 0;
+  const requiredDailyVolume = targetDays > 0 ? Math.ceil(leads.length / Math.max(1, targetDays / calendarDayMultiplier)) : 0;
+  const mailboxesNeeded = isExtendedTimeline ? Math.max(0, Math.ceil((requiredDailyVolume - totalDailyVolume) / 50)) : 0;
 
-  // Neural Brain Cap: 45-50 for safe autonomous stretching
+  // Reputation cap: keep autonomous pacing under provider-safe defaults.
   const NEURAL_CAP = 50; 
   const effectiveSafeDailyVolume = selectedMailboxes.length * Math.min(NEURAL_CAP, totalDailyVolume / (selectedMailboxes.length || 1));
   
   const estimatedDaysToFinish = leads.length > 0 && effectiveSafeDailyVolume > 0 
-    ? Math.ceil(leads.length / effectiveSafeDailyVolume) 
+    ? Math.ceil(Math.ceil(leads.length / effectiveSafeDailyVolume) * calendarDayMultiplier) 
     : 0;
 
   // The total timeline including follow-up delays
-  const lastFollowUp = followups[followups.length - 1];
+  const lastFollowUp = activeFollowups[activeFollowups.length - 1];
   const totalTimelineDays = estimatedDaysToFinish + (lastFollowUp ? parseInt(lastFollowUp.delayDays || "0") : 0);
 
-  const hasUnsafeMailbox = selectedMailboxes.some(id => (mailboxLimits[id] || 0) > 200);
+  const hasUnsafeMailbox = selectedMailboxes.some(id => {
+    const mailbox = availableMailboxes.find((mb: any) => mb.id === id);
+    return mailbox ? (mailboxLimits[id] || 0) > getSafeMailboxCeiling(mailbox) : false;
+  });
+  const minimumDaysAtCurrentCapacity = totalDailyVolume > 0 ? estimatedDays : 0;
+  const launchIssues = [
+    !campaignName.trim() ? "Name your campaign" : null,
+    leads.length === 0 ? "Add leads" : null,
+    selectedMailboxes.length === 0 ? "Select at least one inbox" : null,
+    hasUnsafeMailbox ? "Lower unsafe mailbox limits" : null,
+  ].filter(Boolean) as string[];
 
   useEffect(() => {
     const saved = localStorage.getItem("campaign_draft");
@@ -221,8 +259,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
       toast({ title: "Name Required", description: "Please name your campaign before launching.", variant: "destructive" });
       return;
     }
-    if (selectedMailboxes.length === 0) {
-      toast({ title: "Mailbox Required", description: "Please select at least one connected mailbox.", variant: "destructive" });
+    if (launchIssues.length > 0) {
+      toast({ title: "Campaign not ready", description: launchIssues.join(", "), variant: "destructive" });
       return;
     }
 
@@ -249,21 +287,27 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         aiAutonomousMode,
         config: {
           dailyLimit: totalDailyVolume,
-          mailboxLimits,
+          mailboxLimits: Object.fromEntries(selectedMailboxes.map(id => [id, mailboxLimits[id] || 50])),
           mailboxMaxMultipliers,
           mailboxIds: selectedMailboxes,
+          targetDays,
+          estimatedDays,
+          minimumDaysAtCurrentCapacity,
           replyTo: replyTo || undefined,
           aiAdjustCopy
         },
         template: {
+          subject,
+          body,
           initial: { subject, body },
-          followups: followups.map(f => ({
+          followups: activeFollowups.map(f => ({
             subject: f.subject || subject,
             body: f.body,
             delayDays: parseInt(f.delayDays),
             isBreakup: f.isBreakup
           })),
-          autoReply: { body: autoReplyBody }
+          autoReply: { body: autoReplyBody },
+          autoReplyBody
         }
       });
 
@@ -281,6 +325,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
       }
 
       toast({ title: "Campaign Launched!", description: `${campaignName} has started successfully.` });
+      localStorage.removeItem("campaign_draft");
       localStorage.removeItem(`campaign_draft_${userId}`);
       onSuccess?.();
       onClose();
@@ -427,7 +472,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   return (
     <>
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-full sm:max-w-[95vw] w-full h-[100dvh] sm:h-[95vh] rounded-none sm:rounded-[2rem] p-0 overflow-hidden bg-background border-border/40 flex flex-col shadow-2xl">
+      <DialogContent className="max-w-full lg:max-w-[96vw] xl:max-w-[1280px] w-full h-[100dvh] lg:h-[94vh] rounded-none lg:rounded-xl p-0 overflow-hidden bg-background border-border/40 flex flex-col shadow-2xl">
         <div className="p-6 md:p-8 flex items-center justify-between border-b border-border/40 bg-card/50 backdrop-blur-xl shrink-0 z-10">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -446,46 +491,70 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         <div className="flex flex-1 overflow-hidden relative">
           <div className="flex-1 flex flex-col w-full relative">
             <div className="flex-1 overflow-y-auto w-full">
-              <div className="max-w-4xl mx-auto p-6 md:p-10 pb-32">
+              <div className="max-w-5xl mx-auto p-4 sm:p-6 md:p-8 pb-32">
                 <AnimatePresence mode="wait">
                   {step === 1 && (
-                    <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                      <div className="space-y-8">
+                    <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)] gap-6">
+                      <div className="space-y-6">
                         <div className="space-y-3">
                           <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Campaign Identity</Label>
                           <Input value={campaignName} onChange={e => setCampaignName(e.target.value)} placeholder="e.g. Project Nova" className="h-12 bg-muted/20 border-0 font-semibold text-sm rounded-xl" />
                         </div>
                         <div className="space-y-4">
-                          <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Connected Inboxes</Label>
-                          <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Connected Inboxes</Label>
+                            <div className="flex gap-2">
+                              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedMailboxes(availableMailboxes.map((mb: any) => mb.id))} className="h-8 rounded-lg text-[10px] font-bold uppercase">All</Button>
+                              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedMailboxes([])} className="h-8 rounded-lg text-[10px] font-bold uppercase">Clear</Button>
+                            </div>
+                          </div>
+                          {availableMailboxes.length === 0 && (
+                            <div className="rounded-xl border border-dashed border-border/60 p-5 text-sm text-muted-foreground">
+                              Connect Gmail, Outlook, or SMTP before launching a campaign.
+                            </div>
+                          )}
+                          <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
                             {availableMailboxes.map(mb => {
                               const isSelected = selectedMailboxes.includes(mb.id);
+                              const safeCeiling = getSafeMailboxCeiling(mb);
                               return (
-                                <div key={mb.id} onClick={() => isSelected ? setSelectedMailboxes(selectedMailboxes.filter(id => id !== mb.id)) : setSelectedMailboxes([...selectedMailboxes, mb.id])}
-                                  className={cn("p-4 rounded-2xl border transition-all cursor-pointer", isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border/40 opacity-50")}>
-                                  <div className="flex items-center justify-between mb-3 text-xs font-black italic">
-                                    <div className="flex items-center gap-2">
-                                      <Mail className="w-3 h-3" /> {mb.email}
+                                <div key={mb.id}
+                                  className={cn("p-4 rounded-xl border transition-all", isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border/40 opacity-70")}>
+                                  <div className="flex items-start justify-between gap-3 mb-3 text-xs font-black">
+                                    <button
+                                      type="button"
+                                      onClick={() => isSelected ? setSelectedMailboxes(selectedMailboxes.filter(id => id !== mb.id)) : setSelectedMailboxes([...selectedMailboxes, mb.id])}
+                                      className="flex min-w-0 items-center gap-2 text-left"
+                                    >
+                                      <Mail className="w-3 h-3 shrink-0" />
+                                      <span className="truncate">{getMailboxAddress(mb)}</span>
+                                    </button>
+                                    <div className="flex shrink-0 items-center gap-2">
+                                      <Badge variant="outline" className="text-[9px] uppercase">{mb.provider === 'custom_email' ? 'SMTP' : mb.provider}</Badge>
+                                      {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
                                     </div>
-                                    {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
                                   </div>
                                   {isSelected && (
-                                    <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-1">
+                                    <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-1" onClick={e => e.stopPropagation()}>
                                       <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
                                         <span className="opacity-40">Daily Sends</span>
                                         <span className="text-primary">{mailboxLimits[mb.id]}/day</span>
                                       </div>
                                       <Slider 
                                         value={[mailboxLimits[mb.id] || 30]} 
-                                        onValueChange={v => setMailboxLimits(prev => ({ ...prev, [mb.id]: v[0] }))} 
+                                        onValueChange={v => {
+                                          setMailboxLimits(prev => ({ ...prev, [mb.id]: v[0] }));
+                                          // Persist to DB so this becomes the new default for this mailbox
+                                          apiRequest('PATCH', `/api/integrations/${mb.id}/daily-limit`, { dailyLimit: v[0] }).catch(() => {});
+                                        }} 
                                         min={5} 
-                                        max={500} 
+                                        max={safeCeiling} 
                                         step={5} 
                                       />
-                                      <div className="p-3 bg-amber-500/5 rounded-xl border border-amber-500/10">
+                                      <div className="p-3 bg-amber-500/5 rounded-lg border border-amber-500/10">
                                         <div className="flex justify-between text-[9px] font-black uppercase text-amber-600">
                                           <span>Safety Ceiling</span>
-                                          <span>500/day</span>
+                                          <span>{safeCeiling}/day</span>
                                         </div>
                                       </div>
                                     </div>
@@ -496,7 +565,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                           </div>
                         </div>
                       </div>
-                      <div className="space-y-8">
+                      <div className="space-y-6">
                         <div className="space-y-4">
                           <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Target Population</Label>
                           <div className="grid grid-cols-2 gap-4">
@@ -555,8 +624,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             </div>
                           )}
                         </div>
-                        <div className="p-8 bg-primary/5 rounded-[2.5rem] border border-primary/10 space-y-8">
-                           <div className="flex items-center justify-between">
+                        <div className="p-5 sm:p-6 bg-primary/5 rounded-xl border border-primary/10 space-y-6">
+                           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                              <div className="flex items-center gap-2 text-primary">
                                <Sparkles className="w-5 h-5 animate-pulse" />
                                <span className="text-[10px] font-black uppercase tracking-widest">Growth Engine Plan</span>
@@ -564,18 +633,18 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                              <div className="flex items-center gap-2">
                                {hasUnsafeMailbox && (
                                  <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[9px] font-black px-3 py-1">
-                                   ⚠️ REPUTATION RISK
+                                   REPUTATION RISK
                                  </Badge>
                                )}
                                {totalDailyVolume > 0 && !hasUnsafeMailbox && (
                                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[9px] font-black px-3 py-1">
-                                   ✓ HEALTHY VELOCITY
+                                   HEALTHY VELOCITY
                                  </Badge>
                                )}
                              </div>
                            </div>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
+                            <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
                               <div>
                                 <p className="text-[9px] uppercase font-black opacity-40 mb-1">Daily Capacity</p>
                                 <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-muted-foreground/30" : "text-foreground")}>
@@ -597,7 +666,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                 <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-amber-600/30" : "text-amber-600")}>
                                   +{maxTotalVolume - totalDailyVolume}
                                 </p>
-                                <p className="text-[10px] text-amber-600/60">AI adaptive retry</p>
+                                <p className="text-[10px] text-amber-600/60">Reserved headroom</p>
                               </div>
                               <div>
                                 <p className="text-[9px] uppercase font-black opacity-40 text-primary mb-1">
@@ -613,23 +682,23 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             </div>
 
                            {totalDailyVolume === 0 && (
-                             <div className="p-4 bg-muted/20 border border-border/40 rounded-2xl text-[10px] font-bold italic opacity-60">
-                               ⚠️ No mailboxes selected. Please check at least one "Connected Inbox" above to calculate your growth plan.
+                             <div className="p-4 bg-muted/20 border border-border/40 rounded-xl text-[10px] font-bold opacity-70">
+                               No mailboxes selected. Select at least one connected inbox above to calculate the plan.
                              </div>
                            )}
 
                           <div className="space-y-4 pt-4 border-t border-primary/5">
-                            <div className="flex items-center justify-between">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                               <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Campaign Duration Goal: {targetDays} Days</Label>
-                              <Badge className="bg-primary/10 text-primary text-[8px] font-black">{Math.round((totalDailyVolume * targetDays) / 1000)}k Target Volume</Badge>
+                              <Badge className="bg-primary/10 text-primary text-[8px] font-black w-fit">{minimumDaysAtCurrentCapacity || 0}d minimum now</Badge>
                             </div>
                             <Slider value={[targetDays]} onValueChange={v => setTargetDays(v[0])} min={1} max={90} step={1} className="py-2" />
-                            <p className="text-[10px] text-muted-foreground/60">Set your ideal completion timeline. AI will warn you if daily limits exceed safety ceilings to reach this goal.</p>
+                            <p className="text-[10px] text-muted-foreground/60">Set the ideal completion timeline. Launch stays blocked when selected mailbox limits exceed safety ceilings.</p>
                           </div>
                           
                           {(isExtendedTimeline || leads.length > 5000) && (
                             <div className={cn(
-                              "p-5 rounded-3xl animate-in fade-in zoom-in-95 mt-4 transition-all",
+                              "p-4 sm:p-5 rounded-xl animate-in fade-in zoom-in-95 mt-4 transition-all",
                               isExtendedTimeline ? "bg-amber-500/5 border border-amber-500/20" : "bg-primary/5 border border-primary/10"
                             )}>
                               <div className="flex items-center gap-2 mb-2">
@@ -652,17 +721,17 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                     </motion.div>
                   )}
                   {step === 2 && (
-                    <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-10">
-                      <div className="flex items-center justify-between pb-6 border-b border-border/10">
+                    <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-6 border-b border-border/10">
                         <Label className="text-xs font-black uppercase tracking-[0.2em] opacity-40">Sequence Designer ({1 + followups.length} Steps)</Label>
-                        <Button onClick={handleGenerateSequence} disabled={isGeneratingAI} className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-3 font-bold uppercase tracking-wider text-xs px-6 h-11">
+                        <Button onClick={handleGenerateSequence} disabled={isGeneratingAI} className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-3 font-bold uppercase tracking-wider text-xs px-6 h-11 w-full sm:w-auto">
                           {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} AI Wizard Generate
                         </Button>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="p-6 bg-primary/5 rounded-3xl border border-primary/20 flex flex-col gap-4 col-span-1 md:col-span-2">
-                          <div className="flex items-center justify-between">
+                        <div className="p-5 sm:p-6 bg-primary/5 rounded-xl border border-primary/20 flex flex-col gap-4 col-span-1 md:col-span-2">
+                          <div className="flex items-center justify-between gap-4">
                             <div>
                               <p className="text-[11px] font-black uppercase text-primary">AI Autonomous Engine</p>
                               <p className="text-[10px] opacity-60 italic mt-1 max-w-lg">Autonomously manages follow-ups, bookings, and payments via AI intelligence.</p>
@@ -680,21 +749,21 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                 <Switch checked={aiAdjustCopy} onCheckedChange={setAiAdjustCopy} className="scale-110" />
                               </div>
                               
-                              <div className="p-4 bg-emerald-500/5 rounded-2xl border border-emerald-500/10 flex items-start gap-3">
+                              <div className="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-start gap-3">
                                 <Sparkles className="w-4 h-4 text-emerald-500 mt-0.5" />
                                 <div>
-                                  <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Neural Volume Scaling Active</p>
-                                  <p className="text-[9px] text-emerald-600/70 italic font-bold">AI will start with a testing pool (5-10 leads) to validate copy. Once 30%+ Open Rates are detected, the system will autonomously scale to 80-100/day.</p>
+                                  <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Autonomous pacing active</p>
+                                  <p className="text-[9px] text-emerald-600/70 font-bold">The engine can pace, retry, and rebalance within the selected mailbox limits. Unsafe mailbox limits stay blocked at launch.</p>
                                 </div>
                               </div>
                             </div>
                           )}
                         </div>
-                        <div className="p-6 bg-muted/10 rounded-3xl border border-border/10 space-y-3">
+                        <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 space-y-3">
                            <Label className="text-[9px] font-black uppercase opacity-40">Reply-To Routing</Label>
                            <Input value={replyTo} onChange={e => setReplyTo(e.target.value)} placeholder="alias@domain.com" className="bg-background border-border/20 font-semibold text-xs h-11 rounded-xl" />
                         </div>
-                        <div className="p-6 bg-muted/10 rounded-3xl border border-border/10 flex items-center justify-between">
+                        <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 flex items-center justify-between gap-4">
                            <div>
                              <p className="text-[10px] font-black uppercase">Weekend Protection</p>
                              <p className="text-[9px] opacity-40 mt-1 text-emerald-600">Pauses sending on Saturdays/Sundays</p>
@@ -703,7 +772,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         </div>
                       </div>
 
-                        <div className="grid grid-cols-3 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Forecast</div>
                             <div className="text-lg font-bold tracking-tight">{totalCampaignVolume.toLocaleString()} <span className="text-[10px] opacity-40 font-normal">EMAILS</span></div>
@@ -718,12 +787,12 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                           </div>
                         </div>
                         {totalTimelineDays > 28 && (
-                           <div className="text-[10px] font-bold text-orange-500 bg-orange-500/5 p-3 rounded-xl border border-orange-500/10 italic">
-                             ⚠️ Sequence exceeds 28 days. Add more mailboxes or increase safety limits to speed up.
+                           <div className="text-[10px] font-bold text-orange-500 bg-orange-500/5 p-3 rounded-xl border border-orange-500/10">
+                             Sequence exceeds 28 days. Add more mailboxes or adjust safe limits to speed up.
                            </div>
                         )}
-                        <div className="p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 text-[10px] leading-relaxed italic opacity-80">
-                           🧠 NEURAL BRAIN: Your outreach will be stretched autonomously to maintain 100% domain reputation.
+                        <div className="p-4 bg-blue-500/5 rounded-xl border border-blue-500/10 text-[10px] leading-relaxed opacity-80">
+                           Routing and pacing run continuously, including when new selected mailboxes are connected mid-campaign.
                         </div>
 
                       <Tabs defaultValue="S1" className="w-full">
@@ -863,14 +932,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
               </div>
             </div>
 
-            <div className="p-6 md:p-10 border-t border-border/20 bg-card/95 backdrop-blur-2xl flex items-center justify-between shrink-0 sticky bottom-0 z-30 pb-16 md:pb-10">
-              <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onClose()} className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-wider hover:bg-muted/50 transition-all font-sans">{step === 1 ? 'Discard' : 'Back'}</Button>
+            <div className="p-4 sm:p-6 md:p-8 border-t border-border/20 bg-card/95 backdrop-blur-2xl flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shrink-0 sticky bottom-0 z-30 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6 md:pb-8">
+              <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onClose()} className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-wider hover:bg-muted/50 transition-all font-sans w-full sm:w-auto">{step === 1 ? 'Discard' : 'Back'}</Button>
               {step < 2 ? (
                 <Button 
                   disabled={leads.length === 0 || !campaignName || selectedMailboxes.length === 0 || isLoadingLeads} 
                   onClick={() => setStep(2)} 
                   className={cn(
-                    "h-12 px-8 rounded-xl font-bold uppercase tracking-wider transition-all group font-sans flex flex-col items-center justify-center gap-0 relative overflow-hidden",
+                    "h-12 px-4 sm:px-8 rounded-xl font-bold uppercase tracking-wider transition-all group font-sans flex flex-col items-center justify-center gap-0 relative overflow-hidden w-full sm:w-auto",
                     (leads.length === 0 || selectedMailboxes.length === 0 || isLoadingLeads) ? "bg-muted text-muted-foreground" : "bg-primary hover:bg-primary/90 text-primary-foreground"
                   )}
                 >
@@ -887,7 +956,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                   </span>
                 </Button>
               ) : (
-                <Button onClick={() => handleLaunch()} disabled={isLoading || !subject || !body} className="h-12 px-12 rounded-xl font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-3 transition-all font-sans relative">
+                <Button onClick={() => handleLaunch()} disabled={isLoading || !subject || !body || launchIssues.length > 0} className="h-12 px-12 rounded-xl font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-3 transition-all font-sans relative w-full sm:w-auto">
                   {isLoading ? "LAUNCHING..." : "LAUNCH CAMPAIGN"} <Plus className="h-4 w-4" />
                 </Button>
               )}

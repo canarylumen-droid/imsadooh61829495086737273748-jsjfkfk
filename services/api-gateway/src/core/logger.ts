@@ -98,10 +98,12 @@ export function createLogger(serviceName: string): ServiceLogger {
               message: msg,
               data,
               timestamp: new Date().toISOString()
-            }).catch(() => {});
+            }).catch(err => console.error('[Logger] Failed to log to system health:', err));
           }
         });
-      } catch (e) {}
+      } catch (e) {
+        console.error('[Logger] Error in health transport:', e);
+      }
     },
     child: (sub) => createLogger(`${serviceName}:${sub}`),
   };

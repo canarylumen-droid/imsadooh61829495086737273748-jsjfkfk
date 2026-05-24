@@ -114,7 +114,7 @@ function updateProviderHealth(provider: 'openai' | 'genai' | 'zai', isSuccess: b
       cooldown_ms: delay,
       is_rate_limit: isRateLimit,
       is_transient: isTransient
-    }).catch(() => {});
+    }).catch(err => console.error('[AI Service] Failed to log cooldown/rate-limit:', err));
   }
 }
 

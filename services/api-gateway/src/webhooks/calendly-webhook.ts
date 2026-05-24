@@ -33,7 +33,10 @@ export function verifyCalendlySignature(req: Request, secret: string): boolean {
   const timestamp = req.headers['calendly-webhook-timestamp'] as string;
 
   if (!signature || !timestamp) return false;
-  if (!secret) return true; // Fail open if no secret configured for user (legacy)
+  if (!secret) {
+    console.error('Calendly Webhook: No signing secret configured - rejecting webhook');
+    return false; // Require signing secret, never fail open
+  }
 
   const rawBody = (req as any).rawBody ? (req as any).rawBody.toString() : JSON.stringify(req.body);
   const payload = `${timestamp}.${rawBody}`;

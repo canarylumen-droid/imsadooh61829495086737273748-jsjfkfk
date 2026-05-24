@@ -29,7 +29,7 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
     const [previewDevice, setPreviewDevice] = useState<"ios" | "android">("ios");
 
     // Campaign Config
-    const [dailyLimit, setDailyLimit] = useState(30);
+    const [dailyLimit, setDailyLimit] = useState(50);
     const [followUpDays, setFollowUpDays] = useState("3");
 
     // Email Template
@@ -63,7 +63,7 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
                 setFollowUpBody(parsed.followUpBody || `Hi {{firstName}},\n\nJust wanted to follow up on my previous email. I know you're busy, but I'd love to connect if you have a few minutes.\n\nLet me know if this week works?\n\nBest,\n[Your Name]`);
                 setFollowUpSubject2(parsed.followUpSubject2 || "Re: {{subject}}");
                 setFollowUpBody2(parsed.followUpBody2 || `Hi {{firstName}},\n\nI know you're busy, so I'll stop pestering you. Here is a link to our site if you ever need us.\n\nBest,\n[Your Name]`);
-                setDailyLimit(parsed.dailyLimit || 30);
+                setDailyLimit(parsed.dailyLimit || 50);
                 setFollowUpDays(parsed.followUpDays || "3");
                 setAutoReplyBody(parsed.autoReplyBody || `Hi {{firstName}},\n\nThanks for getting back to me! I'm currently in a few meetings but saw your message. \n\nI'll take a look and get back to you with a proper response in just a bit. \n\nIn the meantime, feel free to check out our site if you have any questions!\n\nBest,\n[Your Name]`);
             } catch (e) {
@@ -300,7 +300,7 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
                                             <Slider
                                                 value={[dailyLimit]}
                                                 onValueChange={v => setDailyLimit(v[0])}
-                                                min={10} max={200} step={5}
+                                                min={10} max={500} step={5}
                                                 className="py-2"
                                             />
                                         </div>

@@ -647,7 +647,8 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
           // Leads in pool (no mailbox assigned) — any healthy mailbox can pick them up
           and(
             isNull(campaignLeads.integrationId),
-            eq(campaignLeads.status, 'queued')
+            eq(campaignLeads.status, 'queued'),
+            sql`COALESCE((${campaignLeads.metadata}->>'routingPending')::boolean, false) = false`
           )
         ),
         or(isNull(campaignLeads.nextActionAt), lte(campaignLeads.nextActionAt, new Date())),
@@ -682,6 +683,23 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       await campaignQueue.add(jobKey, data, { delay, jobId: jobKey, priority: 2 });
       console.log(`[CampaignQueue] 😴 No leads ready. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(delay/60000)}m`);
     } else {
+      const routingPending = await db.select({ id: campaignLeads.id })
+        .from(campaignLeads)
+        .where(and(
+          eq(campaignLeads.campaignId, campaignId),
+          eq(campaignLeads.status, 'queued'),
+          isNull(campaignLeads.integrationId),
+          sql`COALESCE((${campaignLeads.metadata}->>'routingPending')::boolean, false) = true`
+        ))
+        .limit(1);
+
+      if (routingPending.length > 0 && campaignQueue) {
+        const jobKey = `send-batch_${campaignId}_${integrationId}`;
+        await campaignQueue.add(jobKey, data, { delay: 60_000, jobId: jobKey, priority: 2 });
+        console.log(`[CampaignQueue] ⏳ Waiting for smart routing. Retrying mailbox ${integrationId.slice(-8)} in 1m`);
+        return;
+      }
+
       // BUG X8 FIX: Check if the entire campaign is terminal
       const pendingLeads = await db.select({ id: campaignLeads.id })
         .from(campaignLeads)
@@ -1102,10 +1120,12 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     campaignId,
     leadId: lead.id,
     integrationId,
+    allowedIntegrationIds: (campaign.config as any)?.mailboxIds,
     isPriorityReply: true, // Auto-replies always have priority
     inReplyTo,
     references,
-    threadId
+    threadId,
+    replyTo: (campaign.config as any)?.replyTo
   });
 
   // Record message
@@ -1406,10 +1426,12 @@ async function deliverCampaignEmail(
       campaignId: campaign.id,
       leadId: lead.id,
       integrationId,
+      allowedIntegrationIds: (campaign.config as any)?.mailboxIds,
       isPriorityReply,
       inReplyTo,
       references,
-      threadId
+      threadId,
+      replyTo: (campaign.config as any)?.replyTo
     });
   } catch (err) {
     // Release lock on error so BullMQ retry can re-acquire it

@@ -40,20 +40,14 @@ export function ProblemSection() {
     const scale = useTransform(scrollYProgress, [0, 0.2], [0.95, 1]);
 
     return (
-        <section ref={containerRef} id="problem" className="py-24 px-4 relative overflow-hidden bg-background font-sans">
-            {/* Subtle Gradient Atmosphere */}
-            <motion.div
-                style={{ opacity: useTransform(scrollYProgress, [0.1, 0.3], [0, 0.05]) }}
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-primary blur-[150px] rounded-full pointer-events-none"
-            />
-
+        <section ref={containerRef} id="problem" className="py-14 md:py-16 px-4 relative overflow-hidden bg-background font-sans">
             <div className="max-w-7xl mx-auto relative z-10">
-                <div className="text-center mb-20">
+                <div className="text-center mb-10">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-[0.2em] mb-10"
+                        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-bold uppercase tracking-[0.2em] mb-5"
                     >
                         <AlertCircle className="w-3.5 h-3.5" />
                         The Scaling Trap
@@ -61,7 +55,7 @@ export function ProblemSection() {
 
                     <motion.h2
                         style={{ opacity, scale }}
-                        className="text-3xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground mb-10 leading-tight"
+                        className="text-3xl md:text-4xl lg:text-5xl font-bold text-foreground mb-4 leading-tight"
                     >
                         Hidden Efficiency <br />
                         <span className="text-muted-foreground">in your pipeline.</span>
@@ -70,7 +64,7 @@ export function ProblemSection() {
                     <motion.p
                         initial={{ opacity: 0 }}
                         whileInView={{ opacity: 1 }}
-                        className="text-muted-foreground text-lg md:text-2xl max-w-3xl mx-auto font-medium leading-relaxed"
+                        className="text-muted-foreground text-base max-w-3xl mx-auto font-medium leading-relaxed"
                     >
                         Most <span className="text-foreground border-b-2 border-primary/20 pb-0.5">Agencies & Creators</span> hit a revenue ceiling because they can't clone themselves. Audnix solves this by deploying autonomous clones that scrape, qualify, and close deals for you.
                     </motion.p>
@@ -87,21 +81,21 @@ export function ProblemSection() {
                                 scale: 1.02,
                             }}
                             transition={{ delay: i * 0.1, duration: 0.6 }}
-                            className="p-8 rounded-3xl bg-card backdrop-blur-xl border border-border/40 hover:border-primary/20 hover:bg-card/80 transition-all group shadow-sm"
+                            className="p-4 rounded-xl bg-card backdrop-blur-xl border border-border/40 hover:border-primary/20 hover:bg-card/80 transition-all group shadow-sm"
                         >
-                            <div className="flex justify-between items-start mb-8">
-                                <div className="w-14 h-14 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-all duration-500 shadow-sm">
-                                    <point.icon className="w-6 h-6" />
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="w-10 h-10 rounded-lg bg-primary/5 border border-primary/10 flex items-center justify-center text-foreground group-hover:bg-primary/10 group-hover:text-primary transition-all duration-300 shadow-sm">
+                                    <point.icon className="w-5 h-5" />
                                 </div>
                                 <span className="text-[10px] font-black text-foreground/10 group-hover:text-primary/40 transition-colors tracking-widest mt-2">
                                     0{i + 1}
                                 </span>
                             </div>
-                            <h3 className="text-xl font-bold text-foreground mb-4 tracking-tight uppercase">{point.title}</h3>
-                            <p className="text-muted-foreground text-sm leading-relaxed mb-8 font-medium">
+                            <h3 className="text-base font-bold text-foreground mb-2 uppercase">{point.title}</h3>
+                            <p className="text-muted-foreground text-xs leading-relaxed mb-4 font-medium">
                                 {point.desc}
                             </p>
-                            <div className="pt-6 border-t border-border/10 flex items-center justify-between">
+                            <div className="pt-3 border-t border-border/10 flex items-center justify-between">
                                 <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground/30">Performance Impact</span>
                                 <span className="text-xs font-bold text-primary">{point.impact}</span>
                             </div>
@@ -113,7 +107,7 @@ export function ProblemSection() {
                     initial={{ opacity: 0, scale: 0.98 }}
                     whileInView={{ opacity: 1, scale: 1 }}
                     viewport={{ once: true }}
-                    className="mt-16 p-12 md:p-20 rounded-[3rem] bg-card border border-border/40 text-center relative overflow-hidden group shadow-sm"
+                    className="mt-10 p-6 md:p-8 rounded-xl bg-card border border-border/40 text-center relative overflow-hidden group shadow-sm"
                 >
                     <div className="absolute inset-0 bg-grid opacity-5" />
                     <div className="relative z-10">
@@ -121,7 +115,7 @@ export function ProblemSection() {
                             <div className="p-3 rounded-xl bg-primary/10 mb-6 group-hover:scale-110 transition-transform">
                                 <DollarSign className="w-6 h-6 text-primary" />
                             </div>
-                            <span className="text-5xl md:text-7xl font-bold tracking-tighter text-foreground mb-6">$142,000</span>
+                            <span className="text-4xl md:text-5xl font-bold text-foreground mb-4">$142,000</span>
                         </div>
                         <p className="text-muted-foreground font-bold uppercase tracking-[0.2em] max-w-2xl mx-auto text-xs md:text-sm leading-relaxed">
                             Mean annual revenue loss for companies with 50+ monthly leads due to <span className="text-foreground font-semibold">manual latency and follow-up errors.</span>

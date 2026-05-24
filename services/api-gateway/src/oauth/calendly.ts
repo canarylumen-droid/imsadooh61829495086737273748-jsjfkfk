@@ -216,7 +216,7 @@ export class CalendlyOAuth {
     if (!integration || !integration.encryptedMeta) return null;
 
     try {
-      const meta = JSON.parse(decrypt(integration.encryptedMeta));
+      const meta = JSON.parse(await decrypt(integration.encryptedMeta));
       
       // Check expiry
       if (meta.expiresAt && new Date(meta.expiresAt) < new Date()) {
@@ -261,7 +261,10 @@ export class CalendlyOAuth {
     let eventTypeUri = settings?.calendlyEventTypeUri;
 
     if (!eventTypeUri) {
-      const etResponse = await fetch('https://api.calendly.com/event_types?user=https://api.calendly.com/users/me', {
+      const userInfo = await this.getUserInfo(token);
+      if (!userInfo?.uri) throw new Error('Calendly user profile unavailable');
+
+      const etResponse = await fetch(`https://api.calendly.com/event_types?user=${encodeURIComponent(userInfo.uri)}&active=true`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (etResponse.ok) {

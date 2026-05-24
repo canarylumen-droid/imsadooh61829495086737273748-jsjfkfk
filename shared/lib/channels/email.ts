@@ -198,7 +198,8 @@ async function sendCustomSMTP(
   trackingId?: string,
   integrationId?: string,
   inReplyTo?: string,
-  references?: string
+  references?: string,
+  replyTo?: string
 ): Promise<{ messageId: string }> {
   const nodemailer = await import('nodemailer');
   const dns = await import('dns');
@@ -287,7 +288,8 @@ async function sendCustomSMTP(
         [isHtml ? 'html' : 'text']: emailBody,
         messageId: messageId.replace(/[<>]/g, ''), // nodemailer adds brackets
         ...(inReplyTo && { inReplyTo }),
-        ...(references && { references })
+        ...(references && { references }),
+        ...(replyTo && { replyTo })
       });
 
       // If we reach here, it worked!
@@ -296,7 +298,7 @@ async function sendCustomSMTP(
       // Attempt to save to "Sent" folder via background IMAP connection
       // We DO NOT await this because it can be slow and shouldn't block the actual email delivery
       try {
-        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId, inReplyTo, references);
+        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId, inReplyTo, references, replyTo);
         
         const backgroundAppend = async () => {
           try {
@@ -627,10 +629,12 @@ export interface EmailOptions {
   campaignId?: string;
   leadId?: string;
   integrationId?: string;
+  allowedIntegrationIds?: string[];
   isPriorityReply?: boolean; // If true, bypasses daily limits and restrictions
   inReplyTo?: string;
   references?: string;
   threadId?: string;
+  replyTo?: string;
 }
 
 /**
@@ -654,7 +658,9 @@ export async function sendEmail(
   if (!integration || !integration.connected) {
     const integrations = await storage.getIntegrations(userId);
     const fallback = integrations.find(i =>
-      ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected
+      ['custom_email', 'gmail', 'outlook'].includes(i.provider) &&
+      i.connected &&
+      (!options.allowedIntegrationIds?.length || options.allowedIntegrationIds.includes(i.id))
     );
     
     if (fallback) {
@@ -768,7 +774,8 @@ export async function sendEmail(
       trackingId, 
       integration.id,
       options.inReplyTo,
-      options.references
+      options.references,
+      options.replyTo
     );
 
     if (result?.messageId) {
@@ -888,7 +895,8 @@ export async function sendEmail(
         trackingId,
         options.inReplyTo,
         options.references,
-        options.threadId
+        options.threadId,
+        options.replyTo
       );
       if (result && result.messageId) {
         await storage.createEmailMessage({
@@ -916,7 +924,8 @@ export async function sendEmail(
         options.isHtml,
         trackingId,
         options.inReplyTo,
-        options.references
+        options.references,
+        options.replyTo
       );
       if (result && result.messageId) {
         await storage.createEmailMessage({
@@ -963,11 +972,12 @@ async function sendGmailMessage(
   trackingId?: string,
   inReplyTo?: string,
   references?: string,
-  threadId?: string
+  threadId?: string,
+  replyTo?: string
 ): Promise<{ messageId: string }> {
   const emailBody = body;
 
-  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml, undefined, inReplyTo, references);
+  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml, undefined, inReplyTo, references, replyTo);
   const encodedMessage = Buffer.from(message).toString('base64url');
 
   const bodyData: any = {
@@ -1006,7 +1016,8 @@ async function sendOutlookMessage(
   isHtml: boolean = false,
   trackingId?: string,
   inReplyTo?: string,
-  references?: string
+  references?: string,
+  replyTo?: string
 ): Promise<{ messageId: string }> {
   const emailBody = body;
 
@@ -1028,19 +1039,29 @@ async function sendOutlookMessage(
     saveToSentItems: true
   };
 
+  const internetMessageHeaders: Array<{ name: string; value: string }> = [];
   if (inReplyTo) {
-    bodyData.message.internetMessageHeaders = [
+    internetMessageHeaders.push(
       {
         name: "In-Reply-To",
         value: inReplyTo
       }
-    ];
+    );
     if (references) {
-      bodyData.message.internetMessageHeaders.push({
+      internetMessageHeaders.push({
         name: "References",
         value: references
       });
     }
+  }
+  if (replyTo) {
+    internetMessageHeaders.push({
+      name: "Reply-To",
+      value: replyTo
+    });
+  }
+  if (internetMessageHeaders.length > 0) {
+    bodyData.message.internetMessageHeaders = internetMessageHeaders;
   }
 
   const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
@@ -1073,7 +1094,8 @@ function createMimeMessage(
   isHtml: boolean = false,
   messageId?: string,
   inReplyTo?: string,
-  references?: string
+  references?: string,
+  replyTo?: string
 ): string {
   const boundary = '----=_Part_' + Date.now();
 
@@ -1110,6 +1132,9 @@ function createMimeMessage(
   }
   if (references) {
     headers.push(`References: ${references}`);
+  }
+  if (replyTo) {
+    headers.push(`Reply-To: ${replyTo}`);
   }
 
   const parts = [

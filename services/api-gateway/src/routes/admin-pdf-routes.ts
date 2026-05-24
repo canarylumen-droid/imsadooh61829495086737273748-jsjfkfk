@@ -247,7 +247,7 @@ router.post(
           console.log(`📦 Using cached brand PDF analysis for user ${userId}`);
 
           // Refresh the Redis TTL so the binary doesn't expire while still in use
-          await refreshPdfTtl(userId).catch(() => {});
+          await refreshPdfTtl(userId).catch(err => console.warn(`[PDF Upload] TTL refresh failed for user ${userId}:`, err));
 
           // Update user metadata from cache (use cached file size, not current upload size)
           const existingMetadata = (user.metadata || {}) as DeepMergeObject;
@@ -548,7 +548,7 @@ router.post(
       res.status(500).json({ error: getErrorMessage(error) });
     } finally {
       // Always release the lock
-      await releaseLock(`brand-pdf-upload:${userId}`).catch(() => {});
+      await releaseLock(`brand-pdf-upload:${userId}`).catch(err => console.warn(`[PDF Upload] Lock release failed for user ${userId}:`, err));
     }
   } catch (outerError) {
     console.error("Fatal error in upload route:", outerError);

@@ -2375,9 +2375,9 @@ export class DrizzleStorage implements IStorage {
     timeSaved: number; // Total seconds saved by AI
     globalBounceRate: number;
     health: {
-      score: number;
-      status: 'healthy' | 'warning' | 'critical';
-      reputation: number;
+      score: number | null;
+      status: 'healthy' | 'warning' | 'critical' | 'unknown';
+      reputation: number | null;
       bounces: {
         hard: number;
         soft: number;
@@ -2519,9 +2519,9 @@ export class DrizzleStorage implements IStorage {
       timeSaved,
       globalBounceRate: this.calculateRate(Number(combinedStats.bouncyLeads || 0), Number(combinedStats.outreachedLeads || 0), 1) / 100,
       health: {
-        score: Number(integration?.reputationScore || 100),
-        status: (integration?.reputationScore || 100) < 45 ? 'critical' : (integration?.reputationScore || 100) < 70 ? 'warning' : 'healthy',
-        reputation: Number(integration?.reputationScore || 100),
+        score: integration?.reputationScore ?? null,
+        status: integration?.reputationScore == null ? 'unknown' : integration.reputationScore < 45 ? 'critical' : integration.reputationScore < 70 ? 'warning' : 'healthy',
+        reputation: integration?.reputationScore ?? null,
         bounces: {
           hard: Number(combinedStats.bouncyLeads || 0),
           soft: Number(integration?.syncMetadata?.bounces?.soft || 0),

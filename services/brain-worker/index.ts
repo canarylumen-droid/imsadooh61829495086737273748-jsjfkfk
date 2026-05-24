@@ -165,9 +165,9 @@ async function startAIService() {
     try { reEngagementWorker.stop(); }   catch (_e) {}
     try { followUpWorker.stop(); }       catch (_e) {}
     try { ragWorker.stop(); }           catch (_e) {}
-    if (fathomWorker) await fathomWorker.close().catch(() => {});
-    if (calendlyWorker) await calendlyWorker.close().catch(() => {});
-    if (billingWorker) await billingWorker.close().catch(() => {});
+    if (fathomWorker) await fathomWorker.close().catch(err => console.error('[Brain Worker] Fathom worker shutdown failed:', err));
+    if (calendlyWorker) await calendlyWorker.close().catch(err => console.error('[Brain Worker] Calendly worker shutdown failed:', err));
+    if (billingWorker) await billingWorker.close().catch(err => console.error('[Brain Worker] Billing worker shutdown failed:', err));
     process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));

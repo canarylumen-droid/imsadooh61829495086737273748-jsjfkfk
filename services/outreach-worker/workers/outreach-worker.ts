@@ -460,7 +460,7 @@ Provide a 1-sentence strategic directive for the outreach generation.
     const { storage } = await import('@shared/lib/storage/storage.js');
     const user = await storage.getUserById(userId);
     const brandGuidelines = user?.brandGuidelinePdfText || (user?.metadata as any)?.brandContext || "";
-    const calendarLink = (user as any)?.calendlyLink || "";
+    const calendarLink = (user as any)?.calendarLink || (user as any)?.calendlyLink || "";
     
     // Determine Action Type using Stateful Context-Aware Agent
     const { getBrandContext } = await import("@services/brain-worker/src/ai-lib/context/brand-context.js");

@@ -392,7 +392,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         <motion.aside
           data-testid="sidebar-desktop"
           className="hidden md:flex flex-col z-50 transition-all duration-500 ease-in-out relative border-r border-border/10 bg-card/60 backdrop-blur-3xl shadow-[4px_0_24px_rgba(0,0,0,0.02)]"
-          animate={{ width: sidebarCollapsed ? "5rem" : "18rem" }}
+          animate={{ width: sidebarCollapsed ? "4.5rem" : "16rem" }}
         >
           <div className="flex-1 flex flex-col overflow-hidden relative">
             {/* Liquid Glass Accent for Light Mode */}
@@ -400,9 +400,9 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
 
 
             {/* Sidebar Header */}
-            <div className="h-20 flex items-center justify-between px-6 border-b border-border/40">
+            <div className="h-16 flex items-center justify-between px-4 border-b border-border/40">
               {!sidebarCollapsed ? (
-                <Logo className="h-9 w-9" textClassName="text-xl font-bold text-foreground" />
+                <Logo className="h-8 w-8" textClassName="text-lg font-bold text-foreground" />
               ) : (
                 <div className="w-full flex justify-center">
                   <Logo className="h-7 w-7" textClassName="hidden" />
@@ -410,7 +410,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
               )}
             </div>
 
-            <div className="absolute top-20 right-4 z-10 -translate-y-1/2">
+            <div className="absolute top-16 right-3 z-10 -translate-y-1/2">
               <Button
                 variant="ghost"
                 size="icon"
@@ -423,10 +423,10 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
 
 
             {/* Navigation */}
-            <ScrollArea className="flex-1 px-3 py-6">
-              <div className="space-y-8">
+            <ScrollArea className="flex-1 px-2 py-4">
+              <div className="space-y-5">
                 <div>
-                  {!sidebarCollapsed && <h4 className="px-4 text-[10px] font-bold text-primary/40 uppercase tracking-[0.2em] mb-4 font-sans flex items-center gap-2">
+                  {!sidebarCollapsed && <h4 className="px-3 text-[10px] font-bold text-primary/40 uppercase tracking-[0.16em] mb-2 font-sans flex items-center gap-2">
                     <div className="h-[1px] w-2 bg-primary/20" /> Core
                   </h4>}
                   {renderNavItem({ label: "Overview", icon: Home, path: "/dashboard" })}
@@ -437,7 +437,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                     {!sidebarCollapsed ? (
                       <button
                         onClick={() => toggleGroup(group.label)}
-                        className="flex items-center justify-between w-full px-4 py-1.5 text-[10px] font-bold text-primary/60 dark:text-primary/40 uppercase tracking-[0.2em] hover:text-foreground dark:hover:text-white transition-colors group font-sans"
+                        className="flex items-center justify-between w-full px-3 py-1 text-[10px] font-bold text-primary/60 dark:text-primary/40 uppercase tracking-[0.16em] hover:text-foreground dark:hover:text-white transition-colors group font-sans"
                       >
                         <div className="flex items-center gap-2">
                           <div className="h-[1px] w-2 bg-primary/20" />
@@ -464,14 +464,14 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                   </div>
                 ))}
 
-                <div className="pt-8 px-1">
+                <div className="pt-4 px-1">
                   {sidebarCollapsed && <div className="h-px bg-white/5 mx-4 my-6" />}
                   {renderNavItem({ label: "Settings", icon: Settings, path: "/dashboard/settings" })}
                 </div>
 
                 {/* Autonomous Mode Toggle */}
-                <div className={`mt-auto px-4 py-6 ${sidebarCollapsed ? "flex justify-center" : ""}`}>
-                  <div className={`flex flex-col gap-4 w-full`}>
+                <div className={`mt-auto px-3 py-4 ${sidebarCollapsed ? "flex justify-center" : ""}`}>
+                  <div className={`flex flex-col gap-3 w-full`}>
                     {/* Calendar Status Indicator (New) */}
                     {!sidebarCollapsed && (
                       <div className={cn(
@@ -488,7 +488,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                       </div>
                     )}
 
-                    <div className={`flex items-center justify-between p-3 rounded-2xl border border-primary/10 bg-primary/5 transition-all hover:bg-primary/10 ${sidebarCollapsed ? "w-12 h-12 p-0 justify-center" : "w-full"}`}>
+                    <div className={`flex items-center justify-between p-2.5 rounded-lg border border-primary/10 bg-primary/5 transition-all hover:bg-primary/10 ${sidebarCollapsed ? "w-10 h-10 p-0 justify-center" : "w-full"}`}>
                       {!sidebarCollapsed && (
                         <div className="flex flex-col gap-0.5">
                           <Label htmlFor="autonomous-mode" className="text-[10px] font-bold uppercase tracking-wider text-primary cursor-pointer flex items-center gap-1.5">
@@ -655,8 +655,8 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col min-w-0 bg-background relative z-10 transition-all duration-500 overflow-hidden">
           {/* Top Header */}
-          <header className="h-16 md:h-20 border-b border-border/10 bg-background/60 backdrop-blur-3xl flex items-center justify-between px-4 md:px-10 sticky top-0 z-40 transition-all duration-300">
-            <div className="flex items-center gap-6 flex-1">
+          <header className="h-14 md:h-16 border-b border-border/10 bg-background/60 backdrop-blur-3xl flex items-center justify-between px-3 md:px-6 sticky top-0 z-40 transition-all duration-300">
+            <div className="flex items-center gap-4 flex-1">
               <Button
                 variant="ghost"
                 size="icon"
@@ -693,7 +693,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                       </div>
                     </div>
                   </ScrollArea>
-                  <div className="p-8 border-t border-border/10 bg-muted/10 space-y-4">
+                  <div className="p-4 border-t border-border/10 bg-muted/10 space-y-3">
                     <div className="flex items-center gap-4 p-4 rounded-3xl bg-background border border-border/40">
                       <Avatar className="h-12 w-12 rounded-full">
                         <AvatarImage src={user?.avatar} />
@@ -720,7 +720,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-primary transition-all" />
                 <Input
                   placeholder="Search leads..."
-                  className="h-12 pl-12 bg-muted/40 border-border/10 focus:bg-background focus:ring-4 focus:ring-primary/5 rounded-[1.25rem] font-bold text-sm placeholder:text-muted-foreground/40 dark:placeholder:text-white/60 transition-all shadow-inner text-foreground dark:text-white"
+                  className="h-10 pl-10 bg-muted/40 border-border/10 focus:bg-background focus:ring-2 focus:ring-primary/5 rounded-lg font-semibold text-xs placeholder:text-muted-foreground/40 dark:placeholder:text-white/60 transition-all shadow-inner text-foreground dark:text-white"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={handleSearchKeyDown}
@@ -796,18 +796,18 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                   </Button>
                 </SheetTrigger>
                 <SheetContent side="right" className="w-full sm:w-[450px] p-0 flex flex-col border-l border-border/40 bg-background/95 backdrop-blur-2xl">
-                  <div className="p-8 border-b border-border/20 bg-muted/20">
-                    <div className="flex items-center justify-between mb-4">
-                      <h4 className="text-xl md:text-2xl font-black tracking-tighter uppercase italic">Notifications</h4>
+                  <div className="p-4 border-b border-border/20 bg-muted/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-lg font-black uppercase italic">Notifications</h4>
                       {unreadNotifications > 0 && (
                         <Badge className="bg-primary text-black font-black uppercase text-[10px] px-3 py-1">
                           {unreadNotifications} NEW
                         </Badge>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground font-medium mb-4">Real-time alerts from your autonomous sales engine.</p>
+                    <p className="text-xs text-muted-foreground font-medium mb-3">Real-time alerts from your autonomous sales engine.</p>
 
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3">
                       <div className="flex gap-2">
                         {(['all', 'today', 'week'] as const).map(f => (
                           <Button
@@ -830,7 +830,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-10 text-[10px] font-black uppercase tracking-[0.2em] flex-1 rounded-2xl border-primary/20 hover:bg-primary/5 transition-all"
+                          className="h-9 text-[10px] font-black uppercase tracking-[0.12em] flex-1 rounded-lg border-primary/20 hover:bg-primary/5 transition-all"
                           onClick={async () => {
                             const queryKey = ["/api/notifications", { integrationId: selectedMailboxId }];
                             queryClient.setQueryData(queryKey, (old: any) => {
@@ -854,7 +854,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-10 text-[10px] font-black uppercase tracking-[0.2em] flex-1 rounded-2xl text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-all"
+                          className="h-9 text-[10px] font-black uppercase tracking-[0.12em] flex-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-all"
                           onClick={async () => {
                             if (confirm("Permanently delete all notifications?")) {
                               await apiRequest('POST', '/api/notifications/clear-all');
@@ -896,7 +896,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                             <div
                               key={notification.id}
                               className={cn(
-                                "p-6 border-b border-border/10 transition-all hover:bg-muted/30 group relative",
+                                "p-4 border-b border-border/10 transition-all hover:bg-muted/30 group relative",
                                 !notification.isRead && "bg-primary/5 border-l-2 border-l-primary"
                               )}
                             >
@@ -912,7 +912,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                                     {formatDistanceToNow(new Date(notification.createdAt), { addSuffix: true })}
                                   </p>
                                 </div>
-                                <div className="flex gap-1 absolute top-6 right-6">
+                                <div className="flex gap-1 absolute top-4 right-4">
                                   {!notification.isRead && (
                                     <Button
                                       variant="ghost"
@@ -960,9 +960,9 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                           ))}
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center h-[400px] p-8 text-center">
-                        <div className="w-20 h-20 rounded-full bg-muted/10 flex items-center justify-center mb-6 text-muted-foreground/20">
-                          <Inbox className="h-10 w-10" />
+                      <div className="flex flex-col items-center justify-center h-[280px] p-6 text-center">
+                        <div className="w-14 h-14 rounded-full bg-muted/10 flex items-center justify-center mb-4 text-muted-foreground/20">
+                          <Inbox className="h-7 w-7" />
                         </div>
                         <p className="text-sm font-black uppercase tracking-[0.2em] text-foreground dark:text-white">Silence is golden</p>
                         <p className="text-xs font-medium mt-2 text-muted-foreground">No active alerts at this moment.</p>
@@ -970,7 +970,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                     )}
                   </ScrollArea>
 
-                  <div className="p-6 border-t border-border/20 bg-muted/10">
+                  <div className="p-4 border-t border-border/20 bg-muted/10">
                     <Button
                       variant="ghost"
                       className="w-full h-10 rounded-2xl font-bold uppercase tracking-widest text-[10px] text-muted-foreground hover:bg-muted/20"
@@ -997,26 +997,6 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
           {/* Liquid Glass Background Logic (Light Mode) */}
           <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
             <div className="absolute inset-0 bg-[#f8fafc] dark:bg-[#020617] transition-colors duration-700" />
-
-            {/* Animated Orbs for Liquid Effect */}
-            <motion.div
-              animate={{
-                x: [0, 100, 0],
-                y: [0, 50, 0],
-                scale: [1, 1.2, 1],
-              }}
-              transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-              className="absolute -top-[10%] -left-[10%] w-[40%] h-[40%] rounded-full bg-cyan-500/10 blur-[120px] dark:opacity-20"
-            />
-            <motion.div
-              animate={{
-                x: [0, -80, 0],
-                y: [0, 100, 0],
-                scale: [1.2, 1, 1.2],
-              }}
-              transition={{ duration: 25, repeat: Infinity, ease: "linear" }}
-              className="absolute -bottom-[10%] -right-[10%] w-[50%] h-[50%] rounded-full bg-blue-500/10 blur-[150px] dark:opacity-20"
-            />
 
             {/* Liquid Mesh Overlay */}
             <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none mix-blend-overlay"
@@ -1052,7 +1032,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                 )}
               </AnimatePresence>
 
-              <div className={cn("mx-auto", !fullHeight && "max-w-7xl p-6 md:p-8 lg:p-10", fullHeight && "h-full")}>
+              <div className={cn("mx-auto", !fullHeight && "max-w-7xl p-3 md:p-5 lg:p-6", fullHeight && "h-full")}>
                 {children}
               </div>
             </main>
@@ -1066,7 +1046,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
             initial={{ x: 400, opacity: 0 }}
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: 400, opacity: 0 }}
-            className="fixed bottom-6 right-24 z-[100] w-80 p-6 bg-background/80 backdrop-blur-xl border border-primary/20 rounded-[2rem] shadow-2xl overflow-hidden group"
+            className="fixed bottom-4 right-20 z-[100] w-72 p-4 bg-background/80 backdrop-blur-xl border border-primary/20 rounded-xl shadow-xl overflow-hidden group"
           >
             <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 

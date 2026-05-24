@@ -1,7 +1,7 @@
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
-import { leads, auditTrail, fathomCalls, prospectObjections, users, pendingPayments, notifications, deals, campaignLeads } from '@audnix/shared';
-import { eq, and, ilike, desc, sql, inArray } from 'drizzle-orm';
+import { leads, auditTrail, fathomCalls, prospectObjections, users, pendingPayments, notifications, deals, campaignLeads, calendarBookings } from '@audnix/shared';
+import { eq, and, ilike, desc, sql, inArray, gte, lte } from 'drizzle-orm';
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
 import { evaluateNextBestAction } from "@services/brain-worker/src/orchestrator/agents/autonomous-agent.js";
 import fetch from 'node-fetch';
@@ -62,7 +62,14 @@ export async function fetchFathomMeetingDetails(recordingId: string) {
  */
 export async function processFathomWebhook(payload: FathomWebhookPayload) {
   const apiKey = process.env.FATHOM_API_KEY;
-  if (payload.event !== 'meeting.finished') return;
+  const supportedEvents = new Set([
+    'meeting.finished',
+    'recording.completed',
+    'recording.transcript_generated',
+    'call.finished',
+    'call.completed'
+  ]);
+  if (!supportedEvents.has(payload.event)) return;
 
   const { recording_id, id: fallbackId, transcript: initialTranscript, summary: initialSummary, attendees, meeting_title: title, started_at: occurred_at, video_url, video_thumbnail, share_url: meeting_url } = payload.data;
   
@@ -99,6 +106,25 @@ export async function processFathomWebhook(payload: FathomWebhookPayload) {
       if (!lead) continue;
       activeUserId = lead.userId;
 
+      // Cross-reference: find matching Calendly booking by attendee email + time window (±30 min)
+      const occurredDate = occurred_at ? new Date(occurred_at) : new Date();
+      const windowStart = new Date(occurredDate.getTime() - 30 * 60 * 1000);
+      const windowEnd = new Date(occurredDate.getTime() + 30 * 60 * 1000);
+
+      const [matchingBooking] = await db.select()
+        .from(calendarBookings)
+        .where(and(
+          eq(calendarBookings.userId, lead.userId),
+          ilike(calendarBookings.attendeeEmail, attendee.email.trim()),
+          gte(calendarBookings.startTime, windowStart),
+          lte(calendarBookings.startTime, windowEnd)
+        ))
+        .limit(1);
+
+      if (matchingBooking) {
+        console.log(`[Fathom] Matched Calendly booking ${matchingBooking.id} for recording ${fathomMeetingId}`);
+      }
+
       await db.transaction(async (tx) => {
         await tx.insert(fathomCalls).values({
           userId: lead.userId,
@@ -109,8 +135,8 @@ export async function processFathomWebhook(payload: FathomWebhookPayload) {
           transcript: fullTranscript,
           videoUrl: video_url || meeting_url,
           videoThumbnail: video_thumbnail,
-          occurredAt: occurred_at ? new Date(occurred_at) : new Date(),
-          metadata: { attendees, source: 'webhook' }
+          occurredAt: occurredDate,
+          metadata: { attendees, source: 'webhook', calendlyMeetingUrl: matchingBooking?.meetingUrl || null }
         });
 
         await tx.update(leads)

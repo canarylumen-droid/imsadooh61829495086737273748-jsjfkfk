@@ -40,8 +40,8 @@ router.post('/objections', requireAuth, async (req: Request, res: Response): Pro
       return;
     }
 
-    // Validate the incoming body against array of CustomObjection
-    const parsed = z.array(CustomObjectionSchema).parse(req.body);
+    const body = Array.isArray(req.body) ? req.body : req.body?.objections;
+    const parsed = z.array(CustomObjectionSchema).parse(body);
     await saveCustomObjections(userId, parsed);
 
     res.json({ success: true, message: 'Custom objections saved successfully', objections: parsed });

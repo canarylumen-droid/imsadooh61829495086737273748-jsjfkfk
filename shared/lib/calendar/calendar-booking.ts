@@ -64,6 +64,42 @@ interface CalendlySlotData {
   available: boolean;
 }
 
+function appendLeadTrackingToBookingLink(baseLink: string, request: CalendarBookingRequest): string {
+  try {
+    const url = new URL(baseLink);
+    url.searchParams.set('email', request.leadEmail);
+    url.searchParams.set('name', request.leadName);
+    url.searchParams.set('utm_content', request.leadId);
+    if (request.campaignId) url.searchParams.set('utm_campaign', request.campaignId);
+    return url.toString();
+  } catch {
+    const separator = baseLink.includes('?') ? '&' : '?';
+    return `${baseLink}${separator}email=${encodeURIComponent(request.leadEmail)}&name=${encodeURIComponent(request.leadName)}&utm_content=${encodeURIComponent(request.leadId)}`;
+  }
+}
+
+async function getUserBookingLink(userId: string, request: CalendarBookingRequest): Promise<string | null> {
+  const user = await storage.getUserById(userId);
+  if (user?.calendarLink) {
+    return appendLeadTrackingToBookingLink(user.calendarLink, request);
+  }
+
+  const integrations = await storage.getIntegrations(userId);
+  const calendlyIntegration = integrations.find(i => i.provider === 'calendly' && i.connected);
+  if (calendlyIntegration?.encryptedMeta) {
+    try {
+      const { decrypt } = await import('@shared/lib/crypto/encryption.js');
+      const credentials = JSON.parse(await decrypt(calendlyIntegration.encryptedMeta));
+      const link = credentials.scheduling_url || credentials.schedulingUrl || credentials.booking_url;
+      if (link) return appendLeadTrackingToBookingLink(link, request);
+    } catch (error: any) {
+      console.warn('Failed to read Calendly booking link:', error.message);
+    }
+  }
+
+  return null;
+}
+
 /**
  * Get available time slots for booking
  * Priority: User's Calendly → User's Google Calendar → Audnix's fallback Calendly
@@ -197,10 +233,16 @@ export async function sendBookingLinkToLead(
   try {
     const { leadEmail, leadName, userId, duration = 30 } = request;
 
-    // Get user details
-    const user = await storage.getUserById(userId);
-    if (!user) {
+    if (!(await storage.getUserById(userId))) {
       return { success: false, error: 'User not found' };
+    }
+
+    const connectedBookingLink = await getUserBookingLink(userId, request);
+    if (connectedBookingLink) {
+      return {
+        success: true,
+        bookingLink: connectedBookingLink
+      };
     }
 
     // Get available slots
@@ -208,7 +250,7 @@ export async function sendBookingLinkToLead(
     if (slots.length === 0) {
       return {
         success: false,
-        error: 'No available time slots. Please connect Google Calendar.'
+        error: 'No booking link or available calendar slots found. Please connect Calendly or Google Calendar.'
       };
     }
 

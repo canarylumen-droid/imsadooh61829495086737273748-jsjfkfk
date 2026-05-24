@@ -240,6 +240,27 @@ export class VerificationRoutingManager {
 
 export const verificationRoutingManager = new VerificationRoutingManager();
 
+export async function notifyMailboxConnected(userId: string, mailboxId: string): Promise<void> {
+  const activeCampaigns = await db.select({ id: campaignLeads.campaignId })
+    .from(campaignLeads)
+    .innerJoin(leads, eq(campaignLeads.leadId, leads.id))
+    .where(and(
+      eq(leads.userId, userId),
+      or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
+    ))
+    .groupBy(campaignLeads.campaignId);
+
+  if (activeCampaigns.length === 0) return;
+
+  const { routingEngine } = await import('@services/email-service/src/email/routing-engine.js');
+  await Promise.all(activeCampaigns.map(campaign =>
+    routingEngine.onNewMailboxConnected(userId, campaign.id, mailboxId).catch((err: any) => {
+      console.warn(`[MailboxEvent] New mailbox upgrade failed for ${mailboxId}/${campaign.id}:`, err.message);
+      return { reassigned: 0 };
+    })
+  ));
+}
+
 // ─── Verification Worker ──────────────────────────────────────────────────────
 
 async function processVerification(data: VerifyEmailJobData): Promise<void> {
@@ -308,10 +329,12 @@ async function processRouting(data: RouteLeadJobData): Promise<void> {
   try {
     const { routingEngine } = await import('@services/email-service/src/email/routing-engine.js');
 
-    // The routing engine needs all leads for the campaign to do proper load balancing.
-    // For single-lead routing, we wrap it in the same interface.
-    const assignments = await routingEngine.assignLeads(userId, [email]);
-    const assignment = assignments[0];
+    const result = await routingEngine.assignLeadsBatch(
+      userId,
+      [{ leadId: campaignLeadId, email }],
+      campaignId
+    );
+    const assignment = result.assignments[0];
 
     if (!assignment) {
       console.warn(`[RoutingWorker] No mailbox found for ${email} — leaving unassigned`);
@@ -323,12 +346,22 @@ async function processRouting(data: RouteLeadJobData): Promise<void> {
       ? { id: assignment.assigned_mailbox_id }
       : null;
 
+    const [currentLead] = await db.select({ leadId: campaignLeads.leadId, metadata: campaignLeads.metadata })
+      .from(campaignLeads)
+      .where(eq(campaignLeads.id, campaignLeadId))
+      .limit(1);
+
+    const metadata = (currentLead?.metadata as Record<string, any> | null) || {};
+
     // Write assignment to Postgres
     await db.update(campaignLeads)
       .set({
         integrationId: matchedMailbox?.id ?? null,
         status: 'pending',
         metadata: {
+          ...metadata,
+          routingPending: false,
+          routedAt: new Date().toISOString(),
           verificationStatus,
           routingReason: assignment.reason,
           matchType: assignment.match_type,
@@ -337,6 +370,12 @@ async function processRouting(data: RouteLeadJobData): Promise<void> {
         } as any,
       })
       .where(eq(campaignLeads.id, campaignLeadId));
+
+    if (matchedMailbox && currentLead?.leadId) {
+      await db.update(leads)
+        .set({ integrationId: matchedMailbox.id })
+        .where(eq(leads.id, currentLead.leadId));
+    }
 
     // Track mailbox load in Redis
     if (redisConnection && matchedMailbox) {
@@ -463,6 +502,12 @@ async function processNewMailboxConnect(data: NewMailboxJobData): Promise<void> 
         } as any,
       })
       .where(eq(campaignLeads.id, row.id));
+
+    if (row.leadId) {
+      await db.update(leads)
+        .set({ integrationId: newMailboxId })
+        .where(eq(leads.id, row.leadId));
+    }
 
     // Update Redis assignment
     if (redisConnection) {

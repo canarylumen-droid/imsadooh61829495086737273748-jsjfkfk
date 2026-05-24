@@ -26,6 +26,11 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       accountType: integration.accountType,
       lastSync: integration.lastSync,
       createdAt: integration.createdAt,
+      dailyLimit: (integration as any).dailyLimit ?? null,
+      gracefulDailyLimit: (integration as any).gracefulDailyLimit ?? null,
+      reputationScore: (integration as any).reputationScore ?? null,
+      healthLevel: (integration as any).healthLevel ?? null,
+      warmupStatus: (integration as any).warmupStatus ?? null,
     }));
 
     res.json(safeIntegrations);
@@ -282,5 +287,54 @@ router.post('/:provider/disconnect', requireAuth, async (req: Request, res: Resp
   }
 });
 
+
+/**
+ * PATCH /api/integrations/:integrationId/daily-limit
+ * Update the daily send limit for a specific mailbox.
+ * Users can increase or decrease their per-mailbox limit.
+ * The reputation system may still apply gracefulDailyLimit throttles on top.
+ */
+router.patch('/:integrationId/daily-limit', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { integrationId } = req.params;
+    const { dailyLimit } = req.body;
+
+    if (typeof dailyLimit !== 'number' || dailyLimit < 1 || dailyLimit > 500) {
+      res.status(400).json({ error: 'dailyLimit must be a number between 1 and 500' });
+      return;
+    }
+
+    // Verify ownership
+    const integration = await storage.getIntegrationById(integrationId);
+    if (!integration || integration.userId !== userId) {
+      res.status(404).json({ error: 'Integration not found' });
+      return;
+    }
+
+    // Only email providers have daily limits
+    if (!['custom_email', 'gmail', 'outlook'].includes(integration.provider)) {
+      res.status(400).json({ error: 'Daily limits only apply to email providers' });
+      return;
+    }
+
+    await storage.updateIntegrationById(integrationId, { dailyLimit } as any);
+
+    // Notify frontend of the change
+    const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+    wsSync.notifySettingsUpdated(userId);
+
+    console.log(`[Integrations] User ${userId} updated daily limit for ${integrationId} to ${dailyLimit}`);
+    res.json({ success: true, integrationId, dailyLimit });
+  } catch (error) {
+    console.error('Error updating daily limit:', error);
+    res.status(500).json({ error: 'Failed to update daily limit' });
+  }
+});
 export default router;
 

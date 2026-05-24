@@ -136,6 +136,10 @@ router.get('/outlook/callback', async (req: Request, res: Response): Promise<voi
         distributeLeadsFromPool(userId, outlookInt.id).catch(err =>
           console.error('[Outlook Redirect] Lead distribution failed:', err)
         );
+        const { notifyMailboxConnected } = await import('@shared/lib/queues/verification-routing-queue.js');
+        notifyMailboxConnected(userId, outlookInt.id).catch(err =>
+          console.error('[Outlook Redirect] Smart reroute failed (non-fatal):', err)
+        );
       }
     } catch (distErr) {
       console.warn('[Outlook Redirect] Could not trigger lead distribution:', distErr);

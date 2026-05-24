@@ -178,7 +178,7 @@ export async function ensureVectorSetup(): Promise<void> {
       CREATE INDEX IF NOT EXISTS brand_embeddings_vector_idx 
       ON brand_embeddings USING ivfflat (embedding vector_cosine_ops)
       WITH (lists = 100);
-    `).catch(() => {});
+    `).catch(err => console.warn('[VectorStore] Index creation failed (may already exist):', err));
   } catch (e) {
     console.warn('[VectorStore] Index setup alert:', (e as Error).message);
   }

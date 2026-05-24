@@ -15,20 +15,19 @@ const FeatureCard = ({ title, description, icon: Icon, delay, index }: FeatureCa
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
         transition={{ delay, duration: 0.6 }}
-        className="group relative h-full rounded-[2.5rem] glass-premium p-8 hover:bg-white/[0.05] transition-all duration-500"
+        className="group relative h-full rounded-xl glass-premium p-4 hover:bg-white/[0.05] transition-all duration-300"
     >
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-[50px] rounded-full group-hover:bg-primary/10 transition-colors" />
         <div className="relative z-10">
-            <div className="flex justify-between items-start mb-8">
-                <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 group-hover:scale-110 group-hover:bg-primary group-hover:text-black transition-all duration-500">
-                    <Icon className="w-6 h-6" />
+            <div className="flex justify-between items-start mb-4">
+                <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 group-hover:bg-primary group-hover:text-black transition-all duration-300">
+                    <Icon className="w-5 h-5" />
                 </div>
                 <span className="text-[10px] font-black text-foreground/10 group-hover:text-primary/40 transition-colors tracking-widest mt-2">
                     0{index + 1}
                 </span>
             </div>
-            <h3 className="text-xl font-black text-foreground mb-4 tracking-tight uppercase">{title}</h3>
-            <p className="text-muted-foreground text-sm leading-relaxed font-medium">
+            <h3 className="text-base font-black text-foreground mb-2 uppercase">{title}</h3>
+            <p className="text-muted-foreground text-xs leading-relaxed font-medium">
                 {description}
             </p>
         </div>
@@ -37,17 +36,14 @@ const FeatureCard = ({ title, description, icon: Icon, delay, index }: FeatureCa
 
 export function FeatureSection() {
     return (
-        <section id="features" className="py-24 px-4 bg-background relative overflow-hidden">
-            {/* Background Effects */}
-            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[80vw] h-[80vh] bg-primary/5 blur-[150px] rounded-full pointer-events-none" />
-
+        <section id="features" className="py-14 md:py-16 px-4 bg-background relative overflow-hidden">
             <div className="max-w-7xl mx-auto relative z-10">
-                <div className="text-center mb-24">
+                <div className="text-center mb-10">
                     <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         whileInView={{ opacity: 1, scale: 1 }}
                         viewport={{ once: true }}
-                        className="px-6 py-2 rounded-full bg-white/5 border border-white/10 text-primary text-[10px] font-black uppercase tracking-[0.4em] mb-12 inline-block shadow-[0_0_20px_rgba(var(--primary),0.1)]"
+                        className="px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] mb-5 inline-block shadow-sm"
                     >
                         Built for Performance
                     </motion.div>
@@ -55,11 +51,11 @@ export function FeatureSection() {
                         initial={{ opacity: 0, y: 30 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        className="text-3xl md:text-5xl lg:text-6xl font-black text-foreground tracking-tighter leading-[0.85] mb-8 uppercase drop-shadow-[0_0_30px_rgba(var(--primary),0.3)]"
+                        className="text-3xl md:text-4xl lg:text-5xl font-black text-foreground leading-tight mb-4 uppercase"
                     >
                         Engineered <br /> To <span className="text-primary italic">Win.</span>
                     </motion.h2>
-                    <p className="text-muted-foreground text-xl font-medium max-w-2xl mx-auto leading-tight">
+                    <p className="text-muted-foreground text-base font-medium max-w-2xl mx-auto leading-relaxed">
                         Generic AI chats are toys. Audnix is an autonomous revenue engine that analyzes, strategizes, and closes.
                     </p>
                 </div>
@@ -96,24 +92,23 @@ export function FeatureSection() {
                 </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-4 relative z-10">
-                    <div className="lg:col-span-2 group relative overflow-hidden rounded-[2.5rem] glass-premium p-8 md:p-12">
-                        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/5 blur-[100px] rounded-full group-hover:bg-primary/20 transition-colors duration-700" />
+                    <div className="lg:col-span-2 group relative overflow-hidden rounded-xl glass-premium p-4 md:p-6">
                         <div className="relative z-10">
-                            <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 mb-8 group-hover:scale-110 transition-transform duration-500">
-                                <Zap className="w-6 h-6 text-primary" />
+                            <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 mb-4 transition-transform duration-300">
+                                <Zap className="w-5 h-5 text-primary" />
                             </div>
 
-                            <h3 className="text-3xl font-black mb-6 tracking-tight uppercase text-foreground">
+                            <h3 className="text-xl md:text-2xl font-black mb-3 uppercase text-foreground">
                                 High-Ticket Closer Engine
                             </h3>
 
-                            <p className="text-muted-foreground font-medium text-lg mb-8 max-w-xl leading-relaxed">
+                            <p className="text-muted-foreground font-medium text-sm mb-5 max-w-xl leading-relaxed">
                                 Most bots just answer questions. Audnix is programmed to
                                 <span className="text-foreground"> close the deal</span>.
                                 It systematically overcomes objections, builds value, and pushes for the meeting only when intent is verified.
                             </p>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {[
                                     "110+ Objection Scenarios",
                                     "Qualified Meetings Only",
@@ -129,14 +124,14 @@ export function FeatureSection() {
                         </div>
                     </div>
 
-                    <div className="group relative overflow-hidden rounded-[2.5rem] glass-premium p-8 md:p-12">
+                    <div className="group relative overflow-hidden rounded-xl glass-premium p-4 md:p-6">
                         <div className="relative z-10 h-full flex flex-col justify-between">
                             <div>
-                                <div className="w-14 h-14 rounded-2xl bg-white/5 flex items-center justify-center border border-white/10 mb-8 group-hover:scale-110 transition-transform duration-500">
-                                    <Search className="w-6 h-6 text-primary" />
+                                <div className="w-10 h-10 rounded-lg bg-white/5 flex items-center justify-center border border-white/10 mb-4 transition-transform duration-300">
+                                    <Search className="w-5 h-5 text-primary" />
                                 </div>
-                                <h3 className="text-2xl md:text-3xl font-black mb-4 tracking-tight uppercase text-foreground">Smart Lead Profile</h3>
-                                <p className="text-muted-foreground font-medium leading-relaxed mb-6">
+                                <h3 className="text-xl font-black mb-3 uppercase text-foreground">Smart Lead Profile</h3>
+                                <p className="text-muted-foreground text-sm font-medium leading-relaxed mb-4">
                                     Audnix scans public data to build a profile of every lead before engaging.
                                 </p>
                             </div>

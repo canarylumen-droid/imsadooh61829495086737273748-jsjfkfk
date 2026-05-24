@@ -516,8 +516,8 @@ export class OutreachEngine {
       const mailbox = activeMailboxes[idx];
 
       // PHASE 46: Strictly avoid mailboxes with reputation < 65
-      const reputation = mailbox.reputationScore ?? 100;
-      if (reputation < 65 && mailbox.warmupStatus !== 'active') {
+      const reputation = mailbox.reputationScore ?? null;
+      if (reputation !== null && reputation < 65 && mailbox.warmupStatus !== 'active') {
         continue;
       }
 
@@ -547,12 +547,16 @@ export class OutreachEngine {
     const isEnterprise = tier === 'enterprise';
 
     // Default safe limits by provider type
-    let defaultLimit = isEnterprise ? 1000 : 50;
-    if (integration.provider === 'custom_email') defaultLimit = isEnterprise ? 10000 : 250;
-    else if (integration.provider === 'outlook') defaultLimit = isEnterprise ? 1000 : 50;
-    else if (integration.provider === 'gmail') defaultLimit = isEnterprise ? 1000 : 50;
-    
-    let mailboxDailyLimit = meta.dailyLimit ? Number(meta.dailyLimit) : defaultLimit;
+    let defaultLimit = isEnterprise ? 500 : 50;
+    if (integration.provider === 'custom_email') defaultLimit = isEnterprise ? 500 : 250;
+    else if (integration.provider === 'outlook') defaultLimit = isEnterprise ? 500 : 50;
+    else if (integration.provider === 'gmail') defaultLimit = isEnterprise ? 500 : 50;
+
+    // Single source of truth: integrations.dailyLimit DB column
+    // (written by Reputation Monitor + Autonomous Scaler)
+    let mailboxDailyLimit = (integration as any).dailyLimit && Number((integration as any).dailyLimit) > 0
+      ? Number((integration as any).dailyLimit)
+      : defaultLimit;
     
     // Override with campaign-specific limit if provided
     if (campaign?.config?.mailboxLimits && campaign.config.mailboxLimits[integration.id]) {
@@ -561,7 +565,7 @@ export class OutreachEngine {
 
     /**
      * ADVANCED GMAIL/OUTLOOK BUFFERING & ENTERPRISE SCALING
-     * - Hard cap: mailboxDailyLimit (50 for non-enterprise, 1000 for enterprise)
+     * - Hard cap: mailboxDailyLimit (50 for non-enterprise, 500 for enterprise)
      * - Initial Outreach (Priority 3) Buffer: 150 (enforces gap before hard limit)
      */
     const isGmailOrOutlook = ['gmail', 'outlook'].includes(integration.provider);
@@ -582,7 +586,7 @@ export class OutreachEngine {
       const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
       
       // NEURAL BRAIN CAP: 60/day max for non-enterprise (overrides user setting)
-      const smartCap = isWarmed ? 60 : 45 + Math.floor(Math.random() * 6); // 45-50
+      const smartCap = isWarmed ? 60 : 45; // Deterministic: no Math.random in limit calc
       effectiveLimit = Math.min(effectiveLimit, smartCap);
       console.log(`[OutreachEngine] 🧠 NEURAL BRAIN: Mailbox ${integration.id.slice(-8)} capped at ${effectiveLimit} (Warmed: ${isWarmed})`);
     }
@@ -665,8 +669,8 @@ export class OutreachEngine {
         }
         
         // --- PRIORITY PAUSE: Yield to pending auto-replies ---
-        const reputationScore = integration.reputationScore ?? 100;
-        if (reputationScore < 40) {
+        const reputationScore = integration.reputationScore ?? null;
+        if (reputationScore !== null && reputationScore < 40) {
            effectiveLimit = Math.min(5, effectiveLimit);
            console.log(`[OutreachEngine] ⚠️ LOW REPUTATION (${reputationScore}) for ${integration.id}. Strict volume reduction applied.`);
         }
@@ -790,16 +794,17 @@ export class OutreachEngine {
       console.log(`[OutreachEngine] Delivering campaign "${campaign.name}" step ${leadEntry.currentStep} to ${lead.email} using mailbox ${integrationId}`);
 
     // Generate content
-    let subject = (campaign.template as any).subject || "Contacting you";
-    let body = (campaign.template as any).body;
+    const template = campaign.template as any;
+    let subject = template?.initial?.subject || template?.subject || "Contacting you";
+    let body = template?.initial?.body || template?.body;
 
     // --- AUTO-REPLY LOGIC ---
     if (leadEntry.metadata?.pendingAutoReply) {
-      body = (campaign.template as any).autoReplyBody;
+      body = template?.autoReply?.body || template?.autoReplyBody;
       if (!body) throw new Error('Auto-reply body missing in campaign template');
       subject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
     } else if (leadEntry.currentStep > 0) {
-      const followups = (campaign.template as any)?.followups || [];
+      const followups = template?.followups || [];
       const fuConfig = followups[leadEntry.currentStep - 1];
       if (fuConfig) {
         body = fuConfig.body;
@@ -823,7 +828,7 @@ export class OutreachEngine {
              console.error(`[OutreachEngine] AI Copy Adjustment failed for lead ${lead.id}:`, adjErr);
            }
         }
-      } else if (leadEntry.currentStep > (campaign.template as any)?.followups?.length) {
+      } else if (leadEntry.currentStep > template?.followups?.length) {
         // SYSTEM 12: Dynamic AI Follow-up (Post-Template)
         const { DynamicFollowUpEngine } = await import('@services/brain-worker/src/ai-lib/core/dynamic-followup.js');
         const brandContext = await getBrandContext(userId);
@@ -958,10 +963,12 @@ export class OutreachEngine {
         campaignId: campaign.id,
         leadId: lead.id,
         integrationId, // Use the rotated mailbox
+        allowedIntegrationIds: campaign.config?.mailboxIds,
         isPriorityReply,
         inReplyTo,
         references,
-        threadId
+        threadId,
+        replyTo: campaign.config?.replyTo
       });
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';

@@ -3,7 +3,7 @@
  *
  * Priorities:
  *   P1 (domain)          — lead@company.com → sender@company.com
- *   P2 (provider_family) — MX-detected: google→google, microsoft→microsoft
+ *   P2 (provider_family) — DNS-detected: MX/SPF google→google, microsoft→microsoft
  *   P3 (best_available)  — highest reputation + most capacity
  *   P4 (fallback)        — any healthy mailbox; never leave a lead unassigned
  *
@@ -28,6 +28,7 @@ import {
 } from '@shared/lib/queues/lua-scripts.js';
 
 const resolveMx = promisify(dns.resolveMx);
+const resolveTxt = promisify(dns.resolveTxt);
 dns.setServers(['1.1.1.1', '8.8.8.8', '208.67.222.222']);
 
 // Redis provider cache TTL: 24h (separate from the 5-min in-memory cache)
@@ -70,7 +71,7 @@ export interface MailboxInfo {
   capacity: number;
 }
 
-// ─── MX provider detection (no hardcoded lists) ───────────────────────────────
+// ─── DNS provider detection (MX + SPF signals) ───────────────────────────────
 
 const mxProviderCache = new Map<string, { family: string; expires: number }>();
 const MX_TTL = 5 * 60 * 1000;
@@ -103,6 +104,44 @@ function detectFamilyFromMx(mxRecords: dns.MxRecord[]): string {
     if (ex.includes('namecheap'))                                                           return 'namecheap';
   }
   return 'custom';
+}
+
+function detectFamilyFromSpfRecords(txtRecords: string[][]): string {
+  const spfText = txtRecords
+    .map(parts => parts.join(''))
+    .filter(record => record.toLowerCase().startsWith('v=spf1'))
+    .join(' ')
+    .toLowerCase();
+
+  if (!spfText) return 'custom';
+
+  if (spfText.includes('_spf.google.com') || spfText.includes('include:google.com')) return 'google';
+  if (
+    spfText.includes('spf.protection.outlook.com') ||
+    spfText.includes('include:outlook.com') ||
+    spfText.includes('include:spf.messaging.microsoft.com')
+  ) return 'microsoft';
+  if (spfText.includes('spf.hostinger.com') || spfText.includes('spf.titan.email')) return 'hostinger';
+  if (spfText.includes('secureserver.net') || spfText.includes('spf.em.secureserver.net')) return 'godaddy';
+  if (spfText.includes('zoho.com') || spfText.includes('zoho.eu')) return 'zoho';
+  if (spfText.includes('protonmail.ch') || spfText.includes('proton.me')) return 'protonmail';
+  if (spfText.includes('spf.messagingengine.com')) return 'fastmail';
+  if (spfText.includes('mailgun.org')) return 'mailgun';
+  if (spfText.includes('sendgrid.net')) return 'sendgrid';
+  if (spfText.includes('amazonses.com')) return 'aws_ses';
+  if (spfText.includes('spf.privateemail.com')) return 'namecheap_privatemail';
+  if (spfText.includes('spf.ionos.com') || spfText.includes('_spf.ionos.com')) return 'ionos';
+
+  return 'custom';
+}
+
+export function detectProviderFamilyFromDnsSignals(
+  mxRecords: Array<Pick<dns.MxRecord, 'exchange'>>,
+  txtRecords: string[][] = []
+): string {
+  const mxFamily = detectFamilyFromMx(mxRecords as dns.MxRecord[]);
+  if (mxFamily !== 'custom') return mxFamily;
+  return detectFamilyFromSpfRecords(txtRecords);
 }
 
 // ─── Provider family detection: Redis (24h TTL) → in-memory cache → live MX lookup ───
@@ -146,11 +185,15 @@ async function detectProviderFamily(domain: string): Promise<string> {
     // status === 'locked': we hold the lock, do the MX lookup and populate cache
   }
 
-  // 3. Live MX lookup
+  // 3. Live DNS lookup. MX is primary; SPF is a fallback/confirmation signal
+  // for providers such as Google Workspace, Microsoft 365, Hostinger, GoDaddy.
   let family = 'custom';
   try {
-    const mxRecords = await resolveMx(domain);
-    family = detectFamilyFromMx(mxRecords);
+    const [mxRecords, txtRecords] = await Promise.all([
+      resolveMx(domain).catch(() => [] as dns.MxRecord[]),
+      resolveTxt(domain).catch(() => [] as string[][]),
+    ]);
+    family = detectProviderFamilyFromDnsSignals(mxRecords, txtRecords);
   } catch { /* domain has no MX — custom */ }
 
   // Populate both caches
@@ -356,7 +399,10 @@ export class RoutingEngine {
     if (skipped > 0) console.log(`[RoutingEngine] 🗑️ Skipped ${skipped} invalid leads`);
 
     // 3. Load mailboxes (with Redis state if available)
-    const mailboxes = await this.getProcessedMailboxes(userId);
+    const mailboxes = await this.filterMailboxesForCampaign(
+      await this.getProcessedMailboxes(userId),
+      campaignId
+    );
     if (mailboxes.length === 0) {
       return { assignments: [], rebalanced_count: 0, unassigned_count: leadInfos.length, elapsed_ms: Date.now() - start };
     }
@@ -594,6 +640,29 @@ export class RoutingEngine {
     );
     return results.filter((mb): mb is MailboxInfo => mb !== null);
   }
+
+  private async filterMailboxesForCampaign(mailboxes: MailboxInfo[], campaignId?: string): Promise<MailboxInfo[]> {
+    if (!campaignId) return mailboxes;
+
+    try {
+      const { db } = await import('@shared/lib/db/db.js');
+      const { outreachCampaigns } = await import('@audnix/shared');
+      const { eq } = await import('drizzle-orm');
+      const [campaign] = await db.select({ config: outreachCampaigns.config })
+        .from(outreachCampaigns)
+        .where(eq(outreachCampaigns.id, campaignId))
+        .limit(1);
+
+      const allowedMailboxIds = (campaign?.config as any)?.mailboxIds;
+      if (!Array.isArray(allowedMailboxIds) || allowedMailboxIds.length === 0) return mailboxes;
+
+      const allowed = new Set(allowedMailboxIds);
+      return mailboxes.filter(mb => allowed.has(mb.id));
+    } catch (err: any) {
+      console.warn(`[RoutingEngine] Campaign mailbox filter unavailable for ${campaignId}:`, err.message);
+      return mailboxes;
+    }
+  }
 }
 
 export const routingEngine = new RoutingEngine();
@@ -602,7 +671,8 @@ export const routingEngine = new RoutingEngine();
 
 async function buildMailboxInfo(mb: any, capacity: number): Promise<MailboxInfo | null> {
   if (capacity <= 0) return null;
-  if ((mb.reputationScore ?? 100) < 40) return null;
+  const repScore = mb.reputationScore ?? null;
+  if (repScore !== null && repScore < 40) return null;
   if (mb.healthStatus === 'failed') return null;
 
   const meta = await decryptMeta(mb);
@@ -610,11 +680,16 @@ async function buildMailboxInfo(mb: any, capacity: number): Promise<MailboxInfo 
   const domain = email.split('@')[1]?.toLowerCase() || '';
   const providerFamily = await detectProviderFamily(domain);
 
+  // Single source of truth: integrations.dailyLimit DB column
+  // Treat 0 as provider default (shouldn't happen but defensive), null/undefined as provider default
+  const defaultLimit = mb.provider === 'custom_email' ? 250 : 50;
+  const dailyLimit = mb.dailyLimit != null && mb.dailyLimit > 0 ? mb.dailyLimit : defaultLimit;
+
   return {
     id: mb.id, email, provider: mb.provider,
     healthStatus: mb.healthStatus,
-    reputationScore: mb.reputationScore ?? 100,
-    dailyLimit: mb.dailyLimit ?? 50,
+    reputationScore: repScore ?? 100,
+    dailyLimit,
     warmupStatus: mb.warmupStatus ?? 'active',
     domain, providerFamily, capacity,
   };

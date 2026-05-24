@@ -21,13 +21,14 @@ async function checkReputation() {
       console.log('No connected mailboxes found.');
     } else {
       results.forEach(m => {
-        const score = m.reputationScore || 100;
-        let status = 'Excellent 🟢';
-        if (score < 40) status = 'Critical 🔴 (Paused)';
-        else if (score < 70) status = 'Warning 🟠 (Throttled)';
+        const score = m.reputationScore ?? null;
+        const displayScore = score !== null ? score : 'Unscored';
+        let status = score !== null ? 'Excellent 🟢' : 'Unknown ⚪';
+        if (score !== null && score < 40) status = 'Critical 🔴 (Paused)';
+        else if (score !== null && score < 70) status = 'Warning 🟠 (Throttled)';
         
         console.log(`- Provider: ${m.provider}`);
-        console.log(`  Score: ${score}/100`);
+        console.log(`  Score: ${displayScore}${score !== null ? '/100' : ''}`);
         console.log(`  Status: ${status}`);
         console.log(`  Daily Limit: ${m.dailyLimit}`);
         console.log('----------------------------');

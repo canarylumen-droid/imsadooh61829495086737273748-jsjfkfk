@@ -257,6 +257,14 @@
 
   body {
     font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  h1,
+  h2,
+  h3 {
+    letter-spacing: 0;
   }
 
   /* Safe area support for mobile devices */
@@ -334,9 +342,9 @@
 }
 
 .animated-border-card:hover {
-  transform: translateY(-8px);
+  transform: translateY(-2px);
   border-color: hsla(var(--primary) / 0.4);
-  box-shadow: 0 20px 40px -20px hsla(var(--primary) / 0.3);
+  box-shadow: 0 12px 24px -18px hsla(var(--primary) / 0.3);
 }
 
 .animated-border-card:hover::before {
@@ -576,8 +584,8 @@
 
 /* PREMIUM CUSTOM SCROLLBAR */
 ::-webkit-scrollbar {
-  width: 16px;
-  height: 16px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -683,7 +691,17 @@
   }
 
   .grid {
-    gap: 1rem;
+    gap: 0.75rem;
+  }
+}
+
+@layer utilities {
+  .compact-panel {
+    @apply rounded-lg border border-border/50 bg-card/60 shadow-sm;
+  }
+
+  .compact-section {
+    @apply py-12 md:py-16;
   }
 }
 

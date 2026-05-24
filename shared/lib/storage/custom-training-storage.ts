@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { advancedStorage } from './advanced-storage.js';
+import { randomUUID } from 'crypto';
 
 // Schemas
 export const CustomObjectionSchema = z.object({
-  id: z.string().uuid().or(z.string()),
+  id: z.string().min(1).default(() => randomUUID()),
   objection: z.string().min(1, "Objection text is required"),
   category: z.enum(['timing', 'price', 'trust', 'authority', 'fit', 'competitor', 'decision', 'general']).default('general'),
   response: z.string().min(1, "Preferred response/handling instruction is required")

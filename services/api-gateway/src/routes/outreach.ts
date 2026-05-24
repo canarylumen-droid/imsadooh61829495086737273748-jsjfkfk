@@ -107,7 +107,20 @@ router.post('/campaigns', requireAuth, async (req, res) => {
 
     // Default config and template if missing (for the "AI Filter" style calls)
     const campaignConfig = config || { dailyLimit: 50 };
-    const campaignTemplate = template || { subject: 'Re connecting', body: 'Hey {lead_name}, reaching out.' };
+    const campaignTemplate: any = template || { subject: 'Re connecting', body: 'Hey {lead_name}, reaching out.' };
+
+    if (campaignTemplate.initial) {
+      campaignTemplate.subject ||= campaignTemplate.initial.subject;
+      campaignTemplate.body ||= campaignTemplate.initial.body;
+    }
+    if (campaignTemplate.autoReply?.body && !campaignTemplate.autoReplyBody) {
+      campaignTemplate.autoReplyBody = campaignTemplate.autoReply.body;
+    }
+    if (Array.isArray(campaignTemplate.followups)) {
+      campaignTemplate.followups = campaignTemplate.followups.filter((followup: any) =>
+        typeof followup?.body === 'string' && followup.body.trim().length > 0
+      );
+    }
 
     // Enforce reasonable daily limits based on plan or safety (increased from 500)
     if (campaignConfig.dailyLimit) {
@@ -210,20 +223,20 @@ router.post('/campaigns', requireAuth, async (req, res) => {
         }
       }
 
-      // --- Auto-include Inventory Leads (Lead Pool Management) ---
-      // Distribute leads that haven't been assigned to any mailbox yet
-      const inventoryLeads = await db.select({ id: leadsTable.id })
-        .from(leadsTable)
-        .where(and(
-          eq(leadsTable.userId, userId),
-          isNull(leadsTable.integrationId),
-          eq(leadsTable.archived, false),
-          eq(leadsTable.channel, 'email')
-        ));
-      
-      for (const invMatch of inventoryLeads) {
-        if (!finalLeadIds.includes(invMatch.id)) {
-          finalLeadIds.push(invMatch.id);
+      if (campaignConfig.includeInventoryLeads === true) {
+        const inventoryLeads = await db.select({ id: leadsTable.id })
+          .from(leadsTable)
+          .where(and(
+            eq(leadsTable.userId, userId),
+            isNull(leadsTable.integrationId),
+            eq(leadsTable.archived, false),
+            eq(leadsTable.channel, 'email')
+          ));
+
+        for (const invMatch of inventoryLeads) {
+          if (!finalLeadIds.includes(invMatch.id)) {
+            finalLeadIds.push(invMatch.id);
+          }
         }
       }
 
@@ -231,25 +244,14 @@ router.post('/campaigns', requireAuth, async (req, res) => {
       const userIntegrations = await storage.getIntegrations(userId);
       const selectedMailboxIds = campaignConfig.mailboxIds || [];
       const activeMailboxes = userIntegrations.filter(i =>
-        selectedMailboxIds.includes(i.id) && i.connected
+        selectedMailboxIds.includes(i.id) &&
+        i.connected &&
+        ['custom_email', 'gmail', 'outlook'].includes(i.provider)
       );
 
       if (activeMailboxes.length === 0 && finalLeadIds.length > 0) {
         throw new Error("No connected mailboxes selected. Please connect an inbox to start the campaign.");
       }
-
-      const getLimit = (mb: any) => {
-        // Priority 1: Campaign-specific limits (set by user in wizard)
-        if (campaignConfig.mailboxLimits && campaignConfig.mailboxLimits[mb.id]) {
-          return Math.min(Number(campaignConfig.mailboxLimits[mb.id]), 1000); // 1k hard cap
-        }
-        // Priority 2: Provider defaults (100 for Gmail, 500 for SMTP)
-        if (mb.provider === 'gmail' || mb.provider === 'outlook') return 100;
-        return 500;
-      };
-
-      const mailboxesWithLimits = activeMailboxes.map(mb => ({ id: mb.id, limit: getLimit(mb) }));
-      const totalLimit = mailboxesWithLimits.reduce((sum, mb) => sum + mb.limit, 0);
 
       const leadLinks = finalLeadIds.map((leadId, index) => {
         let nextActionAt: Date | null = new Date(); // Start immediately by default
@@ -261,26 +263,16 @@ router.post('/campaigns', requireAuth, async (req, res) => {
           nextActionAt = candidate;
         }
 
-        // Proportional assignment
-        let selectedMailboxId = activeMailboxes[0]?.id;
-        if (totalLimit > 0) {
-          const targetWeight = (index / finalLeadIds.length) * totalLimit;
-          let cumulative = 0;
-          for (const mb of mailboxesWithLimits) {
-            cumulative += mb.limit;
-            if (targetWeight < cumulative) {
-              selectedMailboxId = mb.id;
-              break;
-            }
-          }
-        }
-
         return {
           campaignId: campaign.id,
           leadId,
-          status: 'pending' as const,
-          integrationId: selectedMailboxId,
-          nextActionAt
+          status: 'queued' as const,
+          integrationId: null,
+          nextActionAt,
+          metadata: {
+            routingPending: true,
+            routingQueuedAt: new Date().toISOString()
+          }
         };
       });
       addedCount = leadLinks.length;
@@ -289,20 +281,26 @@ router.post('/campaigns', requireAuth, async (req, res) => {
         await db.insert(campaignLeads).values(leadLinks.slice(i, i + batchSize)).onConflictDoNothing();
       }
 
-      // --- Lead Redistribution (Isolate leads per assigned mailbox) ---
-      const mailboxAssignments: Record<string, string[]> = {};
-      leadLinks.forEach(ll => {
-        if (!ll.integrationId) return;
-        if (!mailboxAssignments[ll.integrationId]) mailboxAssignments[ll.integrationId] = [];
-        mailboxAssignments[ll.integrationId].push(ll.leadId);
-      });
+      // --- Smart Peer Mapping (MX/SPF provider family + capacity balancing) ---
+      // Campaign workers intentionally ignore these rows until routing assigns a mailbox.
+      const routableRows = await db.select({
+        campaignLeadId: campaignLeads.id,
+        email: leadsTable.email
+      })
+        .from(campaignLeads)
+        .innerJoin(leadsTable, eq(campaignLeads.leadId, leadsTable.id))
+        .where(and(
+          eq(campaignLeads.campaignId, campaign.id),
+          inArray(campaignLeads.leadId, finalLeadIds),
+          eq(leadsTable.channel, 'email')
+        ));
 
-      for (const [mbId, leadIds] of Object.entries(mailboxAssignments)) {
-        if (leadIds.length > 0) {
-          await db.update(leadsTable)
-            .set({ integrationId: mbId })
-            .where(inArray(leadsTable.id, leadIds));
-        }
+      if (routableRows.length > 0) {
+        const { verificationRoutingManager } = await import('@shared/lib/queues/verification-routing-queue.js');
+        await verificationRoutingManager.enqueueLeads(userId, campaign.id, routableRows.map(row => ({
+          campaignLeadId: row.campaignLeadId,
+          email: row.email || ''
+        })).filter(row => row.email.includes('@')));
       }
 
       // Trigger UI refresh for leads redistribution
@@ -629,12 +627,17 @@ router.post('/projections', requireAuth, async (req, res) => {
     // Calculate aggregate daily limit
     let totalDailyLimit = 0;
     for (const mb of selectedMailboxes) {
-      let meta: Record<string, any> = {};
-      try {
-        const { decrypt } = await import('@shared/lib/crypto/encryption.js');
-        meta = JSON.parse(decrypt(mb.encryptedMeta || '{}') || '{}');
-      } catch {}
-      let limit = meta.dailyLimit ? Number(meta.dailyLimit) : (mb.provider === 'gmail' ? 50 : 500);
+      // Single source of truth: integrations.dailyLimit DB column
+      // (written by Reputation Monitor + Autonomous Scaler)
+      const defaultLimit = mb.provider === 'custom_email' ? 250 : 50;
+      let limit = (mb as any).dailyLimit && Number((mb as any).dailyLimit) > 0
+        ? Number((mb as any).dailyLimit)
+        : defaultLimit;
+      // Apply graceful throttle from reputation system if set
+      const gracefulLimit = (mb as any).gracefulDailyLimit;
+      if (gracefulLimit !== null && gracefulLimit !== undefined) {
+        limit = Math.min(limit, gracefulLimit);
+      }
       // Warmup adjustment (optional, skip if warmup service unavailable)
       try {
         const { warmupService } = await import('@services/outreach-worker/src/outreach-lib/warmup-service.js');

@@ -40,23 +40,23 @@ const STEPS = [
 
 export function HowItWorksSection() {
     return (
-        <section id="how-it-works" className="py-24 px-4 bg-background relative overflow-hidden">
+        <section id="how-it-works" className="py-14 md:py-16 px-4 bg-background relative overflow-hidden">
             <div className="max-w-7xl mx-auto relative z-10">
-                <div className="text-center mb-24">
+                <div className="text-center mb-10">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         whileInView={{ opacity: 1, y: 0 }}
                         viewport={{ once: true }}
-                        className="px-6 py-2 rounded-full bg-white/5 border border-white/10 text-primary text-[10px] font-black uppercase tracking-[0.4em] mb-12 inline-block"
+                        className="px-4 py-1.5 rounded-full bg-white/5 border border-white/10 text-primary text-[10px] font-black uppercase tracking-[0.2em] mb-5 inline-block"
                     >
                         Engine Activation
                     </motion.div>
-                    <h2 className="text-3xl md:text-5xl lg:text-6xl font-black text-foreground tracking-tighter leading-[0.85] mb-8 uppercase">
+                    <h2 className="text-3xl md:text-4xl lg:text-5xl font-black text-foreground leading-tight mb-4 uppercase">
                         The Intelligent <br /> <span className="text-primary">Workflow.</span>
                     </h2>
                 </div>
 
-                <div className="space-y-12">
+                <div className="space-y-8">
                     {STEPS.map((step, index) => (
                         <motion.div
                             key={step.id}
@@ -64,23 +64,23 @@ export function HowItWorksSection() {
                             whileInView={{ opacity: 1, y: 0 }}
                             viewport={{ once: true, margin: "-100px" }}
                             transition={{ duration: 0.8 }}
-                            className="flex flex-col lg:flex-row items-center gap-12 lg:gap-24"
+                            className="flex flex-col lg:flex-row items-center gap-6 lg:gap-10"
                         >
                             {/* Text Side */}
-                            <div className={`w-full lg:w-1/2 space-y-8 ${index % 2 === 1 ? 'lg:order-2' : ''}`}>
-                                <div className="flex items-center gap-6">
-                                    <span className="text-4xl md:text-6xl font-black text-foreground/10 tracking-tighter">
+                            <div className={`w-full lg:w-1/2 space-y-4 ${index % 2 === 1 ? 'lg:order-2' : ''}`}>
+                                <div className="flex items-center gap-4">
+                                    <span className="text-3xl md:text-4xl font-black text-foreground/10">
                                         {step.id}
                                     </span>
-                                    <div className={`p-4 rounded-2xl ${step.bg} border border-white/5`}>
-                                        <step.icon className={`w-8 h-8 ${step.color}`} />
+                                    <div className={`p-3 rounded-lg ${step.bg} border border-white/5`}>
+                                        <step.icon className={`w-5 h-5 ${step.color}`} />
                                     </div>
                                 </div>
                                 <div className="space-y-4">
-                                    <h3 className="text-2xl md:text-4xl font-black text-foreground tracking-tight uppercase">
+                                    <h3 className="text-xl md:text-2xl font-black text-foreground uppercase">
                                         {step.title}
                                     </h3>
-                                    <p className="text-muted-foreground text-lg md:text-xl font-medium leading-relaxed">
+                                    <p className="text-muted-foreground text-sm md:text-base font-medium leading-relaxed">
                                         {step.desc}
                                     </p>
                                 </div>
@@ -88,10 +88,9 @@ export function HowItWorksSection() {
 
                             {/* UI Mockup Side */}
                             <div className="w-full lg:w-1/2 relative group">
-                                <div className={`absolute inset-0 ${step.bg} blur-[120px] rounded-full opacity-20 group-hover:opacity-40 transition-opacity duration-700`} />
-                                <div className="relative bg-[#0d1117]/80 backdrop-blur-2xl rounded-[3rem] border border-white/10 p-8 shadow-2xl overflow-hidden aspect-[16/10] flex flex-col">
+                                <div className="relative bg-[#0d1117]/80 backdrop-blur-xl rounded-xl border border-white/10 p-4 shadow-sm overflow-hidden aspect-[16/10] flex flex-col">
                                     {/* Mock Browser Header */}
-                                    <div className="flex items-center justify-between mb-8 pb-4 border-b border-white/5">
+                                    <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
                                         <div className="flex gap-1.5">
                                             <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
                                             <div className="w-2.5 h-2.5 rounded-full bg-yellow-500/50" />
@@ -158,9 +157,9 @@ export function HowItWorksSection() {
                     ))}
                 </div>
 
-                <div className="mt-24 flex flex-col items-center justify-center">
+                <div className="mt-10 flex flex-col items-center justify-center">
                     <Link href="/auth">
-                        <Button size="lg" className="h-20 px-16 rounded-full text-base font-black uppercase tracking-widest shadow-[0_20px_50px_rgba(var(--primary),0.2)] hover:scale-105 transition-all bg-primary text-primary-foreground">
+                        <Button size="lg" className="h-11 px-6 rounded-lg text-xs font-black uppercase tracking-widest shadow-md hover:scale-[1.02] transition-all bg-primary text-primary-foreground">
                             Initialize Your System <ArrowRight className="ml-3 w-5 h-5" />
                         </Button>
                     </Link>

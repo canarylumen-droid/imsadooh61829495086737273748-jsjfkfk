@@ -88,7 +88,7 @@ export class RagWorker {
           event: 'search_failure',
           message: err.message,
           details: { query, action: 'search' }
-        }).catch(() => {});
+        }).catch(err => console.error('[RAG Worker] Failed to log search failure:', err));
 
         // Fallback to simple vector search
         const queryVector = await embed(query);
@@ -152,7 +152,7 @@ export class RagWorker {
           event: 'indexing_failure',
           message: err.message,
           details: { fileName, documentId }
-        }).catch(() => {});
+        }).catch(err => console.error('[RAG Worker] Failed to log indexing failure:', err));
 
         throw err;
       }

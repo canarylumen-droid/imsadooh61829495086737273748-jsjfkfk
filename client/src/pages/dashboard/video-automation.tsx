@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback } from "react";
 import { CustomContextMenu, useContextMenu } from "@/components/ui/interactive/CustomContextMenu";
 import { motion, AnimatePresence } from "framer-motion";
@@ -347,6 +346,20 @@ export default function VideoAutomationPage() {
     enabled: canAccessVideo,
   });
 
+  // Fetch video automation stats (intent accuracy, impact level)
+  const { data: videoStats } = useQuery<{
+    intentAccuracy: number | null;
+    totalProcessed: number;
+    dmsSent: number;
+    ignored: number;
+    failed: number;
+    impactLevel: 'none' | 'low' | 'medium' | 'high';
+  }>({
+    queryKey: ["/api/video-automation/stats"],
+    enabled: canAccessVideo,
+    refetchInterval: 30000, // Refresh every 30 seconds
+  });
+
   const { contextConfig, handleContextMenu, closeMenu } = useContextMenu();
 
   // Map backend media to the format expected by the UI
@@ -587,11 +600,21 @@ export default function VideoAutomationPage() {
                         <div className="grid grid-cols-2 gap-4 mb-8">
                           <div className="p-5 rounded-2xl bg-muted/40 border border-border/60">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-1">Intent Accuracy</p>
-                            <div className="flex items-end gap-2 text-xl font-bold">84% <TrendingUp className="w-4 h-4 text-emerald-500 mb-1" /></div>
+                            <div className="flex items-end gap-2 text-xl font-bold">
+                              {videoStats?.intentAccuracy !== null && videoStats?.intentAccuracy !== undefined
+                                ? `${videoStats.intentAccuracy}%`
+                                : "--"}
+                              <TrendingUp className="w-4 h-4 text-emerald-500 mb-1" />
+                            </div>
                           </div>
                           <div className="p-5 rounded-2xl bg-muted/40 border border-border/60">
                             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mb-1">Impact Level</p>
-                            <div className="flex items-end gap-2 text-xl font-bold">High <Zap className="w-4 h-4 text-amber-500 mb-1" /></div>
+                            <div className="flex items-end gap-2 text-xl font-bold">
+                              {videoStats?.impactLevel && videoStats.impactLevel !== 'none'
+                                ? videoStats.impactLevel.charAt(0).toUpperCase() + videoStats.impactLevel.slice(1)
+                                : "--"}
+                              <Zap className="w-4 h-4 text-amber-500 mb-1" />
+                            </div>
                           </div>
                         </div>
                         <Button

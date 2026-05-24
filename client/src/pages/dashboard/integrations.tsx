@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -212,7 +213,7 @@ export default function IntegrationsPage() {
   const { data: customEmailStatus, refetch: refetchStatus } = useQuery<{
     connected: boolean;
     email: string | null;
-    integrations: Array<{ id: string; email: string; connected: boolean; provider: string; reputationScore?: number; bounceRate?: number }>;
+    integrations: Array<{ id: string; email: string; connected: boolean; provider: string; reputationScore?: number; bounceRate?: number; dailyLimit?: number }>;
   }>({
     queryKey: ["/api/custom-email/status"],
     placeholderData: (prev) => prev,
@@ -235,9 +236,9 @@ export default function IntegrationsPage() {
     return 300; // Default / Starter
   };
 
-  const calculateReputation = () => {
-    return stats?.domainHealth !== undefined ? stats.domainHealth.toFixed(2) : null;
-  };
+  // Memoized reputation values to avoid repeated function calls and non-null assertions
+  const reputationStr = stats?.domainHealth !== undefined ? stats.domainHealth.toFixed(2) : null;
+  const reputationNum = reputationStr !== null ? parseFloat(reputationStr) : null;
 
   useEffect(() => {
     // 1. Handle success redirect from OAuth (Gmail/Outlook/Calendly/Instagram)
@@ -1015,6 +1016,24 @@ export default function IntegrationsPage() {
                                     : "Initializing..."}
                                 </span>
                               </div>
+                              <div className="w-px bg-border/50" />
+                              <div className="flex flex-col gap-1">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Daily Limit</span>
+                                <span className="text-sm font-black text-primary">
+                                  {mailbox.dailyLimit || (mailbox.provider === 'custom_email' ? 250 : 50)}/day
+                                </span>
+                                <Slider
+                                  value={[mailbox.dailyLimit || (mailbox.provider === 'custom_email' ? 250 : 50)]}
+                                  onValueChange={async (v) => {
+                                    try {
+                                      await apiRequest('PATCH', `/api/integrations/${mailbox.id}/daily-limit`, { dailyLimit: v[0] });
+                                      queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
+                                    } catch (e) { console.error('Failed to update daily limit', e); }
+                                  }}
+                                  min={10} max={mailbox.provider === 'custom_email' ? 500 : 60} step={5}
+                                  className="w-24 py-1"
+                                />
+                              </div>
                             </div>
                           )}
 
@@ -1095,16 +1114,16 @@ export default function IntegrationsPage() {
                           <Badge className={cn(
                             "text-[9px] font-black border-0 uppercase tracking-tighter",
                             !(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "bg-muted text-muted-foreground" :
-                            calculateReputation() === null ? "bg-muted text-muted-foreground" :
-                              parseFloat(calculateReputation()!) >= 70 ? "bg-emerald-500/10 text-emerald-500" : 
-                              parseFloat(calculateReputation()!) >= 55 ? "bg-amber-500/10 text-amber-500" :
-                              parseFloat(calculateReputation()!) >= 40 ? "bg-orange-500/10 text-orange-500" : "bg-red-500/10 text-red-500"
+                            reputationNum === null ? "bg-muted text-muted-foreground" :
+                              reputationNum >= 70 ? "bg-emerald-500/10 text-emerald-500" : 
+                              reputationNum >= 55 ? "bg-amber-500/10 text-amber-500" :
+                              reputationNum >= 40 ? "bg-orange-500/10 text-orange-500" : "bg-red-500/10 text-red-500"
                           )}>
                             {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Inactive" :
-                             calculateReputation() === null ? "Pending Analysis" : 
-                              parseFloat(calculateReputation()!) >= 70 ? "Healthy" : 
-                              parseFloat(calculateReputation()!) >= 55 ? "Attention Required" : 
-                              parseFloat(calculateReputation()!) >= 40 ? "Cautious" : "Unhealthy - Reduced to 5/day"}
+                             reputationNum === null ? "Pending Analysis" : 
+                              reputationNum >= 70 ? "Healthy" : 
+                              reputationNum >= 55 ? "Attention Required" : 
+                              reputationNum >= 40 ? "Cautious" : "Unhealthy - Reduced to 5/day"}
                           </Badge>
                         </div>
                       </div>
@@ -1115,10 +1134,10 @@ export default function IntegrationsPage() {
                           <div className="text-3xl font-black tracking-tighter text-foreground h-9 flex items-center gap-2">
                             {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? (
                               "0.00%"
-                            ) : calculateReputation() !== null ? (
+                            ) : reputationStr !== null ? (
                               <>
-                                {calculateReputation()}%
-                                {parseFloat(calculateReputation()!) === 100 && (
+                                {reputationStr}%
+                                {reputationNum === 100 && (
                                   <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[7px] font-black uppercase tracking-widest px-1 py-0 h-3">Verified</Badge>
                                 )}
                               </>
@@ -1130,12 +1149,12 @@ export default function IntegrationsPage() {
                           <p className={cn(
                             "text-xs font-black uppercase tracking-widest pt-2",
                             !(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "text-muted-foreground" :
-                            calculateReputation() === null ? "text-muted-foreground" :
-                              parseFloat(calculateReputation()!) >= 70 ? "text-emerald-500" : 
-                              parseFloat(calculateReputation()!) >= 40 ? "text-orange-500" : "text-red-500"
+                            reputationNum === null ? "text-muted-foreground" :
+                              reputationNum >= 70 ? "text-emerald-500" : 
+                              reputationNum >= 40 ? "text-orange-500" : "text-red-500"
                           )}>
                             {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Offline" :
-                             calculateReputation() === null ? "Waiting" : parseFloat(calculateReputation()!) >= 70 ? "Autonomous" : "User Oversight Recommended"}
+                             reputationNum === null ? "Waiting" : reputationNum >= 70 ? "Autonomous" : "User Oversight Recommended"}
                           </p>
                         </div>
                       </div>
@@ -1143,18 +1162,18 @@ export default function IntegrationsPage() {
                       <div className={cn(
                         "p-3 rounded-xl border text-[10px] leading-tight font-medium transition-all duration-300",
                         !(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "bg-muted/10 border-border/20 text-muted-foreground" :
-                        calculateReputation() === null ? "bg-muted/10 border-border/20 text-muted-foreground" :
-                          parseFloat(calculateReputation()!) >= 70
+                        reputationNum === null ? "bg-muted/10 border-border/20 text-muted-foreground" :
+                          reputationNum >= 70
                             ? "bg-primary/5 border-primary/10 text-muted-foreground"
-                            : parseFloat(calculateReputation()!) >= 40
+                            : reputationNum >= 40
                             ? "bg-orange-500/5 border-orange-500/10 text-orange-400"
                             : "bg-red-500/5 border-red-500/10 text-red-400"
                       )}>
                         {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Please connect a mailbox to initiate domain health monitoring." :
-                         calculateReputation() === null ? "AI is initiating a health checkpoint for your domain." :
-                          parseFloat(calculateReputation()!) >= 70
+                         reputationNum === null ? "AI is initiating a health checkpoint for your domain." :
+                          reputationNum >= 70
                             ? "Your domain parameters are within safe limits. AI is managing 1-by-1 sending autonomously."
-                            : parseFloat(calculateReputation()!) >= 40
+                            : reputationNum >= 40
                             ? "Warning: Reputation drops detected. Sending speed is reduced to protect deliverability."
                             : "Critical: Low reputation detected. Sending speed drastically throttled to 5 per day to prevent blocklisting."}
                       </div>
@@ -1261,8 +1280,8 @@ export default function IntegrationsPage() {
                         <CardDescription className="text-xs text-muted-foreground font-medium mt-1 leading-relaxed">{card.description}</CardDescription>
                       </CardHeader>
                       <CardFooter className="p-6 pt-0 flex flex-col gap-3">
-                        {isConnected && connectedIntegrations.map(integration => (
-                          <div key={integration.id || Math.random()} className="flex items-center justify-between w-full p-2 rounded bg-background/50 border border-border/30">
+                        {isConnected && connectedIntegrations.map((integration, idx) => (
+                          <div key={integration.id || `int-${idx}`} className="flex items-center justify-between w-full p-2 rounded bg-background/50 border border-border/30">
                             <span className="text-[10px] font-medium truncate max-w-[120px]" title={integration.accountType?.toString() || ""}>{integration.accountType || "Connected"}</span>
                             <Button
                               variant="ghost"

@@ -377,7 +377,15 @@ Return JSON:
         .where(eq(calendarSettings.userId, this.userId))
         .limit(1);
 
+      const [userForLink] = await db.select({ calendarLink: users.calendarLink }).from(users).where(eq(users.id, this.userId)).limit(1);
+
       if (!settings?.calendlyToken) {
+        if (userForLink?.calendarLink) {
+          return {
+            booked: false,
+            copy: `That works. Please grab the exact spot here so it lands on the calendar: ${userForLink.calendarLink}`
+          };
+        }
         return { booked: false, error: 'No Calendly connected' };
       }
 
@@ -391,6 +399,12 @@ Return JSON:
 
       if (bookingResult?.success) {
         return { booked: true, bookedTime: detection.confirmedTimeISO };
+      }
+      if (userForLink?.calendarLink) {
+        return {
+          booked: false,
+          copy: `That works. Please grab the exact spot here so it lands on the calendar: ${userForLink.calendarLink}`
+        };
       }
       return { booked: false, error: bookingResult?.error || 'Booking failed' };
     } catch (err) {

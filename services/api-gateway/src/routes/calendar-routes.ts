@@ -42,7 +42,7 @@ router.get('/settings', requireAuth, async (req: Request, res: Response): Promis
       } catch { }
     }
 
-    res.json({
+    res.json({ 
       settings: settings ? {
         ...settings,
         calendlyEnabled: !!calendlyIntegration,
@@ -171,7 +171,8 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
       api_token: token,
       username: validation.userName,
       user_uri: validation.userUri,
-      organization_uri: validation.organizationUri
+      organization_uri: validation.organizationUri,
+      scheduling_url: validation.schedulingUrl
     }));
 
     const existingIntegrations = await storage.getIntegrations(userId);
@@ -205,8 +206,28 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
     // Also update the user record for direct matching
     await storage.updateUser(userId, {
       calendlyUserUri: validation.userUri,
+      ...(validation.schedulingUrl && { calendarLink: validation.schedulingUrl }),
       updatedAt: new Date()
     });
+
+    const [existingSettings] = await db
+      .select()
+      .from(calendarSettings)
+      .where(eq(calendarSettings.userId, userId))
+      .limit(1);
+
+    const settingsPayload = {
+      calendlyEnabled: true,
+      calendlyToken: token,
+      calendlyUsername: validation.userName,
+      updatedAt: new Date()
+    };
+
+    if (existingSettings) {
+      await db.update(calendarSettings).set(settingsPayload).where(eq(calendarSettings.userId, userId));
+    } else {
+      await db.insert(calendarSettings).values({ userId, ...settingsPayload });
+    }
 
     console.log(`✓ Calendly connected and webhooks registered for user: ${userId} (${validation.userName})`);
 

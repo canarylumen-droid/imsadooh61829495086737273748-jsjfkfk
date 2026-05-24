@@ -186,7 +186,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
       if (emailInts.length > 0) {
         const scoredInts = emailInts.filter(i => i.reputationScore !== null && i.reputationScore !== undefined);
         if (scoredInts.length > 0) {
-          reputationScore = scoredInts.reduce((sum, i) => sum + (i.reputationScore ?? 100), 0) / scoredInts.length;
+          reputationScore = scoredInts.reduce((sum, i) => sum + (i.reputationScore || 0), 0) / scoredInts.length;
         }
       }
       globalBounceRate = stats.globalBounceRate;
@@ -236,7 +236,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     .from(leadsSchema)
     .where(dEq(leadsSchema.userId, userId));
     
-    const globalAvgScore = Number(scoreResult?.avgScore || 50);
+    const globalAvgScore = scoreResult?.avgScore != null ? Number(scoreResult.avgScore) : null;
 
     // Get global open rate for benchmark
     const [globalMsgStats] = await db.select({
@@ -247,7 +247,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
     const globalOpenRate = Number(globalMsgStats?.totalSent || 0) > 0
       ? Number(((Number(globalMsgStats?.opened || 0) / Number(globalMsgStats?.totalSent || 0)) * 100).toFixed(2))
-      : 25.00; // Fallback benchmark    // Domain Health is now the actual reputation score (which already includes DNS penalties)
+      : null; // No data: don't fabricate a benchmark
     const domainHealth = reputationScore !== null ? Number(reputationScore.toFixed(2)) : null;
 
     // Map verification results nicely
@@ -311,9 +311,9 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
         }
       },
       benchmarks: {
-        avgLeadScore: Number(globalAvgScore.toFixed(2)),
+        avgLeadScore: globalAvgScore != null ? Number(globalAvgScore.toFixed(2)) : null,
         avgOpenRate: globalOpenRate,
-        avgResponseRate: stats.responseRate || 15.00,
+        avgResponseRate: stats.responseRate ?? null,
         marketSentiment: stats.totalLeads > 50 && stats.responseRate > 10 ? 'positive' : 'neutral'
       },
       sync: {

@@ -758,6 +758,12 @@ ${enrichedContext}`;
            useVoice: (detectionResult as any)?.shouldUseVoice === true && isWarm
          };
        }
+       if (bookingResult.copy) {
+         return {
+           text: optimizeSalesLanguage(bookingResult.copy),
+           useVoice: (detectionResult as any)?.shouldUseVoice === true && isWarm
+         };
+       }
     }
 
     // If meeting requested, check brand preference

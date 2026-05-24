@@ -148,6 +148,10 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
         distributeLeadsFromPool(userId, gmailInt.id).catch(err =>
           console.error('[Google Redirect] Lead distribution failed (non-fatal):', err)
         );
+        const { notifyMailboxConnected } = await import('@shared/lib/queues/verification-routing-queue.js');
+        notifyMailboxConnected(userId, gmailInt.id).catch(err =>
+          console.error('[Google Redirect] Smart reroute failed (non-fatal):', err)
+        );
       }
     } catch (distErr) {
       console.warn('[Google Redirect] Could not trigger lead distribution:', distErr);
