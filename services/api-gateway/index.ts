@@ -71,6 +71,12 @@ if (!process.env.VERCEL) {
 
 const app = express();
 
+// Early healthcheck: responds immediately so Docker/Railway health probes don't 404
+// while the async startup IIFE is still registering routes and services
+app.get('/health', (_req, res) => {
+  res.status(200).json({ status: 'ok', mode: 'starting', timestamp: new Date().toISOString() });
+});
+
 // 1. [EMERGENCY] Move Quota Sentinel to the absolute top to protect all requests (including session store)
 app.use(quotaService.getSentinelMiddleware());
 

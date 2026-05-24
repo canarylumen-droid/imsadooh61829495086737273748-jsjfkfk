@@ -24,6 +24,9 @@ RUN npm ci --omit=dev
 FROM node:22-alpine
 WORKDIR /app
 
+# Install curl for reliable healthchecks (busybox wget is flaky on newer alpine)
+RUN apk add --no-cache curl
+
 # Security: Run as non-root user
 RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 USER nodejs
@@ -49,9 +52,9 @@ ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 # Expose API port
 EXPOSE 5000
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:${PORT:-5000}/health || exit 1
+# Healthcheck — curl is more reliable than busybox wget on alpine
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+  CMD curl -fsS http://localhost:${PORT:-5000}/health || exit 1
 
 # Start script handles DB migrations/patches before launching
 # Using 'node' directly from dist/ instead of 'tsx' for maximum performance
