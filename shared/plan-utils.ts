@@ -76,6 +76,25 @@ export type FeatureKey =
   | 'videoAutomation'
   | 'email';
 
+export interface CampaignLimits {
+  maxMailboxesPerCampaign: number;
+  maxLeadsPerCampaign: number;
+}
+
+export function getCampaignLimits(planId: string): CampaignLimits {
+  switch (planId) {
+    case 'enterprise':
+      return { maxMailboxesPerCampaign: 1000, maxLeadsPerCampaign: 500000 };
+    case 'pro':
+      return { maxMailboxesPerCampaign: 15, maxLeadsPerCampaign: 500 };
+    case 'starter':
+      return { maxMailboxesPerCampaign: 5, maxLeadsPerCampaign: 200 };
+    case 'trial':
+    default:
+      return { maxMailboxesPerCampaign: 1, maxLeadsPerCampaign: 50 };
+  }
+}
+
 export function canAccessFeature(featureKey: FeatureKey, planId: string): boolean {
   const capabilities = getPlanCapabilities(planId);
 

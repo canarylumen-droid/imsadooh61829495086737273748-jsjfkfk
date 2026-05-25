@@ -81,7 +81,7 @@ const replacements = [
   { p: /['"](?:\.\.\/)+lib\/queues\/redis-config\.js['"]/g, r: "'@shared/lib/queues/redis-config.js'" },
 ];
 
-function walk(dir, callback) {
+function walk(dir: string, callback: (filePath: string) => void) {
   if (!fs.existsSync(dir)) return;
   fs.readdirSync(dir).forEach((f) => {
     let dirPath = path.join(dir, f);

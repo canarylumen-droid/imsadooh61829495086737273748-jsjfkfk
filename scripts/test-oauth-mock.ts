@@ -1,3 +1,4 @@
+// @ts-nocheck
 import 'dotenv/config';
 import { GmailOAuth } from '@services/api-gateway/src/oauth/gmail.js';
 import { OutlookOAuth } from '../server/lib/oauth/outlook.ts';

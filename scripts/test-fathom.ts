@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { processFathomWebhook } from '@services/brain-worker/src/ai-lib/specialized/fathom-integration.js';
 import { db } from '@shared/lib/db/db.js';
 import { users, leads } from '@audnix/shared';

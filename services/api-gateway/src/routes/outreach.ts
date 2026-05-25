@@ -8,10 +8,11 @@ import { requireAuth } from '../middleware/auth.js';
 import { isValidUUID } from '@shared/lib/utils/validation.js';
 import { verifyDomainDns } from '@services/email-service/src/email/dns-verification.js';
 import { generateExpertOutreach, generateCampaignTemplateSequence } from '@services/brain-worker/src/ai-lib/core/conversation-ai.js';
-import { outreachCampaigns, campaignLeads, messages, campaignEmails, leads as leadsTable } from '@audnix/shared';
+import { outreachCampaigns, campaignLeads, messages, campaignEmails, leads as leadsTable, users } from '@audnix/shared';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
-import { eq, and, desc, sql, ne, inArray } from 'drizzle-orm';
+import { eq, and, desc, sql, ne, inArray, or } from 'drizzle-orm';
+import { getActivePlanId, getCampaignLimits } from '@shared/plan-utils.js';
 import { AuditTrailService } from '@shared/lib/monitoring/audit-trail-service.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { isNull } from 'drizzle-orm';
@@ -127,6 +128,33 @@ router.post('/campaigns', requireAuth, async (req, res) => {
       campaignConfig.dailyLimit = Math.min(parseInt(campaignConfig.dailyLimit) || 50, 2500);
     }
 
+    // ── PLAN-BASED CAMPAIGN LIMITS ──────────────────────────────────────
+    const [userRow] = await db.select({
+      plan: users.plan,
+      subscriptionTier: users.subscriptionTier
+    }).from(users).where(eq(users.id, userId)).limit(1);
+
+    const planId = getActivePlanId(userRow);
+    const campaignLimits = getCampaignLimits(planId);
+    const selectedMailboxIds = (campaignConfig.mailboxIds || []) as string[];
+
+    if (selectedMailboxIds.length > campaignLimits.maxMailboxesPerCampaign) {
+      return res.status(403).json({
+        error: `Your ${planId} plan allows up to ${campaignLimits.maxMailboxesPerCampaign} mailboxes per campaign. You selected ${selectedMailboxIds.length}.`,
+        limit: campaignLimits.maxMailboxesPerCampaign,
+        current: selectedMailboxIds.length
+      });
+    }
+
+    const leadCount = Array.isArray(leads) ? leads.length : 0;
+    if (leadCount > campaignLimits.maxLeadsPerCampaign) {
+      return res.status(403).json({
+        error: `Your ${planId} plan allows up to ${campaignLimits.maxLeadsPerCampaign} leads per campaign. You added ${leadCount}.`,
+        limit: campaignLimits.maxLeadsPerCampaign,
+        current: leadCount
+      });
+    }
+
     const [campaign] = await db.insert(outreachCampaigns).values({
       userId,
       name,
@@ -146,80 +174,84 @@ router.post('/campaigns', requireAuth, async (req, res) => {
     // Link leads to campaign (with auto-upsert for non-UUIDs)
     let addedCount = 0;
     if (leads && Array.isArray(leads)) {
-      const finalLeadIds: string[] = [];
-      const batchSize = 100; // Increased batch size for processing
+      let finalLeadIds: string[] = [];
+      const batchSize = 500;
 
       const thirtyDaysAgoAnalytics = new Date();
       thirtyDaysAgoAnalytics.setDate(thirtyDaysAgoAnalytics.getDate() - 30);
       const analytics = await storage.getAnalyticsSummary(userId, thirtyDaysAgoAnalytics);
       const bestHour = analytics.summary.bestReplyHour;
 
+      // ── BULK LEAD RESOLUTION (replaces N+1 per-lead queries) ─────────────────
+      // Pass 1: partition into UUID IDs vs email strings/objects
+      const emailItems: Array<{ email: string; name: string }> = [];
       for (const leadItem of leads) {
-        // ... (existing logic for UUID and object checks)
-        // [Optimized loop to avoid frequent DB calls if possible, but keeping current flow for safety for now]
-        // [Actual optimization: move dedupe/upsert to a more efficient batch process if leads > 100]
-        // 1. If it's a valid UUID, use it directly
         if (typeof leadItem === 'string' && isValidUUID(leadItem)) {
           finalLeadIds.push(leadItem);
-          continue;
-        }
-
-        // 2. If it's an object with an ID that's a valid UUID
-        if (typeof leadItem === 'object' && leadItem !== null && leadItem.id && isValidUUID(leadItem.id)) {
+        } else if (typeof leadItem === 'object' && leadItem !== null && leadItem.id && isValidUUID(leadItem.id)) {
           finalLeadIds.push(leadItem.id);
-          continue;
+        } else {
+          const email = (typeof leadItem === 'string' ? leadItem : leadItem?.email)?.toLowerCase()?.trim();
+          if (email && email.includes('@')) {
+            emailItems.push({
+              email,
+              name: (typeof leadItem === 'object' ? leadItem?.name : undefined) || email.split('@')[0] || 'Unknown'
+            });
+          }
+        }
+      }
+
+      // Pass 2: bulk-resolve email items with a single SELECT
+      if (emailItems.length > 0) {
+        const uniqueEmails = [...new Set(emailItems.map(e => e.email))];
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+        const existingLeads = await db.select({
+          id: leadsTable.id,
+          email: leadsTable.email,
+          status: leadsTable.status,
+          lastMessageAt: leadsTable.lastMessageAt
+        })
+          .from(leadsTable)
+          .where(and(eq(leadsTable.userId, userId), inArray(leadsTable.email, uniqueEmails)));
+
+        const existingMap = new Map(existingLeads.map(l => [l.email!.toLowerCase(), l]));
+
+        const toCreate: Array<{ email: string; name: string }> = [];
+        for (const item of emailItems) {
+          const ex = existingMap.get(item.email);
+          if (ex) {
+            const hasReplied = ex.status === 'replied' || ex.status === 'converted';
+            if (hasReplied) continue;
+            const lastContacted = ex.lastMessageAt ? new Date(ex.lastMessageAt) : null;
+            if (lastContacted && lastContacted > thirtyDaysAgo) continue;
+            finalLeadIds.push(ex.id);
+          } else {
+            toCreate.push(item);
+          }
         }
 
-        // 3. Auto-Upsert: If it's an email string or object with email
-        const email = typeof leadItem === 'string' ? leadItem : leadItem?.email;
-        const name = typeof leadItem === 'object' ? leadItem?.name : (email?.split('@')[0] || 'Unknown');
-
-        if (email && email.includes('@')) {
-          try {
-            // Check if lead already exists by email
-            let existingLead = await storage.getLeadByEmail(email, userId);
-
-            if (!existingLead) {
-              // Create new lead
-              existingLead = await storage.createLead({
+        // Pass 3: bulk-insert missing leads in batches of 500
+        if (toCreate.length > 0) {
+          const importDate = new Date().toISOString();
+          for (let i = 0; i < toCreate.length; i += batchSize) {
+            const chunk = toCreate.slice(i, i + batchSize);
+            const inserted = await db.insert(leadsTable).values(
+              chunk.map(item => ({
                 userId,
-                name: name || 'Unknown',
-                email: email,
-                channel: 'email',
-                status: 'new',
+                name: item.name,
+                email: item.email,
+                channel: 'email' as const,
+                status: 'new' as const,
                 aiPaused: false,
-                metadata: {
-                  auto_created: true,
-                  campaign_id: campaign.id,
-                  import_date: new Date().toISOString()
-                }
-              });
-              console.log(`[Campaign] Auto-created lead: ${email}`);
-            } else if (existingLead.userId !== userId) {
-              continue;
-            }
-
-            // --- Deduplication Check (Phase 1 Requirement) ---
-            const thirtyDaysAgo = new Date();
-            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-            const lastContacted = existingLead.lastMessageAt ? new Date(existingLead.lastMessageAt) : null;
-            const hasReplied = existingLead.status === 'replied' || existingLead.status === 'converted';
-
-            if (hasReplied) {
-              console.log(`[Campaign] Skipping lead ${email}: Already replied/converted.`);
-              continue;
-            }
-
-            if (lastContacted && lastContacted > thirtyDaysAgo) {
-              console.log(`[Campaign] Skipping lead ${email}: Contacted in the last 30 days.`);
-              continue;
-            }
-
-            finalLeadIds.push(existingLead.id);
-          } catch (err) {
-            console.error('[Campaign] Failed to auto-upsert/dedupe lead %s:', email, err);
+                archived: false,
+                metadata: { auto_created: true, campaign_id: campaign.id, import_date: importDate }
+              }))
+            ).onConflictDoNothing().returning({ id: leadsTable.id });
+            finalLeadIds.push(...inserted.map(r => r.id));
           }
+          console.log(`[Campaign] Bulk-created ${toCreate.length} new leads`);
         }
       }
 
@@ -233,10 +265,31 @@ router.post('/campaigns', requireAuth, async (req, res) => {
             eq(leadsTable.channel, 'email')
           ));
 
+        const finalLeadIdsSet = new Set(finalLeadIds);
         for (const invMatch of inventoryLeads) {
-          if (!finalLeadIds.includes(invMatch.id)) {
+          if (!finalLeadIdsSet.has(invMatch.id)) {
             finalLeadIds.push(invMatch.id);
+            finalLeadIdsSet.add(invMatch.id);
           }
+        }
+      }
+
+      // ── CROSS-CAMPAIGN DUPLICATE GUARD ────────────────────────────────
+      // Prevent leads already in active or paused campaigns from being added again.
+      if (finalLeadIds.length > 0) {
+        const alreadyActive = await db.select({ leadId: campaignLeads.leadId })
+          .from(campaignLeads)
+          .innerJoin(outreachCampaigns, eq(campaignLeads.campaignId, outreachCampaigns.id))
+          .where(and(
+            eq(outreachCampaigns.userId, userId),
+            inArray(campaignLeads.leadId, finalLeadIds),
+            or(eq(outreachCampaigns.status, 'active'), eq(outreachCampaigns.status, 'paused'))
+          ));
+        if (alreadyActive.length > 0) {
+          const blockedSet = new Set(alreadyActive.map(r => r.leadId));
+          const before = finalLeadIds.length;
+          finalLeadIds = finalLeadIds.filter(id => !blockedSet.has(id));
+          console.log(`[Campaign] Cross-campaign guard blocked ${before - finalLeadIds.length} leads already in active/paused campaigns.`);
         }
       }
 
@@ -316,8 +369,8 @@ router.post('/campaigns', requireAuth, async (req, res) => {
         .where(eq(outreachCampaigns.id, campaign.id));
     }
 
-    // Calculate metrics/safety for response (parity with old /campaign/create)
-    const metricsResult = await createOutreachCampaign(leads, name);
+    // Calculate metrics/safety for response — pass minimal stub to avoid serializing 20k leads
+    const metricsResult = await createOutreachCampaign(Array.from({ length: addedCount }, () => ({ id: '', email: '', name: '', company: '', data: {} })), name);
     const safety = validateCampaignSafety(metricsResult);
 
     // Notify UI of new campaign

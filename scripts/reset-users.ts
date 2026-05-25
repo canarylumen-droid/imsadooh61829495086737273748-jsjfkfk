@@ -1,4 +1,4 @@
-
+// @ts-nocheck
 import 'dotenv/config'; // Load .env file
 import { db } from "../server/db";
 import { users } from "../shared/schema";

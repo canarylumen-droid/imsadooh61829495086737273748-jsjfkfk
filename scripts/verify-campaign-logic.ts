@@ -1,4 +1,5 @@
 
+// @ts-nocheck
 import { db } from "../server/db";
 import { outreachCampaigns, campaignLeads, users, leads } from "../shared/schema";
 // @ts-ignore

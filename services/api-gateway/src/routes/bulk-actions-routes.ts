@@ -23,17 +23,6 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
       return;
     }
 
-    const existingLeads = await storage.getLeads({ userId, limit: 10000 });
-
-    // Build lookup maps for O(1) deduplication
-    const emailMap = new Map<string, any>();
-    const nameMap = new Map<string, any>();
-
-    existingLeads.forEach(l => {
-      if (l.email) emailMap.set(l.email.toLowerCase(), l);
-      if (l.name) nameMap.set(l.name.toLowerCase().trim(), l);
-    });
-
     const results = {
       leadsImported: 0,
       leadsUpdated: 0,
@@ -44,12 +33,19 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
 
     const BATCH_SIZE = 500;
     const { mapCsvToLeadMetadata } = await import('@shared/lib/imports/lead-importer.js');
+    const { SpamTrapDetector } = await import('@shared/lib/deliverability/spam-trap-detector.js');
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
 
+    // Process in chunks to avoid memory bloat and keep dedup accurate at any scale
     for (let i = 0; i < leadsData.length; i += BATCH_SIZE) {
       const chunk = leadsData.slice(i, i + BATCH_SIZE);
-      const batchToInsert: any[] = [];
+      const chunkEmails = chunk.map(l => (l.email || '').toLowerCase().trim()).filter(Boolean);
+      const existingEmails = chunkEmails.length > 0
+        ? await storage.getExistingEmails(userId, chunkEmails)
+        : [];
+      const existingEmailSet = new Set(existingEmails);
       const batchIdentifiers = new Set<string>();
+      const batchToInsert: any[] = [];
 
       for (let j = 0; j < chunk.length; j++) {
         const leadData = chunk[j];
@@ -68,14 +64,12 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
           }
 
           const batchKey = email || `name:${nameKey}`;
-          if (batchIdentifiers.has(batchKey) || (email && emailMap.has(email))) {
+          if (batchIdentifiers.has(batchKey) || (email && existingEmailSet.has(email))) {
             results.leadsFiltered++;
             continue;
           }
           batchIdentifiers.add(batchKey);
 
-          const { SpamTrapDetector } = await import('@shared/lib/deliverability/spam-trap-detector.js');
-          
           // Full deterministic + MX check
           const spamCheck = email ? await SpamTrapDetector.verifyFull(email, leadData) : { isTrap: false, score: 0 };
           
@@ -102,7 +96,7 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
             tags: spamCheck.isTrap ? ['spam_trap', 'spam_risk'] : []
           });
 
-          if (email) emailMap.set(email, true);
+          // Dedup tracked via batchIdentifiers above
         } catch (err: any) {
           results.errors.push(`Row ${i + j + 1}: ${err.message}`);
         }

@@ -585,12 +585,8 @@ export class MemStorage implements IStorage {
     return lead;
   }
 
-  async createLeadsBatch(insertLeads: Array<Partial<Lead> & { userId: string; name: string; channel: string }>): Promise<Lead[]> {
-    const created: Lead[] = [];
-    for (const leadData of insertLeads) {
-      created.push(await this.createLead(leadData as any));
-    }
-    return created;
+  async createLeadsBatch(insertLeads: Array<Partial<InsertLead> & { userId: string; name: string; channel: string }>, options?: { suppressNotification?: boolean }): Promise<Lead[]> {
+    return drizzleStorage.createLeadsBatch(insertLeads, options);
   }
   async updateLead(id: string, updates: Partial<Lead>): Promise<Lead | undefined> {
     const lead = this.leads.get(id);

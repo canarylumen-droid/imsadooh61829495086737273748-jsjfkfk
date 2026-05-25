@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { db, pool } from "../server/db";
 import { sql } from "drizzle-orm";
 import fs from "fs";

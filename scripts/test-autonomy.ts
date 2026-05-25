@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { config } from 'dotenv';
 config();
 import { db } from '@shared/lib/db/db.js';

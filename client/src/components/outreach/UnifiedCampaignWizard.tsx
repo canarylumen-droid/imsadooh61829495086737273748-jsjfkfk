@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Send, Wand2, Mail, Clock, Users, Smartphone, Monitor,
   Upload, CheckCircle2, ChevronRight, ChevronLeft, Sparkles,
-  FileText, Plus, Database, Inbox, Tags, Trash2, X, AlertTriangle
+  FileText, Plus, Database, Inbox, Tags, Trash2, X, AlertTriangle, Search
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -24,6 +24,7 @@ import { CsvIcon, PdfIcon } from "@/components/ui/CustomIcons";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { motion, AnimatePresence } from "framer-motion";
 import { useUser } from "@/hooks/use-user";
+import { getActivePlanId, getCampaignLimits } from "@shared/plan-utils";
 
 interface UnifiedCampaignWizardProps {
   isOpen: boolean;
@@ -58,12 +59,13 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   // State Management
   const [sourceType, setSourceType] = useState<'upload' | 'database'>('upload');
-  const [leads, setLeads] = useState<any[]>(initialLeads);
+  const [leads, setLeads] = useState<Array<{ id: string; name?: string; email?: string; metadata?: Record<string, any>; company?: string; city?: string; industry?: string; niche?: string; website?: string }>>(initialLeads);
   const [importProgress, setImportProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [isLoadingLeads, setIsLoadingLeads] = useState(false);
   const [syncLimit, setSyncLimit] = useState<number | 'all'>(1000);
+  const [mailboxSearch, setMailboxSearch] = useState("");
 
   const [mailboxLimits, setMailboxLimits] = useState<Record<string, number>>({});
   const [mailboxMaxMultipliers, setMailboxMaxMultipliers] = useState<Record<string, number>>({});
@@ -89,6 +91,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   const { data: integrations = [] } = useQuery<any[]>({
     queryKey: ['/api/integrations'],
+    staleTime: 30_000,
   });
 
   const availableMailboxes = useMemo(() => (
@@ -96,6 +99,15 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
       .filter((i: any) => ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected)
       .sort((a: any, b: any) => String(a.email || a.accountType || a.id).localeCompare(String(b.email || b.accountType || b.id)))
   ), [integrations]);
+
+  const filteredWizardMailboxes = useMemo(() => {
+    if (!mailboxSearch.trim()) return availableMailboxes;
+    const q = mailboxSearch.toLowerCase();
+    return availableMailboxes.filter((mb: any) =>
+      String(mb.email || mb.accountType || mb.id).toLowerCase().includes(q) ||
+      String(mb.provider || '').toLowerCase().includes(q)
+    );
+  }, [availableMailboxes, mailboxSearch]);
 
   const getMailboxAddress = (mb: any) => mb.email || mb.accountType || mb.metadata?.email || mb.metadata?.smtp_user || "Connected mailbox";
   const getDefaultMailboxLimit = (mb: any) => {
@@ -170,11 +182,20 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     return mailbox ? (mailboxLimits[id] || 0) > getSafeMailboxCeiling(mailbox) : false;
   });
   const minimumDaysAtCurrentCapacity = totalDailyVolume > 0 ? estimatedDays : 0;
+
+  // Plan-based campaign limits
+  const planId = getActivePlanId(user);
+  const campaignLimits = getCampaignLimits(planId);
+  const exceedsMailboxLimit = selectedMailboxes.length > campaignLimits.maxMailboxesPerCampaign;
+  const exceedsLeadLimit = leads.length > campaignLimits.maxLeadsPerCampaign;
+
   const launchIssues = [
     !campaignName.trim() ? "Name your campaign" : null,
     leads.length === 0 ? "Add leads" : null,
     selectedMailboxes.length === 0 ? "Select at least one inbox" : null,
     hasUnsafeMailbox ? "Lower unsafe mailbox limits" : null,
+    exceedsMailboxLimit ? `Your ${planId} plan allows ${campaignLimits.maxMailboxesPerCampaign} mailboxes per campaign` : null,
+    exceedsLeadLimit ? `Your ${planId} plan allows ${campaignLimits.maxLeadsPerCampaign} leads per campaign` : null,
   ].filter(Boolean) as string[];
 
   useEffect(() => {
@@ -240,12 +261,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const handleFetchLeads = async () => {
     setIsLoadingLeads(true);
     try {
-      const limitParam = syncLimit === 'all' ? 500000 : syncLimit;
+      const limitParam = syncLimit === 'all' ? campaignLimits.maxLeadsPerCampaign : syncLimit;
       const res = await apiRequest("GET", `/api/leads?limit=${limitParam}&excludeActiveCampaignLeads=true`);
       const data = await res.json();
       if (data.leads) {
-        setLeads(data.leads);
-        toast({ title: "Leads Fetched", description: `Successfully loaded ${data.leads.length} leads.` });
+        // Store slim objects only — full lead data is not needed in the wizard
+        const slim = (data.leads as any[]).map((l: any) => ({ id: l.id, name: l.name, email: l.email }));
+        setLeads(slim);
+        toast({ title: "Leads Fetched", description: `Successfully loaded ${slim.length} leads.` });
       }
     } catch (err: any) {
       toast({ title: "Fetch failed", description: err.message, variant: "destructive" });
@@ -503,9 +526,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         <div className="space-y-4">
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Connected Inboxes</Label>
-                            <div className="flex gap-2">
-                              <Button type="button" variant="outline" size="sm" onClick={() => setSelectedMailboxes(availableMailboxes.map((mb: any) => mb.id))} className="h-8 rounded-lg text-[10px] font-bold uppercase">All</Button>
-                              <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedMailboxes([])} className="h-8 rounded-lg text-[10px] font-bold uppercase">Clear</Button>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={exceedsMailboxLimit ? 'destructive' : 'secondary'} className="text-[9px] font-bold uppercase">
+                                {selectedMailboxes.length}/{campaignLimits.maxMailboxesPerCampaign} Mailboxes
+                              </Badge>
+                              <div className="flex gap-2">
+                                <Button type="button" variant="outline" size="sm" onClick={() => setSelectedMailboxes(availableMailboxes.map((mb: any) => mb.id))} className="h-8 rounded-lg text-[10px] font-bold uppercase">All</Button>
+                                <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedMailboxes([])} className="h-8 rounded-lg text-[10px] font-bold uppercase">Clear</Button>
+                              </div>
                             </div>
                           </div>
                           {availableMailboxes.length === 0 && (
@@ -513,8 +541,22 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                               Connect Gmail, Outlook, or SMTP before launching a campaign.
                             </div>
                           )}
+                          {availableMailboxes.length > 5 && (
+                            <div className="relative">
+                              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                              <Input
+                                placeholder={`Search ${availableMailboxes.length} mailboxes...`}
+                                value={mailboxSearch}
+                                onChange={e => setMailboxSearch(e.target.value)}
+                                className="h-8 pl-9 text-xs bg-muted/20 border-border/40 rounded-lg"
+                              />
+                            </div>
+                          )}
                           <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
-                            {availableMailboxes.map(mb => {
+                            {filteredWizardMailboxes.length === 0 && mailboxSearch && (
+                              <p className="text-xs text-muted-foreground text-center py-4">No mailboxes match "{mailboxSearch}"</p>
+                            )}
+                            {filteredWizardMailboxes.map(mb => {
                               const isSelected = selectedMailboxes.includes(mb.id);
                               const safeCeiling = getSafeMailboxCeiling(mb);
                               return (
@@ -590,14 +632,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                 <div className="flex-1 relative">
                                   <Input 
                                     type={syncLimit === 'all' ? 'text' : 'number'}
-                                    value={syncLimit === 'all' ? 'MAX (500k)' : syncLimit}
+                                    value={syncLimit === 'all' ? `MAX (${campaignLimits.maxLeadsPerCampaign.toLocaleString()})` : syncLimit}
                                     onChange={e => {
                                       const val = e.target.value;
                                       if (val === '') {
                                         setSyncLimit(0);
                                       } else {
                                         const parsed = parseInt(val);
-                                        if (!isNaN(parsed)) setSyncLimit(Math.max(0, Math.min(500000, parsed)));
+                                        if (!isNaN(parsed)) setSyncLimit(Math.max(0, Math.min(campaignLimits.maxLeadsPerCampaign, parsed)));
                                       }
                                     }}
                                     disabled={syncLimit === 'all'}
@@ -629,6 +671,9 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                              <div className="flex items-center gap-2 text-primary">
                                <Sparkles className="w-5 h-5 animate-pulse" />
                                <span className="text-[10px] font-black uppercase tracking-widest">Growth Engine Plan</span>
+                               <Badge variant={exceedsLeadLimit ? 'destructive' : 'secondary'} className="text-[9px] font-bold uppercase">
+                                 {leads.length}/{campaignLimits.maxLeadsPerCampaign} Leads
+                               </Badge>
                              </div>
                              <div className="flex items-center gap-2">
                                {hasUnsafeMailbox && (
