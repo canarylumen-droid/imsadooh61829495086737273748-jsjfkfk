@@ -86,9 +86,14 @@ router.get("/", requireAuth, async (req: Request, res: Response): Promise<void> 
         integrationId ? or(eq(leadsTable.integrationId, integrationId as string), isNull(leadsTable.integrationId)) : undefined
       ));
 
+    const planLimit = (user?.subscriptionTier === 'enterprise' || user?.plan === 'enterprise' || user?.email === 'team.replyflow@gmail.com')
+      ? 500000
+      : (user?.subscriptionTier === 'pro' || user?.plan === 'pro' ? 100000 : 10000);
+
     res.json({
       leads: leads,
       total: Number(totalLeads[0]?.count || 0),
+      planLimit,
       hasMore: leads.length === limitNum,
     });
   } catch (error: unknown) {
@@ -259,7 +264,7 @@ router.post("/score-all", requireAuth, async (req: Request, res: Response): Prom
 });
 
 /**
- * Import leads from CSV file upload
+ * Import leads from CSV file upload — STREAMING for 50k+ scale
  * POST /api/leads/import-csv
  */
 router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Request, res: Response): Promise<void> => {
@@ -268,6 +273,8 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
     const file = req.file;
     const previewMode = req.query.preview === 'true';
     const aiPaused = req.body.aiPaused === 'true';
+    const MAX_PREVIEW_ROWS = 5000;
+    const CHUNK_SIZE = 500;
 
     if (!file) {
       if (!res.headersSent) {
@@ -276,299 +283,322 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
       return;
     }
 
-    const results: any[] = [];
+    const headerRows: any[] = [];
+    const previewRows: any[] = [];
+    let rowCount = 0;
+    let mapping: LeadColumnMapping | null = null;
+    let mappingResult: any = null;
+
+    // ── STREAMING PHASE ───────────────────────────────────────────────
     const stream = Readable.from(file.buffer.toString('utf-8'));
+    const parser = csvParser();
 
-    stream
-      .pipe(csvParser())
-      .on('data', (data: any) => results.push(data))
-      .on('end', async () => {
+    let streamEnded = false;
+    let streamError: any = null;
+
+    stream.pipe(parser)
+      .on('data', (data: any) => {
+        rowCount++;
+        // Buffer first 5 rows for column mapping
+        if (headerRows.length < 5) {
+          headerRows.push(data);
+        }
+        // For preview mode, accumulate up to cap
+        if (previewMode && previewRows.length < MAX_PREVIEW_ROWS) {
+          previewRows.push(data);
+        }
+      })
+      .on('end', () => { streamEnded = true; })
+      .on('error', (err: any) => { streamError = err; streamEnded = true; });
+
+    // Wait for stream to finish
+    await new Promise<void>((resolve, reject) => {
+      const check = () => {
+        if (streamEnded) {
+          if (streamError) reject(streamError);
+          else resolve();
+          return;
+        }
+        setTimeout(check, 50);
+      };
+      check();
+    });
+
+    try {
+      if (rowCount === 0) {
+        if (!res.headersSent) {
+          res.status(400).json({ error: "CSV file is empty" });
+        }
+        return;
+      }
+
+      // 1. Map Columns using first 5 rows
+      const headers = Object.keys(headerRows[0] || previewRows[0] || {});
+      const aiKeysAvailable = !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY);
+      const skipAI = !aiKeysAvailable || aiPaused;
+      mappingResult = await mapCSVColumnsToSchema(headers, headerRows.slice(0, 3), skipAI);
+      mapping = mappingResult.mapping;
+
+      // 2. Extract leads from preview rows (all rows for preview mode)
+      const rowsToProcess = previewMode ? previewRows : [...headerRows, ...previewRows];
+      const processedLeads = rowsToProcess.map(row => {
+        const basicLead = extractLeadFromRow(row, mapping!) as { name?: string; email?: string; phone?: string; company?: string; channel?: string; role?: string; bio?: string; replyEmail?: string };
+        if (!basicLead.name && basicLead.company) basicLead.name = basicLead.company;
+        if (!basicLead.name && !basicLead.email && !basicLead.company) return null;
+
+        const metadata = extractExtraFieldsAsMetadata(row, mapping!);
+        if (mappingResult.unmappedColumns.length > 0) {
+          metadata._unmapped_cols = mappingResult.unmappedColumns.join(',');
+        }
+        return { ...basicLead, replyEmail: basicLead.replyEmail || basicLead.email || null, metadata };
+      }).filter(l => l !== null);
+
+      // 3. Preview Mode: return immediately
+      if (previewMode) {
+        res.json({
+          preview: true,
+          total: rowCount, // Report actual total, not just preview cap
+          previewCount: processedLeads.length,
+          mapping: mappingResult.mapping,
+          confidence: mappingResult.confidence,
+          leads: processedLeads,
+          allLeads: processedLeads
+        });
+        return;
+      }
+
+      // ── DIRECT IMPORT MODE ── Process remaining rows in batches ─────
+      // Re-parse the full CSV for direct import (we avoided holding all in memory above)
+      // Actually, we already have headerRows + previewRows. For files <= our cap,
+      // we need the rest. Re-streaming is the safest approach.
+      const allRows: any[] = [...headerRows];
+      await new Promise<void>((resolve, reject) => {
+        let count = 0;
+        const reStream = Readable.from(file.buffer.toString('utf-8'));
+        reStream.pipe(csvParser())
+          .on('data', (data: any) => {
+            count++;
+            if (count > headerRows.length) {
+              allRows.push(data);
+            }
+          })
+          .on('end', () => resolve())
+          .on('error', (err: any) => reject(err));
+      });
+
+      const fullProcessed = allRows.map(row => {
+        const basicLead = extractLeadFromRow(row, mapping!) as { name?: string; email?: string; phone?: string; company?: string; replyEmail?: string };
+        if (!basicLead.name && basicLead.company) basicLead.name = basicLead.company;
+        if (!basicLead.name && !basicLead.email && !basicLead.company) return null;
+        const metadata = extractExtraFieldsAsMetadata(row, mapping!);
+        if (mappingResult.unmappedColumns.length > 0) {
+          metadata._unmapped_cols = mappingResult.unmappedColumns.join(',');
+        }
+        return { ...basicLead, replyEmail: basicLead.replyEmail || basicLead.email || null, metadata };
+      }).filter(l => l !== null);
+
+      // 4. Enforce Limits
+      const user = await storage.getUserById(userId);
+      const existingLeadsCount = await storage.getLeadsCount(userId);
+      const limit = (user?.subscriptionTier === 'enterprise' || user?.plan === 'enterprise' || user?.email === 'team.replyflow@gmail.com')
+        ? 500000
+        : (user?.subscriptionTier === 'pro' || user?.plan === 'pro' ? 100000 : 10000);
+
+      if (existingLeadsCount >= limit) {
+        if (!res.headersSent) {
+          res.status(400).json({ error: `Lead limit reached (${limit} leads). Please upgrade your plan.` });
+        }
+        return;
+      }
+
+      // 5. Save to DB
+      const { db } = await import('@shared/lib/db/db.js');
+      const { leads, aiProcessLogs } = await import('@audnix/shared');
+
+      const [processLog] = await db.insert(aiProcessLogs).values({
+        userId,
+        type: 'import_csv',
+        status: 'processing',
+        totalItems: fullProcessed.length,
+        processedItems: 0,
+        metadata: { fileName: file.originalname, previewMode, skipAI }
+      }).returning();
+
+      const leadsToSave: any[] = [];
+      let duplicateCount = 0;
+      let filteredCount = 0;
+      const localSeenEmails = new Set<string>();
+
+      console.log(`[CSV Import] Verifying and saving ${fullProcessed.length} leads...`);
+
+      for (let i = 0; i < fullProcessed.length; i += CHUNK_SIZE) {
+        const chunk = fullProcessed.slice(i, i + CHUNK_SIZE);
+        const chunkEmails = chunk.map(l => l.email).filter((e): e is string => !!e);
+        const existingEmails = chunkEmails.length > 0
+          ? await storage.getExistingEmails(userId, chunkEmails)
+          : [];
+        const existingEmailSet = new Set(existingEmails);
+
+        const uniqueChunk = chunk.filter((leadData: any) => {
+          if (leadData.email) {
+            if (existingEmailSet.has(leadData.email) || localSeenEmails.has(leadData.email)) {
+              duplicateCount++;
+              return false;
+            }
+            localSeenEmails.add(leadData.email);
+          }
+          return true;
+        });
+
+        if (uniqueChunk.length === 0) continue;
+
+        if (leadsToSave.length + existingLeadsCount + uniqueChunk.length > limit) {
+          const remainingSpace = limit - (leadsToSave.length + existingLeadsCount);
+          if (remainingSpace <= 0) break;
+          uniqueChunk.splice(remainingSpace);
+        }
+
+        const skipVerification = req.body.skipVerification === 'true';
+        let verifiedChunk;
         try {
-          if (results.length === 0) {
-            if (!res.headersSent) {
-              res.status(400).json({ error: "CSV file is empty" });
-            }
-            return;
-          }
-
-          // 1. Map Columns (AI or Fallback — auto-skips AI if keys missing)
-          const headers = Object.keys(results[0]);
-          const aiKeysAvailable = !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY);
-          const skipAI = !aiKeysAvailable || aiPaused;
-          const mappingResult = await mapCSVColumnsToSchema(headers, results.slice(0, 3), skipAI);
-          const mapping = mappingResult.mapping;
-
-          // 2. Extract Leads — import everything we can
-          const processedLeads = results.map(row => {
-            const basicLead = extractLeadFromRow(row, mapping) as { name?: string; email?: string; phone?: string; company?: string; channel?: string; role?: string; bio?: string; replyEmail?: string };
-            // Use company as name fallback
-            if (!basicLead.name && basicLead.company) basicLead.name = basicLead.company;
-            // Only skip truly empty rows
-            if (!basicLead.name && !basicLead.email && !basicLead.company) return null;
-
-            const metadata = extractExtraFieldsAsMetadata(row, mapping);
-            if (mappingResult.unmappedColumns.length > 0) {
-              metadata._unmapped_cols = mappingResult.unmappedColumns.join(',');
-            }
-
-            return {
-              ...basicLead,
-              replyEmail: basicLead.replyEmail || basicLead.email || null,
-              metadata
-            };
-          }).filter(l => l !== null);
-
-          // 3. Handle Preview vs Output
-          if (previewMode) {
-            res.json({
-              preview: true,
-              total: processedLeads.length,
-              mapping: mappingResult.mapping,
-              confidence: mappingResult.confidence,
-              leads: processedLeads, // Return all leads
-              allLeads: processedLeads
-            });
-            return;
-          }
-
-          // 4. Enforce Limits (Scaled for Autonomous High-Volume Growth)
-          const user = await storage.getUserById(userId);
-          const existingLeadsCount = await storage.getLeadsCount(userId);
-          
-          // Scaled Plan Limits:
-          // Enterprise/Team: 500,000 leads
-          // Pro: 100,000 leads
-          // Trial/Starter: 10,000 leads
-          const limit = (user?.subscriptionTier === 'enterprise' || user?.plan === 'enterprise' || user?.email === 'team.replyflow@gmail.com') 
-            ? 500000 
-            : (user?.subscriptionTier === 'pro' || user?.plan === 'pro' ? 100000 : 10000);
-
-          if (existingLeadsCount >= limit) {
-            if (!res.headersSent) {
-              res.status(400).json({ error: `Lead limit reached (${limit} leads). Please upgrade your plan.` });
-            }
-            return;
-          }
-
-          // 5. Save to DB (Standalone Mode)
-          const { db } = await import('@shared/lib/db/db.js');
-          const { leads, aiProcessLogs } = await import('@audnix/shared');
-
-          // Create process log
-          const [processLog] = await db.insert(aiProcessLogs).values({
-            userId,
-            type: 'import_csv',
-            status: 'processing',
-            totalItems: processedLeads.length,
-            processedItems: 0,
-            metadata: {
-              fileName: file.originalname,
-              previewMode,
-              skipAI
-            }
-          }).returning();
-
-          // 6. Duplicate Detection & Verification
-          const leadsToSave = [];
-          const chunkSize = 50;
-          let duplicateCount = 0;
-          let filteredCount = 0;
-
-          console.log(`[CSV Import] Verifying and saving ${processedLeads.length} leads...`);
-
-          // Check for existing emails in the whole set first (or in chunks)
-          const allEmails = processedLeads.map(l => l.email).filter((e): e is string => !!e);
-          const existingEmails = await storage.getExistingEmails(userId, allEmails);
-          const existingEmailSet = new Set(existingEmails);
-
-          const localSeenEmails = new Set<string>();
-          for (let i = 0; i < processedLeads.length; i += chunkSize) {
-            const chunk = processedLeads.slice(i, i + chunkSize);
-
-            // Filter out duplicates
-            const uniqueChunk = chunk.filter(leadData => {
-              if (leadData.email) {
-                if (existingEmailSet.has(leadData.email) || localSeenEmails.has(leadData.email)) {
-                  duplicateCount++;
-                  return false;
-                }
-                localSeenEmails.add(leadData.email);
-              }
-              return true;
-            });
-
-            if (uniqueChunk.length === 0) continue;
-
-            // Check if adding this chunk exceeds the limit
-            if (leadsToSave.length + existingLeadsCount + uniqueChunk.length > limit) {
-              const remainingSpace = limit - (leadsToSave.length + existingLeadsCount);
-              if (remainingSpace <= 0) break;
-              uniqueChunk.splice(remainingSpace);
-            }
-
-            const skipVerification = req.body.skipVerification === 'true';
-
-            // Verification/Processing for the unique chunk (Resilient)
-            let verifiedChunk;
-            try {
-              verifiedChunk = await Promise.all(uniqueChunk.map(async (leadData) => {
-                if (leadData.email && !skipVerification) {
-                  try {
-                    // Verifier with timeout logic to prevent hangs
-                    const verifyPromise = verifier.verify(leadData.email);
-                    const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
-                    
-                    const vResult: any = await Promise.race([verifyPromise, timeoutPromise]);
-                    
-                    return {
-                      ...leadData,
-                      verified: vResult.valid,
-                      bouncy: !vResult.valid && vResult.reason.includes('rejected'),
-                      metadata: {
-                        ...leadData.metadata,
-                        verification_reason: vResult.reason,
-                        risk_level: vResult.riskLevel
-                      }
-                    };
-                  } catch (e) {
-                    console.warn(`[CSV Import] Verification skipped for ${leadData.email} (timeout or error)`);
-                    return { ...leadData, verified: false };
-                  }
-                }
-                return { ...leadData, verified: false };
-              }));
-            } catch (pErr) {
-              console.error("[CSV Import] Verified chunk processing failed, falling back to raw data", pErr);
-              verifiedChunk = uniqueChunk.map(l => ({ ...l, verified: false }));
-            }
-
-            const leadsChunk = verifiedChunk.map(leadData => ({
-              userId,
-              name: leadData.name || 'Unknown',
-              email: leadData.email || null,
-              replyEmail: leadData.replyEmail || (leadData as any).replyEmail || leadData.email || null, // Standardize reply email
-              phone: leadData.phone || null,
-              company: leadData.company || null,
-              channel: 'email' as const,
-              status: (leadData as any).bouncy ? 'bouncy' as const : 'new' as const,
-              aiPaused,
-              integrationId: req.body.integrationId || null,
-              verified: (leadData as any).verified || false,
-              metadata: {
-                ...(leadData.metadata as any),
-                imported_via: 'csv_upload',
-                import_date: new Date().toISOString()
-              }
-            }));
-
-            if (leadsChunk.length > 0) {
+          verifiedChunk = await Promise.all(uniqueChunk.map(async (leadData: any) => {
+            if (leadData.email && !skipVerification) {
               try {
-                const inserted = await db.insert(leads).values(leadsChunk as any).returning();
-                leadsToSave.push(...inserted);
-                filteredCount += verifiedChunk.filter(l => (l as any).bouncy).length;
-
-                // Phase 1.1: Dispatch background timezone enrichment
-                const { aiProcessingQueue } = await import('../core/queues.js');
-                if (aiProcessingQueue) {
-                  const enrichmentJobs = inserted.map(lead => ({
-                    name: 'timezone-enrichment',
-                    data: {
-                      type: 'timezone-enrichment',
-                      userId,
-                      leadId: lead.id,
-                      data: { useAI: true }
-                    }
-                  }));
-                  await aiProcessingQueue.addBulk(enrichmentJobs).catch(err => 
-                    console.warn(`[CSV Import] Failed to queue enrichment:`, err)
-                  );
-                }
-              } catch (dbErr) {
-                // If a chunk fails (e.g. malformed data), we don't want to kill the whole import
-                console.error(`[CSV Import] Chunk starting at ${i} failed to insert:`, dbErr);
+                const verifyPromise = verifier.verify(leadData.email);
+                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
+                const vResult: any = await Promise.race([verifyPromise, timeoutPromise]);
+                return {
+                  ...leadData,
+                  verified: vResult.valid,
+                  bouncy: !vResult.valid && vResult.reason.includes('rejected'),
+                  metadata: { ...leadData.metadata, verification_reason: vResult.reason, risk_level: vResult.riskLevel }
+                };
+              } catch (e) {
+                console.warn(`[CSV Import] Verification skipped for ${leadData.email} (timeout or error)`);
+                return { ...leadData, verified: false };
               }
             }
+            return { ...leadData, verified: false };
+          }));
+        } catch (pErr) {
+          console.error("[CSV Import] Verified chunk processing failed, falling back to raw data", pErr);
+          verifiedChunk = uniqueChunk.map((l: any) => ({ ...l, verified: false }));
+        }
 
-            // Update process log - separate block to ensure it updates even if insert fails
-            try {
-              await db.update(aiProcessLogs)
-                .set({
-                  processedItems: Math.min(i + chunkSize, processedLeads.length),
-                  updatedAt: new Date()
-                })
-                .where(eq(aiProcessLogs.id, processLog.id));
-            } catch (logErr) {
-              console.warn("[CSV Import] Failed to update process log progress:", logErr);
-            }
-          }
+        const leadsChunk = verifiedChunk.map((leadData: any) => ({
+          userId,
+          name: leadData.name || 'Unknown',
+          email: leadData.email || null,
+          replyEmail: leadData.replyEmail || leadData.email || null,
+          phone: leadData.phone || null,
+          company: leadData.company || null,
+          channel: 'email' as const,
+          status: leadData.bouncy ? 'bouncy' as const : 'new' as const,
+          aiPaused,
+          integrationId: req.body.integrationId || null,
+          verified: leadData.verified || false,
+          metadata: { ...leadData.metadata, imported_via: 'csv_upload', import_date: new Date().toISOString() }
+        }));
 
-          // Mark process as completed
-          await db.update(aiProcessLogs)
-            .set({
-              status: 'completed',
-              updatedAt: new Date(),
-              metadata: {
-                ...processLog.metadata,
-                leadsImported: leadsToSave.length,
-                duplicatesSkipped: duplicateCount,
-                invalidFiltered: filteredCount
-              }
-            })
-            .where(eq(aiProcessLogs.id, processLog.id));
-
-          // Professional Distribution Trigger
+        if (leadsChunk.length > 0) {
           try {
-            const { distributeLeadsFromPool } = await import('@services/outreach-worker/src/sales-engine/outreach-engine.js');
-            await distributeLeadsFromPool(userId);
-          } catch (distErr) {
-            console.error('[CSV Import] Lead distribution failed:', distErr);
-          }
+            const inserted = await db.insert(leads).values(leadsChunk as any).returning();
+            leadsToSave.push(...inserted);
+            filteredCount += verifiedChunk.filter((l: any) => l.bouncy).length;
 
-          // Notify frontend to refresh data (no sound — the notification event handles that)
-          wsSync.notifyLeadsUpdated(userId, { type: 'bulk_import', count: leadsToSave.length });
-          wsSync.notifyStatsUpdated(userId, { integrationId: req.body.integrationId });
-
-          res.json({
-            success: true,
-            leadsImported: leadsToSave.length,
-            duplicatesSkipped: duplicateCount,
-            invalidFiltered: filteredCount,
-            processId: processLog.id,
-            leads: leadsToSave.slice(0, 1000) // Return leads for immediate Wizard usage
-          });
-
-          // Create single aggregate notification for import (only one sound plays)
-          if (leadsToSave.length > 0 || duplicateCount > 0 || filteredCount > 0) {
-            try {
-              await storage.createNotification({
-                userId,
-                type: 'lead_import',
-                title: '📥 CSV Import Complete',
-                message: `${leadsToSave.length} leads imported${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ''}${filteredCount > 0 ? `, ${filteredCount} invalid filtered` : ''}.`,
-                metadata: { source: 'csv_upload', count: leadsToSave.length, duplicates: duplicateCount, filtered: filteredCount, fileName: file.originalname }
-              });
-              // Single notification event — triggers one sound on the frontend
-              wsSync.notifyNotification(userId, {
-                type: 'lead_import',
-                title: '📥 CSV Import Complete',
-                message: `${leadsToSave.length} leads imported successfully.`,
-                playSound: true
-              });
-            } catch (notifErr) {
-              console.warn('[CSV Import] Failed to create notification:', notifErr);
+            const { aiProcessingQueue } = await import('../core/queues.js');
+            if (aiProcessingQueue) {
+              const enrichmentJobs = inserted.map(lead => ({
+                name: 'timezone-enrichment',
+                data: { type: 'timezone-enrichment', userId, leadId: lead.id, data: { useAI: true } }
+              }));
+              await aiProcessingQueue.addBulk(enrichmentJobs).catch(err =>
+                console.warn(`[CSV Import] Failed to queue enrichment:`, err)
+              );
             }
-          }
 
-          console.log(`[CSV Import] Success: Imported ${leadsToSave.length}, Skipped ${duplicateCount}, Filtered ${filteredCount}`);
-
-
-        } catch (error: any) {
-          console.error("CSV Processing Error:", error);
-          if (!res.headersSent) {
-            res.status(500).json({ error: "Failed to process CSV rows" });
+            // Progress notification every 5 chunks for large imports
+            if (fullProcessed.length > CHUNK_SIZE * 5 && i % (CHUNK_SIZE * 5) === 0) {
+              wsSync.notifyLeadsUpdated(userId, {
+                type: 'bulk_import_progress',
+                current: leadsToSave.length,
+                total: fullProcessed.length
+              });
+            }
+          } catch (dbErr) {
+            console.error(`[CSV Import] Chunk starting at ${i} failed to insert:`, dbErr);
           }
         }
+
+        try {
+          await db.update(aiProcessLogs)
+            .set({ processedItems: Math.min(i + CHUNK_SIZE, fullProcessed.length), updatedAt: new Date() })
+            .where(eq(aiProcessLogs.id, processLog.id));
+        } catch (logErr) {
+          console.warn("[CSV Import] Failed to update process log progress:", logErr);
+        }
+      }
+
+      await db.update(aiProcessLogs)
+        .set({
+          status: 'completed',
+          updatedAt: new Date(),
+          metadata: {
+            ...processLog.metadata,
+            leadsImported: leadsToSave.length,
+            duplicatesSkipped: duplicateCount,
+            invalidFiltered: filteredCount
+          }
+        })
+        .where(eq(aiProcessLogs.id, processLog.id));
+
+      try {
+        const { distributeLeadsFromPool } = await import('@services/outreach-worker/src/sales-engine/outreach-engine.js');
+        await distributeLeadsFromPool(userId);
+      } catch (distErr) {
+        console.error('[CSV Import] Lead distribution failed:', distErr);
+      }
+
+      wsSync.notifyLeadsUpdated(userId, { type: 'bulk_import', count: leadsToSave.length });
+      wsSync.notifyStatsUpdated(userId, { integrationId: req.body.integrationId });
+
+      res.json({
+        success: true,
+        leadsImported: leadsToSave.length,
+        duplicatesSkipped: duplicateCount,
+        invalidFiltered: filteredCount,
+        processId: processLog.id,
+        leads: leadsToSave.slice(0, 1000)
       });
+
+      if (leadsToSave.length > 0 || duplicateCount > 0 || filteredCount > 0) {
+        try {
+          await storage.createNotification({
+            userId,
+            type: 'lead_import',
+            title: '📥 CSV Import Complete',
+            message: `${leadsToSave.length} leads imported${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ''}${filteredCount > 0 ? `, ${filteredCount} invalid filtered` : ''}.`,
+            metadata: { source: 'csv_upload', count: leadsToSave.length, duplicates: duplicateCount, filtered: filteredCount, fileName: file.originalname }
+          });
+          wsSync.notifyNotification(userId, {
+            type: 'lead_import',
+            title: '📥 CSV Import Complete',
+            message: `${leadsToSave.length} leads imported successfully.`,
+            playSound: true
+          });
+        } catch (notifErr) {
+          console.warn('[CSV Import] Failed to create notification:', notifErr);
+        }
+      }
+
+      console.log(`[CSV Import] Success: Imported ${leadsToSave.length}, Skipped ${duplicateCount}, Filtered ${filteredCount}`);
+
+    } catch (error: any) {
+      console.error("CSV Processing Error:", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Failed to process CSV rows" });
+      }
+    }
 
   } catch (error: any) {
     console.error("CSV Import API Error:", error);

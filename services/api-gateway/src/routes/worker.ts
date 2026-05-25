@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { followUpWorker } from '@services/brain-worker/src/ai-lib/core/follow-up-worker.js';
+import { requireAuth, requireAdmin, getCurrentUserId } from '../middleware/auth.js';
 import { db } from '@shared/lib/db/db.js';
 import { followUpQueue, leads } from '@audnix/shared';
 import { eq, and, gte, sql } from 'drizzle-orm';
@@ -9,18 +10,9 @@ const router = Router();
 /**
  * Start the follow-up worker
  */
-router.post('/worker/start', async (req: Request, res: Response) => {
+router.post('/worker/start', requireAdmin, async (req: Request, res: Response) => {
   try {
-    // Check if user is admin (implement your auth logic)
-    const userId = (req as any).session?.userId || req.body.user_id;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    // Start the worker
     followUpWorker.start();
-
     res.json({
       success: true,
       message: 'Follow-up worker started successfully'
@@ -34,18 +26,9 @@ router.post('/worker/start', async (req: Request, res: Response) => {
 /**
  * Stop the follow-up worker
  */
-router.post('/worker/stop', async (req: Request, res: Response) => {
+router.post('/worker/stop', requireAdmin, async (req: Request, res: Response) => {
   try {
-    // Check if user is admin
-    const userId = (req as any).session?.userId || req.body.user_id;
-
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    // Stop the worker
     followUpWorker.stop();
-
     res.json({
       success: true,
       message: 'Follow-up worker stopped successfully'
@@ -120,10 +103,10 @@ router.get('/worker/status', async (req: Request, res: Response) => {
 /**
  * Manually trigger follow-up for a specific lead
  */
-router.post('/worker/trigger/:leadId', async (req: Request, res: Response) => {
+router.post('/worker/trigger/:leadId', requireAuth, async (req: Request, res: Response) => {
   try {
     const { leadId } = req.params;
-    const userId = (req as any).session?.userId || req.body.user_id;
+    const userId = getCurrentUserId(req);
 
     if (!userId || !leadId || !db) {
       return res.status(400).json({ error: 'Invalid request' });
@@ -198,9 +181,14 @@ router.post('/worker/process', async (req: Request, res: Response) => {
  */
 router.get('/outreach/tick', async (req: Request, res: Response) => {
   const secretToken = req.headers['x-worker-secret'];
-  const expectedToken = process.env.WORKER_SECRET || 'audnix-internal-token-42';
+  const expectedToken = process.env.WORKER_SECRET;
 
-  if (secretToken !== expectedToken && process.env.NODE_ENV === 'production') {
+  if (!expectedToken) {
+    console.error('[WorkerRoutes] WORKER_SECRET env var is not set — outreach tick disabled.');
+    return res.status(503).json({ error: 'Worker secret not configured' });
+  }
+
+  if (secretToken !== expectedToken) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 

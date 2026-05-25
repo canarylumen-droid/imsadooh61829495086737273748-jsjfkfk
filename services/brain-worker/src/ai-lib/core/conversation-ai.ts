@@ -254,6 +254,7 @@ export async function generateAIReply(
     calendarLink?: string;
     isCalendlyConnected?: boolean;
     calendlyUserUri?: string;
+    systemPromptSuffix?: string;
   }
 ): Promise<AIReplyResult> {
 
@@ -644,7 +645,10 @@ ${narrativeSummary}
 - NEVER offer or send a payment/checkout link unless the lead explicitly agrees to buy or specifically asks for an invoice/link.
 - All conflict handling: "I've got something on then — how about [day] at [time]?"
 ${lastOutboundBody ? `- NEGATIVE CONSTRAINT: Do NOT repeat or paraphrase our last message: "${lastOutboundBody.slice(0, 300)}${lastOutboundBody.length > 300 ? '...' : ''}"` : ''}
-${enrichedContext}`;
+${enrichedContext}
+${userContext?.systemPromptSuffix ? `
+[AUTONOMOUS MISSION OVERRIDE — HIGHEST PRIORITY]:
+${userContext.systemPromptSuffix}` : ''}`;
 
   const lastMessage = conversationHistory[conversationHistory.length - 1];
   if (!lastMessage || lastMessage.direction !== 'inbound') {

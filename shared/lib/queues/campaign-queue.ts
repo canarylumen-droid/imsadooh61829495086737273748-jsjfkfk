@@ -21,6 +21,7 @@ import {
   campaignEmails,
   integrations,
   pendingPayments,
+  users,
 } from '@audnix/shared';
 import { eq, and, or, sql, lte, isNull, ne, asc, gt, desc } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
@@ -127,9 +128,19 @@ export class CampaignQueueManager {
 
     console.log(`[CampaignQueue] 🚀 Starting campaign "${campaign.name}" with ${mailboxIds.length} mailbox(es)`);
 
+    // Plan-aware default limits for 50k+ lead scalability
+    let planDailyDefault = 50;
+    try {
+      const [userRow] = await db.select({ plan: users.plan, subscriptionTier: users.subscriptionTier })
+        .from(users).where(eq(users.id, campaign.userId)).limit(1);
+      const tier = (userRow?.subscriptionTier || userRow?.plan || 'starter').toLowerCase();
+      if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 500;
+      else if (tier === 'starter') planDailyDefault = 200;
+    } catch (e) { /* fallback to 50 */ }
+
     // Initial send-batch job for EACH mailbox (one-shot, will reschedule itself)
     for (const mbId of mailboxIds) {
-      const dailyLimit = mailboxLimits[mbId] || 50;
+      const dailyLimit = mailboxLimits[mbId] || planDailyDefault;
       const jobKey = `send-batch_${campaign.id}_${mbId}`;
 
       if (campaignQueue) {
@@ -332,7 +343,16 @@ export class CampaignQueueManager {
   ): Promise<void> {
     // Target 2-5 minute window for human-like but high-performance engagement
     const delayMs = Math.floor((2 + Math.random() * 3) * 60 * 1000);
-    
+
+    // Set Redis key so mailboxHasPendingReply() returns true without scanning the queue
+    try {
+      const { redisConnection } = await import('./redis-config.js');
+      if (redisConnection) {
+        const ttlSeconds = Math.ceil(delayMs / 1000) + 60; // +60s buffer
+        await (redisConnection as any).set(`pending-reply:${integrationId}`, '1', 'EX', ttlSeconds);
+      }
+    } catch {}
+
     if (campaignQueue) {
       const jobId = `autoreply:${campaignId}:${campaignLeadId}:${Date.now()}`;
       await campaignQueue.add(jobId, {
@@ -418,10 +438,19 @@ async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
 
 // ─── Shared Helpers ──────────────────────────────────────────────────────────
 
+// 30-second TTL cache for sent counts to avoid full-table COUNT(*) on every batch
+const sentCountCache = new Map<string, { count: number; expiresAt: number }>();
+const SENT_COUNT_TTL_MS = 30000;
+
 /**
  * Get the number of outbound emails sent today by this mailbox.
  */
 async function getMailboxSentCount(userId: string, integrationId: string): Promise<number> {
+  const cacheKey = `${userId}:${integrationId}`;
+  const cached = sentCountCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.count;
+  }
   const result = await db.execute(sql`
     SELECT COUNT(*) as count FROM messages
     WHERE user_id = ${userId}
@@ -429,22 +458,26 @@ async function getMailboxSentCount(userId: string, integrationId: string): Promi
     AND integration_id = ${integrationId}::uuid
     AND created_at >= CURRENT_DATE::timestamp
   `);
-  return Number(result.rows[0].count);
+  const count = Number(result.rows[0].count);
+  sentCountCache.set(cacheKey, { count, expiresAt: Date.now() + SENT_COUNT_TTL_MS });
+  return count;
 }
 
 /**
- * Check if a pending auto-reply job exists for this specific mailbox in BullMQ.
- * Used by processSendBatch to yield when a reply is about to go out.
+ * Check if a pending auto-reply job exists for this specific mailbox.
+ * Uses a Redis SET for O(1) lookup instead of scanning all delayed jobs.
  */
 export async function mailboxHasPendingReply(integrationId: string): Promise<boolean> {
   if (!campaignQueue) return false;
   try {
-    // Check delayed jobs (not yet fired)
-    const delayed = await campaignQueue.getDelayed();
-    return delayed.some(j =>
-      j.data.type === 'campaign:auto-reply' &&
-      (j.data as AutoReplyJobData).integrationId === integrationId
-    );
+    // Fast path: check the Redis SET written by scheduleAutoReply
+    const { redisConnection } = await import('./redis-config.js');
+    if (redisConnection) {
+      const key = `pending-reply:${integrationId}`;
+      const val = await (redisConnection as any).get(key);
+      return val === '1';
+    }
+    return false;
   } catch {
     return false;
   }
@@ -462,13 +495,16 @@ export async function mailboxHasPendingReply(integrationId: string): Promise<boo
 function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?: any): number {
   let effectiveDailyLimit = dailyLimit;
 
-  // Neural Brain Smart Capping (applied to interval calculation)
+  // Neural Brain Smart Capping (applied to interval calculation) — plan-aware for 50k+ scale
   if (integration) {
-    const tier = integration.tier || 'starter';
+    const tier = (integration.tier || 'starter').toLowerCase();
     if (tier !== 'enterprise') {
       const createdAt = new Date(integration.createdAt || Date.now());
       const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
-      const smartCap = isWarmed ? 60 : 45; // Use conservative 45 for interval spreading
+      // Plan-aware caps: starter 200, pro 500 (was hard-capped at 60 for all non-enterprise)
+      const smartCap = tier === 'pro'
+        ? (isWarmed ? 500 : 300)
+        : (isWarmed ? 200 : 100);
       effectiveDailyLimit = Math.min(effectiveDailyLimit, smartCap);
     }
   }
@@ -565,13 +601,15 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       effectiveLimit = warmup.dailyLimit;
     }
 
-    // Neural Brain Smart Capping
-    const tier = (currentIntegration as any).tier || 'starter';
-    const isEnterprise = tier.toLowerCase() === 'enterprise';
+    // Neural Brain Smart Capping — plan-aware for 50k+ scale
+    const tier = ((currentIntegration as any).tier || 'starter').toLowerCase();
+    const isEnterprise = tier === 'enterprise';
     if (!isEnterprise) {
       const createdAt = new Date((currentIntegration as any).createdAt || Date.now());
       const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
-      const smartCap = isWarmed ? 60 : 45 + Math.floor(Math.random() * 6); // 45-50
+      const smartCap = tier === 'pro'
+        ? (isWarmed ? 500 : 300)
+        : (isWarmed ? 200 : 100); // was 45-60 for all non-enterprise
       effectiveLimit = Math.min(effectiveLimit, smartCap);
     }
   }
@@ -662,7 +700,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       )
     )
     .orderBy(campaignLeads.nextActionAt)
-    .limit(5); // Fetch up to 5 so a timezone-blocked lead doesn't stall the whole mailbox
+    .limit(50); // Fetch up to 50 for high-volume throughput (was 5)
 
   if (nextLeadResult.length === 0) {
     // Precise Scheduling: Find the soonest lead in the future for this mailbox
@@ -924,15 +962,17 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   const mailboxLimits: Record<string, number> = config.mailboxLimits || {};
   const baseLimit = mailboxLimits[integrationId] || 50;
 
-  // Neural Brain Smart Capping (Applied to follow-ups too)
+  // Neural Brain Smart Capping (Applied to follow-ups too) — plan-aware for 50k+ scale
   let effectiveHardLimit = baseLimit;
   if (currentIntegration) {
-    const tier = (currentIntegration as any).tier || 'starter';
-    const isEnterprise = tier.toLowerCase() === 'enterprise';
+    const tier = ((currentIntegration as any).tier || 'starter').toLowerCase();
+    const isEnterprise = tier === 'enterprise';
     if (!isEnterprise) {
       const createdAt = new Date((currentIntegration as any).createdAt || Date.now());
       const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
-      const smartCap = isWarmed ? 60 : 45 + Math.floor(Math.random() * 6); // 45-50
+      const smartCap = tier === 'pro'
+        ? (isWarmed ? 500 : 300)
+        : (isWarmed ? 200 : 100); // was 45-60 for all non-enterprise
       effectiveHardLimit = Math.min(baseLimit, smartCap);
     }
   }
@@ -1268,38 +1308,52 @@ async function deliverCampaignEmail(
   // Follow-up logic: use the correct template for the current step
   let variantId = 'standard';
   let isBreakup = false;
-  
+
   if (leadEntry.currentStep > 0) {
     const followups = (campaign.template as any)?.followups || [];
     const fuConfig = followups[leadEntry.currentStep - 1];
     if (fuConfig) {
-      body = fuConfig.body || body; 
+      body = fuConfig.body || body;
       const fuSubject = fuConfig.subject || subject;
       subject = fuSubject.toLowerCase().startsWith('re:') ? fuSubject : `Re: ${fuSubject}`;
       isBreakup = fuConfig.isBreakup || false;
     }
-  } else {
-    // For initial step, use AI generation or A/B testing variants if in autonomous mode
-    try {
-      if (campaign.aiAutonomousMode) {
-        const testResult = await handleAutonomousTesting(campaign, lead, userId);
-        subject = testResult.subject;
-        body = testResult.body;
-        variantId = testResult.variantId;
-      } else {
-        const aiContent = await generateExpertOutreach(lead, userId);
-        subject = aiContent.subject || subject;
-        body = aiContent.body || body;
-      }
-    } catch (e) {
-      console.warn(`[CampaignWorker] AI generation failed, using template fallback:`, e);
-    }
   }
 
-  // CHECK FOR PRE-CRAFTED COPY (Nightly Worker Optimization)
+  // ── PRE-CRAFTED COPY (check BEFORE any AI call to avoid waste) ───────
   if (leadEntry.metadata?.preCraftedCopy) {
     console.log(`[CampaignWorker] ⚡ Using pre-crafted copy for lead ${lead.id.slice(-8)}`);
     body = leadEntry.metadata.preCraftedCopy;
+  }
+  // ── AI GENERATION CAP (initial step only, max 200 AI calls/campaign) ─
+  else if (leadEntry.currentStep === 0) {
+    const stats = (campaign.stats as any) || {};
+    const aiCap = (campaign.config as any)?.aiGenerationCap || 200;
+    const aiGeneratedCount = stats.aiGeneratedCount || 0;
+
+    if (aiGeneratedCount < aiCap) {
+      try {
+        if (campaign.aiAutonomousMode) {
+          const testResult = await handleAutonomousTesting(campaign, lead, userId);
+          subject = testResult.subject;
+          body = testResult.body;
+          variantId = testResult.variantId;
+        } else {
+          const aiContent = await generateExpertOutreach(lead, userId);
+          subject = aiContent.subject || subject;
+          body = aiContent.body || body;
+        }
+        // Increment counter in campaign stats
+        stats.aiGeneratedCount = (stats.aiGeneratedCount || 0) + 1;
+        await db.update(outreachCampaigns)
+          .set({ stats })
+          .where(eq(outreachCampaigns.id, campaign.id));
+      } catch (e) {
+        console.warn(`[CampaignWorker] AI generation failed, using template fallback:`, e);
+      }
+    } else {
+      console.log(`[CampaignWorker] 🧠 AI cap reached (${aiGeneratedCount}/${aiCap}) for campaign ${campaign.id.slice(-8)}. Using template for lead ${lead.id.slice(-8)}.`);
+    }
   }
 
   // BUG #4/#9 FIX: Hard guard — if body is still empty/undefined, abort with a clear error
@@ -1387,6 +1441,24 @@ async function deliverCampaignEmail(
     return;
   }
 
+  // ── CROSS-CAMPAIGN SEND DEDUP ──────────────────────────────────────
+  // Prevent a lead from receiving emails from multiple campaigns within 1 hour.
+  try {
+    const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+    const redisClient = await getRedisClient();
+    if (redisClient) {
+      const lastSendKey = `lead:last_email:${lead.id}`;
+      const alreadySent = await redisClient.get(lastSendKey);
+      if (alreadySent) {
+        console.warn(`[CampaignWorker] Cross-campaign dedup: lead ${lead.id} already emailed within last hour. Skipping campaign ${campaign.id}.`);
+        await releaseLock(lockKey);
+        return;
+      }
+    }
+  } catch (dedupErr) {
+    // fail open if Redis is unavailable
+  }
+
   // --- REFINED THREADING LOGIC ---
   let inReplyTo: string | undefined = undefined;
   let references: string | undefined = undefined;
@@ -1442,6 +1514,15 @@ async function deliverCampaignEmail(
   // BUG #8 FIX: Release lock after successful send so future jobs aren't blocked
   // by an expired but still-held 5-minute lock from the previous successful send.
   await releaseLock(lockKey);
+
+  // ── CROSS-CAMPAIGN DEDUP: Mark lead as emailed for 1 hour ──────────
+  try {
+    const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+    const redisClient = await getRedisClient();
+    if (redisClient) {
+      await redisClient.set(`lead:last_email:${lead.id}`, Date.now().toString(), { EX: 3600 });
+    }
+  } catch {}
 
   // Phase 17: Atomic Post-Send Transaction
   // Ensures that message creation, lead status update, and stats all succeed together
@@ -1662,7 +1743,7 @@ async function deliverCampaignInstagram(
  */
 async function processPreCraft(data: PreCraftJobData): Promise<void> {
   const { campaignId, userId } = data;
-  
+
   // 1. Fetch leads whose nextActionAt is within the next 24 hours
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
   const eligibleLeads = await db.select({
@@ -1676,7 +1757,7 @@ async function processPreCraft(data: PreCraftJobData): Promise<void> {
     eq(campaignLeads.status, 'queued'),
     lte(campaignLeads.nextActionAt, tomorrow)
   ))
-  .limit(20); // Process in manageable batches
+  .limit(200); // 10x more pre-crafted leads per night for 30k campaigns
 
   if (eligibleLeads.length === 0) return;
 
@@ -1685,52 +1766,57 @@ async function processPreCraft(data: PreCraftJobData): Promise<void> {
   const [campaign] = await db.select().from(outreachCampaigns).where(eq(outreachCampaigns.id, campaignId));
   if (!campaign) return;
 
-  for (const row of eligibleLeads) {
-    const lead = row.lead;
-    const leadEntry = row.campaignLead;
+  // Batch concurrency: process 5 at a time to respect AI rate limiters
+  const CONCURRENCY = 5;
+  for (let i = 0; i < eligibleLeads.length; i += CONCURRENCY) {
+    const batch = eligibleLeads.slice(i, i + CONCURRENCY);
+    await Promise.all(batch.map(async (row) => {
+      const lead = row.lead;
+      const leadEntry = row.campaignLead;
 
-    try {
-      let subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject;
-      let body = (campaign.template as any)?.initial?.body || (campaign.template as any)?.body;
+      try {
+        let subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject;
+        let body = (campaign.template as any)?.initial?.body || (campaign.template as any)?.body;
 
-      // Follow-up check
-      let isBreakup = false;
-      if (leadEntry.currentStep > 0) {
-        const followups = (campaign.template as any)?.followups || [];
-        const fuConfig = followups[leadEntry.currentStep - 1];
-        if (fuConfig) {
-          body = fuConfig.body || body;
-          isBreakup = fuConfig.isBreakup || false;
+        // Follow-up check
+        let isBreakup = false;
+        if (leadEntry.currentStep > 0) {
+          const followups = (campaign.template as any)?.followups || [];
+          const fuConfig = followups[leadEntry.currentStep - 1];
+          if (fuConfig) {
+            body = fuConfig.body || body;
+            isBreakup = fuConfig.isBreakup || false;
+          }
         }
+
+        // Generate the copy
+        const aiContent = await generateExpertOutreach(lead as any, userId);
+        let preCraftedBody = aiContent.body || body;
+
+        // Apply adjustment if necessary
+        const adjustment = await adjustCopyIfNecessary({
+          userId,
+          leadId: lead.id,
+          originalBody: preCraftedBody,
+          originalSubject: subject,
+          currentStepIndex: leadEntry.currentStep,
+          isBreakup
+        });
+
+        if (adjustment.adjusted) {
+          preCraftedBody = adjustment.body;
+        }
+
+        // Save to metadata
+        const metadata = { ...(leadEntry.metadata as any || {}), preCraftedCopy: preCraftedBody, preCraftedAt: new Date().toISOString() };
+        await db.update(campaignLeads)
+          .set({ metadata })
+          .where(eq(campaignLeads.id, leadEntry.id));
+
+      } catch (err: any) {
+        console.warn(`[PreCraft] Failed for lead ${lead.id.slice(-8)}:`, err.message);
       }
-
-      // Generate the copy
-      const aiContent = await generateExpertOutreach(lead as any, userId);
-      let preCraftedBody = aiContent.body || body;
-
-      // Apply adjustment if necessary
-      const adjustment = await adjustCopyIfNecessary({
-        userId,
-        leadId: lead.id,
-        originalBody: preCraftedBody,
-        originalSubject: subject,
-        currentStepIndex: leadEntry.currentStep,
-        isBreakup
-      });
-
-      if (adjustment.adjusted) {
-        preCraftedBody = adjustment.body;
-      }
-
-      // Save to metadata
-      const metadata = { ...(leadEntry.metadata as any || {}), preCraftedCopy: preCraftedBody, preCraftedAt: new Date().toISOString() };
-      await db.update(campaignLeads)
-        .set({ metadata })
-        .where(eq(campaignLeads.id, leadEntry.id));
-
-    } catch (err: any) {
-      console.warn(`[PreCraft] Failed for lead ${lead.id.slice(-8)}:`, err.message);
-    }
+    }));
   }
 }
 

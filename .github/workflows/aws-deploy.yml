@@ -1,0 +1,53 @@
+# =============================================================================
+# Audnix AI — GitHub Actions CI/CD for AWS EC2 Deployment
+# =============================================================================
+# Triggers: Push to main branch OR manual dispatch
+# Strategy: SSH to EC2 → git pull → docker build locally → up
+#
+# Required GitHub Secrets:
+#   AWS_EC2_HOST     — EC2 public IP or domain
+#   AWS_EC2_USER     — usually 'ubuntu'
+#   AWS_EC2_SSH_KEY  — contents of your .pem key file
+#   AWS_EC2_APP_DIR  — path to repo on server, e.g. /home/ubuntu/audnix
+# =============================================================================
+
+name: Deploy to AWS EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to AWS EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ${{ secrets.AWS_EC2_USER }}
+          key: ${{ secrets.AWS_EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 15m
+          script: |
+            set -e
+            cd ${{ secrets.AWS_EC2_APP_DIR }}
+
+            echo "� Pulling latest code..."
+            git pull origin main
+
+            echo "� Building and deploying..."
+            ./scripts/aws-deploy.sh
+
+            echo "✅ Deploy triggered via CI/CD!"
+
+      - name: Notify on success
+        if: success()
+        run: echo "✅ Deployed commit ${{ github.sha }} to EC2"
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "❌ Deploy FAILED for commit ${{ github.sha }}"

@@ -271,6 +271,8 @@ export const messages = pgTable("messages", {
   msgsUserIdIdx: index("msgs_user_id_idx").on(table.userId),
   msgsLeadIdIdx: index("msgs_lead_id_idx").on(table.leadId),
   msgsIntegrationIdIdx: index("msgs_integration_id_idx").on(table.integrationId),
+  // Phase 16: Composite index for daily sent-count queries (avoids full scan at 50k+ scale)
+  msgsUserDirectionCreatedAtIdx: index("msgs_user_dir_created_idx").on(table.userId, table.direction, table.createdAt),
 }));
 
 export const threads = pgTable("threads", {
@@ -588,8 +590,8 @@ export const followUpQueue = pgTable("follow_up_queue", {
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
-  // Phase 15: Critical for worker polling performance (avoids full-table scan)
-  followUpScheduledStatusIdx: index("follow_up_scheduled_status_idx").on(table.scheduledAt, table.status),
+  // Phase 15: Critical for worker polling performance (status first = best selectivity for pending filter)
+  followUpStatusScheduledIdx: index("follow_up_status_scheduled_idx").on(table.status, table.scheduledAt),
   followUpUserIdIdx: index("follow_up_user_id_idx").on(table.userId),
 }));
 

@@ -1,9 +1,10 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Play, Pause, Trash2, Activity, PlayCircle, Loader, StopCircle, Mail } from "lucide-react";
+import { Loader2, Plus, Play, Pause, Trash2, Activity, PlayCircle, Loader, StopCircle, Mail, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -13,14 +14,24 @@ interface CampaignListModalProps {
   onNewCampaign: () => void;
 }
 
+const PAGE_SIZE = 10;
+
 export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignListModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const [page, setPage] = useState(0);
 
   const { data: campaigns, isLoading } = useQuery<any[]>({
     queryKey: ["/api/outreach/campaigns"],
     enabled: isOpen,
+    staleTime: 10_000,
   });
+
+  const totalPages = Math.max(1, Math.ceil((campaigns?.length || 0) / PAGE_SIZE));
+  const pagedCampaigns = useMemo(() => {
+    if (!campaigns) return [];
+    return campaigns.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+  }, [campaigns, page]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, action }: { id: string; action: "start" | "pause" | "resume" }) => {
@@ -45,6 +56,19 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     },
     onError: (error: any) => {
       toast({ title: "Failed to abort", description: error.message, variant: "destructive" });
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/outreach/campaigns/${id}`, undefined);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
+      toast({ title: "Campaign Deleted", description: "Campaign and all associated data removed." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Delete failed", description: error.message, variant: "destructive" });
     }
   });
 
@@ -134,9 +158,10 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
             </div>
           ) : (
             <div className="space-y-4">
-              {campaigns.map((camp) => {
+              {pagedCampaigns.map((camp) => {
                 const isPending = updateStatusMutation.isPending && updateStatusMutation.variables?.id === camp.id;
                 const isAborting = abortMutation.isPending && abortMutation.variables === camp.id;
+                const isDeleting = deleteMutation.isPending && deleteMutation.variables === camp.id;
                 
                 return (
                   <div key={camp.id} className="bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex items-center justify-between group transition-all hover:border-primary/30">
@@ -194,16 +219,45 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
                               abortMutation.mutate(camp.id);
                             }
                           }}
-                          disabled={isAborting || isPending}
+                          disabled={isAborting || isPending || isDeleting}
                           title="Abort Campaign"
                         >
                           {isAborting ? <Loader className="w-4 h-4 animate-spin" /> : <StopCircle className="w-4 h-4" />}
                         </Button>
                       )}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="w-8 h-8 rounded-lg hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => {
+                          if (confirm(`Permanently delete "${camp.name}"? All leads and data will be removed.`)) {
+                            deleteMutation.mutate(camp.id);
+                          }
+                        }}
+                        disabled={isDeleting || isPending || isAborting}
+                        title="Delete Campaign"
+                      >
+                        {isDeleting ? <Loader className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
+                      </Button>
                     </div>
                   </div>
                 );
               })}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-3 border-t border-border/20">
+                  <span className="text-[11px] text-muted-foreground font-medium">
+                    Page {page + 1} of {totalPages} &bull; {campaigns?.length || 0} campaigns
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

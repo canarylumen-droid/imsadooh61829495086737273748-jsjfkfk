@@ -592,36 +592,61 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
     
     const { db } = await import('@shared/lib/db/db.js');
     const { leads: leadsSchema, messages: msgSchema } = await import('@audnix/shared');
-    const { and, eq, sql } = await import('drizzle-orm');
+    const { and, eq, sql, inArray } = await import('drizzle-orm');
 
-    const mailboxes = await Promise.all(allIntegrations
-      .filter(i => emailProviders.includes(i.provider))
-      .map(async i => {
-        // Fetch bouncy leads count for this integration
-        const [bouncyRes] = await db.select({ count: sql<number>`count(*)` })
-          .from(leadsSchema)
-          .where(and(eq(leadsSchema.userId, userId), eq(leadsSchema.integrationId, i.id), eq(leadsSchema.status, 'bouncy')));
-        
-        // Fetch outreached leads count for this integration
-        const [outreachedRes] = await db.select({ count: sql<number>`count(distinct ${msgSchema.leadId})` })
-          .from(msgSchema)
-          .where(and(eq(msgSchema.userId, userId), eq(msgSchema.integrationId, i.id), eq(msgSchema.direction, 'outbound')));
+    const emailIntegrations = allIntegrations.filter(i => emailProviders.includes(i.provider));
+    const integrationIds = emailIntegrations.map(i => i.id);
 
-        const bouncy = Number(bouncyRes?.count || 0);
-        const outreached = Number(outreachedRes?.count || 0);
-        const calculatedBounceRate = outreached > 0 ? (bouncy / outreached) : 0;
+    // Bulk-fetch bounce counts in a single query instead of N+1
+    let bouncyCounts: { integrationId: string; count: number }[] = [];
+    let outreachedCounts: { integrationId: string; count: number }[] = [];
 
-        return {
-          id: i.id,
-          email: i.accountType,
-          connected: i.connected,
-          provider: i.provider, // 'custom_email' | 'gmail' | 'outlook'
-          healthStatus: (i as any).healthStatus || 'connected',
-          lastSync: i.lastSync,
-          reputationScore: (i as any).reputationScore ?? null,
-          bounceRate: calculatedBounceRate,
-        };
-      }));
+    if (integrationIds.length > 0) {
+      bouncyCounts = await db.select({
+        integrationId: leadsSchema.integrationId,
+        count: sql<number>`count(*)`,
+      })
+        .from(leadsSchema)
+        .where(and(
+          eq(leadsSchema.userId, userId),
+          eq(leadsSchema.status, 'bouncy'),
+          inArray(leadsSchema.integrationId, integrationIds)
+        ))
+        .groupBy(leadsSchema.integrationId) as any;
+
+      outreachedCounts = await db.select({
+        integrationId: msgSchema.integrationId,
+        count: sql<number>`count(distinct ${msgSchema.leadId})`,
+      })
+        .from(msgSchema)
+        .where(and(
+          eq(msgSchema.userId, userId),
+          eq(msgSchema.direction, 'outbound'),
+          inArray(msgSchema.integrationId, integrationIds)
+        ))
+        .groupBy(msgSchema.integrationId) as any;
+    }
+
+    const bouncyMap = new Map(bouncyCounts.map(r => [r.integrationId, Number(r.count)]));
+    const outreachedMap = new Map(outreachedCounts.map(r => [r.integrationId, Number(r.count)]));
+
+    const mailboxes = emailIntegrations.map(i => {
+      const bouncy = bouncyMap.get(i.id) || 0;
+      const outreached = outreachedMap.get(i.id) || 0;
+      const calculatedBounceRate = outreached > 0 ? (bouncy / outreached) : 0;
+
+      return {
+        id: i.id,
+        email: i.accountType,
+        connected: i.connected,
+        provider: i.provider,
+        healthStatus: (i as any).healthStatus || 'connected',
+        lastSync: i.lastSync,
+        reputationScore: (i as any).reputationScore ?? null,
+        bounceRate: calculatedBounceRate,
+        dailyLimit: (i as any).dailyLimit ?? null,
+      };
+    });
 
     res.json({
       success: true,

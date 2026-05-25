@@ -1,6 +1,6 @@
 import { db } from '@shared/lib/db/db.js';
 import { leads, messages, users } from "@audnix/shared";
-import { eq, and, or, sql, lt, desc } from "drizzle-orm";
+import { eq, and, or, gte, sql, lt, desc } from "drizzle-orm";
 import { storage } from '@shared/lib/storage/storage.js';
 import { generateAIReply } from "@services/brain-worker/src/ai-lib/core/conversation-ai.js";
 import { sendEmail } from "@shared/lib/channels/email.js";
@@ -42,7 +42,7 @@ export class ClosingWorker {
       .leftJoin(messages, eq(leads.id, messages.leadId))
       .where(
         and(
-          eq(leads.score, 100), // Category A is represented as score 100 in our engine
+          gte(leads.score, 85), // Category A: any lead scoring 85+ (high-value)
           or(eq(leads.status, 'replied'), eq(leads.status, 'open')),
           eq(leads.aiPaused, false),
           sql`(${leads.metadata}->>'last_closing_nudge')::boolean IS NULL`,
@@ -79,11 +79,12 @@ export class ClosingWorker {
 
       // Trigger a specific "Closing" variation via generateAIReply
       // We'll inject a command into the conversation history context
-      const closingPrompt = "STALL DETECTION: This lead is high-value but hasn't replied in 48h. Send a high-urgency, scarcity-based closing nudge. Be professional but firm. Mention we are finalizing spots for the week.";
-      
+      const closingPrompt = "STALL DETECTION: This lead is high-value but hasn't replied in 48h. Send a high-urgency, scarcity-based closing nudge. Be professional but firm. Mention we are finalizing spots for the week. Create urgency without sounding desperate. One clear call-to-action only.";
+
       const reply = await generateAIReply(lead, history, 'email', {
         businessName: user?.businessName || 'Audnix',
-        brandVoice: 'High-urgency closing advisor'
+        brandVoice: 'High-urgency closing advisor',
+        systemPromptSuffix: closingPrompt
       });
 
       if (reply && !reply.blocked) {

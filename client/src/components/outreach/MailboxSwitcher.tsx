@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     Select,
@@ -7,7 +7,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
-import { Mail, Globe, CheckCircle2, PlusCircle } from "lucide-react";
+import { Mail, CheckCircle2, PlusCircle, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -35,9 +35,25 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
         queryKey: ["/api/integrations"],
     });
 
-    const mailboxes = integrations?.filter(i =>
-        ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected
-    ) || [];
+    const [mailboxSearch, setMailboxSearch] = useState("");
+    const MAILBOX_DISPLAY_LIMIT = 50;
+
+    const mailboxes = useMemo(() => (
+        integrations?.filter(i => ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected) || []
+    ), [integrations]);
+
+    const filteredMailboxes = useMemo(() => {
+        if (!mailboxSearch.trim()) return mailboxes;
+        const q = mailboxSearch.toLowerCase();
+        return mailboxes.filter(m =>
+            (m.email || "").toLowerCase().includes(q) ||
+            (m.accountType || "").toLowerCase().includes(q) ||
+            (m.provider || "").toLowerCase().includes(q)
+        );
+    }, [mailboxes, mailboxSearch]);
+
+    const visibleMailboxes = filteredMailboxes.slice(0, MAILBOX_DISPLAY_LIMIT);
+    const hiddenCount = filteredMailboxes.length - visibleMailboxes.length;
 
     // Auto-select first mailbox if none is selected and mailboxes exist
     useEffect(() => {
@@ -76,8 +92,25 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
                     </div>
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl border-border/40 bg-card/95 backdrop-blur-xl shadow-2xl min-w-[280px] p-2">
-                    <div className="px-3 py-2 text-[9px] font-black text-muted-foreground/50 uppercase tracking-[0.2em]">Connected Accounts</div>
-                    {mailboxes.map((mailbox) => (
+                    {mailboxes.length > 5 && (
+                        <div className="px-2 pb-2">
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted/30 border border-border/20">
+                                <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+                                <input
+                                    className="flex-1 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground/50 outline-none"
+                                    placeholder="Search mailboxes..."
+                                    value={mailboxSearch}
+                                    onChange={e => setMailboxSearch(e.target.value)}
+                                    onKeyDown={e => e.stopPropagation()}
+                                    onClick={e => e.stopPropagation()}
+                                />
+                            </div>
+                        </div>
+                    )}
+                    <div className="px-3 py-1 text-[9px] font-black text-muted-foreground/50 uppercase tracking-[0.2em]">
+                        {mailboxSearch ? `${filteredMailboxes.length} result${filteredMailboxes.length !== 1 ? "s" : ""}` : `${mailboxes.length} Connected`}
+                    </div>
+                    {visibleMailboxes.map((mailbox) => (
                         <SelectItem
                             key={mailbox.id}
                             value={mailbox.id}
@@ -99,6 +132,12 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
                             </div>
                         </SelectItem>
                     ))}
+
+                    {hiddenCount > 0 && (
+                        <div className="px-3 py-2 text-[9px] font-bold text-muted-foreground/60 text-center">
+                            +{hiddenCount} more — type to search
+                        </div>
+                    )}
 
                     <div className="h-px bg-border/20 my-2 mx-2" />
 

@@ -11,6 +11,7 @@ interface SyncMessage {
 
 class WebSocketSyncServer {
   private io: Server | null = null;
+  private userSocketMap: Map<string, Set<string>> = new Map();
 
   initialize(server: http.Server) {
     if (this.io) {
@@ -64,6 +65,20 @@ class WebSocketSyncServer {
       // Join a room specific to this user
       socket.join(`user:${userId}`);
       console.log(`Socket connected: User ${userId} (${socket.id})`);
+
+      // Track connected user
+      if (!this.userSocketMap.has(userId)) {
+        this.userSocketMap.set(userId, new Set());
+      }
+      this.userSocketMap.get(userId)!.add(socket.id);
+
+      socket.on('disconnect', () => {
+        const sockets = this.userSocketMap.get(userId);
+        if (sockets) {
+          sockets.delete(socket.id);
+          if (sockets.size === 0) this.userSocketMap.delete(userId);
+        }
+      });
 
       socket.on('client:ready', () => {
         socket.emit('server:ready', { timestamp: Date.now() });
@@ -313,7 +328,7 @@ class WebSocketSyncServer {
   }
 
   getConnectedUsers(): string[] {
-    return [];
+    return Array.from(this.userSocketMap.keys());
   }
 }
 

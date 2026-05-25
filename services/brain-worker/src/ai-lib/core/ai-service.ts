@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { MODELS, OPENAI_INTELLIGENCE_MODEL, GENAI_STABLE_MODEL, OPENAI_FAST_MODEL, Z_AI_FAST_MODEL, LLM_FAILOVER_ORDER } from "../utils/model-config.js";
+import { MODELS, OPENAI_INTELLIGENCE_MODEL, GENAI_STABLE_MODEL, OPENAI_FAST_MODEL, Z_AI_FAST_MODEL, LLM_FAILOVER_ORDER, DEEPSEEK_CHAT_MODEL, DEEPSEEK_REASON_MODEL } from "../utils/model-config.js";
 import { storage } from '@shared/lib/storage/storage.js';
-import { openAiLimiter, geminiLimiter, zAiLimiter } from '@shared/lib/ai/rate-limiter.js';
+import { openAiLimiter, geminiLimiter, zAiLimiter, deepseekLimiter } from '@shared/lib/ai/rate-limiter.js';
 import { SystemHealthService } from '@shared/lib/monitoring/system-health-service.js';
 
 // Global timeout for AI requests (15 seconds) to prevent worker hangs
@@ -49,11 +49,19 @@ const zai = process.env.ZAI_API_KEY
   })
   : null;
 
+// Initialize DeepSeek conditionally (OpenAI-compatible API, no separate SDK needed)
+const deepseekClient = process.env.DEEPSEEK_API_KEY
+  ? new OpenAI({
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseURL: "https://api.deepseek.com"
+  })
+  : null;
+
 /**
- * Determine primary provider: Z-AI > OpenAI > Gemini > None (Demo)
+ * Determine primary provider: Z-AI > OpenAI > Gemini > DeepSeek > None (Demo)
  */
-const PREFERRED_PROVIDER = process.env.ZAI_API_KEY ? "zai" : (process.env.OPENAI_API_KEY ? "openai" : (process.env.GEMINI_API_KEY ? "genai" : "demo"));
-const AI_MODEL = process.env.ZAI_API_KEY ? MODELS.sales_reasoning : (process.env.OPENAI_MODEL || OPENAI_INTELLIGENCE_MODEL);
+const PREFERRED_PROVIDER = process.env.ZAI_API_KEY ? "zai" : (process.env.OPENAI_API_KEY ? "openai" : (process.env.GEMINI_API_KEY ? "genai" : (process.env.DEEPSEEK_API_KEY ? "deepseek" : "demo")));
+const AI_MODEL = process.env.ZAI_API_KEY ? MODELS.sales_reasoning : (process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.OPENAI_MODEL || OPENAI_INTELLIGENCE_MODEL));
 
 console.log(`[AI Service] Unified initialization with provider: ${PREFERRED_PROVIDER}`);
 
@@ -61,15 +69,16 @@ console.log(`[AI Service] Unified initialization with provider: ${PREFERRED_PROV
  * Registry to track AI provider health and cooldowns
  */
 const PROVIDER_STATUS = {
-  zai: { cooldownUntil: 0, consecutiveErrors: 0 },
-  openai: { cooldownUntil: 0, consecutiveErrors: 0 },
-  genai: { cooldownUntil: 0, consecutiveErrors: 0 },
+  zai:      { cooldownUntil: 0, consecutiveErrors: 0 },
+  openai:   { cooldownUntil: 0, consecutiveErrors: 0 },
+  genai:    { cooldownUntil: 0, consecutiveErrors: 0 },
+  deepseek: { cooldownUntil: 0, consecutiveErrors: 0 },
 };
 
 const COOLDOWN_BASE_MS = 30000; // Start with 30s for 429s
 const MAX_COOLDOWN_MS = 3600000; // 1 hour
 
-function updateProviderHealth(provider: 'openai' | 'genai' | 'zai', isSuccess: boolean, error?: any) {
+function updateProviderHealth(provider: 'openai' | 'genai' | 'zai' | 'deepseek', isSuccess: boolean, error?: any) {
   const status = PROVIDER_STATUS[provider];
   if (isSuccess) {
     status.consecutiveErrors = 0;
@@ -118,10 +127,11 @@ function updateProviderHealth(provider: 'openai' | 'genai' | 'zai', isSuccess: b
   }
 }
 
-export function isProviderAvailable(provider: 'openai' | 'genai' | 'zai'): boolean {
+export function isProviderAvailable(provider: 'openai' | 'genai' | 'zai' | 'deepseek'): boolean {
   if (provider === 'zai' && !zai) return false;
   if (provider === 'openai' && !openai) return false;
   if (provider === 'genai' && !genai) return false;
+  if (provider === 'deepseek' && !deepseekClient) return false;
   return Date.now() >= PROVIDER_STATUS[provider].cooldownUntil;
 }
 
@@ -138,7 +148,7 @@ export function getAIStatus() {
             available,
             cooldownUntil: PROVIDER_STATUS[provider].cooldownUntil,
             consecutiveErrors: PROVIDER_STATUS[provider].consecutiveErrors,
-            configured: !!(provider === 'zai' ? zai : (provider === 'openai' ? openai : genai))
+            configured: !!(provider === 'zai' ? zai : (provider === 'openai' ? openai : (provider === 'genai' ? genai : deepseekClient)))
         };
         return acc;
     }, {} as Record<string, any>)
@@ -250,9 +260,10 @@ async function selectBestModelForBudget(userId: string, requestedModel: string):
       console.warn(`💸 [Budget Mode] User ${userId} at ${Math.round((dailyUsage/limit)*100)}% quota. Downgrading model.`);
       
       // Map reasoning models to their flash/budget equivalents
+      if (requestedModel === DEEPSEEK_REASON_MODEL) return DEEPSEEK_CHAT_MODEL;
       if (requestedModel === MODELS.sales_reasoning) return GENAI_STABLE_MODEL;
       if (requestedModel === MODELS.intent_classification) return OPENAI_FAST_MODEL;
-      return GENAI_STABLE_MODEL;
+      return process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL;
     }
   } catch (e) {
     console.error("[AiService] Budget selection error:", e);
@@ -285,7 +296,21 @@ export async function generateReply(
 ): Promise<{ text: string; tokensUsed: number }> {
   const finalSystemPrompt = options?.nga1Enforced ? wrapWithNGA1(systemPrompt) : systemPrompt;
   const baseModel = options?.model || AI_MODEL;
-  
+
+  // ── AI BUDGET HARD STOP ────────────────────────────────────────────
+  if (options?.userId) {
+    try {
+      const user = await storage.getUserById(options.userId);
+      const metadata = (user as any)?.intelligenceMetadata || {};
+      const dailyUsage = metadata.dailyTokenUsage || 0;
+      const limit = metadata.customDailyTokenLimit || 500_000;
+      if (dailyUsage >= limit) {
+        console.warn(`[AI Service] ⛔ Budget hard-stop for user ${options.userId}: ${dailyUsage}/${limit} tokens used.`);
+        return { text: "[AI budget exceeded for today — using template fallback]", tokensUsed: 0 };
+      }
+    } catch {}
+  }
+
   const providers = {
     openai: async () => {
       if (!isProviderAvailable('openai')) return null;
@@ -426,6 +451,36 @@ export async function generateReply(
         updateProviderHealth('zai', false, error);
         return null;
       }
+    },
+    deepseek: async () => {
+      if (!isProviderAvailable('deepseek')) return null;
+      try {
+        const modelName = (baseModel.startsWith('gpt-') || baseModel.startsWith('gemini-') || baseModel.startsWith('glm-'))
+          ? DEEPSEEK_CHAT_MODEL
+          : (baseModel.startsWith('deepseek-') ? baseModel : DEEPSEEK_CHAT_MODEL);
+
+        await deepseekLimiter.acquire(1);
+        const response = await withTimeout(deepseekClient!.chat.completions.create({
+          model: modelName,
+          messages: [
+            { role: "system", content: finalSystemPrompt },
+            ...(options?.history || []),
+            { role: "user", content: userPrompt },
+          ],
+          response_format: options?.jsonMode ? { type: "json_object" } : undefined,
+          max_tokens: options?.maxTokens || 1000,
+          temperature: options?.temperature || 0.7
+        } as any));
+        updateProviderHealth('deepseek', true);
+        return {
+          text: response.choices[0].message.content || "",
+          tokensUsed: response.usage?.total_tokens || 0
+        };
+      } catch (error: any) {
+        console.error("[AI Service] DeepSeek error:", error.message);
+        updateProviderHealth('deepseek', false, error);
+        return null;
+      }
     }
   };
 
@@ -522,6 +577,22 @@ export async function classify(
         updateProviderHealth('zai', false, e.status);
         return null;
       }
+    },
+    deepseek: async () => {
+      if (!isProviderAvailable('deepseek')) return null;
+      try {
+        const response = await withTimeout(deepseekClient!.chat.completions.create({
+          model: DEEPSEEK_CHAT_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: text }],
+          response_format: { type: "json_object" },
+          max_tokens: 100,
+        } as any));
+        updateProviderHealth('deepseek', true);
+        return JSON.parse(response.choices[0].message.content || "{}");
+      } catch (e: any) {
+        updateProviderHealth('deepseek', false, e);
+        return null;
+      }
     }
   };
 
@@ -590,6 +661,21 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
         return response.choices[0].message.content || "";
       } catch (e: any) {
         updateProviderHealth('zai', false, e.status);
+        return null;
+      }
+    },
+    deepseek: async () => {
+      if (!isProviderAvailable('deepseek')) return null;
+      try {
+        const response = await withTimeout(deepseekClient!.chat.completions.create({
+          model: DEEPSEEK_CHAT_MODEL,
+          messages: [{ role: "system", content: systemPrompt }, { role: "user", content: fullPrompt }],
+          max_tokens: 500,
+        } as any));
+        updateProviderHealth('deepseek', true);
+        return response.choices[0].message.content || "";
+      } catch (e: any) {
+        updateProviderHealth('deepseek', false, e);
         return null;
       }
     }

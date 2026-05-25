@@ -34,7 +34,9 @@ async function checkEnv(): Promise<void> {
   const required = ['DATABASE_URL'];
   const recommended = [
     'OPENAI_API_KEY',
+    'DEEPSEEK_API_KEY',
     'GOOGLE_AI_API_KEY',
+    'Z_AI_API_KEY',
     'CALENDLY_WEBHOOK_SECRET',
     'DOMAIN',
     'REDIS_URL',

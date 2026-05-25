@@ -172,11 +172,35 @@ class WorkerHealthMonitor {
   }
 
   /**
-   * Alert admin about worker failure
+   * Alert admin about worker failure via DB notification + console
    */
   private async alertAdmin(workerName: string, error: string): Promise<void> {
     console.error(`🚨 WORKER FAILURE: ${workerName} - ${error}`);
-    // Using Neon database for admin notifications - no Supabase needed
+    try {
+      const { db } = await import('../db/db.js');
+      const { notifications } = await import('@audnix/shared');
+      const { adminWhitelist } = await import('@audnix/shared');
+      const { eq } = await import('drizzle-orm');
+      const admins = await db.select({ email: adminWhitelist.email }).from(adminWhitelist);
+      if (admins.length === 0) return;
+      const { users } = await import('@audnix/shared');
+      const adminUsers = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.role, 'admin'));
+      for (const admin of adminUsers) {
+        await db.insert(notifications).values({
+          userId: admin.id,
+          type: 'system_alert',
+          title: `Worker Failure: ${workerName}`,
+          message: `The ${workerName} worker has entered a FAILED state.\n\nLast error: ${error.slice(0, 500)}`,
+          isRead: false,
+          createdAt: new Date()
+        } as any);
+      }
+    } catch (dbErr) {
+      console.error('[WorkerHealthMonitor] Failed to persist admin alert:', dbErr);
+    }
   }
 }
 

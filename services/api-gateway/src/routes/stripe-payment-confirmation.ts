@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
+import { requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -102,7 +103,7 @@ router.post('/verify-subscription', async (req: Request, res: Response): Promise
   }
 });
 
-router.post('/admin/bypass-check', async (req: Request, res: Response): Promise<void> => {
+router.post('/admin/bypass-check', requireAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     if (!stripe) {
       res.status(503).json({ error: 'Stripe not configured' });

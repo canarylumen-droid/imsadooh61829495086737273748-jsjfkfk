@@ -1,6 +1,6 @@
 import { db } from '@shared/lib/db/db.js';
 import { leads, users, messages } from "@audnix/shared";
-import { eq, and, sql, lt, isNull } from "drizzle-orm";
+import { eq, and, sql, lt, isNull, inArray } from "drizzle-orm";
 import { storage } from '@shared/lib/storage/storage.js';
 import { generateAIReply } from "@services/brain-worker/src/ai-lib/core/conversation-ai.js";
 import { sendEmail } from "@shared/lib/channels/email.js";
@@ -48,9 +48,9 @@ export class ReEngagementWorker {
         .from(leads)
         .where(
           and(
-            eq(leads.userId, sql`leads.user_id`), // Just checking for existence
             eq(leads.aiPaused, false),
             lt(leads.lastMessageAt, ninetyDaysAgo),
+            inArray(leads.status, ['open', 'cold', 'contacted', 'nurturing', 'new', 'warm'] as any[]),
             sql`(${leads.metadata}->>'re_engagement_sent')::boolean IS NULL`
           )
         )
@@ -81,11 +81,12 @@ export class ReEngagementWorker {
       const history = await storage.getMessagesByLeadId(lead.id);
 
       // Value-Add Prompt: Focus on a new insight or case study
-      const reEngagementPrompt = "REACTIVATION: This lead has been cold for 90 days. Share a new value-add insight or a recent success story that matches their sector. Do NOT offer a discount. Focus on 'Thinking of you because our latest partners just saw [X] results'.";
-      
+      const reEngagementPrompt = "REACTIVATION: This lead has been cold for 90 days. Share a new value-add insight or a recent success story that matches their sector. Do NOT offer a discount. Focus on 'Thinking of you because our latest partners just saw [X] results'. Keep it brief — one insight, one soft CTA.";
+
       const reply = await generateAIReply(lead, history, 'email', {
         businessName: user?.businessName || 'Audnix',
-        brandVoice: 'Helpful strategic advisor'
+        brandVoice: 'Helpful strategic advisor',
+        systemPromptSuffix: reEngagementPrompt
       });
 
       if (reply && !reply.blocked) {
@@ -143,7 +144,7 @@ export class ReEngagementWorker {
           });
 
           await storage.updateLead(lead.id, {
-            status: 'replied', // Move back to active conversation
+            status: 'open', // Moved back to active outreach — not 'replied' until lead actually responds
             metadata: {
               ...(lead.metadata as any || {}),
               re_engagement_sent: new Date().toISOString(),

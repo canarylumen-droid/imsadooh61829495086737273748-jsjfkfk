@@ -425,7 +425,7 @@ export class OutreachEngine {
       .limit(50); // Increased batch for autonomous outreach scalability
 
     let sentInThisTick = 0;
-    const MAX_AUTONOMOUS_PER_TICK = 10;
+    const MAX_AUTONOMOUS_PER_TICK = 50; // Increased for 50k+ lead bulk catch-up
 
     for (const lead of userLeads) {
       if (sentInThisTick >= MAX_AUTONOMOUS_PER_TICK) break;

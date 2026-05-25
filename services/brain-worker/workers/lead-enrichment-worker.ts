@@ -20,9 +20,9 @@ export class LeadEnrichmentWorker {
   private isRunning: boolean = false;
   private isProcessing: boolean = false;
   private interval: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 10 * 60 * 1000; // Every 10 minutes
-  private readonly BATCH_SIZE = 25; // High-throughput batch for 100k leads
-  private readonly CONCURRENCY = 3; // Parallel enrichments without burning API quota
+  private readonly CHECK_INTERVAL_MS = 5 * 60 * 1000; // Every 5 minutes
+  private readonly BATCH_SIZE = 200; // High-throughput batch for 50k+ bulk imports
+  private readonly CONCURRENCY = 5; // Parallel enrichments without burning API quota
 
   start(): void {
     if (this.isRunning) return;

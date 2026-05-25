@@ -1,6 +1,6 @@
 
-import { db } from './server/db.js';
-import { integrations } from './shared/schema.js';
+import { db } from '@shared/lib/db/db.js';
+import { integrations } from '@audnix/shared';
 import { eq, sql } from 'drizzle-orm';
 
 async function checkReputation() {
@@ -20,7 +20,7 @@ async function checkReputation() {
     if (results.length === 0) {
       console.log('No connected mailboxes found.');
     } else {
-      results.forEach(m => {
+      results.forEach((m: typeof results[number]) => {
         const score = m.reputationScore ?? null;
         const displayScore = score !== null ? score : 'Unscored';
         let status = score !== null ? 'Excellent 🟢' : 'Unknown ⚪';

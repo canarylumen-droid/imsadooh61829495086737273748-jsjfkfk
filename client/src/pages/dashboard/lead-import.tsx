@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
@@ -42,6 +41,22 @@ export default function LeadImportPage() {
   const [manualPasteText, setManualPasteText] = useState("");
   const [importResults, setImportResults] = useState<{ imported: number; skipped: number; filtered?: number; leads?: any[] } | null>(null);
   const [isOutreachModalOpen, setIsOutreachModalOpen] = useState(false);
+  const [leadStats, setLeadStats] = useState<{ total: number; planLimit: number } | null>(null);
+
+  const refreshLeadStats = async () => {
+    try {
+      const res = await fetch('/api/leads?limit=1', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setLeadStats({ total: data.total || 0, planLimit: data.planLimit || 10000 });
+      }
+    } catch {}
+  };
+
+  // Fetch lead stats on mount
+  useEffect(() => {
+    refreshLeadStats();
+  }, []);
 
   const handleManualImport = async () => {
     if (!manualPasteText.trim()) {
@@ -83,6 +98,7 @@ export default function LeadImportPage() {
       setImportResults(result);
       setProgress(100);
       toast({ title: "Manual Import Success", description: `Imported ${result.imported} leads.` });
+      refreshLeadStats();
     } catch (e: any) {
       toast({ title: "Manual import failed", description: e.message, variant: "destructive" });
     } finally {
@@ -335,6 +351,7 @@ export default function LeadImportPage() {
         skipped: result.leadsFiltered || 0,
         leads: allLeads.leads || [] // Use real DB leads
       });
+      refreshLeadStats();
 
       setMLeadsOpen(false); // Close modal on success
       setTimeout(() => {
@@ -366,6 +383,30 @@ export default function LeadImportPage() {
           Synchronize your high-intent leads into the Audnix intelligence core.
         </p>
       </div>
+
+      {leadStats && (
+        <Card className="border-border/40 shadow-sm bg-card">
+          <CardContent className="p-4 flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pipeline Capacity</p>
+              <p className="text-lg font-bold tabular-nums">
+                {leadStats.total.toLocaleString()} <span className="text-muted-foreground text-sm font-medium">/ {leadStats.planLimit.toLocaleString()}</span>
+              </p>
+            </div>
+            <div className="flex-1 max-w-xs">
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (leadStats.total / leadStats.planLimit) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-muted-foreground text-right mt-1">
+                {Math.round((leadStats.total / leadStats.planLimit) * 100)}% used
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-border/40 shadow-2xl relative overflow-hidden group bg-card">
         <CardHeader className="p-8 pb-0 text-center relative z-10">

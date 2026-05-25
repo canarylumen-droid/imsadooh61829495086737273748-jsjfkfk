@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { motion, AnimatePresence } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -34,7 +34,10 @@ import {
   Unplug,
   RefreshCw,
   FolderSync,
-  ArrowRight
+  ArrowRight,
+  Search,
+  ChevronLeft,
+  ChevronRight as ChevronRightIcon
 } from "lucide-react";
 import { SiGoogle, SiShopify, SiHubspot, SiSlack } from "react-icons/si";
 import {
@@ -205,10 +208,14 @@ export default function IntegrationsPage() {
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [appPasswordGuide, setAppPasswordGuide] = useState<any>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
+  const [mailboxSearch, setMailboxSearch] = useState("");
+  const [mailboxPage, setMailboxPage] = useState(0);
+  const MAILBOXES_PER_PAGE = 25;
 
   const { data: integrationsData, isLoading } = useQuery<IntegrationsResponse>({
     queryKey: ["/api/integrations"],
     placeholderData: (prev: any) => prev,
+    staleTime: 30_000,
   });
   const { data: customEmailStatus, refetch: refetchStatus } = useQuery<{
     connected: boolean;
@@ -217,6 +224,7 @@ export default function IntegrationsPage() {
   }>({
     queryKey: ["/api/custom-email/status"],
     placeholderData: (prev) => prev,
+    staleTime: 30_000,
   });
 
   const { data: folderData } = useQuery<{ success: boolean; inbox: string[]; sent: string[]; isDiscovering: boolean }>({
@@ -296,9 +304,27 @@ export default function IntegrationsPage() {
     };
   }, [queryClient, socket]);
 
-  const integrations = Array.isArray(integrationsData) ? integrationsData : (integrationsData as any)?.integrations ?? [];
-  const allMailboxes = customEmailStatus?.integrations || [];
+  const integrations = useMemo(() =>
+    Array.isArray(integrationsData) ? integrationsData : (integrationsData as any)?.integrations ?? []
+  , [integrationsData]);
+  const allMailboxes = useMemo(() => customEmailStatus?.integrations || [], [customEmailStatus]);
   const hasMailboxesConnected = allMailboxes.length > 0;
+
+  const filteredMailboxes = useMemo(() => {
+    if (!mailboxSearch.trim()) return allMailboxes;
+    const q = mailboxSearch.toLowerCase();
+    return allMailboxes.filter(m =>
+      (m.email || "").toLowerCase().includes(q) ||
+      (m.provider || "").toLowerCase().includes(q)
+    );
+  }, [allMailboxes, mailboxSearch]);
+
+  const totalMailboxPages = Math.ceil(filteredMailboxes.length / MAILBOXES_PER_PAGE);
+  const pagedMailboxes = useMemo(() =>
+    filteredMailboxes.slice(mailboxPage * MAILBOXES_PER_PAGE, (mailboxPage + 1) * MAILBOXES_PER_PAGE)
+  , [filteredMailboxes, mailboxPage]);
+
+  const resetMailboxPagination = useCallback(() => setMailboxPage(0), []);
 
   const verifyDomainMutation = useMutation({
     mutationFn: async (domain: string) => {
@@ -493,8 +519,10 @@ export default function IntegrationsPage() {
     return capabilities.mailboxLimit;
   };
 
-  const connectedMailboxesCount = (customEmailStatus?.integrations?.length || 0) +
-    (integrations.filter((i: any) => i.provider === 'gmail' || i.provider === 'outlook').length || 0);
+  const connectedMailboxesCount = useMemo(() =>
+    (customEmailStatus?.integrations?.length || 0) +
+    (integrations.filter((i: any) => i.provider === 'gmail' || i.provider === 'outlook').length || 0)
+  , [customEmailStatus, integrations]);
 
   const limit = getMailboxLimit();
   const isAtMailboxLimit = limit !== -1 && connectedMailboxesCount >= limit;
@@ -953,7 +981,25 @@ export default function IntegrationsPage() {
                   </div>
 
                   <div className="space-y-4">
-                    {allMailboxes.map((mailbox) => (
+                    {allMailboxes.length > 5 && (
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="relative flex-1">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                          <Input
+                            placeholder={`Search ${allMailboxes.length} mailboxes...`}
+                            value={mailboxSearch}
+                            onChange={e => { setMailboxSearch(e.target.value); resetMailboxPagination(); }}
+                            className="h-9 pl-9 rounded-xl text-xs border-border/40 bg-muted/20"
+                          />
+                        </div>
+                        {mailboxSearch && (
+                          <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">
+                            {filteredMailboxes.length} found
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {pagedMailboxes.map((mailbox) => (
                       <div key={mailbox.id} className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 rounded-2xl bg-muted/20 border border-border/40 hover:border-primary/30 transition-all group">
                         <div className="flex items-center gap-4">
                           <div className={cn(
@@ -1053,6 +1099,37 @@ export default function IntegrationsPage() {
                         </div>
                       </div>
                     ))}
+
+                    {totalMailboxPages > 1 && (
+                      <div className="flex items-center justify-between pt-2 border-t border-border/20">
+                        <span className="text-[10px] font-bold text-muted-foreground">
+                          Showing {mailboxPage * MAILBOXES_PER_PAGE + 1}–{Math.min((mailboxPage + 1) * MAILBOXES_PER_PAGE, filteredMailboxes.length)} of {filteredMailboxes.length}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 rounded-lg"
+                            disabled={mailboxPage === 0}
+                            onClick={() => setMailboxPage(p => p - 1)}
+                          >
+                            <ChevronLeft className="h-3.5 w-3.5" />
+                          </Button>
+                          <span className="text-[10px] font-bold text-muted-foreground">
+                            {mailboxPage + 1} / {totalMailboxPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7 rounded-lg"
+                            disabled={mailboxPage >= totalMailboxPages - 1}
+                            onClick={() => setMailboxPage(p => p + 1)}
+                          >
+                            <ChevronRightIcon className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
@@ -1280,19 +1357,24 @@ export default function IntegrationsPage() {
                         <CardDescription className="text-xs text-muted-foreground font-medium mt-1 leading-relaxed">{card.description}</CardDescription>
                       </CardHeader>
                       <CardFooter className="p-6 pt-0 flex flex-col gap-3">
-                        {isConnected && connectedIntegrations.map((integration, idx) => (
+                        {isConnected && connectedIntegrations.slice(0, 3).map((integration, idx) => (
                           <div key={integration.id || `int-${idx}`} className="flex items-center justify-between w-full p-2 rounded bg-background/50 border border-border/30">
                             <span className="text-[10px] font-medium truncate max-w-[120px]" title={integration.accountType?.toString() || ""}>{integration.accountType || "Connected"}</span>
                             <Button
                               variant="ghost"
                               size="sm"
                               className="h-6 px-2 text-[10px] text-destructive hover:bg-destructive/10"
-                              onClick={() => confirmDisconnect(card.id, (integration as any).id)} // Need to pass ID if it exists? The API revokes by provider, but custom_email takes ID. For others, backend might need updates to revoke by ID. For now just passing provider string.
+                              onClick={() => confirmDisconnect(card.id, (integration as any).id)}
                             >
                               Disconnect
                             </Button>
                           </div>
                         ))}
+                        {connectedIntegrations.length > 3 && (
+                          <div className="text-[10px] font-bold text-muted-foreground text-center py-0.5">
+                            +{connectedIntegrations.length - 3} more connected
+                          </div>
+                        )}
                         
                         <Button
                           variant={card.badge ? "secondary" : (isConnected ? "outline" : "default")}

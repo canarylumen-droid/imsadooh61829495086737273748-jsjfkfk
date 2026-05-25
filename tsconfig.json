@@ -5,7 +5,8 @@
     "server/**/*",
     "services/**/*",
     "packages/**/*",
-    "api/**/*"
+    "api/**/*",
+    "scripts/**/*"
   ],
   "exclude": [
     "node_modules",

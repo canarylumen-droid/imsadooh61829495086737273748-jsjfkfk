@@ -1,0 +1,109 @@
+# =============================================================================
+# Audnix AI — Production Docker Compose for AWS EC2
+# =============================================================================
+# Optimized for t3.large (2 vCPU, 8GB RAM) running all services in unified mode.
+# Services: nginx (reverse proxy + SSL), app (unified API + all workers)
+# Redis: EXTERNAL — set REDIS_URL in .env (Redis Cloud / Upstash recommended)
+# Database: EXTERNAL — set DATABASE_URL in .env (Neon PostgreSQL)
+# =============================================================================
+# IMPORTANT: Copy .env.aws.example → .env and fill ALL values before deploying
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # --- Nginx Reverse Proxy + SSL ---
+  nginx:
+    image: nginx:alpine
+    container_name: audnix-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx-aws.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:rw
+      - certbot-data:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: always
+    mem_limit: 128m
+    networks:
+      - audnix-net
+
+  # --- Certbot (Let's Encrypt SSL auto-renewal) ---
+  # Used by: certbot-init.sh (first-time) + cron (auto-renew)
+  # Renews certs every 12h, then sends reload signal to nginx
+  certbot:
+    image: certbot/certbot
+    container_name: audnix-certbot
+    volumes:
+      - certbot-data:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    entrypoint: >
+      /bin/sh -c 'trap exit TERM;
+      while :; do
+        sleep 12h;
+        certbot renew --webroot --webroot-path=/var/www/certbot --quiet;
+      done'
+    restart: always
+    networks:
+      - audnix-net
+
+  # --- Main Application (Unified Mode: API + All Workers) ---
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.production
+    image: audnix-ai:latest
+    container_name: audnix-app
+    # Load ALL env vars directly from .env — no need to list them individually.
+    # This prevents variable name mismatches and keeps docker-compose in sync automatically.
+    env_file:
+      - .env
+    # Override only the Node.js memory/DNS tuning that shouldn't be in .env
+    environment:
+      - NODE_OPTIONS=--dns-result-order=ipv4first --max-old-space-size=4096
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 120s
+      retries: 3
+    restart: always
+    # mem_limit is enforced by regular docker-compose (deploy.resources is Swarm-only)
+    mem_limit: 5g
+    memswap_limit: 6g
+    networks:
+      - audnix-net
+
+volumes:
+  certbot-data:
+  certbot-www:
+
+networks:
+  audnix-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+# =============================================================================
+# DEPLOYMENT CHECKLIST
+# =============================================================================
+# 1. Copy .env file:              cp .env.aws.example .env
+# 2. Build & start:               docker compose -f docker-compose.prod.yml up --build -d
+# 3. View logs:                   docker compose -f docker-compose.prod.yml logs -f app
+# 4. SSL setup (first time):      ./scripts/certbot-init.sh your-domain.com
+# 5. Restart after SSL:             docker compose -f docker-compose.prod.yml restart nginx
+# =============================================================================
+
+# Memory Budget for t3.large (8GB):
+#   - OS + Docker overhead:  ~1GB
+#   - App (unified):         ~5GB   (mem_limit above)
+#   - Nginx:                 ~128MB (mem_limit above)
+#   - Redis:                 EXTERNAL (no container RAM used)
+#   - Swap:                  4GB    (prevents OOM crashes, configured by setup script)
+#   Total allocated:         ~6.1GB  ✅ fits in 8GB with headroom
+# =============================================================================

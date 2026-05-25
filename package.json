@@ -22,6 +22,7 @@
     "check": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit",
     "start": "npm run start:api-gateway",
     "start:api": "npm run start:api-gateway",
+    "start:unified": "node --import tsx --import ./instrument.ts services/api-gateway/index.ts",
     "start:api-gateway": "node --import tsx --import ./instrument.ts services/api-gateway/api-only.ts",
     "start:socket": "npm run start:socket-server",
     "start:socket-server": "node --import tsx --import ./instrument.ts services/socket-service/index.ts",

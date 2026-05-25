@@ -89,6 +89,7 @@ export class GlobalLeakyBucket {
 }
 
 // Global instances for standard providers
-export const openAiLimiter = new GlobalLeakyBucket({ name: 'openai', requestsPerMinute: 60 });
-export const geminiLimiter = new GlobalLeakyBucket({ name: 'gemini', requestsPerMinute: 60 });
-export const zAiLimiter    = new GlobalLeakyBucket({ name: 'zai',    requestsPerMinute: 60 });
+export const openAiLimiter    = new GlobalLeakyBucket({ name: 'openai',   requestsPerMinute: 60 });
+export const geminiLimiter    = new GlobalLeakyBucket({ name: 'gemini',   requestsPerMinute: 60 });
+export const zAiLimiter       = new GlobalLeakyBucket({ name: 'zai',      requestsPerMinute: 60 });
+export const deepseekLimiter  = new GlobalLeakyBucket({ name: 'deepseek', requestsPerMinute: 60 });

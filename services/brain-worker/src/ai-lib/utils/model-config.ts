@@ -14,14 +14,18 @@ export const OPENAI_FAST_MODEL = "gpt-4o-mini";        // Fast/Cheap for simple 
 export const Z_AI_STABLE_MODEL = "glm-4-flash";             // Standard GLM-4 (mapped to flash)
 export const Z_AI_FAST_MODEL = "glm-4-flash";               // Flash version
 
+// DeepSeek Models (OpenAI-compatible via api.deepseek.com)
+// Note: deepseek-chat/deepseek-reasoner are deprecated aliases (removal: 2026/07/24)
+export const DEEPSEEK_CHAT_MODEL = "deepseek-v4-flash";     // Most cost-effective (chat + reasoning)
+export const DEEPSEEK_REASON_MODEL = "deepseek-v4-pro";     // Premium reasoning tasks
 
-// Failover Priority: OpenAI -> Gemini -> GLM (Gemini is more reliable for embeddings)
-export const LLM_FAILOVER_ORDER: Array<'openai' | 'genai' | 'zai'> = ['openai', 'genai', 'zai'];
+// Failover Priority: OpenAI -> Gemini -> ZAI -> DeepSeek
+export const LLM_FAILOVER_ORDER: Array<'openai' | 'genai' | 'zai' | 'deepseek'> = ['openai', 'genai', 'zai', 'deepseek'];
 
 // Default active models based on service
 export const MODELS = {
-    sales_reasoning: process.env.OPENAI_API_KEY ? OPENAI_INTELLIGENCE_MODEL : (process.env.ZAI_API_KEY ? Z_AI_STABLE_MODEL : GENAI_STABLE_MODEL),
-    intent_classification: process.env.OPENAI_API_KEY ? OPENAI_FAST_MODEL : (process.env.ZAI_API_KEY ? Z_AI_FAST_MODEL : GENAI_STABLE_MODEL),
+    sales_reasoning: process.env.OPENAI_API_KEY ? OPENAI_INTELLIGENCE_MODEL : (process.env.ZAI_API_KEY ? Z_AI_STABLE_MODEL : (process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL)),
+    intent_classification: process.env.OPENAI_API_KEY ? OPENAI_FAST_MODEL : (process.env.ZAI_API_KEY ? Z_AI_FAST_MODEL : (process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL)),
     content_generation: GENAI_STABLE_MODEL, // Always use flash for content to save cost
     lead_intelligence: OPENAI_FAST_MODEL,
     voice_assistant: OPENAI_FAST_MODEL,

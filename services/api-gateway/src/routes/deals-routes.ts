@@ -2,6 +2,10 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { evaluateLeadDealValue } from '@services/brain-worker/src/ai-lib/engines/deal-evaluator.js';
+import { db } from '@shared/lib/db/db.js';
+import { messages as messagesTable } from '@audnix/shared';
+import { inArray } from 'drizzle-orm';
+import pLimit from 'p-limit';
 
 const router = Router();
 
@@ -161,16 +165,32 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
     }
 
     const leads = await storage.getLeads({ userId });
-    let analyzedCount = 0;
-
-    // Run in parallel with a concurrency limit if needed, for now just sequential for safety
-    for (const lead of leads) {
-      const messages = await storage.getMessagesByLeadId(lead.id);
-      if (messages && messages.length > 0) {
-        await evaluateLeadDealValue(userId, lead.id.toString());
-        analyzedCount++;
-      }
+    if (leads.length === 0) {
+      const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+      wsSync.notifyDealsUpdated(userId);
+      res.json({ success: true, analyzedCount: 0 });
+      return;
     }
+
+    // Single query to find which leads have messages (eliminates N+1)
+    const leadIds = leads.map(l => l.id);
+    const leadsWithMsgs = await db
+      .selectDistinct({ leadId: messagesTable.leadId })
+      .from(messagesTable)
+      .where(inArray(messagesTable.leadId, leadIds));
+    const hasMessages = new Set(leadsWithMsgs.map(r => r.leadId));
+
+    // Evaluate qualifying leads with bounded concurrency
+    const limit = pLimit(5);
+    let analyzedCount = 0;
+    await Promise.all(
+      leads
+        .filter(lead => hasMessages.has(lead.id))
+        .map(lead => limit(async () => {
+          await evaluateLeadDealValue(userId, lead.id.toString());
+          analyzedCount++;
+        }))
+    );
 
     // Notify client via WebSocket
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');

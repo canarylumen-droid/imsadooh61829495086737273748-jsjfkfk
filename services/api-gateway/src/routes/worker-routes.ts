@@ -1,7 +1,8 @@
 
 import { Router } from 'express';
 import { outreachEngine } from "@services/outreach-worker/workers/outreach-engine.js";
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
+import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 
 const router = Router();
 
@@ -12,9 +13,14 @@ const router = Router();
  */
 router.get('/tick', async (req, res) => {
   const secretToken = req.headers['x-worker-secret'];
-  const expectedToken = process.env.WORKER_SECRET || 'audnix-internal-token-42';
+  const expectedToken = process.env.WORKER_SECRET;
 
-  if (secretToken !== expectedToken && process.env.NODE_ENV === 'production') {
+  if (!expectedToken) {
+    console.error('[WorkerRoutes] WORKER_SECRET env var is not set — tick endpoint disabled.');
+    return res.status(503).json({ error: 'Worker secret not configured' });
+  }
+
+  if (secretToken !== expectedToken) {
     return res.status(403).json({ error: 'Forbidden' });
   }
 
@@ -30,11 +36,10 @@ router.get('/tick', async (req, res) => {
  * GET /api/admin/worker/status
  * Check worker health and status
  */
-router.get('/status', requireAuth, async (req, res) => {
-  // Only admins can see status
-  // For now just allow authenticated users
+router.get('/status', requireAdmin, async (req, res) => {
+  const health = workerHealthMonitor.getDetailedStatus();
   res.json({
-    status: 'running',
+    ...health,
     timestamp: new Date().toISOString(),
   });
 });

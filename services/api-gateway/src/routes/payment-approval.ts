@@ -178,12 +178,13 @@ router.post("/reject/:userId", requireAuth, async (req: Request, res: Response) 
 
 /**
  * POST /api/payment-approval/mark-pending
- * Internal: Mark payment as pending (called after user initiates payment)
- * NO API KEY NEEDED
+ * Called by the client after Stripe checkout is initiated.
+ * Auth required — userId is taken from the verified session, not the request body.
  */
-router.post("/mark-pending", async (req: Request, res: Response) => {
+router.post("/mark-pending", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { userId, plan, amount, sessionId, subscriptionId } = req.body;
+    const userId = getCurrentUserId(req);
+    const { plan, amount, sessionId, subscriptionId } = req.body;
 
     if (!userId || !plan || !amount) {
       return res.status(400).json({ error: "Missing required fields" });

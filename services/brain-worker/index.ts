@@ -93,6 +93,7 @@ async function startAIService() {
   await startWorker('Lead Enrichment',    () => leadEnrichmentWorker.start());
   await startWorker('Autonomous Closing', () => closingWorker.start());
   await startWorker('Cold Re-engagement', () => reEngagementWorker.start());
+  await startWorker('Post-mortem',        () => postMortemWorker.start());
   await startWorker('Follow-up',          () => followUpWorker.start());
   await startWorker('Video Comment',      () => startVideoCommentMonitoring());
   await startWorker('AI Budget Monitor',  () => aiBudgetWorker.start());
@@ -163,6 +164,7 @@ async function startAIService() {
     log.info(`🛑 ${signal} — shutting down AI Agent service...`);
     try { leadEnrichmentWorker.stop(); } catch (_e) {}
     try { reEngagementWorker.stop(); }   catch (_e) {}
+    try { postMortemWorker.stop(); }     catch (_e) {}
     try { followUpWorker.stop(); }       catch (_e) {}
     try { ragWorker.stop(); }           catch (_e) {}
     if (fathomWorker) await fathomWorker.close().catch(err => console.error('[Brain Worker] Fathom worker shutdown failed:', err));

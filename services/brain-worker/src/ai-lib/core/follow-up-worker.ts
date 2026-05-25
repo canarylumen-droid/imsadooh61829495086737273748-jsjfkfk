@@ -129,8 +129,8 @@ export class FollowUpWorker {
     this.isRunning = true;
     console.log('Starting follow-up worker...');
 
-    // Process queue every 2-4 minutes randomly to simulate human delay
-    const delay = Math.floor(Math.random() * (4 - 2 + 1) + 2) * 60 * 1000;
+    // Process queue every 1-2 minutes for high-volume throughput
+    const delay = Math.floor(Math.random() * (2 - 1 + 1) + 1) * 60 * 1000;
     this.processingInterval = setInterval(async () => {
       try {
         await this.processQueue();
@@ -215,7 +215,7 @@ export class FollowUpWorker {
           )
         )
         .orderBy(asc(followUpQueue.scheduledAt))
-        .limit(10);
+        .limit(100);
 
       if (!jobs || jobs.length === 0) {
         return;

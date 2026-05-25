@@ -10,14 +10,16 @@ const router = Router();
  * Triggered by Vercel Cron or manual monitor
  */
 router.get('/tick', async (req: Request, res: Response) => {
-    // Security check for Vercel Cron
+    // Security check: CRON_SECRET must be set and Bearer token must match
     const authHeader = req.headers['authorization'];
     const cronSecret = process.env.CRON_SECRET;
 
-    // Also allow Vercel's internal cron header if secret matches
-    const isVercelCron = req.headers['x-vercel-cron'] === 'true';
+    if (!cronSecret) {
+        console.error('[Cron] CRON_SECRET env var is not set — cron endpoint disabled.');
+        return res.status(503).json({ error: 'Cron secret not configured' });
+    }
 
-    if (cronSecret && authHeader !== `Bearer ${cronSecret}` && !isVercelCron) {
+    if (authHeader !== `Bearer ${cronSecret}`) {
         console.warn('[Cron] Unauthorized attempt to trigger tick');
         return res.status(401).json({ error: 'Unauthorized' });
     }

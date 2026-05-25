@@ -42,9 +42,9 @@ export function LeadsDisplayModal({
     setVisibleCount(prev => prev + 50);
   };
 
-  // Identify all unique metadata keys across visible leads to build columns
+  // Identify all unique metadata keys across VISIBLE leads only to prevent freeze on large imports
   const allMetadataKeys = Array.from(new Set(
-    leads.flatMap(l => Object.keys((l as any).metadata || {}).filter(k => !k.endsWith('_type') && k !== '_unmapped_cols'))
+    visibleLeads.flatMap(l => Object.keys((l as any).metadata || {}).filter(k => !k.endsWith('_type') && k !== '_unmapped_cols'))
   )).sort();
 
   const renderValue = (val: any, type?: string) => {

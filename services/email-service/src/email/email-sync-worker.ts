@@ -111,9 +111,16 @@ class EmailSyncWorker {
 
       for (const integration of integrations) {
         if (!integration.connected) continue;
-        
+
         // ghosted lead detection (maintenance)
         await this.detectGhostedLeads(integration.userId);
+
+        // SYNC FIX: actually sync emails per integration for historical recovery
+        try {
+          await this.syncUserEmails(integration.userId, integration, 5000);
+        } catch (syncErr: any) {
+          console.error(`[EmailSync] Integration sync failed for ${integration.userId}/${integration.provider}:`, syncErr.message);
+        }
       }
       workerHealthMonitor.recordSuccess('email-sync-worker');
     } catch (error: any) {
@@ -198,18 +205,31 @@ class EmailSyncWorker {
         throw new Error("Failed to get valid access token for Gmail sync");
       }
 
-      const fetchMessages = async (q: string) => {
-        const response = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?maxResults=50&q=${encodeURIComponent(q)}`, {
-          headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-        if (!response.ok) {
-          if (response.status === 401 || response.status === 403) {
-            throw new Error(`Gmail API authentication failed: ${response.status} ${response.statusText}`);
+      const fetchMessages = async (q: string, maxResults = 500) => {
+        let allMessages: any[] = [];
+        let pageToken: string | undefined = undefined;
+        let pages = 0;
+        const MAX_PAGES = 10; // Cap at 5k messages to avoid API quota exhaustion
+        do {
+          const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+          url.searchParams.set('maxResults', String(maxResults));
+          url.searchParams.set('q', q);
+          if (pageToken) url.searchParams.set('pageToken', pageToken);
+          const response = await fetch(url.toString(), {
+            headers: { 'Authorization': `Bearer ${accessToken}` }
+          });
+          if (!response.ok) {
+            if (response.status === 401 || response.status === 403) {
+              throw new Error(`Gmail API authentication failed: ${response.status} ${response.statusText}`);
+            }
+            break;
           }
-          return [];
-        }
-        const data = await response.json() as any;
-        return data.messages || [];
+          const data = await response.json() as any;
+          if (data.messages) allMessages = allMessages.concat(data.messages);
+          pageToken = data.nextPageToken;
+          pages++;
+        } while (pageToken && pages < MAX_PAGES);
+        return allMessages;
       };
 
       const [inboxList, sentList] = await Promise.all([

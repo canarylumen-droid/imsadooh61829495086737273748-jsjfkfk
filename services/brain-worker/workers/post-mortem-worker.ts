@@ -2,6 +2,7 @@ import { db } from '@shared/lib/db/db.js';
 import { leads, users, messages } from "@audnix/shared";
 import { eq, and, desc, sql } from "drizzle-orm";
 import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
+import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
 
 /**
  * Phase 54: Automated "Lost Lead" Post-Mortem
@@ -9,6 +10,24 @@ import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service
  */
 export class PostMortemWorker {
   private isProcessing: boolean = false;
+  private interval: NodeJS.Timeout | null = null;
+  private readonly INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+  start(): void {
+    if (this.interval) return;
+    console.log('[PostMortemWorker] 🔬 Starting — runs every 6 hours');
+    workerHealthMonitor.registerWorker('PostMortemWorker');
+    this.tick();
+    this.interval = setInterval(() => this.tick(), this.INTERVAL_MS);
+  }
+
+  stop(): void {
+    if (this.interval) {
+      clearInterval(this.interval);
+      this.interval = null;
+      console.log('[PostMortemWorker] 🛑 Stopped');
+    }
+  }
 
   async tick(): Promise<void> {
     if (this.isProcessing) return;
@@ -30,8 +49,10 @@ export class PostMortemWorker {
       for (const lead of lostLeads) {
         await this.analyzeLostLead(lead);
       }
+      workerHealthMonitor.recordSuccess('PostMortemWorker');
     } catch (err) {
       console.error('[PostMortemWorker] Tick failed:', err);
+      workerHealthMonitor.recordError('PostMortemWorker', err instanceof Error ? err.message : String(err));
     } finally {
       this.isProcessing = false;
     }
