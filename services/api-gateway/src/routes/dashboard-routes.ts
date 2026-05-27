@@ -238,12 +238,14 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     
     const globalAvgScore = scoreResult?.avgScore != null ? Number(scoreResult.avgScore) : null;
 
-    // Get global open rate for benchmark
+    // Get user's own open rate for benchmark (prevents cross-user data leakage)
     const [globalMsgStats] = await db.select({
       totalSent: dSql<number>`count(*) filter (where direction = 'outbound')`,
       opened: dSql<number>`count(*) filter (where direction = 'outbound' and opened_at is not null)`,
       replied: dSql<number>`count(*) filter (where direction = 'inbound')`
-    }).from(msgSchema);
+    })
+    .from(msgSchema)
+    .where(dEq(msgSchema.userId, userId));
 
     const globalOpenRate = Number(globalMsgStats?.totalSent || 0) > 0
       ? Number(((Number(globalMsgStats?.opened || 0) / Number(globalMsgStats?.totalSent || 0)) * 100).toFixed(2))

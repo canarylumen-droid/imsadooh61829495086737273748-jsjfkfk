@@ -28,7 +28,9 @@ import fs from "fs";
 import * as path from "path";
 import crypto from "crypto";
 import hpp from "hpp";
+import helmet from "helmet";
 import csrf from "csurf";
+import { securityHeaders } from "./src/middleware/security-headers.js";
 import { sql } from "drizzle-orm";
 import { users } from "@audnix/shared";
 import { db, pool } from "@shared/lib/db/db.js";
@@ -81,6 +83,19 @@ app.get('/health', (_req, res) => {
 app.use(quotaService.getSentinelMiddleware());
 
 app.use(hpp());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://www.audnixai.com", "wss://www.audnixai.com"],
+    },
+  },
+  hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+}));
+app.use(securityHeaders);
 
 // Unified CORS middleware for Railway deployment
 app.use((req, res, next) => {
@@ -253,7 +268,7 @@ const sessionConfig: session.SessionOptions = {
     secure: process.env.NODE_ENV === "production",
     httpOnly: true,
     maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
-    sameSite: "lax",
+    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
     path: "/",
   },
   store: sessionStore,
@@ -638,6 +653,16 @@ async function runMigrations() {
         const { instagramSyncWorker } = await import("@services/social-worker/src/social/workers/instagram-sync-worker.js");
         instagramSyncWorker.stop();
       } catch (e) { /* service may not have started */ }
+
+      try {
+        const { campaignWorker } = await import("@shared/lib/queues/campaign-queue.js");
+        if (campaignWorker) await campaignWorker.close();
+      } catch (e) { /* campaign worker may not have started */ }
+
+      try {
+        const { closeQueues } = await import("@shared/lib/queue.js");
+        await closeQueues();
+      } catch (e) { /* queues may not have initialized */ }
 
       // 3. Force exit after 10s if graceful shutdown fails
       setTimeout(() => {

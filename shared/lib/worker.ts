@@ -1,13 +1,12 @@
 import { Worker, Processor, WorkerOptions } from 'bullmq';
-import { bullmqRedisConnection } from './redis';
+import { createFreshConnection, hasRedis } from './queues/redis-config.js';
 import { logger } from './logger';
 
 const defaultWorkerOptions: Omit<WorkerOptions, 'connection'> = {
   concurrency: parseInt(process.env.WORKER_CONCURRENCY || '5', 10),
-  limiter: {
-    max: 100,
-    duration: 1000,
-  },
+  lockDuration:    parseInt(process.env.WORKER_LOCK_DURATION_MS  || '120000',  10), // 2min — covers AI+SMTP job duration
+  stalledInterval: parseInt(process.env.WORKER_STALLED_INTERVAL_MS || '300000', 10), // 5min — prevents false duplicate retries
+  maxStalledCount: parseInt(process.env.WORKER_MAX_STALLED_COUNT   || '3',      10), // tolerate 3 stalls before failing job
 };
 
 /**
@@ -24,7 +23,7 @@ export function createWorker<T = any, R = any, N extends string = string>(
   options?: Partial<WorkerOptions>
 ): Worker<T, R, N> {
   const workerOptions: WorkerOptions = {
-    connection: bullmqRedisConnection,
+    connection: hasRedis ? createFreshConnection() : undefined as any,
     ...defaultWorkerOptions,
     ...options,
   };

@@ -111,22 +111,8 @@ router.get('/track/click/:token', async (req: Request, res: Response): Promise<v
     });
 
     if (!verified) {
-      // Legacy email support: Use an interstitial HTML page for URLs that aren't verified by the DB.
-      // This mitigates the Server-Side URL Redirect vulnerability.
-      const safeUrl = String(redirectUrl).replace(/"/g, '&quot;');
-      res.send(`
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta http-equiv="refresh" content="1;url=${safeUrl}">
-          <title>Redirecting...</title>
-          <style>body { font-family: sans-serif; text-align: center; margin-top: 50px; }</style>
-        </head>
-        <body>
-          <p>Redirecting you to <a href="${safeUrl}">${safeUrl}</a>...</p>
-        </body>
-        </html>
-      `);
+      console.warn(`[Tracking] Blocked redirect for unverified token ${token}: no DB record`);
+      res.status(400).send('Link could not be verified');
       return;
     }
 

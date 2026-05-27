@@ -166,19 +166,8 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
 }
 
 /**
- * Check if running in developer mode (no production API keys set)
- */
-function isDevMode(): boolean {
-  const hasSupabase = !!(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY);
-  const hasStripe = !!process.env.STRIPE_SECRET_KEY;
-
-  return !hasSupabase || !hasStripe;
-}
-
-/**
  * Middleware to check if user has an active subscription or valid trial
  * Blocks access to premium features if trial expired and no paid plan
- * DEVELOPER MODE: Bypasses checks if API keys are not configured
  */
 export async function requireActiveSubscription(req: Request, res: Response, next: NextFunction) {
   const userId = req.session?.userId;
@@ -196,13 +185,6 @@ export async function requireActiveSubscription(req: Request, res: Response, nex
       error: "Invalid session",
       message: "User not found"
     });
-  }
-
-  // DEVELOPER MODE: Skip subscription checks if API keys not configured
-  if (isDevMode()) {
-    console.log('⚡ Developer Mode: Bypassing subscription check (API keys not configured)');
-    req.user = user;
-    return next();
   }
 
   // Check if user has a paid plan

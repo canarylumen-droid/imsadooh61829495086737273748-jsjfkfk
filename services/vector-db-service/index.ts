@@ -13,7 +13,7 @@ async function startVectorDbService() {
   startWorkerHealthServer('vector-db-service', parseInt(process.env.VECTOR_DB_WORKER_PORT || process.env.PORT || '8084', 10));
 
   // ── BullMQ Worker — processes Vector DB operations ────
-  createWorker(vectorOpsQueue.name, async (job) => {
+  const vectorWorker = createWorker(vectorOpsQueue.name, async (job) => {
     const { action, documentId, vector, metadata } = job.data;
     log.info('Processing Vector DB job', { action, documentId, jobId: job.id });
 
@@ -46,7 +46,8 @@ async function startVectorDbService() {
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Vector DB service...`);
-    setTimeout(() => process.exit(0), 5000);
+    try { await vectorWorker.close(); } catch (_e) {}
+    process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));

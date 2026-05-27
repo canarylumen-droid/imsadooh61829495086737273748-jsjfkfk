@@ -252,9 +252,14 @@ router.post("/intelligence-dashboard", requireAuth, async (req: Request<any, any
     const { lead, messages } = req.body;
     
     // 1. Fetch latest lead data to check cache
+    const userId = getCurrentUserId(req)!;
     const dbLead = await storage.getLead(lead.id);
     if (!dbLead) {
       res.status(404).json({ error: "Lead not found" });
+      return;
+    }
+    if (dbLead.userId !== userId) {
+      res.status(403).json({ error: "Forbidden: lead does not belong to you" });
       return;
     }
 

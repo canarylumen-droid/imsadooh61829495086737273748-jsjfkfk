@@ -2,6 +2,8 @@ import { MobileShell } from "./MobileShell";
 import { cn } from "@/lib/utils";
 import { Instagram, Mail, Sparkles } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import DOMPurify from "dompurify";
+import { useMemo } from "react";
 
 interface OutreachPreviewProps {
     type: 'email' | 'instagram';
@@ -13,6 +15,7 @@ interface OutreachPreviewProps {
 }
 
 export function OutreachPreview({ type, content, subject, recipient, isOpen, onClose }: OutreachPreviewProps) {
+    const sanitizedContent = useMemo(() => DOMPurify.sanitize(content || ''), [content]);
     return (
         <MobileShell
             isOpen={isOpen}
@@ -33,7 +36,7 @@ export function OutreachPreview({ type, content, subject, recipient, isOpen, onC
                     </div>
                     <div className="text-black leading-relaxed whitespace-pre-wrap pb-32">
                         <div
-                            dangerouslySetInnerHTML={{ __html: content }}
+                            dangerouslySetInnerHTML={{ __html: sanitizedContent }}
                             className="prose prose-sm max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-zinc-800 prose-p:leading-relaxed"
                         />
                         <StrategyBadge strategy="Direct Professional Outreach" />

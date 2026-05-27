@@ -63,7 +63,7 @@ export async function runDatabaseMigrations() {
     // This handles cases where the migration journal might be out of sync or missing in Vercel
     console.log("🛠️ Running emergency schema synchronization...");
     try {
-        await db.execute(sql`
+        await db.transaction(async (tx) => { await tx.execute(sql`
             DO $$ 
             BEGIN
                 -- Leads: archived
@@ -286,6 +286,28 @@ export async function runDatabaseMigrations() {
                     CREATE INDEX campaigns_user_id_idx ON outreach_campaigns(user_id);
                 END IF;
 
+                -- Campaign Leads (HIGH PRIORITY — 50-100K leads per campaign)
+                -- Without these, every lead-fetch and stat-aggregate is a full table scan.
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='campaign_leads') THEN
+                    -- Lead selection: WHERE campaign_id = X AND status IN (...) ORDER BY next_action_at
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'cl_campaign_status_action_idx') THEN
+                        CREATE INDEX cl_campaign_status_action_idx ON campaign_leads(campaign_id, status, next_action_at);
+                    END IF;
+                    -- Mailbox-specific lead fetch: WHERE campaign_id = X AND integration_id = Y AND status IN (...)
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'cl_campaign_integration_status_idx') THEN
+                        CREATE INDEX cl_campaign_integration_status_idx ON campaign_leads(campaign_id, integration_id, status);
+                    END IF;
+                    -- Stats GROUP BY: WHERE campaign_id = X GROUP BY status
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'cl_campaign_id_idx') THEN
+                        CREATE INDEX cl_campaign_id_idx ON campaign_leads(campaign_id);
+                    END IF;
+                END IF;
+
+                -- Messages sent-count query: WHERE user_id = X AND direction = 'outbound' AND integration_id = Y AND created_at >= today
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'msgs_sent_count_idx') THEN
+                    CREATE INDEX msgs_sent_count_idx ON messages(user_id, direction, integration_id, created_at);
+                END IF;
+
                 -- Email Messages (High Volume)
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='email_messages') THEN
                     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_msgs_user_id_idx') THEN
@@ -320,7 +342,7 @@ export async function runDatabaseMigrations() {
                 END IF;
 
             END $$;
-        `);
+        `); });
         console.log("✅ Emergency schema synchronization completed.");
     } catch (emergencyError: any) {
         console.error("❌ Emergency schema synchronization failed:", emergencyError.message || emergencyError);

@@ -18,7 +18,7 @@ async function startRagService() {
   log.info(`✅ [${WORKER_NAME}] Registered with worker health monitor`);
 
   // ── BullMQ Worker — processes RAG tasks (indexing, embedding, searching) ────
-  createWorker(ragQueue.name, async (job) => {
+  const ragMainWorker = createWorker(ragQueue.name, async (job) => {
     const { action, documentId, content, metadata, userId, fileName, query, topK } = job.data;
     log.info('Processing RAG job', { action, documentId, jobId: job.id });
 
@@ -53,13 +53,12 @@ async function startRagService() {
     }
   }, { lockDuration: 600000 }); // Phase 10: increased from 120s to 600s to prevent vector search timeouts
 
-  // Phase 10: onFailed handler — record failures in the health monitor so they're visible
-  const ragWorkerInstance = createWorker(ragQueue.name, async () => {}, {});
-  ragWorkerInstance?.on?.('failed', (job: any, err: any) => {
+  // Phase 10: onFailed/completed handlers on the real worker (no duplicate worker)
+  ragMainWorker?.on?.('failed', (job: any, err: any) => {
     log.error(`RAG job ${job?.id} failed: ${err?.message}`);
     workerHealthMonitor.recordError(WORKER_NAME, err?.message || 'Unknown RAG job failure');
   });
-  ragWorkerInstance?.on?.('completed', () => {
+  ragMainWorker?.on?.('completed', () => {
     workerHealthMonitor.recordSuccess(WORKER_NAME);
   });
 
@@ -68,7 +67,8 @@ async function startRagService() {
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down RAG Worker service...`);
-    setTimeout(() => process.exit(0), 5000);
+    try { await ragMainWorker.close(); } catch (_e) {}
+    process.exit(0);
   };
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT',  () => shutdown('SIGINT'));

@@ -19,7 +19,7 @@
  */
 
 import { Queue, Worker, type Job } from 'bullmq';
-import { getSharedRedisConnection, redisConnection, hasRedis } from './redis-config.js';
+import { getSharedRedisConnection, redisConnection, hasRedis, createFreshConnection } from './redis-config.js';
 import { createHash } from 'crypto';
 import { db } from '@shared/lib/db/db.js';
 import { campaignLeads, leads, integrations } from '@audnix/shared';
@@ -553,8 +553,11 @@ export function startVerificationWorker() {
       await processVerification(job.data);
     },
     {
-      connection: redisConnection as any,
+      connection: createFreshConnection(), // dedicated connection per worker
       concurrency: 50,  // 50 parallel SMTP checks
+      lockDuration: 60_000,    // SMTP checks can take up to 30s
+      stalledInterval: 120_000, // 2min between stall checks for verification jobs
+      maxStalledCount: 2,
       limiter: {
         max: 100,        // Max 100 jobs per minute per worker (rate-limit SMTP servers)
         duration: 60_000,
@@ -587,7 +590,13 @@ export function startRoutingWorker() {
         await processRouting(data as RouteLeadJobData);
       }
     },
-    { connection: redisConnection as any, concurrency: 20 }
+    {
+    connection: createFreshConnection(), // dedicated connection per worker
+    concurrency: 20,
+    lockDuration: 60_000,
+    stalledInterval: 120_000,
+    maxStalledCount: 2,
+  }
   );
 
   worker.on('failed', (job, err) => {
@@ -612,8 +621,11 @@ export function startReassignWorker() {
       }
     },
     {
-      connection: redisConnection as any,
+      connection: createFreshConnection(), // dedicated connection per worker
       concurrency: 10, // Reassign is high-priority but low-volume
+      lockDuration: 60_000,
+      stalledInterval: 120_000,
+      maxStalledCount: 2,
     }
   );
 

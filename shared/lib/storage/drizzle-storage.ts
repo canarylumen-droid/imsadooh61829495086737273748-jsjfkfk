@@ -144,7 +144,10 @@ export class DrizzleStorage implements IStorage {
     checkDatabase();
     if (!isValidUUID(id)) return undefined;
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
-    return result[0];
+    if (!result[0]) return undefined;
+    const user = { ...result[0] };
+    delete (user as any).password;
+    return user as User;
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
@@ -161,13 +164,19 @@ export class DrizzleStorage implements IStorage {
   async getUserByUsername(username: string): Promise<User | undefined> {
     checkDatabase();
     const result = await db.select().from(users).where(eq(users.username, username)).limit(1);
-    return result[0];
+    if (!result[0]) return undefined;
+    const user = { ...result[0] };
+    delete (user as any).password;
+    return user as User;
   }
 
   async getUserBySupabaseId(supabaseId: string): Promise<User | undefined> {
     checkDatabase();
     const result = await db.select().from(users).where(eq(users.supabaseId, supabaseId)).limit(1);
-    return result[0];
+    if (!result[0]) return undefined;
+    const user = { ...result[0] };
+    delete (user as any).password;
+    return user as User;
   }
 
   async updateUser(id: string, updates: Partial<User>): Promise<User | undefined> {
@@ -2313,7 +2322,12 @@ export class DrizzleStorage implements IStorage {
 
   async getSmtpSettings(userId: string): Promise<SmtpSettings[]> {
     checkDatabase();
-    return await db.select().from(smtpSettings).where(eq(smtpSettings.userId, userId));
+    const rows = await db.select().from(smtpSettings).where(eq(smtpSettings.userId, userId));
+    return rows.map(row => {
+      const safe = { ...row };
+      delete (safe as any).pass;
+      return safe as SmtpSettings;
+    });
   }
 
   async createPayment(data: InsertPayment): Promise<Payment> {

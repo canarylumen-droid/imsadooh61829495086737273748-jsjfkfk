@@ -9,8 +9,8 @@ const defaultQueueOptions = {
       type: 'exponential',
       delay: 1000,
     },
-    removeOnComplete: true, // Keep Redis memory clean
-    removeOnFail: false,    // Keep failed jobs for inspection
+    removeOnComplete: true,                         // Keep Redis memory clean
+    removeOnFail: { count: 500, age: 24 * 3600 },  // Retain last 500 failures for up to 24h, then purge
   },
 };
 

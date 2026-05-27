@@ -1,10 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Smartphone, Maximize2, Minimize2, ZoomIn, ZoomOut, Mail, Apple, Smartphone as AndroidIcon, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AudnixLogo } from "@/components/ui/CustomIcons";
+import DOMPurify from "dompurify";
 
 interface EmailPreviewProps {
     subject: string;
@@ -28,6 +29,7 @@ export function EmailPreview({ subject, body, brandColor, isOpen, onClose }: Ema
         }
     }, [isOpen]);
 
+    const sanitizedBody = useMemo(() => DOMPurify.sanitize(body || ''), [body]);
     const handleZoomIn = () => setZoom(prev => Math.min(prev + 0.2, 2));
     const handleZoomOut = () => setZoom(prev => Math.max(prev - 0.2, 0.5));
 
@@ -192,7 +194,7 @@ export function EmailPreview({ subject, body, brandColor, isOpen, onClose }: Ema
 
                                     <div className="p-8 text-black leading-relaxed whitespace-pre-wrap pb-32">
                                         <div
-                                            dangerouslySetInnerHTML={{ __html: body }}
+                                            dangerouslySetInnerHTML={{ __html: sanitizedBody }}
                                             className={cn(
                                                 "prose prose-sm max-w-none prose-headings:font-black prose-p:font-medium prose-p:text-zinc-800 prose-p:leading-relaxed",
                                                 skin === 'ios' ? "ui-ios" : "ui-android"

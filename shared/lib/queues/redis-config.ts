@@ -39,7 +39,8 @@ function baseOptions() {
     enableReadyCheck: false,
     lazyConnect: false,
     connectTimeout: readInt('REDIS_CONNECT_TIMEOUT_MS', 5000),
-    commandTimeout: readInt('REDIS_COMMAND_TIMEOUT_MS', 10000),
+    commandTimeout: readInt('REDIS_COMMAND_TIMEOUT_MS', 30000), // 30s for heavy campaign+AI workloads
+    keepAlive: readInt('REDIS_KEEPALIVE_MS', 30000),            // prevents idle drops on paid Redis
     retryStrategy: redisRetryStrategy,
     reconnectOnError: redisReconnectOnError,
   };
@@ -88,6 +89,24 @@ function getBullMQConnectionOptions() {
     ...baseOptions(),
     tls: getTlsOptions(tls),
   };
+}
+
+/**
+ * Creates a brand-new dedicated ioredis connection.
+ * MUST be used for every BullMQ Worker — workers issue blocking BLPOP commands
+ * that saturate a shared connection at scale (100+ concurrent jobs).
+ * Each call returns a fully independent connection with its own socket.
+ */
+export function createFreshConnection(): Redis {
+  if (!hasRedis) throw new Error('[RedisConfig] Redis is not configured');
+  const conn = instrumentIoRedis(new Redis(getBullMQConnectionOptions() as any), 'bullmq-worker');
+  conn.on('error', (err) => {
+    console.error('[RedisConfig] Worker Redis connection error:', err.message);
+  });
+  conn.on('reconnecting', () => {
+    console.warn('[RedisConfig] Worker Redis reconnecting...');
+  });
+  return conn;
 }
 
 let sharedRedis: Redis | null = null;

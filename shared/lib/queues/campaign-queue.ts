@@ -10,7 +10,7 @@
  */
 
 import { Queue, Worker, Job } from 'bullmq';
-import { redisConnection, hasRedis } from './redis-config.js';
+import { redisConnection, hasRedis, createFreshConnection } from './redis-config.js';
 export { hasRedis, redisConnection };
 import { db } from '@shared/lib/db/db.js';
 import {
@@ -97,7 +97,7 @@ export const campaignQueue = hasRedis ? new Queue<CampaignJobData>('campaign-eng
       type: 'exponential',
       delay: 300000, // 5 minutes (5min -> 15min -> 60min backoff for transient issues)
     },
-    removeOnComplete: { count: 500 },
+    removeOnComplete: true,   // purge immediately — no accumulation across 50-100K job volumes
     removeOnFail: { count: 1000 },
   },
 } as any) : null;
@@ -138,25 +138,32 @@ export class CampaignQueueManager {
       else if (tier === 'starter') planDailyDefault = 200;
     } catch (e) { /* fallback to 50 */ }
 
-    // Initial send-batch job for EACH mailbox (one-shot, will reschedule itself)
-    for (const mbId of mailboxIds) {
-      const dailyLimit = mailboxLimits[mbId] || planDailyDefault;
-      const jobKey = `send-batch_${campaign.id}_${mbId}`;
+    // Initial send-batch job for EACH mailbox — addBulk() for 1K mailboxes instead of sequential await loop
+    // (sequential add at 5ms/call × 1000 mailboxes = 5s blocked; addBulk is a single Redis pipeline)
+    if (campaignQueue) {
+      const bulkJobs = mailboxIds.map(mbId => {
+        const dailyLimit = mailboxLimits[mbId] || planDailyDefault;
+        const jobKey = `send-batch_${campaign.id}_${mbId}`;
+        return {
+          name: jobKey,
+          data: {
+            type: 'campaign:send-batch' as const,
+            campaignId: campaign.id,
+            userId: campaign.userId,
+            integrationId: mbId,
+            dailyLimit,
+          },
+          opts: { delay: 5000, priority: 2, jobId: jobKey },
+        };
+      });
+      await campaignQueue.addBulk(bulkJobs);
+    }
 
-      if (campaignQueue) {
-        await campaignQueue.add(jobKey, {
-          type: 'campaign:send-batch',
-          campaignId: campaign.id,
-          userId: campaign.userId,
-          integrationId: mbId,
-          dailyLimit,
-        }, {
-          delay: 5000, // Start in 5s
-          priority: 2,
-          jobId: jobKey
-        });
-      } else {
-        // [FALLBACK] No Redis — Start a local setInterval loop
+    // Fallback: setInterval per mailbox when Redis is unavailable
+    if (!campaignQueue) {
+      for (const mbId of mailboxIds) {
+        const dailyLimit = mailboxLimits[mbId] || planDailyDefault;
+        const jobKey = `send-batch_${campaign.id}_${mbId}`;
         if (this.fallbackIntervals.has(jobKey)) clearInterval(this.fallbackIntervals.get(jobKey));
         const interval = setInterval(async () => {
           try {
@@ -170,7 +177,7 @@ export class CampaignQueueManager {
           } catch (err) {
             console.error(`[CampaignFallback] Batch failed for ${mbId}:`, err);
           }
-        }, 300_000); // Fallback still uses 5min polling
+        }, 300_000);
         this.fallbackIntervals.set(jobKey, interval);
         console.log(`[CampaignFallback] ⚡ Interval started for ${mbId} (5m)`);
       }
@@ -223,6 +230,92 @@ export class CampaignQueueManager {
   }
 
   /**
+   * Full Redis cleanup after a campaign completes naturally.
+   * Removes: repeatable heartbeats, delayed follow-ups/auto-replies, failed job records.
+   * This frees Redis RAM immediately rather than waiting for the 24h retention window.
+   */
+  async completeCampaign(campaignId: string): Promise<void> {
+    console.log(`[CampaignQueue] 🧹 Running post-campaign Redis cleanup for ${campaignId}`);
+
+    for (const [key, interval] of this.fallbackIntervals.entries()) {
+      if (key.includes(campaignId)) {
+        clearInterval(interval);
+        this.fallbackIntervals.delete(key);
+      }
+    }
+
+    if (!campaignQueue) return;
+
+    // 1. Remove repeatable heartbeat jobs (send-batch, pre-craft)
+    const repeatableJobs = await campaignQueue.getRepeatableJobs();
+    for (const job of repeatableJobs) {
+      if (job.key.includes(campaignId)) {
+        await campaignQueue.removeRepeatableByKey(job.key).catch(() => {});
+      }
+    }
+
+    // 2. Remove orphaned scheduled follow-up / auto-reply jobs (skip mid-retry ones).
+    //    Paginated in batches of 200 to avoid loading 150K+ delayed jobs into memory at once
+    //    (50K leads × 3 follow-up steps = 150K jobs × 2KB ≈ 300MB heap spike without pagination).
+    //    offset += PAGE - removed accounts for index shift when items are deleted from the sorted set.
+    {
+      const PAGE = 200;
+      let dOffset = 0;
+      while (true) {
+        const page = await campaignQueue.getDelayed(dOffset, dOffset + PAGE - 1);
+        if (page.length === 0) break;
+        let removed = 0;
+        for (const job of page) {
+          const matchesCampaign = (job.data as any)?.campaignId === campaignId;
+          const isRetrying      = job.attemptsMade > 0;
+          if (!matchesCampaign || isRetrying) continue;
+          try {
+            await job.remove();
+            removed++;
+          } catch (err: any) {
+            if (err.message?.includes('job scheduler')) {
+              try {
+                if (job.id) {
+                  const parts = job.id.split(':');
+                  if (parts.length >= 3 && parts[0] === 'repeat') {
+                    await campaignQueue!.removeRepeatableByKey(parts.slice(0, -1).join(':'));
+                  } else {
+                    await campaignQueue!.removeJobScheduler(job.name);
+                  }
+                }
+              } catch {}
+            }
+          }
+        }
+        dOffset += PAGE - removed;
+        if (page.length < PAGE) break;
+      }
+    }
+
+    // 3. Purge failed job records for this campaign — frees Redis RAM immediately.
+    //    Paginated: a 50K campaign can exceed 1000 failed records (getFailed(0,999) would miss them).
+    {
+      const PAGE = 200;
+      let fOffset = 0;
+      while (true) {
+        const page = await campaignQueue.getFailed(fOffset, fOffset + PAGE - 1);
+        if (page.length === 0) break;
+        let removed = 0;
+        for (const job of page) {
+          if ((job.data as any)?.campaignId === campaignId) {
+            await job.remove().catch(() => {});
+            removed++;
+          }
+        }
+        fOffset += PAGE - removed;
+        if (page.length < PAGE) break;
+      }
+    }
+
+    console.log(`[CampaignQueue] ✅ Redis cleanup complete for campaign ${campaignId}`);
+  }
+
+  /**
    * Abort a campaign: remove all jobs (repeatable + delayed).
    */
   async abortCampaign(campaignId: string): Promise<void> {
@@ -246,36 +339,42 @@ export class CampaignQueueManager {
       }
     }
 
-    // Remove delayed follow-up and auto-reply jobs.
+    // Remove delayed follow-up and auto-reply jobs — paginated to avoid memory spikes.
     // In BullMQ v5, jobs created with `repeat:` are scheduler-owned and cannot be
     // removed via job.remove() — we must use removeJobScheduler() or removeRepeatableByKey() for those.
-    const delayedJobs = await campaignQueue.getDelayed();
-    for (const job of delayedJobs) {
-      if ((job.data as any)?.campaignId === campaignId) {
-        try {
-          await job.remove();
-        } catch (removeErr: any) {
-          // BullMQ v5: scheduler-owned jobs throw when removed directly — remove by key instead
-          if (removeErr.message?.includes('job scheduler')) {
-            try {
-              if (job.id) {
-                // Extract the repeatable key from the job id (format: repeat:<key>:<timestamp>)
-                const parts = job.id.split(':');
-                if (parts.length >= 3 && parts[0] === 'repeat') {
-                  const repeatKey = parts.slice(0, -1).join(':'); // everything except timestamp
-                  await campaignQueue!.removeRepeatableByKey(repeatKey);
-                } else {
-                  // Try removing via job scheduler name
-                  await campaignQueue!.removeJobScheduler(job.name);
+    {
+      const PAGE = 200;
+      let offset = 0;
+      while (true) {
+        const page = await campaignQueue.getDelayed(offset, offset + PAGE - 1);
+        if (page.length === 0) break;
+        let removed = 0;
+        for (const job of page) {
+          if ((job.data as any)?.campaignId !== campaignId) continue;
+          try {
+            await job.remove();
+            removed++;
+          } catch (err: any) {
+            if (err.message?.includes('job scheduler')) {
+              try {
+                if (job.id) {
+                  const parts = job.id.split(':');
+                  if (parts.length >= 3 && parts[0] === 'repeat') {
+                    await campaignQueue!.removeRepeatableByKey(parts.slice(0, -1).join(':'));
+                  } else {
+                    await campaignQueue!.removeJobScheduler(job.name);
+                  }
                 }
+              } catch (schedulerErr: any) {
+                console.warn(`[CampaignQueue] Could not remove scheduler job ${job.id}:`, schedulerErr.message);
               }
-            } catch (schedulerErr: any) {
-              console.warn(`[CampaignQueue] Could not remove scheduler job ${job.id}:`, schedulerErr.message);
+            } else {
+              console.warn(`[CampaignQueue] Could not remove delayed job ${job.id}:`, err.message);
             }
-          } else {
-            console.warn(`[CampaignQueue] Could not remove delayed job ${job.id}:`, removeErr.message);
           }
         }
+        offset += PAGE - removed;
+        if (page.length < PAGE) break;
       }
     }
   }
@@ -354,7 +453,8 @@ export class CampaignQueueManager {
     } catch {}
 
     if (campaignQueue) {
-      const jobId = `autoreply:${campaignId}:${campaignLeadId}:${Date.now()}`;
+      const bucket = Math.floor(Date.now() / (5 * 60 * 1000)); // 5-min dedup window: collapses rapid re-triggers, allows new replies later
+      const jobId = `autoreply:${campaignId}:${campaignLeadId}:${bucket}`;
       await campaignQueue.add(jobId, {
         type: 'campaign:auto-reply',
         campaignId,
@@ -539,6 +639,17 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?
   return Math.round(clamped + jitter);
 }
 
+/**
+ * Reschedule a mailbox's send-batch job so the chain never breaks.
+ * One-shot delayed jobs that don't get re-added are dead permanently.
+ */
+async function rescheduleSendBatch(data: SendBatchJobData, delayMs: number): Promise<void> {
+  if (!campaignQueue) return;
+  const { campaignId, integrationId } = data;
+  const jobKey = `send-batch_${campaignId}_${integrationId}`;
+  await campaignQueue.add(jobKey, data, { delay: delayMs, jobId: jobKey, priority: 2 });
+}
+
 // ─── Job Processors ──────────────────────────────────────────────────────────
 
 /**
@@ -580,6 +691,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   
   if (healthState.isHardPaused) {
     // We removed the console.log here to prevent endless log spam every 5 minutes when a mailbox is dead.
+    await rescheduleSendBatch(data, 30 * 60 * 1000);
     return;
   }
 
@@ -615,6 +727,8 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   }
 
   if (sentToday >= effectiveLimit) {
+    // Reschedule in 1 hour so the mailbox resumes when the daily limit resets (new day)
+    await rescheduleSendBatch(data, 60 * 60 * 1000);
     return;
   }
 
@@ -636,6 +750,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
   if (activeCheckouts.length > 0) {
     // console.log(`[Priority Schedule] Yielding campaign batch for ${userId}. Active checkout detected.`);
+    await rescheduleSendBatch(data, 30 * 60 * 1000);
     return;
   }
 
@@ -645,7 +760,8 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   const replyPending = await mailboxHasPendingReply(integrationId);
   if (replyPending) {
     console.log(`[CampaignWorker] ⏳ Reply pending on mailbox ${integrationId.slice(-8)} — batch yielding`);
-    return; // This job will reschedule automatically via BullMQ repeat
+    await rescheduleSendBatch(data, 10 * 60 * 1000);
+    return; // send-batch is one-shot, must be explicitly re-added
   }
 
   // 5. Dynamic cooldown: spread remaining sends evenly across remaining business hours
@@ -661,7 +777,10 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
     const lastSentAt = new Date(lastSentResult.rows[0].created_at as string).getTime();
     // Dynamically compute minimum spacing based on remaining budget & business time
     const minDelayMs = calcMailboxInterval(sentToday, dailyLimit, currentIntegration);
-    if (Date.now() - lastSentAt < minDelayMs) return;
+    if (Date.now() - lastSentAt < minDelayMs) {
+      await rescheduleSendBatch(data, minDelayMs - (Date.now() - lastSentAt));
+      return;
+    }
   }
 
   // 6. Pick the next pending or queued lead assigned to this mailbox
@@ -738,12 +857,19 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
         return;
       }
 
-      // BUG X8 FIX: Check if the entire campaign is terminal
+      // BUG X8 FIX: Check if the entire campaign is terminal.
+      // IMPORTANT: also check 'sent' — leads in 'sent' status are awaiting follow-up steps.
+      // Without this, a 50K campaign completes prematurely (all initial emails sent → no more
+      // 'pending'/'queued') and completeCampaign() wipes all 150K scheduled follow-up jobs.
       const pendingLeads = await db.select({ id: campaignLeads.id })
         .from(campaignLeads)
         .where(and(
           eq(campaignLeads.campaignId, campaignId),
-          or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
+          or(
+            eq(campaignLeads.status, 'pending'),
+            eq(campaignLeads.status, 'queued'),
+            eq(campaignLeads.status, 'sent')  // 'sent' = initial email delivered, follow-ups pending
+          )
         ))
         .limit(1);
 
@@ -753,8 +879,12 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
           .set({ status: 'completed' })
           .where(eq(outreachCampaigns.id, campaignId));
         
-        // Stop the repeatable jobs
-        await campaignQueueManager.pauseCampaign(campaignId);
+        // Full Redis cleanup: removes heartbeat jobs + delayed follow-ups + failed records
+        await campaignQueueManager.completeCampaign(campaignId);
+      } else {
+        // Campaign still has leads but none available for this mailbox right now.
+        // Reschedule in 5 minutes so the mailbox doesn't die while others process.
+        await rescheduleSendBatch(data, 5 * 60 * 1000);
       }
     }
     return;
@@ -762,17 +892,30 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
   // BUG #10 FIX: Iterate up to 5 leads so a timezone-gated lead
   // doesn't stall the entire mailbox queue.
+  let didSend = false;
   for (const row of nextLeadResult) {
     const leadEntry = (row as any).campaignLead;
     const lead = (row as any).lead;
 
     if (!lead?.email) continue;
 
-    // Claim the lead for this mailbox (assign integrationId)
+    // Atomically claim the lead for this mailbox.
+    // Using RETURNING to detect if another mailbox worker already claimed this pool lead.
+    // Without this, 1K concurrent mailboxes can all read the same null-integrationId lead
+    // and send to the same recipient multiple times.
     if (!leadEntry.integrationId || leadEntry.status === 'queued') {
-      await db.update(campaignLeads)
+      const claimed = await db.update(campaignLeads)
         .set({ integrationId, status: 'pending' })
-        .where(eq(campaignLeads.id, leadEntry.id));
+        .where(and(
+          eq(campaignLeads.id, leadEntry.id),
+          or(isNull(campaignLeads.integrationId), eq(campaignLeads.integrationId, integrationId)),
+          or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
+        ))
+        .returning({ id: campaignLeads.id });
+
+      if (claimed.length === 0) {
+        continue; // Another mailbox worker claimed this lead first — skip it
+      }
     }
 
     // --- PHASE 50: INTELLIGENT SCHEDULING GATE ---
@@ -813,8 +956,19 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       await resetCampaignFailureCount(campaignId);
       await db!.update(integrations).set({ failureCount: 0 }).where(eq(integrations.id, integrationId));
       
-      // Event-Based Stats Update
-      await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
+      // Debounced stats update: bucket by 30s window so at most one runs per 30s per campaign
+      // regardless of how many mailboxes fire simultaneously (prevents thousands of GROUP BY
+      // full-table-scans per hour on 100K-row campaign_leads tables).
+      if (campaignQueue) {
+        const bucket = Math.floor(Date.now() / 30000);
+        await campaignQueue.add(
+          `stats-${campaignId}`,
+          { type: 'campaign:update-stats', campaignId, userId },
+          { jobId: `stats:${campaignId}:${bucket}`, delay: 3000, priority: 3 }
+        ).catch(() => {});
+      } else {
+        await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
+      }
       
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
@@ -874,7 +1028,14 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       console.log(`[CampaignQueue] 🎯 Sent lead. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(nextDelay/60000)}m`);
     }
 
+    didSend = true;
     break; // Only one send per batch cycle to respect pacing
+  }
+
+  // If the loop completed without sending (all leads claimed by others,
+  // timezone-gated, or all sends failed), reschedule so the mailbox stays alive.
+  if (!didSend) {
+    await rescheduleSendBatch(data, 60_000);
   }
 }
 
@@ -1270,8 +1431,8 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
         .set({ status: 'completed', updatedAt: new Date() })
         .where(eq(outreachCampaigns.id, campaignId));
 
-      // Clean up repeatable jobs so no more heartbeats fire for a completed campaign
-      await campaignQueueManager.pauseCampaign(campaignId);
+      // Full Redis cleanup: removes heartbeat jobs + delayed follow-ups + failed records
+      await campaignQueueManager.completeCampaign(campaignId);
 
       // Notify user via WebSocket + notification
       wsSync.notifyCampaignsUpdated(userId);
@@ -1835,13 +1996,19 @@ async function handleCampaignFailure(campaignId: string): Promise<void> {
   const [campaign] = await db!.select().from(outreachCampaigns).where(eq(outreachCampaigns.id, campaignId));
   if (!campaign) return;
 
-  const currentFailures = Number((campaign.stats as any)?.consecutive_failures || 0) + 1;
-  
+  // Atomic increment at DB level to prevent race conditions when multiple
+  // mailbox workers fail simultaneously (1K mailboxes = up to 1K concurrent workers).
   await db!.update(outreachCampaigns)
     .set({
-      stats: sql`jsonb_set(stats, '{consecutive_failures}', ${currentFailures.toString()}::jsonb)`,
+      stats: sql`jsonb_set(stats, '{consecutive_failures}', ((COALESCE((stats->>'consecutive_failures')::int, 0) + 1))::text::jsonb)`,
     })
     .where(eq(outreachCampaigns.id, campaignId));
+
+  // Re-read the actual value after atomic increment
+  const [updated] = await db!.select({ stats: outreachCampaigns.stats })
+    .from(outreachCampaigns)
+    .where(eq(outreachCampaigns.id, campaignId));
+  const currentFailures = Number((updated.stats as any)?.consecutive_failures || 0);
 
   // Threshold: 3 consecutive failures aborts/pauses the campaign
   if (currentFailures >= 3) {
@@ -1944,9 +2111,18 @@ export const campaignWorker = hasRedis ? new Worker<CampaignJobData>(
   'campaign-engine',
   processCampaignJob,
   {
-    connection: redisConnection as any,
-    concurrency: 25, // Handle multiple mailboxes concurrently
-    removeOnComplete: { count: 500 },
+    connection: createFreshConnection(), // dedicated connection — never shares socket with queues or other workers
+    concurrency: parseInt(process.env.CAMPAIGN_CONCURRENCY || '50', 10),  // 50 slots — handles 100+ mailboxes comfortably
+    lockDuration:    parseInt(process.env.CAMPAIGN_LOCK_DURATION_MS    || '120000',  10), // 2min — AI generation + SMTP can take >30s
+    stalledInterval: parseInt(process.env.CAMPAIGN_STALLED_INTERVAL_MS || '300000',  10), // 5min — prevents false duplicate-send retries
+    maxStalledCount: parseInt(process.env.CAMPAIGN_MAX_STALLED_COUNT   || '3',       10), // tolerate 3 stalls before hard-failing job
+    limiter: {
+      // Prevents thundering-herd when 100+ mailbox jobs come due simultaneously on restart.
+      // Set well above concurrency so normal operation is never throttled.
+      max: parseInt(process.env.CAMPAIGN_RATE_MAX || '60', 10),
+      duration: 1000,
+    },
+    removeOnComplete: true,   // successful jobs are purged from Redis instantly — zero RAM spent on them
     removeOnFail: { count: 1000 },
   } as any
 ) : null;
@@ -1994,6 +2170,30 @@ if (campaignWorker) {
     // Circuit Breaker: Increment campaign failure count
     if (jobType === 'campaign:send-batch' && (job?.data as any)?.campaignId) {
       await handleCampaignFailure((job!.data as any).campaignId);
+    }
+
+    // Late-retry cleanup: if this job has exhausted ALL attempts and the campaign is already
+    // completed, purge the failed record from Redis immediately.
+    // This closes the gap where completeCampaign() ran before these retries finished.
+    const attemptsMade  = job?.attemptsMade ?? 0;
+    const maxAttempts   = (job?.opts as any)?.attempts ?? 3;
+    const isPermanentlyFailed = attemptsMade >= maxAttempts;
+    const campaignIdForCleanup = (job?.data as any)?.campaignId;
+
+    if (isPermanentlyFailed && campaignIdForCleanup && job) {
+      try {
+        const { db: cleanupDb } = await import('@shared/lib/db/db.js');
+        const { outreachCampaigns: oCampaigns } = await import('@audnix/shared');
+        const { eq: eqCleanup } = await import('drizzle-orm');
+        const [campaignRow] = await cleanupDb
+          .select({ status: oCampaigns.status })
+          .from(oCampaigns)
+          .where(eqCleanup(oCampaigns.id, campaignIdForCleanup))
+          .limit(1);
+        if (campaignRow?.status === 'completed' || campaignRow?.status === 'aborted') {
+          await job.remove().catch(() => {});
+        }
+      } catch { /* non-fatal — global retention policy still evicts eventually */ }
     }
   });
 
