@@ -19,15 +19,30 @@ import { getRedisClient } from '@shared/lib/redis/redis.js';
 import { IMAP_KEYS } from '@shared/lib/redis/imap-keys.js';
 import { Queue } from 'bullmq';
 import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
+import { pool } from '@shared/lib/db/db.js';
 import crypto from 'crypto';
 
 const app = express();
 const port = process.env.PORT || 3001;
 
-// Deterministic sharding via Railway replica ID
-const REPLICA_ID    = parseInt(process.env.RAILWAY_REPLICA_ID || '0', 10);
-const TOTAL_REPLICAS = parseInt(process.env.TOTAL_REPLICAS || '1', 10);
-const WORKER_ID     = process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || `worker-${process.pid}`;
+// ── Sharding Configuration ────────────────────────────────────────────────────
+// Railway:  RAILWAY_REPLICA_ID + TOTAL_REPLICAS  (static hash ring)
+// K8s/EKS:  IMAP_DYNAMIC_SHARDING=true           (all pods compete via Redis claim)
+//
+// Dynamic mode is REQUIRED for HPA/KEDA autoscaling because TOTAL_REPLICAS
+// changes at runtime. Static hash rings break when pods spin up/down.
+
+const DYNAMIC_SHARDING = process.env.IMAP_DYNAMIC_SHARDING === 'true';
+// POD_ORDINAL in K8s StatefulSet comes from metadata.name = "pod-name-3".
+// We need to extract the trailing number, e.g. "audnix-imap-worker-3" → 3.
+function extractOrdinal(raw: string | undefined): number {
+  if (!raw) return 0;
+  const m = raw.match(/-(\d+)$/);
+  return m ? parseInt(m[1], 10) : parseInt(raw, 10) || 0;
+}
+const REPLICA_ID       = parseInt(process.env.RAILWAY_REPLICA_ID || '0', 10) || extractOrdinal(process.env.POD_ORDINAL);
+const TOTAL_REPLICAS   = parseInt(process.env.TOTAL_REPLICAS || '1', 10);
+const WORKER_ID        = process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || `worker-${process.pid}`;
 
 const connectionManager = new ImapConnectionManager();
 const mailboxWorker     = createMailboxWorker(connectionManager);
@@ -38,9 +53,16 @@ const imapTaskQueue = hasRedis ? new Queue('imap-idle-tasks', {
   defaultJobOptions: { attempts: 3, backoff: { type: 'exponential', delay: 5000 } },
 } as any) : null;
 
-/** Returns true if this replica is responsible for the given integration ID */
+/**
+ * Returns true if this pod should attempt to claim the given integration.
+ *
+ * Static mode (Railway): uses deterministic hash ring for even distribution.
+ * Dynamic mode (K8s):    ALL pods try to claim — Redis Lua atomic claim
+ *                        prevents double-connect. Pods self-limit via MAX_SOCKETS.
+ */
 function isResponsibleFor(id: string): boolean {
-  if (TOTAL_REPLICAS <= 1) return true;
+  if (DYNAMIC_SHARDING) return true;          // Everyone competes
+  if (TOTAL_REPLICAS <= 1) return true;        // Single pod
   const hash = crypto.createHash('md5').update(id).digest().readUInt32BE(0);
   return (hash % TOTAL_REPLICAS) === REPLICA_ID;
 }
@@ -48,19 +70,52 @@ function isResponsibleFor(id: string): boolean {
 // ── Health & Metrics Endpoints ─────────────────────────────────────────────────
 
 app.get('/health', async (_req, res) => {
+  const checks: Record<string, any> = {};
+  let allOk = true;
+
+  // DB check
+  const dbStart = Date.now();
+  try {
+    if (pool) {
+      await pool.query('SELECT 1');
+      checks.db = { ok: true, latencyMs: Date.now() - dbStart };
+    } else {
+      checks.db = { ok: false, error: 'pool_not_initialized' };
+      allOk = false;
+    }
+  } catch (err: any) {
+    checks.db = { ok: false, error: err.message, latencyMs: Date.now() - dbStart };
+    allOk = false;
+  }
+
+  // Redis check
+  const redisStart = Date.now();
   try {
     const redis = await getRedisClient();
-    const redisPing = redis ? await redis.ping() : 'SKIP';
-    res.json({
-      status: 'ok',
-      replicaId: REPLICA_ID,
-      totalReplicas: TOTAL_REPLICAS,
-      connections: connectionManager.connectionCount,
-      redis: redisPing === 'PONG' ? 'ok' : 'unavailable',
-    });
-  } catch {
-    res.status(500).json({ status: 'error' });
+    const pong = redis ? await redis.ping() : null;
+    checks.redis = { ok: pong === 'PONG', latencyMs: Date.now() - redisStart };
+    if (!checks.redis.ok) allOk = false;
+  } catch (err: any) {
+    checks.redis = { ok: false, error: err.message, latencyMs: Date.now() - redisStart };
+    allOk = false;
   }
+
+  // IMAP pool check
+  checks.imap = {
+    ok: connectionManager.connectionCount <= parseInt(process.env.IMAP_MAX_SOCKETS || '50', 10),
+    connections: connectionManager.connectionCount,
+    maxSockets: parseInt(process.env.IMAP_MAX_SOCKETS || '50', 10),
+  };
+
+  res.status(allOk ? 200 : 503).json({
+    status: allOk ? 'ok' : 'degraded',
+    service: 'email-worker',
+    replicaId: REPLICA_ID,
+    totalReplicas: TOTAL_REPLICAS,
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    ...checks,
+  });
 });
 
 app.get('/metrics', async (_req, res) => {
@@ -177,8 +232,16 @@ async function watchdog() {
 // ── Start ──────────────────────────────────────────────────────────────────────
 
 boot().then(() => {
-  // Run watchdog every 5 minutes
-  // Removed polling; rely on event-driven orphan detection via Redis Pub/Sub
+  // Run watchdog every 5 minutes to reclaim orphaned mailboxes from crashed pods.
+  // This is critical: without it, if a pod dies mid-session its mailboxes go dark
+  // permanently until the entire service restarts.
+  const WATCHDOG_INTERVAL_MS = 5 * 60 * 1000;
+  setTimeout(() => {
+    // First sweep after 2 min (let other pods settle on startup)
+    watchdog();
+    setInterval(watchdog, WATCHDOG_INTERVAL_MS);
+  }, 2 * 60 * 1000);
+  console.log(`[Boot] Watchdog armed — sweeps every ${WATCHDOG_INTERVAL_MS / 60000} min.`);
 }).catch((err) => {
   console.error('[Boot] Fatal boot error:', err);
 });

@@ -341,6 +341,68 @@ export async function runDatabaseMigrations() {
                     END IF;
                 END IF;
 
+                -- Campaign Job Logs (Self-Healing Watchdog source-of-truth)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='campaign_job_logs') THEN
+                    CREATE TABLE campaign_job_logs (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        job_bullmq_id TEXT NOT NULL UNIQUE,
+                        campaign_id UUID NOT NULL REFERENCES outreach_campaigns(id) ON DELETE CASCADE,
+                        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        integration_id TEXT,
+                        campaign_lead_id TEXT,
+                        job_type TEXT NOT NULL,
+                        step_index INTEGER,
+                        status TEXT NOT NULL DEFAULT 'pending',
+                        job_data JSONB NOT NULL DEFAULT '{}',
+                        attempt_count INTEGER NOT NULL DEFAULT 0,
+                        last_error TEXT,
+                        scheduled_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        processed_at TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'cjl_status_scheduled_idx') THEN
+                    CREATE INDEX cjl_status_scheduled_idx ON campaign_job_logs(status, scheduled_at);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'cjl_campaign_status_idx') THEN
+                    CREATE INDEX cjl_campaign_status_idx ON campaign_job_logs(campaign_id, status);
+                END IF;
+
+                -- Job Attempts (per-attempt audit trail for 1M+ scale)
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='job_attempts') THEN
+                    CREATE TABLE job_attempts (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        job_id TEXT NOT NULL,
+                        job_name TEXT NOT NULL,
+                        campaign_id UUID REFERENCES outreach_campaigns(id) ON DELETE CASCADE,
+                        user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                        integration_id TEXT,
+                        campaign_lead_id TEXT,
+                        attempt_number INTEGER NOT NULL DEFAULT 1,
+                        status TEXT NOT NULL DEFAULT 'started',
+                        error TEXT,
+                        worker_id TEXT,
+                        metadata JSONB NOT NULL DEFAULT '{}',
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ja_status_created_at_idx') THEN
+                    CREATE INDEX ja_status_created_at_idx ON job_attempts(status, created_at);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ja_job_id_idx') THEN
+                    CREATE INDEX ja_job_id_idx ON job_attempts(job_id);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ja_campaign_id_idx') THEN
+                    CREATE INDEX ja_campaign_id_idx ON job_attempts(campaign_id);
+                END IF;
+
+                -- Campaign Emails idempotency guard (prevents duplicate sends at DB layer)
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ce_campaign_lead_step_idx') THEN
+                    CREATE UNIQUE INDEX ce_campaign_lead_step_idx ON campaign_emails(campaign_id, lead_id, step_index);
+                END IF;
+
             END $$;
         `); });
         console.log("✅ Emergency schema synchronization completed.");

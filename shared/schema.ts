@@ -1071,11 +1071,15 @@ export const campaignEmails = pgTable("campaign_emails", {
   subject: text("subject"),
   body: text("body"),
   sentAt: timestamp("sent_at").notNull().defaultNow(),
-  status: text("status", { enum: ["sent", "delivered", "opened", "clicked", "replied", "bounced"] }).notNull().default("sent"),
+  status: text("status", { enum: ["sending", "sent", "delivered", "opened", "clicked", "replied", "bounced", "suppressed"] }).notNull().default("sent"),
   stepIndex: integer("step_index").notNull().default(0),
   targetUrl: text("target_url"),
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
-});
+}, (table) => ({
+  // PG-level idempotency guard — prevents duplicate sends at the database layer
+  // even when two concurrent workers race past the SELECT check.
+  ceCampaignLeadStepIdx: uniqueIndex("ce_campaign_lead_step_idx").on(table.campaignId, table.leadId, table.stepIndex),
+}));
 
 export const emailReplyStore = pgTable("email_reply_store", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1361,6 +1365,65 @@ export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
 
 export type AuditTrail = typeof auditTrail.$inferSelect;
 export type InsertAuditTrail = typeof auditTrail.$inferInsert;
+
+// ─── Campaign Job Logs ────────────────────────────────────────────────────────
+// PostgreSQL source-of-truth for every BullMQ campaign job.
+// The self-healing Watchdog queries this table every hour:
+//   SELECT * FROM campaign_job_logs WHERE status IN ('pending','processing')
+//     AND scheduled_at < NOW() - INTERVAL '1 hour' AND attempt_count < 3
+// If a job is missing from BullMQ, it is automatically re-queued.
+export const campaignJobLogs = pgTable("campaign_job_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobBullmqId: text("job_bullmq_id").notNull().unique(),
+  campaignId: uuid("campaign_id").notNull().references(() => outreachCampaigns.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  integrationId: text("integration_id"),
+  campaignLeadId: text("campaign_lead_id"),
+  jobType: text("job_type").notNull(),
+  stepIndex: integer("step_index"),
+  status: text("status").notNull().default("pending"),
+  jobData: jsonb("job_data").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  lastError: text("last_error"),
+  scheduledAt: timestamp("scheduled_at").notNull().defaultNow(),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  cjlBullmqIdIdx: index('cjl_bullmq_id_idx').on(table.jobBullmqId),
+  cjlCampaignStatusIdx: index('cjl_campaign_status_idx').on(table.campaignId, table.status),
+  cjlStatusScheduledIdx: index('cjl_status_scheduled_idx').on(table.status, table.scheduledAt),
+}));
+
+export type CampaignJobLog = typeof campaignJobLogs.$inferSelect;
+export type InsertCampaignJobLog = typeof campaignJobLogs.$inferInsert;
+
+// ─── Job Attempts ─────────────────────────────────────────────────────────────
+// Fine-grained per-attempt audit trail for every BullMQ worker execution.
+// Captures entry, success, and failure for full observability at 1M+ scale.
+export const jobAttempts = pgTable("job_attempts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  jobId: text("job_id").notNull(),
+  jobName: text("job_name").notNull(),
+  campaignId: uuid("campaign_id").references(() => outreachCampaigns.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }),
+  integrationId: text("integration_id"),
+  campaignLeadId: text("campaign_lead_id"),
+  attemptNumber: integer("attempt_number").notNull().default(1),
+  status: text("status").notNull().default("started"), // started | completed | failed
+  error: text("error"),
+  workerId: text("worker_id"),
+  metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  jaJobIdIdx: index('ja_job_id_idx').on(table.jobId),
+  jaStatusCreatedAtIdx: index('ja_status_created_at_idx').on(table.status, table.createdAt),
+  jaCampaignIdIdx: index('ja_campaign_id_idx').on(table.campaignId),
+}));
+
+export type JobAttempt = typeof jobAttempts.$inferSelect;
+export type InsertJobAttempt = typeof jobAttempts.$inferInsert;
 
 // LEGACY - Keep old Zod schemas for backward compatibility (deprecated)
 export const userSchema = z.object({

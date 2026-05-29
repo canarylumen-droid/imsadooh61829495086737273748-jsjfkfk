@@ -50,6 +50,7 @@ export const emailSyncQueue = createLazyQueue('email-sync-tasks', {
     backoff: { type: 'exponential', delay: 5000 },
     removeOnComplete: { count: 500 },
     removeOnFail: { count: 1000 },
+    priority: 5, // Default mid-priority; reply detection uses 1, orphan reassignment uses 1
   },
 });
 
@@ -160,6 +161,23 @@ export function startEmailSyncWorker() {
           // ── Discovery: reconnect missing IMAP sessions ─────────────────────────
           case 'discovery': {
             await imapIdleManager.syncConnections();
+            break;
+          }
+
+          // ── Watchdog: reassign orphaned mailbox from dead worker ─────────────────
+          case 'discovery-orphan': {
+            const { integrationId: orphanId, reason, deadTaskId } = job.data;
+            console.log(`[EmailSyncQueue] 🔍 Reassigning orphan mailbox ${orphanId} (dead worker: ${deadTaskId}, reason: ${reason})`);
+            await imapIdleManager.syncConnections();
+            break;
+          }
+
+          // ── Priority: reply detected via IMAP IDLE → fast-track AI processing ────
+          case 'reply-detected': {
+            const { integrationId: replyIntegrationId, userId: replyUserId } = job.data;
+            console.log(`[EmailSyncQueue] ⚡ Priority reply-detected job for ${replyIntegrationId}`);
+            // The actual AI reply logic is already triggered in fetchNewEmails via enqueuePriorityReply.
+            // This job serves as a BullMQ-tracked high-priority marker for observability.
             break;
           }
 

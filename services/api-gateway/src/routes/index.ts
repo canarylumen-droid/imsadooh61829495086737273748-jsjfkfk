@@ -55,6 +55,7 @@ import emailTrackingRoutes from "./email-tracking-routes.js";
 import { registerAnalyticsRoutes } from "./analytics-routes.js";
 import revenueWebhook from "../webhooks/revenue-webhook.js";
 import unsubscribeRoutes from "./unsubscribe-routes.js";
+import fblWebhookRoutes from "./fbl-webhook.js";
 
 export async function registerRoutes(app: Express): Promise<http.Server> {
   // 1. Static Assets & Public Manifests (Served before auth/rate limiting for common assets)
@@ -145,7 +146,8 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/video-automation", videoAutomationRoutes);
   app.use("/api/voice", voiceRoutes);
   app.use("/api/webhook", webhookRouter);
-  app.use("/api/webhooks", revenueWebhook);
+  app.use("/api/webhooks/fbl", fblWebhookRoutes);  // Specific FIRST
+  app.use("/api/webhooks", revenueWebhook);        // Generic AFTER
   app.use("/webhook", webhookMetaRoutes); // Root-level Meta webhook
 
   app.use("/api/worker", workerRoutes);

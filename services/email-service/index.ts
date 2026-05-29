@@ -5,14 +5,41 @@ import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { createWorker } from '@shared/lib/worker';
 import { mailSyncQueue } from '@shared/lib/queue';
 import { subscribe } from '@services/event-bus/src/redis-pubsub.js';
+import { startHeartbeat, HealthMonitor } from '@shared/lib/monitoring/health-heartbeat.js';
+import { WorkerDiscoveryRegistry, MailboxReassignmentWatchdog } from '@shared/lib/monitoring/index.js';
+import { startMemoryWatchdog } from '@shared/lib/monitoring/memory-watchdog.js';
+import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
 
 const log = createLogger('EMAIL-SYNC');
+const discoveryRegistry = new WorkerDiscoveryRegistry('email-service');
+const mailboxWatchdog = new MailboxReassignmentWatchdog();
+const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'email-service');
 
 async function startEmailService() {
+  await serviceRegistry.register({ version: '1.0.0' });
+  // Start ECS-safe memory watchdog (logs only, no hard exit on ECS)
+  startMemoryWatchdog();
+
   log.info('📬 Email Sync Service starting...');
 
-  // Expose /health endpoint for Railway healthchecks
-  startWorkerHealthServer('email-sync', parseInt(process.env.EMAIL_WORKER_PORT || process.env.PORT || '8081', 10));
+  // Expose /health endpoint for Railway/ECS healthchecks
+  startWorkerHealthServer('email-sync', parseInt(process.env.EMAIL_WORKER_PORT || process.env.PORT || '8081', 10), {
+    checkDb: true,
+    checkRedis: true,
+    checkImap: async () => {
+      const conns = (imapIdleManager as any)?.connections;
+      let activeConnections = 0;
+      if (conns) {
+        for (const folderMap of conns.values()) {
+          activeConnections += folderMap?.size || 0;
+        }
+      }
+      return {
+        ok: imapIdleManager?.getRunningStatus?.() || false,
+        activeConnections,
+      };
+    },
+  });
 
   // ── Register workers with the health monitor ──────────────────────────────
   ['IMAP IDLE', 'Email Sync', 'Email Warmup', 'Mailbox Health', 'Lead Redistribution',
@@ -56,6 +83,11 @@ async function startEmailService() {
   await startWorkerModule('Lead Redistribution',   () => redistributionWorker.start());
   await startWorkerModule('IMAP IDLE Manager',     () => imapIdleManager.start());
   await startWorkerModule('Native Push',           () => PushNotificationService.initializeAll());
+
+  // ── Worker Discovery Registry ───────────────────────────────────────────
+  await discoveryRegistry.register();
+  mailboxWatchdog.start();
+  log.info('Worker Discovery Registry ✅ Online', { taskId: discoveryRegistry.getTaskId() });
 
   // ── Verification + Routing BullMQ Workers ────────────────────────────────
   const { startVerificationWorker, startRoutingWorker, startReassignWorker, startMailboxEventListener } =
@@ -105,9 +137,19 @@ async function startEmailService() {
 
   log.info(`✅ BullMQ worker listening on [${mailSyncQueue.name}]`);
 
+  // ── Health heartbeat & SRE monitoring ───────────────────────────────────
+  startHeartbeat('email-service', () => ({
+    imapActive: imapIdleManager?.getRunningStatus?.() || false,
+  }));
+  const healthMonitor = new HealthMonitor();
+  healthMonitor.startMonitoring();
+
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Email Sync service...`);
+    try { await serviceRegistry.deregister(); } catch (_e) {}
+    try { await discoveryRegistry.releaseAll(); } catch (_e) {}
+    try { mailboxWatchdog.stop(); }      catch (_e) {}
     try { imapIdleManager.stop(); }     catch (_e) {}
     try { mailboxHealthService.stop(); } catch (_e) {}
     try { emailSyncWorkerModule && await (emailSyncWorkerModule as any).close(); } catch (_e) {}
@@ -117,8 +159,8 @@ async function startEmailService() {
     if (process.env.UNIFIED_MODE !== 'true') setTimeout(() => process.exit(0), 5000);
   };
   if (process.env.UNIFIED_MODE !== 'true') {
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT',  () => shutdown('SIGINT'));
+    process.on('SIGTERM', async () => { await shutdown('SIGTERM'); });
+    process.on('SIGINT',  async () => { await shutdown('SIGINT'); });
   }
 
   log.info('🚀 Email Sync Service fully online');

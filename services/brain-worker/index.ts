@@ -10,6 +10,8 @@ import { Worker, Job } from 'bullmq';
 import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { startMemoryWatchdog } from '@shared/lib/monitoring/memory-watchdog.js';
+import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
+import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
 
 // Start resilience layers
 startMemoryWatchdog(Number(process.env.HEAP_LIMIT_MB) || 1024);
@@ -18,6 +20,7 @@ import { db } from '@shared/lib/db/db.js';
 import { users, notifications } from '@audnix/shared';
 
 const log = createLogger('AI-AGENT');
+const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'brain-worker');
 
 /**
  * Enterprise DLQ Reporter
@@ -39,6 +42,7 @@ async function reportPermanentFailure(job: Job, err: Error) {
 }
 
 async function startAIService() {
+  await serviceRegistry.register({ version: '1.0.0' });
   log.info('🤖 AI Agent Service starting...');
 
   const enabledWorkers = process.env.START_WORKERS ? process.env.START_WORKERS.split(',').map(w => w.trim().toLowerCase()) : ['all'];
@@ -160,8 +164,12 @@ async function startAIService() {
     log.info('✅ Enterprise Webhook & Billing workers fully listening with DLQ monitoring');
   }
 
+  // ── Health heartbeat ──────────────────────────────────────────────────────
+  startHeartbeat('brain-worker');
+
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down AI Agent service...`);
+    try { await serviceRegistry.deregister(); } catch (_e) {}
     try { leadEnrichmentWorker.stop(); } catch (_e) {}
     try { reEngagementWorker.stop(); }   catch (_e) {}
     try { postMortemWorker.stop(); }     catch (_e) {}
@@ -173,8 +181,8 @@ async function startAIService() {
     if (process.env.UNIFIED_MODE !== 'true') process.exit(0);
   };
   if (process.env.UNIFIED_MODE !== 'true') {
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT',  () => shutdown('SIGINT'));
+    process.on('SIGTERM', async () => { await shutdown('SIGTERM'); });
+    process.on('SIGINT',  async () => { await shutdown('SIGINT'); });
   }
 
   log.info('🚀 AI Agent Service fully online');

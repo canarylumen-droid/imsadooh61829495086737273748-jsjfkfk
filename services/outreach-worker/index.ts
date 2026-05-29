@@ -5,6 +5,7 @@ import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { createWorker } from '@shared/lib/worker';
 import { outreachQueue } from '@shared/lib/queue';
 import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
+import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
 
 const log = createLogger('OUTREACH-WORKER');
 
@@ -74,6 +75,17 @@ async function startOutreachService() {
     log.info('Campaign Engine BullMQ Worker ✅ Initialized');
   }
 
+  // ── Self-Healing Job Watchdog ───────────────────────────────────────────────
+  // Sweeps campaign_job_logs every hour for jobs stuck in 'pending'/'processing'
+  // that are missing from BullMQ, and re-queues them automatically.
+  try {
+    const { startJobWatchdog } = await import('@shared/lib/queues/job-watchdog.js');
+    startJobWatchdog();
+    log.info('Job Watchdog ✅ Armed (1h sweep interval)');
+  } catch (err: any) {
+    log.error('Job Watchdog failed to start (non-fatal)', { error: err.message });
+  }
+
   // ── Activate Autonomous Neural Scaler ──────────────────────────────
   if (AutonomousScalerService) {
     log.info('Autonomous Scaler ✅ Active (Cycle: 12h)');
@@ -83,7 +95,7 @@ eventScheduler('autonomous-scaler', async () => {
   }
 
   // ── BullMQ Worker — processes queue-dispatched jobs with retry support ────
-  createWorker(outreachQueue.name, async (job) => {
+  const outreachBullWorker = createWorker(outreachQueue.name, async (job) => {
     log.info('Processing outreach job', { name: job.name, userId: job.data?.userId, leadId: job.data?.leadId, jobId: job.id });
 
     try {
@@ -110,22 +122,38 @@ eventScheduler('autonomous-scaler', async () => {
 
   log.info(`✅ BullMQ worker listening on [${outreachQueue.name}]`);
 
+  // ── Health heartbeat ──────────────────────────────────────────────────────
+  startHeartbeat('outreach-worker', () => ({
+    campaignQueueReady: !!campaignQueueModule,
+    outreachEngineActive: !!outreachEngine,
+  }));
+
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Outreach Worker service...`);
     try { outreachEngine.stop(); }             catch (_e) {}
     try { autonomousOutreachWorker.stop(); }   catch (_e) {}
     try { meetingReminderWorker.stop(); }      catch (_e) {}
-    if (process.env.UNIFIED_MODE !== 'true') setTimeout(() => process.exit(0), 5000);
+    // Wait for active BullMQ jobs to finish before exiting
+    try {
+      if (outreachBullWorker) {
+        await outreachBullWorker.close(false);
+        log.info('BullMQ worker closed gracefully');
+      }
+    } catch (_e: any) {
+      log.warn('BullMQ worker close error', { error: _e?.message });
+    }
+    log.info('Outreach Worker shutdown complete');
+    if (process.env.UNIFIED_MODE !== 'true') process.exit(0);
   };
   if (process.env.UNIFIED_MODE !== 'true') {
     process.on('SIGTERM', async () => {
       await serviceRegistry.deregister();
-      shutdown('SIGTERM');
+      await shutdown('SIGTERM');
     });
     process.on('SIGINT', async () => {
       await serviceRegistry.deregister();
-      shutdown('SIGINT');
+      await shutdown('SIGINT');
     });
   }
 

@@ -4,8 +4,18 @@ import { resolve } from "path";
 
 dotenv.config({ path: resolve(process.cwd(), ".env") });
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL, ensure the database is provisioned");
+// ─── MIGRATION PIPE: Direct Connection ───────────────────────────────────────
+// NEVER run migrations through a transaction pooler.
+// DDL (CREATE TABLE, ALTER COLUMN, etc.) uses ACCESS EXCLUSIVE locks
+// that poolers cannot hold. Always use the direct connection line.
+// ───────────────────────────────────────────────────────────────────────────────
+
+const MIGRATION_URL = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
+if (!MIGRATION_URL) {
+  throw new Error(
+    "DATABASE_URL_DIRECT (or fallback DATABASE_URL) is not set. " +
+    "Migrations require a direct (non-pooled) database connection."
+  );
 }
 
 export default defineConfig({
@@ -13,6 +23,6 @@ export default defineConfig({
   schema: "./shared/schema.ts",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL,
+    url: MIGRATION_URL,
   },
 });

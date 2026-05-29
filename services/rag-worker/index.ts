@@ -4,11 +4,15 @@ import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-h
 import { createWorker } from '@shared/lib/worker';
 import { ragQueue, vectorOpsQueue } from '@shared/lib/queue';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
+import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
+import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
 
 const log = createLogger('RAG-WORKER');
+const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'rag-worker');
 const WORKER_NAME = 'RAG';
 
 async function startRagService() {
+  await serviceRegistry.register({ version: '1.0.0' });
   log.info('🧠 RAG Worker Service starting...');
 
   startWorkerHealthServer('rag-worker', parseInt(process.env.RAG_WORKER_PORT || process.env.PORT || '8083', 10));
@@ -64,14 +68,18 @@ async function startRagService() {
 
   log.info(`✅ BullMQ worker listening on [${ragQueue.name}]`);
 
+  // ── Health heartbeat ──────────────────────────────────────────────────────
+  startHeartbeat('rag-worker');
+
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down RAG Worker service...`);
+    try { await serviceRegistry.deregister(); } catch (_e) {}
     try { await ragMainWorker.close(); } catch (_e) {}
     process.exit(0);
   };
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGTERM', async () => { await shutdown('SIGTERM'); });
+  process.on('SIGINT',  async () => { await shutdown('SIGINT'); });
 
   log.info('🚀 RAG Worker Service fully online');
 }

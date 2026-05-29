@@ -13,6 +13,7 @@ import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import dns from 'dns';
 import { acquireDistributedLock, extendLock, isLockOwner, releaseLock, getRedisClient } from '@shared/lib/redis/redis.js';
 import { IMAP_KEYS, IMAP_TTL } from '@shared/lib/redis/imap-keys.js';
+import { WorkerDiscoveryRegistry } from '@shared/lib/monitoring/worker-discovery-registry.js';
 
 
 interface EmailConfig {
@@ -41,6 +42,12 @@ class ImapIdleManager {
     private readonly MIN_BACKOFF = 5000; // 5s initial retry
     private readonly MAX_BACKOFF = 15 * 60 * 1000; // 15m max
     private readonly ZOMBIE_TIMEOUT_MS = 120 * 60 * 1000; // 2 hours silence = zombie
+    // ─── Scaling: Connection throttle ────────────────────────────────────────────
+    // IDLE connections hold a permanent TCP socket + buffer. At 500 mailboxes this
+    // exhausts OS file descriptors (~1024 limit). Cap at 100 IDLE; overflow polls.
+    private readonly MAX_IDLE_CONNECTIONS = 100;
+    private pollingOnlyIntegrations: Map<string, { interval: NodeJS.Timeout; integration: Integration }> = new Map();
+    private discoveryRegistry = new WorkerDiscoveryRegistry('email-service');
 
     /**
      * Start the IMAP IDLE manager
@@ -94,6 +101,11 @@ class ImapIdleManager {
         this.connections.clear();
         this.folders.clear();
         this.lastActivity.clear();
+        // Stop all polling-fallback intervals
+        for (const [, entry] of this.pollingOnlyIntegrations.entries()) {
+            clearInterval(entry.interval);
+        }
+        this.pollingOnlyIntegrations.clear();
         console.log(`[ImapIdleManager] Stopped. Closed ${closed} connection(s).`);
     }
 
@@ -102,6 +114,10 @@ class ImapIdleManager {
      */
     public getRunningStatus(): boolean {
         return this.isRunning;
+    }
+
+    public async releaseAllMailboxClaims(): Promise<void> {
+        await this.discoveryRegistry.releaseAll();
     }
 
     /**
@@ -145,6 +161,12 @@ class ImapIdleManager {
         this.folders.delete(integrationId);
         this.syncing.delete(integrationId);
         this.backoffDelays.delete(integrationId);
+        // Also kill polling-fallback if this integration was in poll mode
+        const pollingEntry = this.pollingOnlyIntegrations.get(integrationId);
+        if (pollingEntry) {
+            clearInterval(pollingEntry.interval);
+            this.pollingOnlyIntegrations.delete(integrationId);
+        }
 
         // 4. Clear any pending reconnection timers
         const timer = this.reconnectTimers.get(integrationId);
@@ -160,7 +182,10 @@ class ImapIdleManager {
             }
         }
 
-        // 5. Notify frontend in real time so UI updates immediately
+        // 5. Release mailbox claim in worker discovery registry
+        this.discoveryRegistry.releaseMailbox(integrationId).catch(() => {});
+
+        // 6. Notify frontend in real time so UI updates immediately
         if (userId) {
             wsSync.notifySettingsUpdated(userId);
             wsSync.notifySyncStatus(userId, { syncing: false, integrationId, disconnected: true });
@@ -205,17 +230,45 @@ class ImapIdleManager {
                     }
                     this.connections.delete(integrationId);
                     this.folders.delete(integrationId);
+                    // Release mailbox claim so another worker can pick it up
+                    this.discoveryRegistry.releaseMailbox(integrationId).catch(() => {});
                 }
             }
 
-            // Add persistent IMAP IDLE connections for ALL active integrations:
-            // - custom_email: Password auth via encryptedMeta
-            // - gmail / outlook: XOAUTH2 via live OAuth token refresh
+            // Add IMAP connections — throttled:
+            // First MAX_IDLE_CONNECTIONS active mailboxes get real-time IDLE.
+            // Overflow gets 5-minute polling to avoid fd exhaustion.
             const supported = ['custom_email', 'gmail', 'outlook'];
-            for (const integration of integrations) {
-                if (integration.connected && supported.includes(integration.provider) && !this.connections.has(integration.id)) {
+            const activeMailboxes = integrations.filter(i => i.connected && supported.includes(i.provider));
+
+            // Cleanup stale polling-only entries (disconnected mailboxes)
+            for (const [id, entry] of this.pollingOnlyIntegrations.entries()) {
+                if (!activeIntegrationIds.has(id)) {
+                    clearInterval(entry.interval);
+                    this.pollingOnlyIntegrations.delete(id);
+                    console.log(`[IMAP] 📅 Removed polling fallback for disconnected integration ${id}`);
+                }
+            }
+
+            for (const integration of activeMailboxes) {
+                const alreadyIdle = this.connections.has(integration.id);
+                const alreadyPolling = this.pollingOnlyIntegrations.has(integration.id);
+                if (alreadyIdle || alreadyPolling) continue;
+
+                // Claim this mailbox in the worker discovery registry
+                const claimed = await this.discoveryRegistry.claimMailbox(integration.id);
+                if (!claimed) {
+                    console.log(`[IMAP] Integration ${integration.id} already owned by another worker — skipping`);
+                    continue;
+                }
+
+                const currentIdleCount = this.connections.size;
+                if (currentIdleCount < this.MAX_IDLE_CONNECTIONS) {
                     console.log(`🔌 Opening real-time IMAP IDLE connection for integration ${integration.id} (${integration.provider}, User: ${integration.userId})`);
                     this.setupConnection(integration.id, integration);
+                } else {
+                    // IDLE cap reached — use 5-min polling fallback
+                    this.startPollingFallback(integration.id, integration);
                 }
             }
         } catch (error) {
@@ -337,6 +390,34 @@ class ImapIdleManager {
                 spam: ['Spam', 'Junk', '[Gmail]/Spam']
             });
         }
+    }
+
+    /**
+     * Polling fallback for integrations beyond MAX_IDLE_CONNECTIONS cap.
+     * Fetches the last 50 unseen messages every 5 minutes instead of holding
+     * a permanent TCP socket. This prevents OS fd exhaustion at 500+ mailboxes.
+     */
+    private startPollingFallback(integrationId: string, integration: Integration): void {
+        const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+        console.log(`[IMAP] 📅 ${integrationId} (${integration.provider}) → polling fallback (IDLE cap ${this.MAX_IDLE_CONNECTIONS} reached). Polling every 5 min.`);
+        const poll = async () => {
+            try {
+                const { emailSyncQueue } = await import('@shared/lib/queues/email-sync-queue.js');
+                if (emailSyncQueue) {
+                    await emailSyncQueue.add('poll-fallback', {
+                        type: 'historical',
+                        integrationId: integration.id,
+                        userId: integration.userId,
+                        limit: 50,
+                    }, { removeOnComplete: true, removeOnFail: true });
+                }
+            } catch (err) {
+                console.debug(`[IMAP][poll] ${integrationId}: ${(err as Error).message}`);
+            }
+        };
+        poll(); // Initial poll immediately
+        const interval = setInterval(poll, POLL_INTERVAL_MS);
+        this.pollingOnlyIntegrations.set(integrationId, { interval, integration });
     }
 
     /**
@@ -927,6 +1008,18 @@ class ImapIdleManager {
                                     // If we detect a reply in the imported batch, fire a specific high-priority event
                                     const hasReply = emails.some(e => e.inReplyTo || (e.subject && e.subject.toLowerCase().startsWith('re:')));
                                     if (hasReply && direction === 'inbound') {
+                                        // Enqueue high-priority reply-detection job for instant AI processing
+                                        try {
+                                            const { emailSyncQueue } = await import('@shared/lib/queues/email-sync-queue.js');
+                                            if (emailSyncQueue) {
+                                                await emailSyncQueue.add('reply-detected', {
+                                                    type: 'reply-detected',
+                                                    integrationId,
+                                                    userId,
+                                                    hasReply: true,
+                                                }, { priority: 1 });
+                                            }
+                                        } catch (_e) {}
                                         wsSync.notifyActivityUpdated(userId, {
                                             type: 'reply_detected',
                                             integrationId,
@@ -1826,6 +1919,9 @@ class ImapIdleManager {
 // ── Graceful Shutdown ──────────────────────────────────────────────────────────
 process.on('SIGTERM', async () => {
     console.log('[ImapIdleManager] SIGTERM received. Cleaning up connections...');
+    try {
+        await imapIdleManager.releaseAllMailboxClaims();
+    } catch (_e) {}
     try {
         await imapIdleManager.stop();
     } catch (err: any) {

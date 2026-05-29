@@ -66,6 +66,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [isLoadingLeads, setIsLoadingLeads] = useState(false);
   const [syncLimit, setSyncLimit] = useState<number | 'all'>(1000);
   const [mailboxSearch, setMailboxSearch] = useState("");
+  const [mailboxRenderLimit, setMailboxRenderLimit] = useState(30);
 
   const [mailboxLimits, setMailboxLimits] = useState<Record<string, number>>({});
   const [mailboxMaxMultipliers, setMailboxMaxMultipliers] = useState<Record<string, number>>({});
@@ -89,8 +90,9 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   const [autoReplyBody, setAutoReplyBody] = useState("");
 
+  // Fetch only email mailboxes (not calendar/instagram) — reduces payload from 500-item full list
   const { data: integrations = [] } = useQuery<any[]>({
-    queryKey: ['/api/integrations'],
+    queryKey: ['/api/integrations', { provider: 'custom_email,gmail,outlook', connected: 'true' }],
     staleTime: 30_000,
   });
 
@@ -148,6 +150,9 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
       setSelectedMailboxes(availableMailboxes.map((mb: any) => mb.id));
     }
   }, [availableMailboxes]);
+
+  // Reset render window when user searches — show matches from top
+  useEffect(() => { setMailboxRenderLimit(30); }, [mailboxSearch]);
 
   // Forecast & Scaling Intelligence
   const activeFollowups = followups.filter(f => f.body.trim());
@@ -556,7 +561,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             {filteredWizardMailboxes.length === 0 && mailboxSearch && (
                               <p className="text-xs text-muted-foreground text-center py-4">No mailboxes match "{mailboxSearch}"</p>
                             )}
-                            {filteredWizardMailboxes.map(mb => {
+                            {filteredWizardMailboxes.slice(0, mailboxRenderLimit).map(mb => {
                               const isSelected = selectedMailboxes.includes(mb.id);
                               const safeCeiling = getSafeMailboxCeiling(mb);
                               return (
@@ -604,6 +609,16 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                 </div>
                               );
                             })}
+                            {filteredWizardMailboxes.length > mailboxRenderLimit && (
+                              <button
+                                type="button"
+                                onClick={() => setMailboxRenderLimit(n => n + 30)}
+                                className="w-full py-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground transition-colors border border-dashed border-border/40 rounded-xl"
+                              >
+                                + Load {Math.min(30, filteredWizardMailboxes.length - mailboxRenderLimit)} more &nbsp;
+                                <span className="opacity-50">({filteredWizardMailboxes.length - mailboxRenderLimit} remaining)</span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

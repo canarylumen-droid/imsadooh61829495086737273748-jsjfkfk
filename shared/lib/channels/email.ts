@@ -93,6 +93,9 @@ interface ParsedEmail {
   date?: Date;
 }
 
+import { CircuitBreaker, isTransientSMTPError, getCircuitBreaker } from '@shared/lib/monitoring/circuit-breaker.js';
+import { createStructuredLogger, generateCorrelationId } from '@shared/lib/monitoring/structured-logger.js';
+
 /**
  * Auto-discover SMTP/IMAP settings based on email address
  */
@@ -259,6 +262,21 @@ async function sendCustomSMTP(
     ? `"${config.from_name}" <${config.smtp_user}>`
     : config.smtp_user;
 
+  const correlationId = generateCorrelationId('smtp');
+  const smtpLog = createStructuredLogger('SMTP', {
+    correlationId,
+    mailboxId: integrationId || config.smtp_user,
+  });
+
+  // Circuit breaker: identify provider from host
+  const providerName = config.smtp_host?.split('.')[0] || 'unknown';
+  const breaker = getCircuitBreaker(providerName);
+
+  if (await breaker.isOpen()) {
+    smtpLog.error('SMTP circuit breaker OPEN — skipping send', { provider: providerName, to });
+    throw new Error(`SMTP circuit breaker OPEN for ${providerName}`);
+  }
+
   const MAX_RETRIES = 3;
   let lastError: any = null;
   let currentForcedPort: number | undefined;
@@ -267,16 +285,16 @@ async function sendCustomSMTP(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       if (attempt > 0) {
-        // Exponential backoff: 2s, 4s, 8s
+        // Exponential backoff: 2s, 4s, 8s (for all transient errors including 421/451)
         const delay = Math.pow(2, attempt) * 1000;
-        console.log(`[CustomSMTP] Retry attempt ${attempt} for`, to, `after ${delay}ms...`);
+        smtpLog.warn('SMTP retry attempt', { attempt, to, delayMs: delay, provider: providerName });
         await new Promise(res => setTimeout(res, delay));
       }
 
       // Re-acquire each iteration — pool may have been evicted by ENETUNREACH handler
       let transporter = smtpPools.get(cacheKey);
       if (!transporter || (currentForcedPort && (transporter as any).options?.port !== currentForcedPort)) {
-        console.log(`[CustomSMTP] ${currentForcedPort ? `Switching to port ${currentForcedPort}` : 'Re-creating'} connection pool for ${cacheKey} (attempt ${attempt + 1})`);
+        smtpLog.info('SMTP re-creating connection pool', { cacheKey, attempt: attempt + 1, port: currentForcedPort });
         transporter = createTransporterPool(currentForcedPort, currentForcedSecure);
         smtpPools.set(cacheKey, transporter);
       }
@@ -293,7 +311,8 @@ async function sendCustomSMTP(
       });
 
       // If we reach here, it worked!
-      console.log(`[CustomSMTP] ✅ Successfully sent to ${to} (Attempt ${attempt + 1}) - Message-ID: ${info.messageId}`);
+      smtpLog.info('SMTP send succeeded', { to, attempt: attempt + 1, messageId: info.messageId, provider: providerName });
+      await breaker.recordSuccess();
 
       // Attempt to save to "Sent" folder via background IMAP connection
       // We DO NOT await this because it can be slow and shouldn't block the actual email delivery
@@ -354,12 +373,21 @@ async function sendCustomSMTP(
       }
 
       if (attempt === MAX_RETRIES) {
-        console.error(`[CustomSMTP] ❌ Permanent failure sending to`, to, ':', error.message);
-        if (isTimeout) console.error(`[CustomSMTP] 💡 TIP: This is likely a firewall block. Try port 465 if using 587, or ask support to unblock port 587.`);
+        smtpLog.error('SMTP permanent failure after retries', { to, error: error.message, code: error.code, provider: providerName });
+        if (isTimeout) smtpLog.error('SMTP timeout tip: check firewall block on port 587/465', { provider: providerName });
+        // Record circuit breaker failure for transient errors on final attempt
+        if (isTransientSMTPError(error)) {
+          await breaker.recordFailure();
+        }
         throw error;
       }
-      
-      console.warn(`[CustomSMTP] ⚠️ Transient failure (Attempt ${attempt + 1}):`, error.message);
+
+      // Record transient failure for circuit breaker tracking on intermediate attempts too
+      if (isTransientSMTPError(error)) {
+        await breaker.recordFailure();
+      }
+
+      smtpLog.warn('SMTP transient failure', { to, attempt: attempt + 1, error: error.message, code: error.code, provider: providerName });
       lastError = error;
     }
   }

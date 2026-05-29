@@ -12,7 +12,7 @@
 import { Queue, Worker, Job } from 'bullmq';
 import { redisConnection, hasRedis, createFreshConnection } from './redis-config.js';
 export { hasRedis, redisConnection };
-import { db } from '@shared/lib/db/db.js';
+import { db, withDbRetry } from '@shared/lib/db/db.js';
 import {
   outreachCampaigns,
   campaignLeads,
@@ -22,6 +22,8 @@ import {
   integrations,
   pendingPayments,
   users,
+  campaignJobLogs,
+  jobAttempts,
 } from '@audnix/shared';
 import { eq, and, or, sql, lte, isNull, ne, asc, gt, desc } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
@@ -60,6 +62,7 @@ interface AutoReplyJobData {
   campaignLeadId: string;
   integrationId: string;
   leadId: string;
+  _jobId?: string; // stored so processAutoReply can update the correct campaignJobLogs row
 }
 
 interface AutonomousJobData {
@@ -153,9 +156,34 @@ export class CampaignQueueManager {
             integrationId: mbId,
             dailyLimit,
           },
-          opts: { delay: 5000, priority: 2, jobId: jobKey },
+          opts: { delay: 5000, priority: 2, jobId: jobKey, removeOnComplete: true, removeOnFail: { count: 1000 } },
         };
       });
+      // Write source-of-truth records to PostgreSQL BEFORE adding to BullMQ.
+      // If Redis crashes between this write and addBulk, the Watchdog detects
+      // 'pending' rows with no live BullMQ job and automatically re-queues them.
+      if (db) {
+        await withDbRetry(() => db.insert(campaignJobLogs).values(
+          bulkJobs.map(j => ({
+            jobBullmqId:     (j.opts as any).jobId as string,
+            campaignId:      campaign.id,
+            userId:          campaign.userId,
+            integrationId:   (j.data as any).integrationId,
+            campaignLeadId:  null as any,
+            jobType:         'campaign:send-batch',
+            stepIndex:       null as any,
+            status:          'pending' as const,
+            jobData:         j.data as Record<string, any>,
+            scheduledAt:     new Date(Date.now() + 5000),
+            updatedAt:       new Date(),
+          }))
+        ).onConflictDoUpdate({
+          target: campaignJobLogs.jobBullmqId,
+          set: { status: 'pending', scheduledAt: new Date(Date.now() + 5000), updatedAt: new Date() },
+        })).catch((e: any) =>
+          console.warn('[CampaignQueue] PG job log insert failed (non-fatal):', e.message)
+        );
+      }
       await campaignQueue.addBulk(bulkJobs);
     }
 
@@ -192,7 +220,9 @@ export class CampaignQueueManager {
         userId: campaign.userId
       }, {
         repeat: { pattern: '0 1 * * *' }, // Run daily at 1 AM UTC
-        jobId: preCraftKey.replace(/:/g, '-')
+        jobId: preCraftKey.replace(/:/g, '-'),
+        removeOnComplete: true,
+        removeOnFail: { count: 1000 },
       });
     }
 
@@ -393,6 +423,8 @@ export class CampaignQueueManager {
   ): Promise<void> {
     if (campaignQueue) {
       const jobId = `followup:${campaignId}:${campaignLeadId}:step${stepIndex}`;
+      // Write PG source-of-truth BEFORE Redis — if Redis crashes mid-add, the Watchdog can recover
+      await logJobPending(jobId, 'campaign:follow-up', campaignId, userId, integrationId, campaignLeadId, stepIndex, { type: 'campaign:follow-up', campaignId, userId, campaignLeadId, integrationId, stepIndex }, delayMs).catch(() => {});
       await campaignQueue.add(jobId, {
         type: 'campaign:follow-up',
         campaignId,
@@ -406,6 +438,8 @@ export class CampaignQueueManager {
         attempts: 5,
         priority: 1,
         backoff: { type: 'exponential', delay: 60_000 },
+        removeOnComplete: true,
+        removeOnFail: { count: 1000 },
       });
     } else {
       // [FALLBACK] Local setTimeout
@@ -455,17 +489,22 @@ export class CampaignQueueManager {
     if (campaignQueue) {
       const bucket = Math.floor(Date.now() / (5 * 60 * 1000)); // 5-min dedup window: collapses rapid re-triggers, allows new replies later
       const jobId = `autoreply:${campaignId}:${campaignLeadId}:${bucket}`;
-      await campaignQueue.add(jobId, {
-        type: 'campaign:auto-reply',
+      const jobData = {
+        type: 'campaign:auto-reply' as const,
         campaignId,
         userId,
         campaignLeadId,
         integrationId,
         leadId,
-      }, {
+        _jobId: jobId,
+      };
+      await logJobPending(jobId, 'campaign:auto-reply', campaignId, userId, integrationId, campaignLeadId, null, jobData, delayMs).catch(() => {});
+      await campaignQueue.add(jobId, jobData, {
         delay: delayMs,
         jobId,
         priority: 0,
+        removeOnComplete: true,
+        removeOnFail: { count: 1000 },
       });
     } else {
       // [FALLBACK] Local setTimeout
@@ -495,44 +534,77 @@ export const campaignQueueManager = new CampaignQueueManager();
 
 async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
   const data = job.data;
+  const jobId = job.id || 'unknown';
+  const jobName = data.type;
+  const attemptsMade = (job as any).attemptsMade ?? 0;
 
-  switch (data.type) {
-    case 'campaign:send-batch':
-      await processSendBatch(data);
-      break;
-    case 'campaign:follow-up':
-      await processFollowUp(data);
-      break;
-    case 'campaign:auto-reply':
-      await processAutoReply(data);
-      break;
-    case 'campaign:update-stats':
-      await processStatsUpdate(data);
-      break;
-    case 'campaign:pre-craft':
-      await processPreCraft(data);
-      break;
-    case 'autonomous':
-      try {
-        const { outreachEngine } = await import("@services/outreach-worker/workers/outreach-engine.js");
-        const { storage } = await import('@shared/lib/storage/storage.js');
-        
-        let integration = null;
-        if (data.integrationId) {
-          integration = await storage.getIntegrationById(data.integrationId);
+  // Log every worker execution attempt — this is the 1M+ scale audit trail
+  logJobAttempt(jobId, jobName, 'started', {
+    campaignId: (data as any).campaignId,
+    userId: (data as any).userId,
+    integrationId: (data as any).integrationId,
+    campaignLeadId: (data as any).campaignLeadId,
+    attemptNumber: attemptsMade + 1,
+  }).catch(() => {});
+
+  try {
+    switch (data.type) {
+      case 'campaign:send-batch':
+        await processSendBatch(data);
+        break;
+      case 'campaign:follow-up':
+        await processFollowUp(data);
+        break;
+      case 'campaign:auto-reply':
+        await processAutoReply(data);
+        break;
+      case 'campaign:update-stats':
+        await processStatsUpdate(data);
+        break;
+      case 'campaign:pre-craft':
+        await processPreCraft(data);
+        break;
+      case 'autonomous':
+        try {
+          const { outreachEngine } = await import("@services/outreach-worker/workers/outreach-engine.js");
+          const { storage } = await import('@shared/lib/storage/storage.js');
+          
+          let integration = null;
+          if (data.integrationId) {
+            integration = await storage.getIntegrationById(data.integrationId);
+          }
+          
+          // signature: processUserOutreach(userId, integration, isAutonomousExplicit)
+          await outreachEngine.processUserOutreach(data.userId, integration as any, data.isAutonomous);
+        } catch (err: any) {
+          console.error(`[CampaignWorker] Autonomous outreach failed for user ${data.userId}:`, err.message);
         }
-        
-        // signature: processUserOutreach(userId, integration, isAutonomousExplicit)
-        await outreachEngine.processUserOutreach(data.userId, integration as any, data.isAutonomous);
-      } catch (err: any) {
-        console.error(`[CampaignWorker] Autonomous outreach failed for user ${data.userId}:`, err.message);
-      }
-      break;
-    case 'system:cleanup-payments':
-      await processPaymentCleanup();
-      break;
-    default:
-      console.warn(`[CampaignWorker] Unknown job type: ${(data as any).type}`);
+        break;
+      case 'system:cleanup-payments':
+        await processPaymentCleanup();
+        break;
+      default:
+        console.warn(`[CampaignWorker] Unknown job type: ${(data as any).type}`);
+    }
+
+    logJobAttempt(jobId, jobName, 'completed', {
+      campaignId: (data as any).campaignId,
+      userId: (data as any).userId,
+      integrationId: (data as any).integrationId,
+      campaignLeadId: (data as any).campaignLeadId,
+      attemptNumber: attemptsMade + 1,
+    }).catch(() => {});
+  } catch (err: any) {
+    // Log the failure before re-throwing so BullMQ retry sees it in PG
+    logJobAttempt(jobId, jobName, 'failed', {
+      campaignId: (data as any).campaignId,
+      userId: (data as any).userId,
+      integrationId: (data as any).integrationId,
+      campaignLeadId: (data as any).campaignLeadId,
+      attemptNumber: attemptsMade + 1,
+      error: err.message || String(err),
+    }).catch(() => {});
+    throw err; // Let BullMQ handle retries as configured
   }
 }
 
@@ -647,7 +719,102 @@ async function rescheduleSendBatch(data: SendBatchJobData, delayMs: number): Pro
   if (!campaignQueue) return;
   const { campaignId, integrationId } = data;
   const jobKey = `send-batch_${campaignId}_${integrationId}`;
-  await campaignQueue.add(jobKey, data, { delay: delayMs, jobId: jobKey, priority: 2 });
+  // Upsert PG heartbeat BEFORE Redis so watchdog always sees a valid scheduled_at
+  await logJobPending(jobKey, 'campaign:send-batch', campaignId, data.userId, integrationId, null, null, data as Record<string, any>, delayMs).catch(() => {});
+  await campaignQueue.add(jobKey, data, { delay: delayMs, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
+}
+
+// ─── PostgreSQL Job Lifecycle Helpers (Self-Healing Watchdog) ─────────────────
+// Every helper is fire-and-forget (.catch(() => {})) — logging must never crash a worker.
+
+async function logJobPending(
+  jobBullmqId: string,
+  jobType: string,
+  campaignId: string,
+  userId: string,
+  integrationId: string | null,
+  campaignLeadId: string | null,
+  stepIndex: number | null,
+  jobData: Record<string, any>,
+  scheduledInMs: number
+): Promise<void> {
+  if (!db) return;
+  const scheduledAt = new Date(Date.now() + scheduledInMs);
+  await withDbRetry(() => db.insert(campaignJobLogs).values({
+    jobBullmqId,
+    campaignId,
+    userId,
+    integrationId,
+    campaignLeadId,
+    jobType,
+    stepIndex,
+    status: 'pending',
+    jobData,
+    scheduledAt,
+    updatedAt: new Date(),
+  }).onConflictDoUpdate({
+    target: campaignJobLogs.jobBullmqId,
+    set: { status: 'pending', scheduledAt, jobData, updatedAt: new Date() },
+  }));
+}
+
+async function markJobProcessing(jobBullmqId: string): Promise<void> {
+  if (!db) return;
+  await withDbRetry(() => db.update(campaignJobLogs)
+    .set({ status: 'processing', updatedAt: new Date() })
+    .where(and(eq(campaignJobLogs.jobBullmqId, jobBullmqId), ne(campaignJobLogs.status, 'sent'))));
+}
+
+async function markJobSent(jobBullmqId: string): Promise<void> {
+  if (!db) return;
+  await withDbRetry(() => db.update(campaignJobLogs)
+    .set({ status: 'sent', processedAt: new Date(), updatedAt: new Date() })
+    .where(eq(campaignJobLogs.jobBullmqId, jobBullmqId)));
+}
+
+async function markJobFailed(jobBullmqId: string, error: string): Promise<void> {
+  if (!db) return;
+  await withDbRetry(() => db.update(campaignJobLogs)
+    .set({ status: 'failed', lastError: error.substring(0, 500), updatedAt: new Date() })
+    .where(eq(campaignJobLogs.jobBullmqId, jobBullmqId)));
+}
+
+// ─── Per-Attempt Audit Trail (1M+ Scale) ─────────────────────────────────────
+// Writes a row to job_attempts at worker entry, success, and failure.
+// Fire-and-forget (.catch(() => {})) — logging must never crash a worker.
+async function logJobAttempt(
+  jobId: string,
+  jobName: string,
+  status: 'started' | 'completed' | 'failed',
+  opts: {
+    campaignId?: string;
+    userId?: string;
+    integrationId?: string | null;
+    campaignLeadId?: string | null;
+    attemptNumber?: number;
+    error?: string;
+    metadata?: Record<string, any>;
+  } = {}
+): Promise<void> {
+  if (!db) return;
+  try {
+    await withDbRetry(() => db!.insert(jobAttempts).values({
+      jobId,
+      jobName,
+      campaignId: opts.campaignId || null,
+      userId: opts.userId || null,
+      integrationId: opts.integrationId || null,
+      campaignLeadId: opts.campaignLeadId || null,
+      attemptNumber: opts.attemptNumber || 1,
+      status,
+      error: opts.error || null,
+      workerId: process.env.HOSTNAME || process.env.RAILWAY_REPLICA_ID || 'unknown',
+      metadata: opts.metadata || {},
+      updatedAt: new Date(),
+    }));
+  } catch (e: any) {
+    console.warn('[CampaignWorker] logJobAttempt failed (non-fatal):', e.message);
+  }
 }
 
 // ─── Job Processors ──────────────────────────────────────────────────────────
@@ -666,8 +833,8 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
   if (!db) return;
 
   const { campaignId, userId, integrationId, dailyLimit } = data;
-
-
+  // Mark as 'processing' in PG so the Watchdog knows this mailbox chain is active
+  markJobProcessing(`send-batch_${campaignId}_${integrationId}`).catch(() => {});
 
   // 1. Verify campaign is still active
   const [campaign] = await db.select().from(outreachCampaigns)
@@ -837,7 +1004,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
     if (soonestLeadResult.length > 0 && campaignQueue) {
       const delay = Math.max(60000, new Date(soonestLeadResult[0].nextActionAt!).getTime() - Date.now());
       const jobKey = `send-batch_${campaignId}_${integrationId}`;
-      await campaignQueue.add(jobKey, data, { delay, jobId: jobKey, priority: 2 });
+      await campaignQueue.add(jobKey, data, { delay, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
       console.log(`[CampaignQueue] 😴 No leads ready. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(delay/60000)}m`);
     } else {
       const routingPending = await db.select({ id: campaignLeads.id })
@@ -852,7 +1019,7 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
       if (routingPending.length > 0 && campaignQueue) {
         const jobKey = `send-batch_${campaignId}_${integrationId}`;
-        await campaignQueue.add(jobKey, data, { delay: 60_000, jobId: jobKey, priority: 2 });
+        await campaignQueue.add(jobKey, data, { delay: 60_000, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
         console.log(`[CampaignQueue] ⏳ Waiting for smart routing. Retrying mailbox ${integrationId.slice(-8)} in 1m`);
         return;
       }
@@ -875,9 +1042,9 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
 
       if (pendingLeads.length === 0) {
         console.log(`[CampaignWorker] 🎉 Campaign ${campaignId} has no more pending leads. Marking as completed.`);
-        await db.update(outreachCampaigns)
+        await withDbRetry(() => db.update(outreachCampaigns)
           .set({ status: 'completed' })
-          .where(eq(outreachCampaigns.id, campaignId));
+          .where(eq(outreachCampaigns.id, campaignId)));
         
         // Full Redis cleanup: removes heartbeat jobs + delayed follow-ups + failed records
         await campaignQueueManager.completeCampaign(campaignId);
@@ -904,14 +1071,14 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
     // Without this, 1K concurrent mailboxes can all read the same null-integrationId lead
     // and send to the same recipient multiple times.
     if (!leadEntry.integrationId || leadEntry.status === 'queued') {
-      const claimed = await db.update(campaignLeads)
+      const claimed = await withDbRetry(() => db.update(campaignLeads)
         .set({ integrationId, status: 'pending' })
         .where(and(
           eq(campaignLeads.id, leadEntry.id),
           or(isNull(campaignLeads.integrationId), eq(campaignLeads.integrationId, integrationId)),
           or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
         ))
-        .returning({ id: campaignLeads.id });
+        .returning({ id: campaignLeads.id }));
 
       if (claimed.length === 0) {
         continue; // Another mailbox worker claimed this lead first — skip it
@@ -928,9 +1095,9 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       if (probability === 0) {
         console.log(`[CampaignWorker] 😴 Lead ${lead.id.slice(-8)} is outside business window. Rescheduling.`);
         const nextCheck = new Date(Date.now() + 60 * 60 * 1000);
-        await db.update(campaignLeads)
+        await withDbRetry(() => db.update(campaignLeads)
           .set({ nextActionAt: nextCheck, status: 'queued' })
-          .where(eq(campaignLeads.id, leadEntry.id));
+          .where(eq(campaignLeads.id, leadEntry.id)));
         continue; 
       }
 
@@ -938,38 +1105,84 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       if (diceRoll > probability) {
         console.log(`[CampaignWorker] 🎲 Dice roll (${diceRoll.toFixed(2)}) > Prob (${probability}) for lead ${lead.id.slice(-8)}. Yielding.`);
         const retryAt = new Date(Date.now() + (15 + Math.random() * 15) * 60 * 1000);
-        await db.update(campaignLeads)
+        await withDbRetry(() => db.update(campaignLeads)
           .set({ nextActionAt: retryAt, status: 'queued' })
-          .where(eq(campaignLeads.id, leadEntry.id));
+          .where(eq(campaignLeads.id, leadEntry.id)));
         continue;
       }
     }
 
     // 7. FAULT-TOLERANT SEND
+    // All operations — delivery, stats, follow-up scheduling, mailbox reschedule —
+    // must succeed or fail atomically. If follow-up scheduling crashes, the lead
+    // stays retryable instead of appearing "sent" with a missing follow-up.
     try {
-      if (lead.channel === 'instagram') {
-        await deliverCampaignInstagram(userId, campaign, lead, leadEntry, integrationId);
+      // ── PG-LEVEL IDEMPOTENCY GUARD ────────────────────────────────────────
+      // This takes precedence over Redis locks. If campaignEmails already has a
+      // record for this lead + step, the email was sent. Skip delivery but still
+      // run post-send scheduling so a previous crash-after-send doesn't orphan
+      // the follow-up or mailbox reschedule.
+      const alreadySent = await db.select({ id: campaignEmails.id })
+        .from(campaignEmails)
+        .where(and(
+          eq(campaignEmails.campaignId, campaign.id),
+          eq(campaignEmails.leadId, lead.id),
+          eq(campaignEmails.stepIndex, leadEntry.currentStep)
+        ))
+        .limit(1);
+      if (alreadySent.length > 0) {
+        console.log(`[CampaignWorker] ⚡ PG idempotency: lead ${lead.id} step ${leadEntry.currentStep} already sent — skipping delivery.`);
       } else {
-        await deliverCampaignEmail(userId, campaign, lead, leadEntry, integrationId);
+        if (lead.channel === 'instagram') {
+          await deliverCampaignInstagram(userId, campaign, lead, leadEntry, integrationId);
+        } else {
+          await deliverCampaignEmail(userId, campaign, lead, leadEntry, integrationId);
+        }
       }
-      
+
       await resetCampaignFailureCount(campaignId);
-      await db!.update(integrations).set({ failureCount: 0 }).where(eq(integrations.id, integrationId));
-      
+      await withDbRetry(() => db!.update(integrations).set({ failureCount: 0 }).where(eq(integrations.id, integrationId)));
+
       // Debounced stats update: bucket by 30s window so at most one runs per 30s per campaign
-      // regardless of how many mailboxes fire simultaneously (prevents thousands of GROUP BY
-      // full-table-scans per hour on 100K-row campaign_leads tables).
       if (campaignQueue) {
         const bucket = Math.floor(Date.now() / 30000);
         await campaignQueue.add(
           `stats-${campaignId}`,
           { type: 'campaign:update-stats', campaignId, userId },
-          { jobId: `stats:${campaignId}:${bucket}`, delay: 3000, priority: 3 }
+          { jobId: `stats:${campaignId}:${bucket}`, delay: 3000, priority: 3, removeOnComplete: true, removeOnFail: { count: 1000 } }
         ).catch(() => {});
       } else {
         await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
       }
-      
+
+      // Schedule follow-up if there's a next step
+      const followupsArr = (campaign.template as any)?.followups || [];
+      const nextStep = leadEntry.currentStep + 1;
+      if (nextStep <= followupsArr.length) {
+        const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
+        let delayMs = delayDays * 24 * 60 * 60 * 1000;
+        const initialSentAt = leadEntry.metadata?.initialSentAt;
+        if (initialSentAt) {
+          const targetDate = new Date(initialSentAt);
+          targetDate.setDate(targetDate.getDate() + delayDays);
+          delayMs = Math.max(60000, targetDate.getTime() - Date.now());
+        }
+        await campaignQueueManager.scheduleFollowUp(campaignId, userId, leadEntry.id, integrationId, nextStep, delayMs);
+      }
+
+      wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
+
+      // Reschedule the mailbox for the next send
+      if (campaignQueue) {
+        const jobKey = `send-batch_${campaignId}_${integrationId}`;
+        const nextDelay = calcMailboxInterval(sentToday + 1, dailyLimit, currentIntegration);
+        await campaignQueue.add(jobKey, data, { delay: nextDelay, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
+        console.log(`[CampaignQueue] 🎯 Sent lead. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(nextDelay/60000)}m`);
+      }
+
+      didSend = true;
+      break; // Only one send per batch cycle to respect pacing
+
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
       console.error(`[CampaignWorker] ❌ Send failed for ${lead.email} via ${integrationId}: ${errorMsg}`);
@@ -981,9 +1194,9 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
       metadata.lastError = errorMsg;
 
       if (failCount >= 3) {
-        await db.update(campaignLeads)
+        await withDbRetry(() => db.update(campaignLeads)
           .set({ status: 'failed', error: `Max failures (3): ${errorMsg}`, metadata })
-          .where(eq(campaignLeads.id, leadEntry.id));
+          .where(eq(campaignLeads.id, leadEntry.id)));
         continue;
       }
 
@@ -992,44 +1205,16 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
           const integration = await storage.getIntegrationById(integrationId);
           if (integration) await mailboxHealthService.handleMailboxFailure(integration, errorMsg);
         }
-        await db.update(campaignLeads)
+        await withDbRetry(() => db.update(campaignLeads)
           .set({ integrationId: null, status: 'queued', error: errorMsg, metadata })
-          .where(eq(campaignLeads.id, leadEntry.id));
+          .where(eq(campaignLeads.id, leadEntry.id)));
       } else {
-        await db.update(campaignLeads)
+        await withDbRetry(() => db.update(campaignLeads)
           .set({ status: 'failed', error: errorMsg, metadata })
-          .where(eq(campaignLeads.id, leadEntry.id));
+          .where(eq(campaignLeads.id, leadEntry.id)));
       }
       continue;
     }
-
-    // Schedule follow-up if there's a next step
-    const followupsArr = (campaign.template as any)?.followups || [];
-    const nextStep = leadEntry.currentStep + 1;
-    if (nextStep <= followupsArr.length) {
-      const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
-      let delayMs = delayDays * 24 * 60 * 60 * 1000;
-      const initialSentAt = leadEntry.metadata?.initialSentAt;
-      if (initialSentAt) {
-        const targetDate = new Date(initialSentAt);
-        targetDate.setDate(targetDate.getDate() + delayDays);
-        delayMs = Math.max(60000, targetDate.getTime() - Date.now());
-      }
-      await campaignQueueManager.scheduleFollowUp(campaignId, userId, leadEntry.id, integrationId, nextStep, delayMs);
-    }
-
-    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
-    
-    // Reschedule the mailbox for the next send
-    if (campaignQueue) {
-      const jobKey = `send-batch_${campaignId}_${integrationId}`;
-      const nextDelay = calcMailboxInterval(sentToday + 1, dailyLimit, currentIntegration);
-      await campaignQueue.add(jobKey, data, { delay: nextDelay, jobId: jobKey, priority: 2 });
-      console.log(`[CampaignQueue] 🎯 Sent lead. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(nextDelay/60000)}m`);
-    }
-
-    didSend = true;
-    break; // Only one send per batch cycle to respect pacing
   }
 
   // If the loop completed without sending (all leads claimed by others,
@@ -1046,6 +1231,20 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   if (!db) return;
 
   const { campaignId, userId, campaignLeadId, integrationId, stepIndex } = data;
+  const followupJobId = `followup:${campaignId}:${campaignLeadId}:step${stepIndex}`;
+
+  // PG idempotency: skip if already sent — prevents duplicate send when the Watchdog re-queues this job
+  if (db) {
+    const [existing] = await db.select({ status: campaignJobLogs.status })
+      .from(campaignJobLogs)
+      .where(eq(campaignJobLogs.jobBullmqId, followupJobId))
+      .limit(1);
+    if (existing?.status === 'sent') {
+      console.log(`[CampaignWorker] ⚡ Idempotency: ${followupJobId} already sent — skipping.`);
+      return;
+    }
+    markJobProcessing(followupJobId).catch(() => {});
+  }
 
   // 1. Verify campaign is still active
   const [campaign] = await db.select().from(outreachCampaigns)
@@ -1158,7 +1357,20 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
 
   // 6. Deliver the follow-up email
   try {
-    await deliverCampaignEmail(userId, campaign, lead, { ...leadEntry, currentStep: stepIndex }, integrationId);
+    // ── PG-LEVEL IDEMPOTENCY GUARD ─────────────────────────────────────────
+    const alreadySent = await db.select({ id: campaignEmails.id })
+      .from(campaignEmails)
+      .where(and(
+        eq(campaignEmails.campaignId, campaign.id),
+        eq(campaignEmails.leadId, lead.id),
+        eq(campaignEmails.stepIndex, stepIndex)
+      ))
+      .limit(1);
+    if (alreadySent.length > 0) {
+      console.log(`[CampaignWorker] ⚡ PG idempotency: follow-up ${followupJobId} already sent — skipping delivery.`);
+    } else {
+      await deliverCampaignEmail(userId, campaign, lead, { ...leadEntry, currentStep: stepIndex }, integrationId);
+    }
 
     // 7. Schedule NEXT follow-up step if there are more
     const followupsArr = (campaign.template as any)?.followups || [];
@@ -1175,13 +1387,17 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
         delayMs = Math.max(60000, targetDate.getTime() - Date.now());
       }
 
+      // .catch() prevents a duplicate deterministic jobId from crashing the worker
       await campaignQueueManager.scheduleFollowUp(
         campaignId, userId, campaignLeadId, integrationId, nextStep,
         delayMs
-      );
+      ).catch((e: any) => {
+        console.warn(`[CampaignWorker] Follow-up schedule duplicate (harmless): ${e.message}`);
+      });
     }
 
     // 8. Real-time KPI push
+    markJobSent(followupJobId).catch(() => {});
     wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'followup_sent' });
     await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
   } catch (err: any) {
@@ -1195,16 +1411,17 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
 
     if (failCount >= 3) {
       console.error(`[CampaignWorker] 🛑 Follow-up reached max failure (3) for ${lead.email}. Killing lead.`);
-      await db.update(campaignLeads)
+      await withDbRetry(() => db.update(campaignLeads)
         .set({ status: 'failed', error: `Max follow-up failures: ${errorMsg}`, metadata })
-        .where(eq(campaignLeads.id, leadEntry.id));
+        .where(eq(campaignLeads.id, leadEntry.id)));
+      markJobFailed(followupJobId, `Max follow-up failures: ${errorMsg}`).catch(() => {});
       return;
     }
 
     // Re-queue for another attempt in 1 hour
-    await db.update(campaignLeads)
+    await withDbRetry(() => db.update(campaignLeads)
       .set({ metadata })
-      .where(eq(campaignLeads.id, leadEntry.id));
+      .where(eq(campaignLeads.id, leadEntry.id)));
 
     await campaignQueueManager.scheduleFollowUp(
       campaignId, userId, campaignLeadId, integrationId, stepIndex,
@@ -1220,6 +1437,8 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
   if (!db) return;
 
   const { campaignId, userId, campaignLeadId, integrationId, leadId } = data;
+  const autoreplyJobId = data._jobId || `autoreply:${campaignId}:${campaignLeadId}:unknown`;
+  markJobProcessing(autoreplyJobId).catch(() => {});
 
   // 2. Fetch campaign and verify status
   const [campaign] = await db.select().from(outreachCampaigns).where(eq(outreachCampaigns.id, campaignId));
@@ -1352,16 +1571,17 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
   const newMetadata = { ...(leadEntry.metadata as Record<string, any> || {}) };
   delete newMetadata.pendingAutoReply;
 
-  await db.update(campaignLeads)
+  await withDbRetry(() => db.update(campaignLeads)
     .set({
       metadata: newMetadata,
       updatedAt: new Date()
     })
-    .where(eq(campaignLeads.id, campaignLeadId));
+    .where(eq(campaignLeads.id, campaignLeadId)));
 
   // Stats
   await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
 
+  markJobSent(autoreplyJobId).catch(() => {});
   wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'auto_reply_sent' });
   wsSync.notifyCampaignStatsUpdated(userId, campaignId);
   wsSync.notifyStatsUpdated(userId);
@@ -1400,7 +1620,7 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
   });
 
   // Update campaign stats in DB
-  await db.update(outreachCampaigns)
+  await withDbRetry(() => db.update(outreachCampaigns)
     .set({ 
       stats: {
         total: stats.total || 0,
@@ -1410,7 +1630,7 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
       }, 
       updatedAt: new Date() 
     })
-    .where(eq(outreachCampaigns.id, campaignId));
+    .where(eq(outreachCampaigns.id, campaignId)));
 
   // X8 Fix: Check if campaign is complete.
   // A campaign is complete when ALL leads have been sent (no pending OR queued leads remain)
@@ -1427,9 +1647,9 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
       ));
 
     if (Number(pendingFollowUps[0]?.count || 0) === 0) {
-      await db.update(outreachCampaigns)
+      await withDbRetry(() => db.update(outreachCampaigns)
         .set({ status: 'completed', updatedAt: new Date() })
-        .where(eq(outreachCampaigns.id, campaignId));
+        .where(eq(outreachCampaigns.id, campaignId)));
 
       // Full Redis cleanup: removes heartbeat jobs + delayed follow-ups + failed records
       await campaignQueueManager.completeCampaign(campaignId);
@@ -1506,9 +1726,9 @@ async function deliverCampaignEmail(
         }
         // Increment counter in campaign stats
         stats.aiGeneratedCount = (stats.aiGeneratedCount || 0) + 1;
-        await db.update(outreachCampaigns)
+        await withDbRetry(() => db.update(outreachCampaigns)
           .set({ stats })
-          .where(eq(outreachCampaigns.id, campaign.id));
+          .where(eq(outreachCampaigns.id, campaign.id)));
       } catch (e) {
         console.warn(`[CampaignWorker] AI generation failed, using template fallback:`, e);
       }
@@ -1589,6 +1809,62 @@ async function deliverCampaignEmail(
 
   const trackingId = Math.random().toString(36).substring(2, 11);
 
+  // ── PRE-SEND IDEMPOTENCY WRITE ─────────────────────────────────────
+  // Insert BEFORE sendEmail so two concurrent workers racing past the SELECT
+  // guard are blocked at the DB layer by the unique index. We use status='sending'
+  // so a crashed worker leaves a recoverable stale record instead of a false 'sent'.
+  const insertResult = await withDbRetry(() => db!.insert(campaignEmails)
+    .values({
+      campaignId: campaign.id,
+      leadId: lead.id,
+      userId,
+      messageId: trackingId,
+      subject,
+      body,
+      stepIndex: leadEntry.currentStep,
+      status: 'sending',
+    })
+    .onConflictDoNothing({
+      target: [campaignEmails.campaignId, campaignEmails.leadId, campaignEmails.stepIndex],
+    })
+    .returning({ id: campaignEmails.id }));
+
+  if (insertResult.length === 0) {
+    // Conflict — check if it's a stale 'sending' record from a crashed worker
+    const [existing] = await db.select({ status: campaignEmails.status, sentAt: campaignEmails.sentAt })
+      .from(campaignEmails)
+      .where(and(
+        eq(campaignEmails.campaignId, campaign.id),
+        eq(campaignEmails.leadId, lead.id),
+        eq(campaignEmails.stepIndex, leadEntry.currentStep)
+      ))
+      .limit(1);
+
+    if (existing?.status === 'sent') {
+      console.log(`[CampaignWorker] ⚡ PG idempotency: lead ${lead.id} step ${leadEntry.currentStep} already sent by another worker — skipping.`);
+      return;
+    }
+
+    if (existing?.status === 'sending') {
+      const isStale = Date.now() - new Date(existing.sentAt).getTime() > 15 * 60 * 1000;
+      if (!isStale) {
+        console.log(`[CampaignWorker] ⏳ PG idempotency: lead ${lead.id} step ${leadEntry.currentStep} is actively being sent by another worker — skipping.`);
+        return;
+      }
+      // Stale — delete and continue so this retry can attempt delivery
+      console.log(`[CampaignWorker] 🧹 Stale 'sending' record found for lead ${lead.id} step ${leadEntry.currentStep} — cleaning up and retrying.`);
+      await withDbRetry(() => db!.delete(campaignEmails)
+        .where(and(
+          eq(campaignEmails.campaignId, campaign.id),
+          eq(campaignEmails.leadId, lead.id),
+          eq(campaignEmails.stepIndex, leadEntry.currentStep)
+        ))).catch(() => {});
+    } else {
+      console.log(`[CampaignWorker] ⚡ PG idempotency: lead ${lead.id} step ${leadEntry.currentStep} already sent by another worker — skipping.`);
+      return;
+    }
+  }
+
   // Phase 16: Send Guard (Idempotency)
   // Prevents duplicate sends if a job is retried by BullMQ after a partial timeout
   const { acquireLock, releaseLock } = await import('@shared/lib/redis/redis.js');
@@ -1625,6 +1901,7 @@ async function deliverCampaignEmail(
   let references: string | undefined = undefined;
   let threadId: string | undefined = undefined;
 
+  let emailSent = false;
   try {
     // Determine if this is a priority reply
     const isPriorityReply = leadEntry.currentStep > 0 && (lead.status === 'replied' || lead.status === 'interested' || lead.status === 'warm');
@@ -1666,9 +1943,20 @@ async function deliverCampaignEmail(
       threadId,
       replyTo: (campaign.config as any)?.replyTo
     });
-  } catch (err) {
+    emailSent = true;
+  } catch (err: any) {
     // Release lock on error so BullMQ retry can re-acquire it
     await releaseLock(lockKey);
+    // If sendEmail never succeeded, delete the pre-send idempotency record
+    // so the next BullMQ retry can attempt delivery again.
+    if (!emailSent) {
+      await withDbRetry(() => db!.delete(campaignEmails)
+        .where(and(
+          eq(campaignEmails.campaignId, campaign.id),
+          eq(campaignEmails.leadId, lead.id),
+          eq(campaignEmails.stepIndex, leadEntry.currentStep)
+        ))).catch(() => {});
+    }
     throw err;
   }
 
@@ -1717,18 +2005,6 @@ async function deliverCampaignEmail(
       }
     }, tx as any); // Pass transaction client to storage
 
-    // Detailed campaign email tracking
-    await tx.insert(campaignEmails).values({
-      campaignId: campaign.id,
-      leadId: lead.id,
-      userId,
-      messageId: trackingId,
-      subject,
-      body,
-      stepIndex: leadEntry.currentStep,
-      status: 'sent'
-    });
-
     // Update campaign lead status
     const newMetadata = { ...(leadEntry.metadata as Record<string, any> || {}) };
     
@@ -1763,6 +2039,15 @@ async function deliverCampaignEmail(
         metadata: newMetadata
       })
       .where(eq(campaignLeads.id, leadEntry.id));
+
+    // Promote campaignEmails from 'sending' to 'sent'
+    await tx.update(campaignEmails)
+      .set({ status: 'sent', sentAt: new Date() })
+      .where(and(
+        eq(campaignEmails.campaignId, campaign.id),
+        eq(campaignEmails.leadId, lead.id),
+        eq(campaignEmails.stepIndex, leadEntry.currentStep)
+      ));
 
     // Increment campaign sent count
     await tx.update(outreachCampaigns)
@@ -1829,40 +2114,104 @@ async function deliverCampaignInstagram(
     .replace(/{{lead_name}}/g, lead.name?.trim() || firstName)
     .replace(/{{company}}/g, company);
 
+  // ── PRE-SEND IDEMPOTENCY WRITE ─────────────────────────────────────
+  const igMessageId = `ig:${campaign.id}:${lead.id}:${leadEntry.currentStep}:${Date.now()}`;
+  const insertResult = await withDbRetry(() => db!.insert(campaignEmails)
+    .values({
+      campaignId: campaign.id,
+      leadId: lead.id,
+      userId,
+      messageId: igMessageId,
+      subject: 'Instagram DM',
+      body,
+      stepIndex: leadEntry.currentStep,
+      status: 'sending',
+    })
+    .onConflictDoNothing({
+      target: [campaignEmails.campaignId, campaignEmails.leadId, campaignEmails.stepIndex],
+    })
+    .returning({ id: campaignEmails.id }));
+
+  if (insertResult.length === 0) {
+    // Conflict — check if it's a stale 'sending' record from a crashed worker
+    const [existing] = await db.select({ status: campaignEmails.status, sentAt: campaignEmails.sentAt })
+      .from(campaignEmails)
+      .where(and(
+        eq(campaignEmails.campaignId, campaign.id),
+        eq(campaignEmails.leadId, lead.id),
+        eq(campaignEmails.stepIndex, leadEntry.currentStep)
+      ))
+      .limit(1);
+
+    if (existing?.status === 'sent') {
+      console.log(`[CampaignWorker] ⚡ PG idempotency (IG): lead ${lead.id} step ${leadEntry.currentStep} already sent by another worker — skipping.`);
+      return;
+    }
+
+    if (existing?.status === 'sending') {
+      const isStale = Date.now() - new Date(existing.sentAt).getTime() > 15 * 60 * 1000;
+      if (!isStale) {
+        console.log(`[CampaignWorker] ⏳ PG idempotency (IG): lead ${lead.id} step ${leadEntry.currentStep} is actively being sent by another worker — skipping.`);
+        return;
+      }
+      // Stale — delete and continue so this retry can attempt delivery
+      console.log(`[CampaignWorker] 🧹 Stale 'sending' record (IG) found for lead ${lead.id} step ${leadEntry.currentStep} — cleaning up and retrying.`);
+      await withDbRetry(() => db!.delete(campaignEmails)
+        .where(and(
+          eq(campaignEmails.campaignId, campaign.id),
+          eq(campaignEmails.leadId, lead.id),
+          eq(campaignEmails.stepIndex, leadEntry.currentStep)
+        ))).catch(() => {});
+    } else {
+      console.log(`[CampaignWorker] ⚡ PG idempotency (IG): lead ${lead.id} step ${leadEntry.currentStep} already sent by another worker — skipping.`);
+      return;
+    }
+  }
+
   // Phase 16: Send Guard (Idempotency)
   const { acquireLock, releaseLock } = await import('@shared/lib/redis/redis.js');
   const lockKey = `send_guard:ig:${campaign.id}:${lead.id}:${leadEntry.currentStep}`;
-  const hasLock = await acquireLock(lockKey, 300); // 5 minute guard
+  // BUG #3 FIX: Pass failOpen:true so sends proceed when Redis is unavailable.
+  const hasLock = await acquireLock(lockKey, 300, true);
 
   if (!hasLock) {
     console.warn(`[CampaignWorker] 🛡️ IG Send Guard triggered for campaign ${campaign.id}, lead ${lead.id}. Already sending...`);
     return;
   }
 
-  let result;
+  let result: any;
+  let igSent = false;
   try {
     result = await sendInstagramOutreach(userId, lead.id, body, {
       isAutonomous: true,
       metadata: { campaignId: campaign.id, step: leadEntry.currentStep, integrationId }
     });
-  } catch (err) {
+    igSent = true;
+  } catch (err: any) {
     await releaseLock(lockKey);
+    // If sendInstagramOutreach never succeeded, delete the pre-send idempotency record
+    // so the next BullMQ retry can attempt delivery again.
+    if (!igSent) {
+      await withDbRetry(() => db!.delete(campaignEmails)
+        .where(and(
+          eq(campaignEmails.campaignId, campaign.id),
+          eq(campaignEmails.leadId, lead.id),
+          eq(campaignEmails.stepIndex, leadEntry.currentStep)
+        ))).catch(() => {});
+    }
     throw err;
   }
 
   // Phase 17: Atomic Post-Send Transaction
   await db!.transaction(async (tx: any) => {
-    // Track Instagram message in campaign history
-    await tx.insert(campaignEmails).values({
-      campaignId: campaign.id,
-      leadId: lead.id,
-      userId,
-      messageId: result.messageId,
-      subject: 'Instagram DM',
-      body,
-      stepIndex: leadEntry.currentStep,
-      status: 'sent'
-    });
+    // Promote campaignEmails from 'sending' to 'sent' and update with real messageId
+    await tx.update(campaignEmails)
+      .set({ status: 'sent', messageId: result?.messageId || igMessageId, sentAt: new Date() })
+      .where(and(
+        eq(campaignEmails.campaignId, campaign.id),
+        eq(campaignEmails.leadId, lead.id),
+        eq(campaignEmails.stepIndex, leadEntry.currentStep)
+      ));
 
     // Update lead status
     const nextStep = leadEntry.currentStep + 1;
@@ -1970,9 +2319,9 @@ async function processPreCraft(data: PreCraftJobData): Promise<void> {
 
         // Save to metadata
         const metadata = { ...(leadEntry.metadata as any || {}), preCraftedCopy: preCraftedBody, preCraftedAt: new Date().toISOString() };
-        await db.update(campaignLeads)
+        await withDbRetry(() => db.update(campaignLeads)
           .set({ metadata })
-          .where(eq(campaignLeads.id, leadEntry.id));
+          .where(eq(campaignLeads.id, leadEntry.id)));
 
       } catch (err: any) {
         console.warn(`[PreCraft] Failed for lead ${lead.id.slice(-8)}:`, err.message);
@@ -1982,11 +2331,11 @@ async function processPreCraft(data: PreCraftJobData): Promise<void> {
 }
 
 async function resetCampaignFailureCount(campaignId: string): Promise<void> {
-  await db!.update(outreachCampaigns)
+  await withDbRetry(() => db!.update(outreachCampaigns)
     .set({
       stats: sql`jsonb_set(stats, '{consecutive_failures}', '0')`,
     })
-    .where(eq(outreachCampaigns.id, campaignId));
+    .where(eq(outreachCampaigns.id, campaignId)));
 }
 
 /**
@@ -1998,25 +2347,25 @@ async function handleCampaignFailure(campaignId: string): Promise<void> {
 
   // Atomic increment at DB level to prevent race conditions when multiple
   // mailbox workers fail simultaneously (1K mailboxes = up to 1K concurrent workers).
-  await db!.update(outreachCampaigns)
+  await withDbRetry(() => db!.update(outreachCampaigns)
     .set({
       stats: sql`jsonb_set(stats, '{consecutive_failures}', ((COALESCE((stats->>'consecutive_failures')::int, 0) + 1))::text::jsonb)`,
     })
-    .where(eq(outreachCampaigns.id, campaignId));
+    .where(eq(outreachCampaigns.id, campaignId)));
 
   // Re-read the actual value after atomic increment
-  const [updated] = await db!.select({ stats: outreachCampaigns.stats })
+  const [updated] = await withDbRetry(() => db!.select({ stats: outreachCampaigns.stats })
     .from(outreachCampaigns)
-    .where(eq(outreachCampaigns.id, campaignId));
+    .where(eq(outreachCampaigns.id, campaignId)));
   const currentFailures = Number((updated.stats as any)?.consecutive_failures || 0);
 
   // Threshold: 3 consecutive failures aborts/pauses the campaign
   if (currentFailures >= 3) {
     console.error(`[CampaignWorker] 🚨 CIRCUIT BREAKER: Campaign ${campaignId} hit 3 failures. PAUSING.`);
     await campaignQueueManager.pauseCampaign(campaignId);
-    await db!.update(outreachCampaigns)
+    await withDbRetry(() => db!.update(outreachCampaigns)
       .set({ status: 'paused', updatedAt: new Date() })
-      .where(eq(outreachCampaigns.id, campaignId));
+      .where(eq(outreachCampaigns.id, campaignId)));
       
     // Notify user - via storage helper if exists, or system message
     await storage.createNotification({
@@ -2061,11 +2410,11 @@ async function handleAutonomousTesting(
       { id: 'v3_hybrid', subject: aiResult.alternatives[1] || `Question regarding ${lead.company || 'your team'}`, body: aiResult.body }
     ];
     
-    await db.update(outreachCampaigns)
+    await withDbRetry(() => db.update(outreachCampaigns)
       .set({ 
         metadata: { ...metadata, testing_variants: variants, testing_phase: 'active' } 
       })
-      .where(eq(outreachCampaigns.id, campaign.id));
+      .where(eq(outreachCampaigns.id, campaign.id)));
   }
 
   // Deterministic assignment for the testing pool
@@ -2090,7 +2439,7 @@ async function processPaymentCleanup(): Promise<void> {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   
-  const result = await db.update(pendingPayments)
+  const result = await withDbRetry(() => db.update(pendingPayments)
     .set({ status: 'expired', updatedAt: new Date() })
     .where(
       and(
@@ -2100,7 +2449,7 @@ async function processPaymentCleanup(): Promise<void> {
           lte(pendingPayments.expiresAt, new Date())
         )
       )
-    ).returning();
+    ).returning());
     
   if (result.length > 0) {
     console.log(`[CleanupWorker] ✅ Marked ${result.length} stale payment links as expired.`);
@@ -2112,14 +2461,14 @@ export const campaignWorker = hasRedis ? new Worker<CampaignJobData>(
   processCampaignJob,
   {
     connection: createFreshConnection(), // dedicated connection — never shares socket with queues or other workers
-    concurrency: parseInt(process.env.CAMPAIGN_CONCURRENCY || '50', 10),  // 50 slots — handles 100+ mailboxes comfortably
+    concurrency: parseInt(process.env.CAMPAIGN_CONCURRENCY || '5', 10),  // 5 slots — safe for small DB instances (1–2 GB)
     lockDuration:    parseInt(process.env.CAMPAIGN_LOCK_DURATION_MS    || '120000',  10), // 2min — AI generation + SMTP can take >30s
     stalledInterval: parseInt(process.env.CAMPAIGN_STALLED_INTERVAL_MS || '300000',  10), // 5min — prevents false duplicate-send retries
     maxStalledCount: parseInt(process.env.CAMPAIGN_MAX_STALLED_COUNT   || '3',       10), // tolerate 3 stalls before hard-failing job
     limiter: {
       // Prevents thundering-herd when 100+ mailbox jobs come due simultaneously on restart.
       // Set well above concurrency so normal operation is never throttled.
-      max: parseInt(process.env.CAMPAIGN_RATE_MAX || '60', 10),
+      max: parseInt(process.env.CAMPAIGN_RATE_MAX || '15', 10),  // throttled for small instances
       duration: 1000,
     },
     removeOnComplete: true,   // successful jobs are purged from Redis instantly — zero RAM spent on them
@@ -2167,18 +2516,41 @@ if (campaignWorker) {
       console.error('[CampaignWorker] Audit log failed (non-fatal):', auditErr.message);
     }
 
+    // Pre-compute retry exhaustion status (needed by both state safety and cleanup)
+    const attemptsMade  = job?.attemptsMade ?? 0;
+    const maxAttempts   = (job?.opts as any)?.attempts ?? 3;
+    const isPermanentlyFailed = attemptsMade >= maxAttempts;
+    const campaignIdForCleanup = (job?.data as any)?.campaignId;
+
     // Circuit Breaker: Increment campaign failure count
-    if (jobType === 'campaign:send-batch' && (job?.data as any)?.campaignId) {
-      await handleCampaignFailure((job!.data as any).campaignId);
+    if (jobType === 'campaign:send-batch' && campaignIdForCleanup) {
+      await handleCampaignFailure(campaignIdForCleanup);
+    }
+
+    // ── STATE SAFETY: Reconcile campaignLeads.status on permanent failure ──
+    // If a job bubbles up an unhandled error, Postgres must still reflect the
+    // terminal state. This ensures no lead stays 'pending' when it is dead.
+    if (isPermanentlyFailed) {
+      const leadId = (job?.data as any)?.campaignLeadId;
+      if (leadId && campaignIdForCleanup && db) {
+        try {
+          await withDbRetry(() => db.update(campaignLeads)
+            .set({
+              status: 'failed',
+              error: `[Worker Terminal] ${err.message.substring(0, 240)}`,
+              updatedAt: new Date(),
+            })
+            .where(eq(campaignLeads.id, leadId)));
+          console.log(`[CampaignWorker] 💀 Reconciled campaignLead ${leadId} to 'failed' after terminal job failure.`);
+        } catch (reconcileErr: any) {
+          console.error('[CampaignWorker] Lead reconciliation failed (non-fatal):', reconcileErr.message);
+        }
+      }
     }
 
     // Late-retry cleanup: if this job has exhausted ALL attempts and the campaign is already
     // completed, purge the failed record from Redis immediately.
     // This closes the gap where completeCampaign() ran before these retries finished.
-    const attemptsMade  = job?.attemptsMade ?? 0;
-    const maxAttempts   = (job?.opts as any)?.attempts ?? 3;
-    const isPermanentlyFailed = attemptsMade >= maxAttempts;
-    const campaignIdForCleanup = (job?.data as any)?.campaignId;
 
     if (isPermanentlyFailed && campaignIdForCleanup && job) {
       try {
@@ -2197,7 +2569,7 @@ if (campaignWorker) {
     }
   });
 
-  console.log('✅ BullMQ Campaign Queue Worker initialized (concurrency: 25)');
+  console.log(`✅ BullMQ Campaign Queue Worker initialized (concurrency: ${parseInt(process.env.CAMPAIGN_CONCURRENCY || '5', 10)})`);
 
   // Initialize Autonomous Scaler (Daily Optimization Cycle)
   // Using dynamic import with a safer relative path for the worker context
@@ -2216,7 +2588,9 @@ if (campaignWorker) {
   if (campaignQueue) {
     campaignQueue.add('global-payment-cleanup', { type: 'system:cleanup-payments' }, {
       repeat: { pattern: '0 2 * * *' },
-      jobId: 'global-payment-cleanup'
+      jobId: 'global-payment-cleanup',
+      removeOnComplete: true,
+      removeOnFail: { count: 1000 },
     }).catch(err => console.error('Failed to schedule payment cleanup:', err.message));
   }
 

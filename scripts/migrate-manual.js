@@ -11,32 +11,38 @@ const __dirname = dirname(__filename);
 async function runMigration() {
     console.log("Starting migration script...");
     
-    // Try to load .env if available
+    // ─── MIGRATION PIPE: Direct Connection ────────────────────────────────────
+    // Migrations MUST use DATABASE_URL_DIRECT (non-pooled).
+    // DDL locks are incompatible with transaction poolers.
+    // ──────────────────────────────────────────────────────────────────────────
     const envPath = resolve(process.cwd(), '.env');
-    let DATABASE_URL = process.env.DATABASE_URL;
+    let MIGRATION_URL = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
 
-    if (fs.existsSync(envPath) && !DATABASE_URL) {
+    if (fs.existsSync(envPath) && !MIGRATION_URL) {
          try {
              const b = fs.readFileSync(envPath);
              const envContent = b[0] === 255 && b[1] === 254 ? b.toString('utf16le') : b.toString('utf8');
-             const dbUrlMatch = envContent.match(/DATABASE_URL=(.+)/m);
+             // Prefer DIRECT line; fall back to legacy DATABASE_URL
+             const directMatch = envContent.match(/DATABASE_URL_DIRECT=(.+)/m);
+             const fallbackMatch = envContent.match(/DATABASE_URL=(.+)/m);
+             const dbUrlMatch = directMatch || fallbackMatch;
              if (dbUrlMatch) {
-                DATABASE_URL = dbUrlMatch[1].trim().replace(/^["']|["']$/g, '');
+                MIGRATION_URL = dbUrlMatch[1].trim().replace(/^["']|["']$/g, '');
              }
          } catch (e) {
              console.warn("Failed to read .env file:", e);
          }
     }
 
-    if (!DATABASE_URL) {
-        console.error('DATABASE_URL is not set. Cannot run migrations.');
+    if (!MIGRATION_URL) {
+        console.error('DATABASE_URL_DIRECT is not set. Migrations require a direct (non-pooled) database connection.');
         process.exit(1);
     }
 
-    console.log('Connecting to database...');
-    const dbUrl = new URL(DATABASE_URL);
+    console.log('[Migrate] Connecting via DIRECT line...');
+    const dbUrl = new URL(MIGRATION_URL);
     
-    if (DATABASE_URL.includes('neon.tech')) {
+    if (MIGRATION_URL.includes('neon.tech')) {
         dbUrl.searchParams.set('uselibpqcompat', 'true');
         if (!dbUrl.searchParams.has('sslmode')) {
             dbUrl.searchParams.set('sslmode', 'require');
@@ -52,9 +58,10 @@ async function runMigration() {
 
     const client = new pg.Client({
         connectionString,
-        ssl: DATABASE_URL.includes('neon.tech') || process.env.NODE_ENV === "production"
-            ? { rejectUnauthorized: false } 
-            : false
+        // RDS and cloud Postgres always require SSL. Only disable for local dev (localhost/127.0.0.1).
+        ssl: MIGRATION_URL.includes('localhost') || MIGRATION_URL.includes('127.0.0.1')
+            ? false
+            : { rejectUnauthorized: false }
     });
 
     const migrationsFolder = resolve(__dirname, '../migrations');

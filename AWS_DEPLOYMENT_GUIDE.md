@@ -18,9 +18,11 @@
 8. [Step 6: Setup SSL (HTTPS)](#step-6-setup-ssl-https)
 9. [Step 7: Verify Everything Works](#step-7-verify-everything-works)
 10. [Step 8: Setup CI/CD (Optional)](#step-8-setup-cicd-optional)
-11. [Monitoring & Maintenance](#monitoring--maintenance)
-12. [Troubleshooting](#troubleshooting)
-13. [Architecture](#architecture)
+11. [EKS: Sharded IMAP for 500+ Mailboxes (Enterprise)](#eks-sharded-imap-for-500-mailboxes-enterprise)
+12. [ECS Fargate: Zero-Downtime Worker Migration](#ecs-fargate-zero-downtime-worker-migration)
+13. [Monitoring & Maintenance](#monitoring--maintenance)
+14. [Troubleshooting](#troubleshooting)
+15. [Architecture](#architecture)
 
 ---
 
@@ -589,7 +591,384 @@ These are **separate costs** on top of AWS:
 
 ---
 
-## 👥 User Capacity
+## � EKS: Sharded IMAP for 500+ Mailboxes (Enterprise)
+
+If you need **true real-time reply detection across 500+ mailboxes**, the single-EC2 "unified mode" will not work. You need **Amazon EKS (Kubernetes)** with a dedicated, horizontally-scaled IMAP worker cluster.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Amazon EKS Cluster                                │
+│                                                                             │
+│  ┌─────────────┐     ┌────────────────────┐     ┌────────────────────────┐   │
+│  │   ALB/NLB   │────▶│  API Gateway Pods  │     │  IMAP Worker Pods      │   │
+│  │   (HTTPS)   │     │  (replicas: 3)     │     │  (StatefulSet: 5-20) │   │
+│  └─────────────┘     └────────────────────┘     │  • Pod-0: 50 mailboxes │   │
+│                                                  │  • Pod-1: 50 mailboxes │   │
+│  ┌─────────────┐     ┌────────────────────┐       │  • Pod-N: 50 mailboxes │   │
+│  │ ElastiCache │◀───▶│  Outreach Worker   │     └────────────────────────┘   │
+│  │  (Redis)    │     │  (replicas: 3)       │                                  │
+│  └─────────────┘     └────────────────────┘     ┌────────────────────────┐   │
+│                                                  │  Brain Worker Pods     │   │
+│  ┌─────────────┐     ┌────────────────────┐      │  (replicas: 2)         │   │
+│  │   RDS       │◀───▶│  Other Workers     │      └────────────────────────┘   │
+│  │ (Postgres)  │     └────────────────────┘                                  │
+│  └─────────────┘                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why This Works
+
+- **Each IMAP pod holds max 50 IDLE connections** (not 500 in one process)
+- **Pod crash?** Only 50 mailboxes go dark. Global watchdog detects stale worker in 5 min and reclaims orphans to healthy pods.
+- **Need more mailboxes?** KEDA sees orphan list growing → spins up new pods automatically.
+- **Memory safe:** Each pod has a 700MB heap guard. If a spam mailbox spikes memory, that pod stops accepting new connections — others unaffected.
+
+### Deploy Steps
+
+#### 1. Create EKS Cluster
+
+```bash
+# Install eksctl: https://eksctl.io/installation/
+# Install kubectl + aws-cli
+
+eksctl create cluster \
+  --name audnix-prod \
+  --region us-east-1 \
+  --node-type t3.large \
+  --nodes 3 --nodes-min 3 --nodes-max 10 \
+  --managed
+```
+
+#### 2. Install KEDA (for Redis-based autoscaling)
+
+```bash
+kubectl apply --server-side -f https://github.com/kedacore/keda/releases/download/v2.15.0/keda-2.15.0.yaml
+```
+
+#### 3. Deploy Secrets
+
+```bash
+kubectl create namespace audnix
+kubectl create secret generic audnix-secrets \
+  --from-literal=database-url='postgresql://...' \
+  --from-literal=redis-url='rediss://...' \
+  --from-literal=redis-password='...' \
+  --from-literal=encryption-key='...' \
+  --namespace audnix
+```
+
+#### 4. Deploy IMAP Worker StatefulSet + KEDA Scaler
+
+```bash
+kubectl apply -f k8s/imap-worker-statefulset.yaml -n audnix
+kubectl apply -f k8s/imap-worker-keda.yaml -n audnix
+```
+
+#### 5. Verify
+
+```bash
+# Check pods are running
+kubectl get pods -n audnix -l app=audnix-imap-worker
+
+# Check KEDA is scaling
+kubectl get scaledobject -n audnix
+kubectl get hpa -n audnix
+
+# Check a pod's health
+kubectl port-forward pod/audnix-imap-worker-0 3001:3001 -n audnix
+curl http://localhost:3001/health
+```
+
+### Environment Variables
+
+| Variable | Value | Purpose |
+|----------|-------|---------|
+| `IMAP_DYNAMIC_SHARDING` | `true` | K8s mode: all pods compete via Redis claim |
+| `IMAP_MAX_SOCKETS` | `50` | Max IDLE connections per pod |
+| `IMAP_MAX_HEAP_MB` | `700` | Memory guard per pod |
+| `POD_ORDINAL` | From `metadata.name` | Stable pod identity (`pod-name-0`, `pod-name-1`...) |
+
+### Scaling Math
+
+| Mailboxes | Pods Needed | EKS Nodes | Monthly Cost |
+|-----------|-------------|-----------|--------------|
+| 250 | 5 | 3 × t3.large | ~$200 |
+| 500 | 10 | 5 × t3.large | ~$350 |
+| 1,000 | 20 | 8 × t3.large | ~$600 |
+
+*Costs: EKS control plane ($72/mo) + nodes + ElastiCache Redis ($15-50/mo) + RDS Postgres ($15-100/mo).*
+
+### Monitoring
+
+```bash
+# Real-time pod metrics
+kubectl top pods -n audnix
+
+# IMAP connections per pod
+for pod in $(kubectl get pods -n audnix -l app=audnix-imap-worker -o name); do
+  echo "=== $pod ==="
+  kubectl exec -n audnix $pod -- curl -s localhost:3001/health | jq
+  echo
+done
+
+# Check Redis orphans (should be 0 in steady state)
+kubectl run -it --rm redis-cli --image=redis:7-alpine -- redis-cli -h <redis-host> -a <password> LLEN imap:orphans
+```
+
+---
+
+## 🚀 ECS Fargate: Zero-Downtime Worker Migration
+
+For production-grade reliability, migrate all worker services from Railway / single-EC2 to **AWS ECS on Fargate**. This gives you serverless compute, automatic restarts, and rolling deployments with zero downtime.
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              AWS Cloud                                        │
+│                                                                             │
+│  ┌─────────────┐     ┌─────────────────────────────────────────────────┐   │
+│  │   Route 53  │────▶│  Application Load Balancer (HTTPS)              │   │
+│  └─────────────┘     └─────────────────────────────────────────────────┘   │
+│                                    │                                       │
+│  ┌─────────────────────────────────────────────────────────────────────┐  │
+│  │                     Amazon ECS Cluster (Fargate)                      │  │
+│  │                                                                     │  │
+│  │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │  │
+│  │  │   API    │ │ Outreach │ │  Brain   │ │  Email   │ │   IMAP   │  │  │
+│  │  │ Gateway  │ │ Worker   │ │ Worker   │ │ Worker   │ │ Worker   │  │  │
+│  │  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘  │  │
+│  │                                                                     │  │
+│  └─────────────────────────────────────────────────────────────────────┘  │
+│                                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐                        │
+│  │ ElastiCache │  │ RDS Postgres│  │ CloudWatch  │                        │
+│  │   (Redis)   │  │  (Pooled)   │  │   (Logs)    │                        │
+│  └─────────────┘  └─────────────┘  └─────────────┘                        │
+│                                                                             │
+│  ┌─────────────┐  ┌─────────────┐                                         │
+│  │     ECR     │◀─│ GitHub Actions│                                         │
+│  │  (Images)   │  │   (CI/CD)     │                                         │
+│  └─────────────┘  └─────────────┘                                         │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Why ECS Fargate?
+
+| Feature | Railway / EC2 | ECS Fargate |
+|---------|--------------|-------------|
+| **Scaling** | Manual / Script | Target Tracking (CPU/Memory) |
+| **Restart** | Crash = downtime | Auto-restart within 30s |
+| **Deploy** | SSH + restart | Rolling update, zero downtime |
+| **Cost** | $65/mo fixed | Pay per use (~$50-150/mo) |
+| **Health** | Process logs | CloudWatch + ALB health checks |
+
+### Infrastructure Prerequisites
+
+Before deploying, create the following AWS resources:
+
+#### 1. VPC & Networking
+
+Create a VPC with public + private subnets across 2+ AZs for ALB + Fargate.
+
+#### 2. ElastiCache Redis (Cluster Mode)
+
+```bash
+aws elasticache create-replication-group \
+  --replication-group-id audnix-redis \
+  --replication-group-description "Audnix Redis cluster" \
+  --engine redis \
+  --cache-node-type cache.t3.micro \
+  --num-cache-clusters 2 \
+  --automatic-failover-enabled \
+  --multi-az-enabled
+```
+
+> Use `rediss://` (TLS) in production. Update `REDIS_URL` with the ElastiCache endpoint.
+
+#### 3. RDS Postgres (Pooled + Direct)
+
+| URL | Purpose | Pool Size |
+|-----|---------|-----------|
+| `DATABASE_URL_POOL` | Application / Workers | 60 per task |
+| `DATABASE_URL_DIRECT` | Migrations / DDL | 5 |
+
+#### 4. Secrets Manager
+
+Store all secrets in **AWS Secrets Manager** (never hardcode in task definitions):
+
+```bash
+aws secretsmanager create-secret --name audnix/db-pool-url --secret-string "postgresql://..."
+aws secretsmanager create-secret --name audnix/redis-url     --secret-string "rediss://..."
+aws secretsmanager create-secret --name audnix/session-secret --secret-string "..."
+aws secretsmanager create-secret --name audnix/encryption-key --secret-string "..."
+```
+
+#### 5. ECR Repository
+
+```bash
+aws ecr create-repository --repository-name audnix-ai --region us-east-1
+```
+
+### Task Definition (`aws/ecs/task-definition.json`)
+
+The task definition is parameterized. Replace `${...}` placeholders via `envsubst` or the GitHub Actions workflow before registering.
+
+Key settings for zero-downtime:
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `cpu` | `1024` (1 vCPU) | Fargate minimum; scales vertically |
+| `memory` | `3072` (3 GB) | Leaves headroom for AI + IMAP buffers |
+| `nofile` | `65536` | 500+ mailboxes need many TCP sockets |
+| `healthCheck` | `/health` every 30s | ECS waits for 200 OK before routing |
+| `awslogs` | CloudWatch | Centralized logging for all workers |
+| `secrets` | Secrets Manager | No env var leakage in task def |
+
+Register the task definition:
+
+```bash
+# Replace placeholders
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export AWS_REGION=us-east-1
+export IMAGE_TAG=$(git rev-parse --short HEAD)
+export APP_ROLE=imap   # or api, outreach, ai, etc.
+
+envsubst < aws/ecs/task-definition.json > task-def-rendered.json
+aws ecs register-task-definition --cli-input-json file://task-def-rendered.json
+```
+
+### Service Deployment with Rolling Updates
+
+Create each ECS service with **deployment circuit breaker** and **rolling update**:
+
+```bash
+aws ecs create-service \
+  --cluster audnix-prod \
+  --service-name audnix-imap-worker \
+  --task-definition audnix-worker \
+  --desired-count 5 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-1,subnet-2],securityGroups=[sg-xxx],assignPublicIp=ENABLED}" \
+  --deployment-configuration "minimumHealthyPercent=100,maximumPercent=200,deploymentCircuitBreaker={enable=true,rollback=true}" \
+  --health-check-grace-period-seconds 120
+```
+
+| Parameter | Value | Effect |
+|-----------|-------|--------|
+| `minimumHealthyPercent=100` | 100% | New task must be Ready before old task is killed |
+| `maximumPercent=200` | 200% | Allows 2x tasks during deploy (e.g., 5 → 10 → 5) |
+| `deploymentCircuitBreaker` | `enable=true,rollback=true` | Auto-rollback if new tasks fail health checks |
+| `healthCheckGracePeriod` | `120s` | Time to boot before health checks count |
+
+> **This guarantees at least one worker is always processing jobs.**
+
+### Auto-Scaling Policies
+
+Attach target-tracking scaling to every worker service:
+
+```bash
+aws application-autoscaling register-scalable-target \
+  --service-namespace ecs \
+  --resource-id service/audnix-prod/audnix-outreach-worker \
+  --scalable-dimension ecs:service:DesiredCount \
+  --min-capacity 2 \
+  --max-capacity 10
+
+aws application-autoscaling put-scaling-policy \
+  --service-namespace ecs \
+  --resource-id service/audnix-prod/audnix-outreach-worker \
+  --scalable-dimension ecs:service:DesiredCount \
+  --policy-name audnix-outreach-memory \
+  --policy-type TargetTrackingScaling \
+  --target-tracking-scaling-policy-configuration \
+    '{"PredefinedMetricSpecification":{"PredefinedMetricType":"ECSServiceAverageMemoryUtilization"},"TargetValue":70.0,"ScaleInCooldown":300,"ScaleOutCooldown":60}'
+
+aws application-autoscaling put-scaling-policy \
+  --service-namespace ecs \
+  --resource-id service/audnix-prod/audnix-outreach-worker \
+  --scalable-dimension ecs:service:DesiredCount \
+  --policy-name audnix-outreach-cpu \
+  --policy-type TargetTrackingScaling \
+  --target-tracking-scaling-policy-configuration \
+    '{"PredefinedMetricSpecification":{"PredefinedMetricType":"ECSServiceAverageCPUUtilization"},"TargetValue":60.0,"ScaleInCooldown":300,"ScaleOutCooldown":60}'
+```
+
+| Metric | Target | Scale-Out | Scale-In |
+|--------|--------|-----------|----------|
+| MemoryUtilization | >70% | 60s | 300s |
+| CPUUtilization | >60% | 60s | 300s |
+
+### Graceful Shutdown Behavior
+
+All workers handle `SIGTERM` from ECS:
+
+1. **Pause BullMQ queue** — stop accepting new jobs
+2. **Finish current job** — `worker.close(false)` waits for active job completion
+3. **Close IMAP/SMTP** — `connectionManager.disconnectAll()` sends IMAP LOGOUT
+4. **Deregister from service registry** — Redis cleanup so orphans are reclaimed
+5. **Exit 0** — ECS marks task as `STOPPED` cleanly
+
+ECS sends `SIGTERM` first, then `SIGKILL` after the **stopTimeout** (default 30s, configurable up to 120s).
+
+### CI/CD Pipeline (`.github/workflows/ecs-deploy.yml`)
+
+The workflow uses **OIDC** (no long-lived AWS keys):
+
+1. **Build** — multi-stage `Dockerfile.ecs` with layer caching via `gha`
+2. **Push** — tag with `git sha` + `latest` to ECR
+3. **Redeploy** — `aws ecs update-service --force-new-deployment` for every service
+4. **Wait** — `aws ecs wait services-stable` before marking deployment green
+
+Required GitHub repository secrets:
+
+| Secret | Value |
+|--------|-------|
+| `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::ACCOUNT:role/GitHubActionsECSRoles` |
+
+Required AWS IAM Role (trust policy for GitHub OIDC):
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": { "Federated": "arn:aws:iam::ACCOUNT:oidc-provider/token.actions.githubusercontent.com" },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": { "token.actions.githubusercontent.com:aud": "sts.amazonaws.com" },
+        "StringLike": { "token.actions.githubusercontent.com:sub": "repo:your-org/audnix-ai-project:*" }
+      }
+    }
+  ]
+}
+```
+
+Role permissions: `AmazonEC2ContainerRegistryFullAccess`, `AmazonECS_FullAccess`, `CloudWatchLogsFullAccess`.
+
+### Verify Deployment
+
+```bash
+# Check all services
+aws ecs list-services --cluster audnix-prod
+
+# Check task health
+aws ecs describe-tasks --cluster audnix-prod --tasks $(aws ecs list-tasks --cluster audnix-prod --query 'taskArns[0]' --output text)
+
+# Tail logs
+aws logs tail /ecs/audnix-worker --follow
+
+# Hit health endpoint of a running task
+TASK_IP=$(aws ecs describe-tasks ... --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value')
+curl http://$TASK_IP:8081/health
+```
+
+---
+
+## �� User Capacity
 
 ### t3.large (2 vCPU, 8GB RAM) can handle:
 

@@ -39,7 +39,7 @@ router.get('/tick', async (req: Request, res: Response) => {
         res.json({
             success: true,
             timestamp: new Date().toISOString(),
-            outreach: outreachResult
+            outreach: outreachResult,
         });
     } catch (error: any) {
         console.error('[Cron] Tick failed:', error);

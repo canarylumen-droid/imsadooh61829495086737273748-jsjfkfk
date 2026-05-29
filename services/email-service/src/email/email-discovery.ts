@@ -152,16 +152,56 @@ export class EmailDiscoveryService {
             };
         }
 
-        // 2. Heuristic: try common subdomains
+        // 2. Probe common subdomains + port combinations for custom/enterprise domains
+        // Tries: smtp.domain (587, 465, 25), mail.domain (587, 465), mx.domain (587)
+        //        imap.domain (993, 143), mail.domain (993, 995)
+        const smtpCandidates: Array<{ host: string; port: number }> = [
+            { host: `smtp.${domain}`, port: 587 },
+            { host: `smtp.${domain}`, port: 465 },
+            { host: `mail.${domain}`, port: 587 },
+            { host: `mail.${domain}`, port: 465 },
+            { host: `mx.${domain}`, port: 587 },
+            { host: domain, port: 587 },
+            { host: domain, port: 25 },
+        ];
+        const imapCandidates: Array<{ host: string; port: number }> = [
+            { host: `imap.${domain}`, port: 993 },
+            { host: `imap.${domain}`, port: 143 },
+            { host: `mail.${domain}`, port: 993 },
+            { host: `mail.${domain}`, port: 995 },
+            { host: domain, port: 993 },
+        ];
+
+        const probePort = (host: string, port: number, timeoutMs = 3000): Promise<boolean> =>
+            new Promise(resolve => {
+                const net = require('net');
+                const sock = new net.Socket();
+                sock.setTimeout(timeoutMs);
+                sock.once('connect', () => { sock.destroy(); resolve(true); });
+                sock.once('timeout', () => { sock.destroy(); resolve(false); });
+                sock.once('error', () => resolve(false));
+                sock.connect(port, host);
+            });
+
+        let smtpResult = smtpCandidates[0]; // safe fallback
+        for (const candidate of smtpCandidates) {
+            if (await probePort(candidate.host, candidate.port)) {
+                smtpResult = candidate;
+                break;
+            }
+        }
+
+        let imapResult = imapCandidates[0]; // safe fallback
+        for (const candidate of imapCandidates) {
+            if (await probePort(candidate.host, candidate.port)) {
+                imapResult = candidate;
+                break;
+            }
+        }
+
         return {
-            smtp: {
-                host: `smtp.${domain}`,
-                port: 587
-            },
-            imap: {
-                host: `imap.${domain}`,
-                port: 993
-            },
+            smtp: smtpResult,
+            imap: imapResult,
             provider: 'custom',
             suggestedName
         };

@@ -1,44 +1,141 @@
-name: Docker Build & Deploy
+name: Build, Push to ECR, and Deploy to ECS
 
 on:
   push:
-    branches: [ "main" ]
-    tags: [ 'v*.*.*' ]
+    branches: [main]
+    tags: ['v*.*.*']
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ECR_REPOSITORY: audnix-ai
+  ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'audnix-prod' }}
+  IMAGE_TAG: ${{ github.sha }}
+
+permissions:
+  id-token: write
+  contents: read
 
 jobs:
   build-and-push:
+    name: Build & Push to ECR
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    outputs:
+      image: ${{ steps.build-image.outputs.image }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Build, tag, and push image to ECR
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build -f Dockerfile.ecs -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy to ECS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - name: audnix-api
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: api
+          - name: audnix-socket
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: socket
+          - name: audnix-email-worker
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: email
+          - name: audnix-imap-worker
+            task-def: aws/ecs/task-definition-imap.json
+            container: audnix-imap-worker
+            role: imap
+          - name: audnix-outreach-worker
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: outreach
+          - name: audnix-ai-worker
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: brain
+          - name: audnix-social-worker
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: social
+          - name: audnix-billing-worker
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: billing
+          - name: audnix-rag-worker
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: rag
+          - name: audnix-vector-db-service
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: vectordb
+          - name: audnix-lead-recovery-worker
+            task-def: aws/ecs/task-definition.json
+            container: audnix-worker
+            role: lead-recovery
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Resolve AWS Account ID
+        id: aws-account
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+
+      - name: Substitute task-definition placeholders
+        id: substitute
+        env:
+          AWS_ACCOUNT_ID: ${{ steps.aws-account.outputs.account_id }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          APP_ROLE: ${{ matrix.service.role }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          mkdir -p .github/tmp
+          envsubst < "${{ matrix.service.task-def }}" > ".github/tmp/task-def.json"
+          echo "task-def=.github/tmp/task-def.json" >> $GITHUB_OUTPUT
+
+      - name: Render task definition (inject image)
+        id: render
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.substitute.outputs.task-def }}
+          container-name: ${{ matrix.service.container }}
+          image: ${{ needs.build-and-push.outputs.image }}
+
+      - name: Deploy ECS service
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.render.outputs.task-definition }}
+          service: ${{ matrix.service.name }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true

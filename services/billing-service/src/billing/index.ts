@@ -17,10 +17,14 @@ import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-h
 import { Worker, Job } from 'bullmq';
 import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
+import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
+import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
 
 const log = createLogger('BILLING');
+const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'billing-service');
 
 async function startBillingService() {
+  await serviceRegistry.register({ version: '1.0.0' });
   log.info('💳 Billing Service starting...');
 
   startWorkerHealthServer('billing', parseInt(process.env.BILLING_WORKER_PORT || process.env.PORT || '8085', 10));
@@ -50,8 +54,9 @@ async function startBillingService() {
   await startWorker('Checkout Worker',        () => (checkoutWorker as any).start?.());
 
   // ── BullMQ Worker ─────────────────────────────────────────────────────────
+  let bullWorker: Worker | null = null;
   if (hasRedis && redisConnection) {
-    const bullWorker = new Worker(
+    bullWorker = new Worker(
       'audnix-billing',
       async (job: Job) => {
         const { type, data } = job.data;
@@ -90,14 +95,20 @@ async function startBillingService() {
     log.info('✅ BullMQ billing worker listening on [audnix-billing]');
   }
 
+  // ── Health heartbeat ──────────────────────────────────────────────────────
+  startHeartbeat('billing-service', () => ({ bullmqActive: !!bullWorker }));
+
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Billing service...`);
+    try { await serviceRegistry.deregister(); } catch (_e) {}
     try { paymentAutoApprovalWorker.stop(); } catch (_e) {}
-    if (process.env.UNIFIED_MODE !== 'true') setTimeout(() => process.exit(0), 5000);
+    try { if (bullWorker) await bullWorker.close(); } catch (_e) {}
+    log.info('Billing service shutdown complete');
+    if (process.env.UNIFIED_MODE !== 'true') process.exit(0);
   };
   if (process.env.UNIFIED_MODE !== 'true') {
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT',  () => shutdown('SIGINT'));
+    process.on('SIGTERM', async () => { await shutdown('SIGTERM'); });
+    process.on('SIGINT',  async () => { await shutdown('SIGINT'); });
   }
 
   log.info('🚀 Billing Service fully online');

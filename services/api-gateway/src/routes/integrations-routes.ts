@@ -17,7 +17,18 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const integrations = await storage.getIntegrations(userId);
+    let integrations = await storage.getIntegrations(userId);
+
+    // Server-side filtering — reduces payload for campaign wizard (500 mailboxes → only email ones)
+    const { provider, connected } = req.query as { provider?: string; connected?: string };
+    if (provider) {
+      const providers = provider.split(',').map(p => p.trim());
+      integrations = integrations.filter(i => providers.includes(i.provider));
+    }
+    if (connected !== undefined) {
+      const wantConnected = connected !== 'false';
+      integrations = integrations.filter(i => i.connected === wantConnected);
+    }
 
     const safeIntegrations = integrations.map(integration => ({
       id: integration.id,

@@ -4,10 +4,14 @@ import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-h
 import { createWorker } from '@shared/lib/worker';
 import { vectorOpsQueue } from '@shared/lib/queue';
 import { redisClient } from '@shared/lib/redis';
+import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
+import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
 
 const log = createLogger('VECTOR-DB-SERVICE');
+const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'vector-db-service');
 
 async function startVectorDbService() {
+  await serviceRegistry.register({ version: '1.0.0' });
   log.info('🗄️ Vector DB Service starting...');
 
   startWorkerHealthServer('vector-db-service', parseInt(process.env.VECTOR_DB_WORKER_PORT || process.env.PORT || '8084', 10));
@@ -43,14 +47,18 @@ async function startVectorDbService() {
 
   log.info(`✅ BullMQ worker listening on [${vectorOpsQueue.name}]`);
 
+  // ── Health heartbeat ──────────────────────────────────────────────────────
+  startHeartbeat('vector-db-service');
+
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Vector DB service...`);
+    try { await serviceRegistry.deregister(); } catch (_e) {}
     try { await vectorWorker.close(); } catch (_e) {}
     process.exit(0);
   };
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGTERM', async () => { await shutdown('SIGTERM'); });
+  process.on('SIGINT',  async () => { await shutdown('SIGINT'); });
 
   log.info('🚀 Vector DB Service fully online');
 }

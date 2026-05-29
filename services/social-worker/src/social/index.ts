@@ -18,10 +18,14 @@ import { Worker, Job } from 'bullmq';
 import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
+import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
+import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
 
 const log = createLogger('SOCIAL-SYNC');
+const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'social-worker');
 
 async function startSocialService() {
+  await serviceRegistry.register({ version: '1.0.0' });
   log.info('📱 Social Sync Service starting...');
 
   startWorkerHealthServer('social-sync', parseInt(process.env.SOCIAL_WORKER_PORT || process.env.PORT || '8084', 10));
@@ -47,8 +51,9 @@ async function startSocialService() {
   await startWorker('Instagram DM Sync', () => instagramSyncWorker.start());
 
   // ── BullMQ Worker ─────────────────────────────────────────────────────────
+  let bullWorker: Worker | null = null;
   if (hasRedis && redisConnection) {
-    const bullWorker = new Worker(
+    bullWorker = new Worker(
       'audnix-social-sync',
       async (job: Job) => {
         const { type, userId } = job.data;
@@ -78,13 +83,19 @@ async function startSocialService() {
     log.info('✅ BullMQ social worker listening on [audnix-social-sync]');
   }
 
+  // ── Health heartbeat ──────────────────────────────────────────────────────
+  startHeartbeat('social-worker', () => ({ bullmqActive: !!bullWorker }));
+
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down Social Sync service...`);
+    try { await serviceRegistry.deregister(); } catch (_e) {}
     try { instagramSyncWorker.stop(); } catch (_e) {}
-    setTimeout(() => process.exit(0), 5000);
+    try { if (bullWorker) await bullWorker.close(); } catch (_e) {}
+    log.info('Social Sync service shutdown complete');
+    process.exit(0);
   };
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGTERM', async () => { await shutdown('SIGTERM'); });
+  process.on('SIGINT',  async () => { await shutdown('SIGINT'); });
 
   log.info('🚀 Social Sync Service fully online');
 }

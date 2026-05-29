@@ -55,7 +55,13 @@ interface ImapClientData {
 
 const RECYCLE_TIME     = 29 * 60 * 1000; // 29 min proactive recycle
 const HEARTBEAT_TIME   =  2 * 60 * 1000; // 2 min NOOP + Redis TTL refresh (was 5min)
-const MAX_SOCKETS      = 2000;            // Hard cap per replica
+// 50 mailboxes per pod: ~10MB/connection × 50 = 500MB IMAP budget.
+// Keeps event loop fast (<5ms latency per IDLE event) and isolates crashes.
+// Scale out by adding replicas (TOTAL_REPLICAS env var), not increasing this cap.
+const MAX_SOCKETS      = parseInt(process.env.IMAP_MAX_SOCKETS || '50', 10);
+// Memory guard: refuse new connections if heap exceeds this threshold.
+// Triggers Redis signal so the watchdog knows to spin up another pod.
+const MAX_HEAP_MB      = parseInt(process.env.IMAP_MAX_HEAP_MB || '400', 10);
 const WORKER_ID        = process.env.RAILWAY_REPLICA_ID || process.env.HOSTNAME || `worker-${process.pid}`;
 
 /** Jitter ±25% of a delay value */
@@ -117,8 +123,18 @@ export class ImapConnectionManager {
     }
 
     if (this.connections.size >= MAX_SOCKETS) {
-      console.warn(`[IMAP] Replica ${WORKER_ID} at cap (${MAX_SOCKETS}). Rejecting ${integrationId}.`);
+      console.warn(`[IMAP] Replica ${WORKER_ID} at socket cap (${MAX_SOCKETS}). Rejecting ${integrationId}.`);
       imapErrorsTotal.inc({ type: 'cap_exceeded', provider: 'unknown' });
+      await this._signalCapReached();
+      return;
+    }
+
+    // Memory guard — reject before we OOM-kill the entire pod
+    const heapMB = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+    if (heapMB > MAX_HEAP_MB) {
+      console.warn(`[IMAP] Replica ${WORKER_ID} memory pressure — heap=${heapMB}MB > ${MAX_HEAP_MB}MB. Rejecting ${integrationId}.`);
+      imapErrorsTotal.inc({ type: 'memory_pressure', provider: 'unknown' });
+      await this._signalCapReached();
       return;
     }
 
@@ -196,8 +212,11 @@ export class ImapConnectionManager {
   }
 
   /**
-   * Periodic watchdog to ensure no connections are stuck in 'CONNECTING' state
-   * and to cleanup stale local state.
+   * Periodic watchdog:
+   * 1) Cleans up stale entries in this pod's own worker set.
+   * 2) Detects orphans from OTHER dead pods by scanning workerLoad + stale heartbeats.
+   *    Dead pods → orphaned integration IDs pushed to Redis orphans list for
+   *    the boot-time watchdog to reclaim.
    */
   private _startGlobalWatchdog(): void {
     setInterval(async () => {
@@ -205,16 +224,16 @@ export class ImapConnectionManager {
         const redis = await getRedisClient();
         if (!redis) return;
 
-        const myIntegrations = await redis.sMembers(IMAP_KEYS.workerSet(WORKER_ID));
         const now = Date.now();
 
+        // ── Phase 1: Local cleanup ─────────────────────────────────────────
+        const myIntegrations = await redis.sMembers(IMAP_KEYS.workerSet(WORKER_ID));
         for (const id of myIntegrations) {
           const key = IMAP_KEYS.active(id);
           const state = await redis.hGetAll(key);
-          
+
           if (!state || Object.keys(state).length === 0) {
-            // Local set thinks we have it, but main key is gone.
-            console.warn(`[WATCHDOG] Found orphaned local integration ${id}. Cleaning up.`);
+            console.warn(`[WATCHDOG] Local orphan ${id} (no active key). Cleaning up.`);
             await redis.sRem(IMAP_KEYS.workerSet(WORKER_ID), id);
             continue;
           }
@@ -224,6 +243,52 @@ export class ImapConnectionManager {
             console.warn(`[WATCHDOG] Integration ${id} stuck in CONNECTING for > 10m. Releasing.`);
             await this.disconnectMailbox(id);
           }
+        }
+
+        // ── Phase 2: Cross-pod orphan detection ────────────────────────────
+        // Scan all workers in the load sorted set. If a worker's last update
+        // is older than 10 minutes, scan its integration set for stale entries.
+        const DEAD_WORKER_THRESHOLD_MS = 10 * 60 * 1000; // 10 min
+        const workers = await redis.zRangeWithScores(IMAP_KEYS.workerLoad(), 0, -1);
+        for (const { value: otherWorkerId } of workers) {
+          if (otherWorkerId === WORKER_ID) continue;
+          // Check when this other worker last updated its load
+          const lastScore = await redis.zScore(IMAP_KEYS.workerLoad(), otherWorkerId);
+          if (lastScore === null) continue;
+          const lastUpdateAge = now - lastScore;
+          if (lastUpdateAge < DEAD_WORKER_THRESHOLD_MS) continue;
+
+          console.log(`[WATCHDOG] Worker ${otherWorkerId} looks stale (${Math.round(lastUpdateAge / 1000)}s silent). Scanning for orphans...`);
+
+          const otherIntegrations = await redis.sMembers(IMAP_KEYS.workerSet(otherWorkerId));
+          let foundOrphans = 0;
+          for (const integrationId of otherIntegrations) {
+            const state = await redis.hGetAll(IMAP_KEYS.active(integrationId));
+            const lastHB = parseInt(state.lastHeartbeat || '0', 10);
+            const workerId = state.workerId || '';
+
+            // If heartbeat is stale AND the key is still marked as owned by the dead worker
+            if ((now - lastHB) > DEAD_WORKER_THRESHOLD_MS && workerId === otherWorkerId) {
+              // True orphan — push to reclaim list
+              await redis.lPush(IMAP_KEYS.orphans(), JSON.stringify({
+                integrationId,
+                sourceWorker: otherWorkerId,
+                reason: 'DEAD_WORKER',
+                timestamp: now,
+              }));
+              // Clean the dead worker's set so it's not scanned again
+              await redis.sRem(IMAP_KEYS.workerSet(otherWorkerId), integrationId);
+              foundOrphans++;
+            }
+          }
+
+          if (foundOrphans > 0) {
+            console.log(`[WATCHDOG] 🐕 Found ${foundOrphans} orphans from dead worker ${otherWorkerId}. Enqueued for reclaim.`);
+          }
+
+          // Clean up the dead worker from the load tracker entirely
+          await redis.zRem(IMAP_KEYS.workerLoad(), otherWorkerId);
+          await redis.del(IMAP_KEYS.workerSet(otherWorkerId));
         }
       } catch (err: any) {
         console.warn('[WATCHDOG] Global scan failed:', err.message);
@@ -662,5 +727,22 @@ export class ImapConnectionManager {
         value: WORKER_ID,
       });
     } catch { /* non-critical */ }
+  }
+
+  /**
+   * Signal to the orchestrator that this pod is at capacity.
+   * Used by external watchdog to decide whether to spin up a new replica.
+   */
+  private async _signalCapReached(): Promise<void> {
+    try {
+      const redis = await getRedisClient();
+      if (!redis) return;
+      // Add to the orphans list so orchestrator knows another pod is needed
+      await redis.lPush(IMAP_KEYS.orphans(), JSON.stringify({
+        reason: 'CAPACITY',
+        workerId: WORKER_ID,
+        timestamp: Date.now(),
+      }));
+    } catch { /* ignore */ }
   }
 }
