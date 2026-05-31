@@ -84,6 +84,8 @@ export interface UVPResult {
   whyYouWin: string;
 }
 
+const competitorCache = new Map<string, CompetitorIntelligence>();
+
 export interface OptimizedMessageResult {
   subject: string;
   body: string;
@@ -249,6 +251,12 @@ export async function gatherCompetitorIntelligence(
   leadCompany?: string
 ): Promise<CompetitorIntelligence> {
   try {
+    const cacheKey = `${userIndustry.toLowerCase()}|${userNiche.toLowerCase()}`;
+    const cached = competitorCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
     const response = await generateReply(
       "You are a competitive intelligence expert.",
       `Industry: ${userIndustry}
@@ -281,11 +289,14 @@ Be specific and actionable.`,
     const gaps = text.match(/GAPS:(.+?)(?=OPPORTUNITIES:|$)/s)?.[1]?.split("\n").filter(Boolean) || [];
     const opportunities = text.match(/OPPORTUNITIES:(.+?)$/s)?.[1]?.split("\n").filter(Boolean) || [];
 
-    return {
+    const result: CompetitorIntelligence = {
       competitors: competitors.map((c: string) => c.trim()),
       gaps: gaps.map((g: string) => g.trim()),
       opportunities: opportunities.map((o: string) => o.trim()),
     };
+
+    competitorCache.set(cacheKey, result);
+    return result;
   } catch (error) {
     console.error("Error gathering competitive intelligence:", error);
     return { competitors: [], gaps: [], opportunities: [] };

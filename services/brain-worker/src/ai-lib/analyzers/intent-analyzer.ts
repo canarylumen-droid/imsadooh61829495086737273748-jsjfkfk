@@ -159,7 +159,15 @@ Return ONLY valid JSON, no explanation.`;
     const analysis = JSON.parse(response) as IntentAnalysis;
 
     // Intelligent Tagging Integration
-    const tags = await suggestLeadTags(lead, message, analysis);
+    const clearlyNegative = analysis.isNegative &&
+      !analysis.isInterested &&
+      !analysis.wantsToSchedule &&
+      !analysis.readyToBuy &&
+      !analysis.hasQuestion;
+
+    if (!clearlyNegative) {
+      await suggestLeadTags(lead, message, analysis);
+    }
 
     // Determine new status based on intent
     let newStatus = lead.status;

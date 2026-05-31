@@ -70,7 +70,7 @@ Before you start, have these ready:
 | **Neon DB** | [neon.tech](https://neon.tech) (free tier: 500MB) |
 | **Redis** | [console.upstash.com](https://console.upstash.com) (free tier: 10K cmds/day) |
 | **GitHub Repo** | Your repo URL (already set up) |
-| **API Keys** | OpenAI, Stripe, SendGrid, etc. (see `.env.aws.example`) |
+| **API Keys** | OpenAI, Stripe, SendGrid, etc. (see `.env.example`) |
 
 ---
 
@@ -121,11 +121,13 @@ Point your domain to your EC2 IP:
 2. Find **DNS Management**
 3. Create an **A Record**:
    - **Type:** A
-   - **Name:** @ (root) or `app` (subdomain)
+   - **Name:** @ (root) — use your main domain, not a subdomain
    - **Value:** YOUR_EC2_IP_ADDRESS
    - **TTL:** 300 (5 minutes)
 4. Wait 5-10 minutes for DNS to propagate
-5. Verify: `ping your-domain.com` should show your EC2 IP
+5. Verify: `ping audnixai.com` should show your EC2 IP
+
+> **Tip:** Using your main domain (audnixai.com) is better than a subdomain for SEO and user trust. All OAuth flows (Google, Outlook, Meta) are configured for the main domain.
 
 ---
 
@@ -224,7 +226,7 @@ GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 ```
 
-> See `.env.aws.example` for the complete list with instructions for each.
+> See `.env.example` for the complete list with instructions for each.
 
 **Generate secure secrets:**
 ```bash
@@ -262,11 +264,11 @@ This will:
 ## Step 6: Setup SSL (HTTPS)
 
 **Only do this AFTER:**
-- ✅ DNS is pointing to your EC2 IP (verify with `ping your-domain.com`)
+- ✅ DNS is pointing to your EC2 IP (verify with `ping audnixai.com`)
 - ✅ The app is running (`docker-compose -f docker-compose.prod.yml ps` shows healthy)
 
 ```bash
-./scripts/certbot-init.sh your-domain.com your-email@domain.com
+./scripts/certbot-init.sh audnixai.com admin@audnixai.com
 ```
 
 This will:
@@ -278,8 +280,8 @@ This will:
 6. ✅ Set up auto-renewal cron (2x daily)
 
 **Verify:**
-- Visit `https://your-domain.com` — you should see the green lock 🔒
-- HTTP (`http://your-domain.com`) redirects to HTTPS automatically
+- Visit `https://audnixai.com` — you should see the green lock 🔒
+- HTTP (`http://audnixai.com`) redirects to HTTPS automatically
 
 > **Note:** Certs auto-renew every 90 days. The certbot container checks every 12 hours.
 
@@ -302,13 +304,13 @@ audnix-redis   Up 2 min  6379/tcp
 
 ### 2. Test the API
 ```bash
-curl -s https://your-domain.com/health | jq
+curl -s https://audnixai.com/health | jq
 ```
 
 Should return: `{"status":"ok",...}`
 
 ### 3. Test login/signup
-- Visit `https://your-domain.com`
+- Visit `https://audnixai.com`
 - Try creating an account
 - Check email arrives (if SMTP configured)
 
@@ -465,7 +467,7 @@ If consistently OOM, you may need to:
 ### ❌ "SSL certificate error"
 ```bash
 # Re-run full SSL setup
-./scripts/certbot-init.sh your-domain.com your-email@domain.com
+./scripts/certbot-init.sh audnixai.com admin@audnixai.com
 
 # Or force renew existing cert
 docker-compose -f docker-compose.prod.yml run --rm certbot \
@@ -482,13 +484,13 @@ This means certbot hasn't run yet or the cert path is wrong:
 docker-compose -f docker-compose.prod.yml run --rm certbot certbot certificates
 
 # Re-run certbot-init.sh
-./scripts/certbot-init.sh your-domain.com your-email@domain.com
+./scripts/certbot-init.sh audnixai.com admin@audnixai.com
 ```
 
 ### ❌ "nginx conf.d/ssl.conf: No such file"
 SSL config is missing — either certbot hasn't run yet (expected, access via HTTP works fine), or run:
 ```bash
-./scripts/certbot-init.sh your-domain.com your-email@domain.com
+./scripts/certbot-init.sh audnixai.com admin@audnixai.com
 ```
 
 ### ❌ "Workers not starting"
@@ -1010,7 +1012,7 @@ curl http://$TASK_IP:8081/health
 | `scripts/ssl-renew-cron.sh` | Setup auto-renewal cron |
 | `scripts/backup-db.sh` | Database backup to S3 |
 | `.github/workflows/aws-deploy.yml` | CI/CD pipeline |
-| `.env.aws.example` | Environment variable template |
+| `.env.example` | Environment variable template |
 
 ---
 

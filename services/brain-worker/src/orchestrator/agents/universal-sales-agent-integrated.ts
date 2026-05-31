@@ -246,14 +246,19 @@ export async function generateContextAwareMessage(
   }
 
   if (!proceduralMemory && campaignId) {
-    console.log(`[ProceduralMemory] No plan for lead ${lead.id}. Planning now...`);
-    const competitive = await gatherCompetitorIntelligence(
-      (brandContext as SalesBrandContext).industry || "B2B",
-      (brandContext as SalesBrandContext).niche || "Sales",
-      lead.company || undefined
-    );
-    proceduralMemory = await planProceduralMemory(lead, brandContext, competitive);
-    await storage.updateCampaignLeadProceduralMemory(campaignId, lead.id, { strategy: proceduralMemory });
+    const campaignForPlan = await storage.getOutreachCampaign(campaignId);
+    const highVolumeMode = !!(campaignForPlan as any)?.config?.highVolumeMode;
+
+    if (!highVolumeMode) {
+      console.log(`[ProceduralMemory] No plan for lead ${lead.id}. Planning now...`);
+      const competitive = await gatherCompetitorIntelligence(
+        (brandContext as SalesBrandContext).industry || "B2B",
+        (brandContext as SalesBrandContext).niche || "Sales",
+        lead.company || undefined
+      );
+      proceduralMemory = await planProceduralMemory(lead, brandContext, competitive);
+      await storage.updateCampaignLeadProceduralMemory(campaignId, lead.id, { strategy: proceduralMemory });
+    }
   }
 
   // Inject strategy supplement into procedural memory context

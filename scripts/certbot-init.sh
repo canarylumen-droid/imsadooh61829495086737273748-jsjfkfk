@@ -2,7 +2,7 @@
 # =============================================================================
 # Audnix AI — SSL Certificate Initialization (Let's Encrypt via Webroot)
 # =============================================================================
-# Usage: ./scripts/certbot-init.sh your-domain.com your-email@example.com
+# Usage: ./scripts/certbot-init.sh audnixai.com admin@audnixai.com
 # Must be run AFTER docker-compose.prod.yml is up (nginx must be running)
 # =============================================================================
 
@@ -12,7 +12,7 @@ DOMAIN="${1:-}"
 EMAIL="${2:-}"
 
 if [ -z "$DOMAIN" ] || [ -z "$EMAIL" ]; then
-    echo "❌ Usage: ./scripts/certbot-init.sh your-domain.com your-email@domain.com"
+    echo "❌ Usage: ./scripts/certbot-init.sh audnixai.com admin@audnixai.com"
     exit 1
 fi
 

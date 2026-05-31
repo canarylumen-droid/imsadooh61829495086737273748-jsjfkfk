@@ -70,29 +70,29 @@ sudo systemctl restart docker
 
 # Create .env file template if it doesn't exist
 if [ ! -f ".env" ]; then
-echo "📝 Creating .env template from .env.aws.example..."
-if [ -f ".env.aws.example" ]; then
-    cp .env.aws.example .env
-    echo "   ✅ .env created from .env.aws.example"
+echo "📝 Creating .env template from .env.example..."
+if [ -f ".env.example" ]; then
+    cp .env.example .env
+    echo "   ✅ .env created from .env.example"
 else
-    # Fallback minimal template if .env.aws.example is missing
+    # Fallback minimal template if .env.example is missing
     cat > ".env" <<'EOF'
 NODE_ENV=production
 PORT=5000
-APP_URL=https://your-domain.com
+APP_URL=https://audnixai.com
 DATABASE_URL=postgresql://user:password@neon-host.neon.tech/audnix?sslmode=require
 REDIS_URL=rediss://default:your-redis-password@your-host.upstash.io:6380
 SESSION_SECRET=change-this-to-a-64-char-random-string-minimum-length-required
 ENCRYPTION_KEY=change-this-to-a-32-char-random-string-for-aes-256
 VITE_ADMIN_SECRET_URL=your-secret-admin-path
 ADMIN_SECRET_KEY=your-admin-secret-key
-ADMIN_WHITELIST_EMAILS=admin@your-domain.com
+ADMIN_WHITELIST_EMAILS=admin@audnixai.com
 OPENAI_API_KEY=sk-your-openai-key
 GEMINI_API_KEY=your-gemini-key
 ZAI_API_KEY=your-zai-key
 Z_AI_API_KEY=your-zai-key
 TWILIO_SENDGRID_API_KEY=SG.your-sendgrid-key
-TWILIO_EMAIL_FROM=noreply@your-domain.com
+TWILIO_EMAIL_FROM=noreply@audnixai.com
 RESEND_API_KEY=re_your-resend-key
 STRIPE_SECRET_KEY=sk_live_your-stripe-secret
 STRIPE_WEBHOOK_SECRET=whsec_your-webhook-secret
@@ -109,7 +109,7 @@ OUTLOOK_CLIENT_SECRET=your-outlook-client-secret
 OUTLOOK_TENANT_ID=common
 META_APP_ID=your-meta-app-id
 META_APP_SECRET=your-meta-app-secret
-META_REDIRECT_URI=https://your-domain.com/api/oauth/instagram/callback
+META_REDIRECT_URI=https://audnixai.com/api/oauth/instagram/callback
 META_VERIFY_TOKEN=your-meta-verify-token
 CALENDLY_CLIENT_ID=your-calendly-client-id
 CALENDLY_CLIENT_SECRET=your-calendly-client-secret
@@ -146,7 +146,7 @@ echo "  2. Deploy the application:"
 echo "     ./scripts/aws-deploy.sh"
 echo ""
 echo "  3. Setup SSL (after DNS points to this server):"
-echo "     ./scripts/certbot-init.sh your-domain.com your-email@domain.com"
+echo "     ./scripts/certbot-init.sh audnixai.com admin@audnixai.com"
 echo ""
 echo "  Swap:     $(free -h | grep Swap | awk '{print $2}') configured"
 echo "  Docker:   $(docker --version)"

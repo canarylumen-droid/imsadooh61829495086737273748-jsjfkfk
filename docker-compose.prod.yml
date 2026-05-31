@@ -6,7 +6,7 @@
 # Redis: EXTERNAL — set REDIS_URL in .env (Redis Cloud / Upstash recommended)
 # Database: EXTERNAL — set DATABASE_URL in .env (Neon PostgreSQL)
 # =============================================================================
-# IMPORTANT: Copy .env.aws.example → .env and fill ALL values before deploying
+# IMPORTANT: Copy .env.example → .env and fill ALL values before deploying
 # =============================================================================
 
 version: '3.8'
@@ -92,10 +92,10 @@ networks:
 # =============================================================================
 # DEPLOYMENT CHECKLIST
 # =============================================================================
-# 1. Copy .env file:              cp .env.aws.example .env
+# 1. Copy .env file:              cp .env.example .env
 # 2. Build & start:               docker compose -f docker-compose.prod.yml up --build -d
 # 3. View logs:                   docker compose -f docker-compose.prod.yml logs -f app
-# 4. SSL setup (first time):      ./scripts/certbot-init.sh your-domain.com
+# 4. SSL setup (first time):      ./scripts/certbot-init.sh audnixai.com
 # 5. Restart after SSL:             docker compose -f docker-compose.prod.yml restart nginx
 # =============================================================================
 

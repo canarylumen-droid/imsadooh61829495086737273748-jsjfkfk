@@ -19,6 +19,8 @@ import { adjustCopyIfNecessary } from "../../../shared/lib/ai/copy-adjuster.js";
 import { generateContextAwareMessage } from "@services/brain-worker/src/orchestrator/agents/universal-sales-agent-integrated.js";
 import { getBrandContext } from "@services/brain-worker/src/ai-lib/context/brand-context.js";
 import { generateExpertOutreach } from "@services/brain-worker/src/ai-lib/core/conversation-ai.js";
+import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
+import { MODELS } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
 import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
 import { AuditTrailService } from "@shared/lib/monitoring/audit-trail-service.js";
@@ -848,28 +850,54 @@ export class OutreachEngine {
         body = dynamicResult.body;
       }
     } else {
-      // For initial step, use Context-Aware stateful generation
-      const brandContext = await getBrandContext(userId);
-      const threadMessages = await storage.getMessagesByLeadId(lead.id);
-      
-      const contextAwareResult = await generateContextAwareMessage(
-        lead,
-        brandContext,
-        [], // Testimonials can be added here
-        threadMessages
-      );
-      
-      subject = contextAwareResult.subject || subject;
-      body = contextAwareResult.message;
-      
-      // PHASE 43: Store A/B variant for tracking
-      if (contextAwareResult.intelligence.variant) {
-        await storage.updateLead(lead.id, {
-          metadata: {
-            ...(lead.metadata as any || {}),
-            outreach_variant: contextAwareResult.intelligence.variant
+      const campaignConfig = (campaign.config as any) || {};
+
+      if (campaignConfig.highVolumeMode) {
+        const brandContext = await getBrandContext(userId);
+        const baseBody = body || template?.initial?.body || template?.body || "";
+        const firstName = lead.name?.trim().split(" ")[0] || "there";
+        const company = lead.company?.trim() || "your company";
+
+        const result = await generateReply(
+          "You are an efficient outbound email copywriter. Improve the following outreach email body but keep it concise, clear, and under 120 words.",
+          `BRAND CONTEXT:\n${typeof brandContext === "string" ? brandContext : JSON.stringify(brandContext)}\n\nLEAD:\nName: ${lead.name || firstName}\nCompany: ${company}\n\nORIGINAL BODY:\n${baseBody}`,
+          {
+            model: MODELS.outreach_generation,
+            maxTokens: 400,
+            temperature: 0.7,
+            nga1Enforced: true,
+            isEmailBody: true,
+            userId
           }
-        });
+        );
+
+        if (result.text && result.text.trim()) {
+          body = result.text.trim();
+        }
+      } else {
+        // For initial step, use Context-Aware stateful generation
+        const brandContext = await getBrandContext(userId);
+        const threadMessages = await storage.getMessagesByLeadId(lead.id);
+
+        const contextAwareResult = await generateContextAwareMessage(
+          lead,
+          brandContext,
+          [], // Testimonials can be added here
+          threadMessages
+        );
+
+        subject = contextAwareResult.subject || subject;
+        body = contextAwareResult.message;
+
+        // PHASE 43: Store A/B variant for tracking
+        if (contextAwareResult.intelligence.variant) {
+          await storage.updateLead(lead.id, {
+            metadata: {
+              ...(lead.metadata as any || {}),
+              outreach_variant: contextAwareResult.intelligence.variant
+            }
+          });
+        }
       }
     }
 

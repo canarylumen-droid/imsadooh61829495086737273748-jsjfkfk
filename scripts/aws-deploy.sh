@@ -29,7 +29,7 @@ echo -e "${YELLOW}🔍 Checking prerequisites...${NC}"
 
 if [ ! -f ".env" ]; then
     echo -e "${RED}❌ .env file not found!${NC}"
-    echo "   Create it first: cp .env.aws.example .env && nano .env"
+    echo "   Create it first: cp .env.example .env && nano .env"
     exit 1
 fi
 
