@@ -182,3 +182,75 @@ export function getDatabase(): NodePgDatabase<typeof schema> {
   return _db;
 }
 
+// ─── Direct Connection (Migrations / DDL only) ───────────────────────────────
+let _directDb: NodePgDatabase<typeof schema> | null = null;
+let _directPool: pgPkg.Pool | null = null;
+
+export function getDirectDatabase(): NodePgDatabase<typeof schema> {
+  if (_directDb) return _directDb;
+
+  const rawUrl = process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL;
+  if (!rawUrl) {
+    throw new Error(
+      'DATABASE_URL_DIRECT (or fallback DATABASE_URL) is not set. ' +
+      'Direct DB connection required for migrations/DDL.'
+    );
+  }
+
+  let connectionString: string;
+  try {
+    const dbUrl = new URL(rawUrl);
+    const isNeon = rawUrl.includes('neon.tech');
+    if (isNeon) {
+      dbUrl.searchParams.set('uselibpqcompat', 'true');
+      if (!dbUrl.searchParams.has('sslmode')) {
+        dbUrl.searchParams.set('sslmode', 'require');
+      }
+      if (dbUrl.port === '6543') {
+        console.warn('[DB DIRECT] ⚠️ Pooler port 6543 detected in direct URL — switching to 5432');
+        dbUrl.port = '5432';
+      }
+    } else if (process.env.NODE_ENV === 'production') {
+      if (!dbUrl.searchParams.has('sslmode')) {
+        dbUrl.searchParams.set('sslmode', 'verify-full');
+      }
+    }
+    connectionString = dbUrl.toString();
+  } catch {
+    console.error('❌ [DB DIRECT] Invalid DATABASE_URL_DIRECT format');
+    connectionString = rawUrl;
+  }
+
+  console.log('[DB DIRECT] Initializing direct pool (max=5) for migrations/DDL');
+
+  _directPool = new Pool({
+    connectionString,
+    ssl: rawUrl.includes('neon.tech') || process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
+    max: 5,
+    idleTimeoutMillis: IDLE_TIMEOUT_MS,
+    connectionTimeoutMillis: CONNECTION_TIMEOUT_MS,
+    maxUses: MAX_USES,
+    options: '-c statement_timeout=30000 -c idle_in_transaction_session_timeout=60000',
+  });
+
+  _directPool.on('error', (err: any) => {
+    console.error('🚨 [DB DIRECT POOL ERROR]', err?.message || String(err));
+    quotaService.reportDbError(err);
+  });
+
+  _directDb = drizzle(_directPool, { schema });
+  return _directDb;
+}
+
+export async function closeDirectDatabase(): Promise<void> {
+  if (_directPool) {
+    console.log('[DB DIRECT] Closing direct pool...');
+    await _directPool.end();
+    _directPool = null;
+    _directDb = null;
+    console.log('[DB DIRECT] Pool closed.');
+  }
+}
+

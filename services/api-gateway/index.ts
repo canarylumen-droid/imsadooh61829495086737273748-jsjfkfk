@@ -234,7 +234,7 @@ const sessionSecret = process.env.SESSION_SECRET!;
 const PgSession = connectPgSimple(session);
 let sessionStore: session.Store | undefined;
 
-if (process.env.DATABASE_URL && pool) {
+if ((process.env.DATABASE_URL_POOL || process.env.DATABASE_URL) && pool) {
   sessionStore = new PgSession({
     pool: pool,
     tableName: "user_sessions",
@@ -474,7 +474,7 @@ async function runMigrations() {
 
 (async () => {
   // Step 0: Validate Critical Environment Variables for Production Readiness
-  const criticalEnv = ['DATABASE_URL', 'REDIS_URL', 'GEMINI_API_KEY', 'ENCRYPTION_KEY'];
+  const criticalEnv = ['DATABASE_URL_POOL', 'REDIS_URL', 'GEMINI_API_KEY', 'ENCRYPTION_KEY'];
   const missing = criticalEnv.filter(k => !process.env[k]);
   if (missing.length > 0) {
     console.error(`âŒ [Advanced Infra] CRITICAL FAILURE: Missing required environment variables: ${missing.join(', ')}`);
@@ -502,7 +502,7 @@ async function runMigrations() {
   app.get("/health", async (_req, res) => {
     try {
       // â”€â”€ DB ping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      if (process.env.DATABASE_URL) {
+      if (process.env.DATABASE_URL_POOL || process.env.DATABASE_URL) {
         await Promise.race([
           db.execute(sql`SELECT 1`),
           new Promise((_, reject) => setTimeout(() => reject(new Error('DB Timeout')), 5000))
@@ -589,7 +589,7 @@ async function runMigrations() {
 
     // Post-startup initialization (Non-blocking)
     (async () => {
-        if (process.env.DATABASE_URL) {
+        if (process.env.DATABASE_URL_POOL || process.env.DATABASE_URL) {
           try {
             log("ðŸ“¦ Initializing database & migrations...");
             

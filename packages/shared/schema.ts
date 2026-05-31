@@ -236,7 +236,7 @@ export const leadSocialDetails = pgTable("lead_social_details", {
   verified: boolean("verified").default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-}, (table: any) => ({
+}, (table) => ({
   leadPlatformIdx: uniqueIndex("lead_platform_idx").on(table.leadId, table.platform),
 }));
 
@@ -968,7 +968,7 @@ export const aiLearningPatterns = pgTable("ai_learning_patterns", {
   lastUsedAt: timestamp("last_used_at").defaultNow(),
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-}, (table: any) => {
+}, (table) => {
   return {
     userPatternIdx: uniqueIndex("user_pattern_idx").on(table.userId, table.patternKey),
   };
@@ -1015,7 +1015,7 @@ export const campaignLeads = pgTable("campaign_leads", {
   metadata: jsonb("metadata").$type<Record<string, any>>().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-}, (table: any) => {
+}, (table) => {
   return {
     campaignLeadIdx: uniqueIndex("campaign_lead_idx").on(table.campaignId, table.leadId),
     campaignLeadsNextActionIdx: index("campaign_leads_next_action_idx").on(table.campaignId, table.status, table.nextActionAt),
@@ -1049,6 +1049,8 @@ export const campaignEmails = pgTable("campaign_emails", {
   // PG-level idempotency guard — prevents duplicate sends at the database layer
   // even when two concurrent workers race past the SELECT check.
   ceCampaignLeadStepIdx: uniqueIndex("ce_campaign_lead_step_idx").on(table.campaignId, table.leadId, table.stepIndex),
+  // High-throughput status scan for watchdog / analytics at 1M+ scale
+  ceStatusSentAtIdx: index("ce_status_sent_at_idx").on(table.status, table.sentAt),
 }));
 
 export const emailReplyStore = pgTable("email_reply_store", {

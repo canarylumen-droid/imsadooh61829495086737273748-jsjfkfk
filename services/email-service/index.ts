@@ -11,6 +11,16 @@ import { startMemoryWatchdog } from '@shared/lib/monitoring/memory-watchdog.js';
 import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
 
 const log = createLogger('EMAIL-SYNC');
+
+// ─── Global Process Safety Net ─────────────────────────────────────────────
+process.on('unhandledRejection', (reason: any) => {
+  log.error('🚨 unhandledRejection', { reason: reason?.message || String(reason) });
+});
+process.on('uncaughtException', (err: Error) => {
+  log.error('🚨 uncaughtException — shutting down gracefully', { error: err.message, stack: err.stack });
+  setTimeout(() => process.exit(1), 1500);
+});
+
 const discoveryRegistry = new WorkerDiscoveryRegistry('email-service');
 const mailboxWatchdog = new MailboxReassignmentWatchdog();
 const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'email-service');

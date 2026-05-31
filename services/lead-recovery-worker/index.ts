@@ -3,6 +3,15 @@ import { startHeartbeat } from "@shared/lib/monitoring/health-heartbeat.js";
 import { ServiceRegistry } from "@shared/lib/monitoring/service-registry.js";
 import { LeadRecoveryWorker } from "./src/worker.js";
 
+// ─── Global Process Safety Net ─────────────────────────────────────────────
+process.on('unhandledRejection', (reason: any) => {
+  console.error('🚨 [LeadRecovery] unhandledRejection', reason?.message || String(reason));
+});
+process.on('uncaughtException', (err: Error) => {
+  console.error('🚨 [LeadRecovery] uncaughtException — shutting down', err.message);
+  setTimeout(() => process.exit(1), 1500);
+});
+
 const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'lead-recovery-worker');
 
 async function startRecoveryService() {

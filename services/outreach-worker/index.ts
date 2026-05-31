@@ -9,6 +9,18 @@ import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
 
 const log = createLogger('OUTREACH-WORKER');
 
+// ─── Global Process Safety Net ─────────────────────────────────────────────
+// At 1M+ scale, a single unhandled promise rejection or uncaught exception
+// must NEVER crash the entire worker pod. Log it and keep running.
+process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
+  log.error('🚨 unhandledRejection', { reason: reason?.message || String(reason), promise });
+});
+process.on('uncaughtException', (err: Error) => {
+  log.error('🚨 uncaughtException — shutting down gracefully', { error: err.message, stack: err.stack });
+  // Give logger time to flush, then exit (BullMQ will auto-restart via Railway/ECS)
+  setTimeout(() => process.exit(1), 1500);
+});
+
 async function startOutreachService() {
   const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'outreach-worker');
   await serviceRegistry.register({

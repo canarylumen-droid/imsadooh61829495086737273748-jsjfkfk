@@ -550,7 +550,7 @@ async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
   try {
     switch (data.type) {
       case 'campaign:send-batch':
-        await processSendBatch(data);
+        await processSendBatch(data, jobId);
         break;
       case 'campaign:follow-up':
         await processFollowUp(data);
@@ -785,7 +785,7 @@ async function markJobFailed(jobBullmqId: string, error: string): Promise<void> 
 async function logJobAttempt(
   jobId: string,
   jobName: string,
-  status: 'started' | 'completed' | 'failed',
+  status: 'started' | 'completed' | 'failed' | 'duplicate_skipped',
   opts: {
     campaignId?: string;
     userId?: string;
@@ -829,7 +829,7 @@ async function logJobAttempt(
  * - System NEVER crashes due to a single mailbox failure
  * - Also picks up 'queued' leads (returned from failed mailboxes)
  */
-async function processSendBatch(data: SendBatchJobData): Promise<void> {
+async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise<void> {
   if (!db) return;
 
   const { campaignId, userId, integrationId, dailyLimit } = data;
@@ -1132,6 +1132,18 @@ async function processSendBatch(data: SendBatchJobData): Promise<void> {
         .limit(1);
       if (alreadySent.length > 0) {
         console.log(`[CampaignWorker] ⚡ PG idempotency: lead ${lead.id} step ${leadEntry.currentStep} already sent — skipping delivery.`);
+        logJobAttempt(
+          jobId || `send-batch_${campaignId}_${lead.id}_${leadEntry.currentStep}`,
+          'campaign:send-batch',
+          'duplicate_skipped',
+          {
+            campaignId,
+            userId,
+            integrationId,
+            campaignLeadId: leadEntry.id,
+            metadata: { reason: 'campaignEmails already exists', leadId: lead.id, stepIndex: leadEntry.currentStep }
+          }
+        ).catch(() => {});
       } else {
         if (lead.channel === 'instagram') {
           await deliverCampaignInstagram(userId, campaign, lead, leadEntry, integrationId);
@@ -2461,7 +2473,7 @@ export const campaignWorker = hasRedis ? new Worker<CampaignJobData>(
   processCampaignJob,
   {
     connection: createFreshConnection(), // dedicated connection — never shares socket with queues or other workers
-    concurrency: parseInt(process.env.CAMPAIGN_CONCURRENCY || '5', 10),  // 5 slots — safe for small DB instances (1–2 GB)
+    concurrency: parseInt(process.env.CAMPAIGN_CONCURRENCY || '50', 10),  // 50 slots — tuned for 1M+ scale (override via env)
     lockDuration:    parseInt(process.env.CAMPAIGN_LOCK_DURATION_MS    || '120000',  10), // 2min — AI generation + SMTP can take >30s
     stalledInterval: parseInt(process.env.CAMPAIGN_STALLED_INTERVAL_MS || '300000',  10), // 5min — prevents false duplicate-send retries
     maxStalledCount: parseInt(process.env.CAMPAIGN_MAX_STALLED_COUNT   || '3',       10), // tolerate 3 stalls before hard-failing job
@@ -2569,7 +2581,7 @@ if (campaignWorker) {
     }
   });
 
-  console.log(`✅ BullMQ Campaign Queue Worker initialized (concurrency: ${parseInt(process.env.CAMPAIGN_CONCURRENCY || '5', 10)})`);
+  console.log(`✅ BullMQ Campaign Queue Worker initialized (concurrency: ${parseInt(process.env.CAMPAIGN_CONCURRENCY || '50', 10)})`);
 
   // Initialize Autonomous Scaler (Daily Optimization Cycle)
   // Using dynamic import with a safer relative path for the worker context

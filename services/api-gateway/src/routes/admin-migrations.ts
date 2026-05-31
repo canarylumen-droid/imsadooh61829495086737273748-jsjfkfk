@@ -111,7 +111,7 @@ router.get("/db-status", async (req: Request, res: Response): Promise<void> => {
             success: true,
             tables: result.rows,
             rowCounts: counts,
-            databaseUrl: process.env.DATABASE_URL?.replace(/:[^@]+@/, ":****@") // Hide password
+            databaseUrl: (process.env.DATABASE_URL_POOL || process.env.DATABASE_URL)?.replace(/:[^@]+@/, ":****@") // Hide password
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

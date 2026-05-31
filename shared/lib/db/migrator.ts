@@ -1,4 +1,4 @@
-import { db } from './db.js';
+import { getDirectDatabase, closeDirectDatabase } from './db.js';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
 import { sql } from 'drizzle-orm';
 import path from 'path';
@@ -15,6 +15,8 @@ const __dirname = path.dirname(__filename);
  */
 export async function runDatabaseMigrations() {
     console.log("🚀 Starting database migrations (direct integration)...");
+
+    const directDb = getDirectDatabase();
 
     // Find migrations folder relative to this file
     // In source: server/lib/db/migrator.ts -> ../../migrations
@@ -39,20 +41,20 @@ export async function runDatabaseMigrations() {
     } else {
         console.log(`📂 Using migrations from: ${migrationsFolder}`);
         try {
-            if (!db) {
-                console.warn("⚠️ Database not initialized. Skipping migrations.");
+            if (!directDb) {
+                console.warn("⚠️ Direct database not initialized. Skipping migrations.");
                 return;
             }
 
-            // 1. First, attempt the Drizzle-managed migration
-            await migrate(db, { migrationsFolder });
+            // 1. First, attempt the Drizzle-managed migration (via DIRECT connection)
+            await migrate(directDb, { migrationsFolder });
             console.log("✨ Database migrations completed successfully");
         } catch (error: any) {
             console.warn("⚠️ Drizzle migration reported an issue:", error.message || error);
         }
     }
 
-    if (!db) return;
+    if (!directDb) return;
 
     if (quotaService.isRestricted()) {
         console.warn("⚠️ Skipping emergency schema synchronization: Database quota restricted.");
@@ -63,7 +65,7 @@ export async function runDatabaseMigrations() {
     // This handles cases where the migration journal might be out of sync or missing in Vercel
     console.log("🛠️ Running emergency schema synchronization...");
     try {
-        await db.transaction(async (tx) => { await tx.execute(sql`
+        await directDb.transaction(async (tx) => { await tx.execute(sql`
             DO $$ 
             BEGIN
                 -- Leads: archived
@@ -75,6 +77,13 @@ export async function runDatabaseMigrations() {
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='outreach_campaigns') THEN
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='outreach_campaigns' AND column_name='stats') THEN
                         ALTER TABLE outreach_campaigns ADD COLUMN stats jsonb DEFAULT '{"total": 0, "sent": 0, "replied": 0, "bounced": 0}'::jsonb;
+                    END IF;
+                END IF;
+
+                -- High-throughput index for campaignEmails (status, sent_at) — hot path for 1M+ scale
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='campaign_emails') THEN
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname='ce_status_sent_at_idx') THEN
+                        CREATE INDEX ce_status_sent_at_idx ON campaign_emails(status, sent_at);
                     END IF;
                 END IF;
 
@@ -409,6 +418,10 @@ export async function runDatabaseMigrations() {
     } catch (emergencyError: any) {
         console.error("❌ Emergency schema synchronization failed:", emergencyError.message || emergencyError);
         quotaService.reportDbError(emergencyError);
+    } finally {
+        // Always close the direct pool — migrations are one-shot.
+        // Leaving it open leaks connections if this function is triggered repeatedly (e.g., admin panel).
+        await closeDirectDatabase().catch(() => {});
     }
 }
 

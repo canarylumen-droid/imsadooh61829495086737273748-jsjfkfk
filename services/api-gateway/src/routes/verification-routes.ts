@@ -33,7 +33,7 @@ async function verifyEnvironmentVariables() {
   verificationLog("=== ENVIRONMENT VARIABLES CHECK ===");
 
   const requiredVars = [
-    "DATABASE_URL",
+    "DATABASE_URL_POOL",
     // "SESSION_SECRET" // Good to check if you have it
   ];
 
@@ -101,8 +101,8 @@ async function verifyDatabaseConnection() {
     error: null,
   };
 
-  if (!process.env.DATABASE_URL) {
-    status.error = "DATABASE_URL environment variable not set";
+  if (!process.env.DATABASE_URL_POOL && !process.env.DATABASE_URL) {
+    status.error = "DATABASE_URL_POOL (or fallback DATABASE_URL) environment variable not set";
     verificationLog(`❌ ${status.error}`);
     return status;
   }
