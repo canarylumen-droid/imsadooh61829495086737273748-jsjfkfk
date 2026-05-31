@@ -58,10 +58,12 @@ const deepseekClient = process.env.DEEPSEEK_API_KEY
   : null;
 
 /**
- * Determine primary provider: Z-AI > OpenAI > Gemini > DeepSeek > None (Demo)
+ * Determine primary provider: DeepSeek > Gemini > Z-AI (GLM) > OpenAI > Demo
+ * DeepSeek = primary (most cost-effective), Gemini = speed fallback,
+ * Z-AI = GLM fallback, OpenAI = last resort (most expensive)
  */
-const PREFERRED_PROVIDER = process.env.ZAI_API_KEY ? "zai" : (process.env.OPENAI_API_KEY ? "openai" : (process.env.GEMINI_API_KEY ? "genai" : (process.env.DEEPSEEK_API_KEY ? "deepseek" : "demo")));
-const AI_MODEL = process.env.ZAI_API_KEY ? MODELS.sales_reasoning : (process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.OPENAI_MODEL || OPENAI_INTELLIGENCE_MODEL));
+const PREFERRED_PROVIDER = process.env.DEEPSEEK_API_KEY ? "deepseek" : (process.env.GEMINI_API_KEY ? "genai" : (process.env.ZAI_API_KEY ? "zai" : (process.env.OPENAI_API_KEY ? "openai" : "demo")));
+const AI_MODEL = process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : (process.env.ZAI_API_KEY ? MODELS.sales_reasoning : (process.env.OPENAI_MODEL || OPENAI_INTELLIGENCE_MODEL)));
 
 console.log(`[AI Service] Unified initialization with provider: ${PREFERRED_PROVIDER}`);
 
@@ -261,8 +263,8 @@ async function selectBestModelForBudget(userId: string, requestedModel: string):
       
       // Map reasoning models to their flash/budget equivalents
       if (requestedModel === DEEPSEEK_REASON_MODEL) return DEEPSEEK_CHAT_MODEL;
-      if (requestedModel === MODELS.sales_reasoning) return GENAI_STABLE_MODEL;
-      if (requestedModel === MODELS.intent_classification) return OPENAI_FAST_MODEL;
+      if (requestedModel === MODELS.sales_reasoning) return process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL;
+      if (requestedModel === MODELS.intent_classification) return process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : OPENAI_FAST_MODEL);
       return process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL;
     }
   } catch (e) {

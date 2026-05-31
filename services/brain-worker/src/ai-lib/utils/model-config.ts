@@ -19,18 +19,21 @@ export const Z_AI_FAST_MODEL = "glm-4-flash";               // Flash version
 export const DEEPSEEK_CHAT_MODEL = "deepseek-v4-flash";     // Most cost-effective (chat + reasoning)
 export const DEEPSEEK_REASON_MODEL = "deepseek-v4-pro";     // Premium reasoning tasks
 
-// Failover Priority: OpenAI -> Gemini -> ZAI -> DeepSeek
-export const LLM_FAILOVER_ORDER: Array<'openai' | 'genai' | 'zai' | 'deepseek'> = ['openai', 'genai', 'zai', 'deepseek'];
+// Failover Priority: DeepSeek -> Gemini -> ZAI (GLM) -> OpenAI
+// DeepSeek = primary (cost-effective), Gemini = speed fallback,
+// ZAI = GLM fallback (subscription exhausted), OpenAI = last resort (most expensive)
+export const LLM_FAILOVER_ORDER: Array<'deepseek' | 'genai' | 'zai' | 'openai'> = ['deepseek', 'genai', 'zai', 'openai'];
 
 // Default active models based on service
+// Priority: DeepSeek -> Gemini -> ZAI (GLM) -> OpenAI
 export const MODELS = {
-    sales_reasoning: process.env.OPENAI_API_KEY ? OPENAI_INTELLIGENCE_MODEL : (process.env.ZAI_API_KEY ? Z_AI_STABLE_MODEL : (process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL)),
-    intent_classification: process.env.OPENAI_API_KEY ? OPENAI_FAST_MODEL : (process.env.ZAI_API_KEY ? Z_AI_FAST_MODEL : (process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL)),
-    content_generation: GENAI_STABLE_MODEL, // Always use flash for content to save cost
-    lead_intelligence: OPENAI_FAST_MODEL,
-    voice_assistant: OPENAI_FAST_MODEL,
-    objection_handling: OPENAI_FAST_MODEL,
-    grammar_check: Z_AI_FAST_MODEL,
-    outreach_generation: GENAI_STABLE_MODEL,
-    intelligence_synthesis: OPENAI_FAST_MODEL,
+    sales_reasoning: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : (process.env.ZAI_API_KEY ? Z_AI_STABLE_MODEL : OPENAI_INTELLIGENCE_MODEL)),
+    intent_classification: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : (process.env.ZAI_API_KEY ? Z_AI_FAST_MODEL : OPENAI_FAST_MODEL)),
+    content_generation: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL,
+    lead_intelligence: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : OPENAI_FAST_MODEL),
+    voice_assistant: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : OPENAI_FAST_MODEL),
+    objection_handling: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : OPENAI_FAST_MODEL),
+    grammar_check: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.ZAI_API_KEY ? Z_AI_FAST_MODEL : OPENAI_FAST_MODEL),
+    outreach_generation: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : GENAI_STABLE_MODEL,
+    intelligence_synthesis: process.env.DEEPSEEK_API_KEY ? DEEPSEEK_CHAT_MODEL : (process.env.GEMINI_API_KEY ? GENAI_STABLE_MODEL : OPENAI_FAST_MODEL),
 };
