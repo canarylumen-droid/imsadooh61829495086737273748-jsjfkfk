@@ -1,6 +1,6 @@
 import { db } from '@shared/lib/db/db.js';
 import { bounceTracker, leads, Lead, integrations } from '@audnix/shared';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { mailboxHealthService } from './mailbox-health-service.js';
@@ -26,6 +26,7 @@ interface BounceEvent {
   bounceType: 'hard' | 'soft' | 'spam';
   reason?: string;
   integrationId?: string;
+  messageId?: string;
 }
 
 class BounceHandler {
@@ -47,6 +48,25 @@ class BounceHandler {
 
       const integrationId = event.integrationId || lead.integrationId;
 
+      // Deduplication: skip if this messageId was already recorded
+      if (event.messageId) {
+        const existing = await db
+          .select({ id: bounceTracker.id })
+          .from(bounceTracker)
+          .where(
+            and(
+              eq(bounceTracker.leadId, event.leadId),
+              eq(bounceTracker.email, event.email),
+              sql`${bounceTracker.metadata}->>'messageId' = ${event.messageId}`
+            )
+          )
+          .limit(1);
+        if (existing.length > 0) {
+          console.log(`[Bounce] Dedup: skip duplicate bounce for ${event.email} msg=${event.messageId}`);
+          return;
+        }
+      }
+
       // Save bounce record
       await db.insert(bounceTracker).values({
         userId: event.userId,
@@ -56,6 +76,7 @@ class BounceHandler {
         email: event.email,
         metadata: {
           reason: event.reason,
+          messageId: event.messageId || null,
           recordedAt: new Date().toISOString()
         }
       });
@@ -335,28 +356,34 @@ class BounceHandler {
     if (!db) return { hardBounces: 0, softBounces: 0, spamBounces: 0, totalBounces: 0, bounceRate: 0 };
 
     try {
-      const bounces = await db
-        .select()
+      // [FIX] Use SQL aggregation instead of loading all rows into memory
+      const result = await db
+        .select({
+          total: sql<number>`count(*)`,
+          hard: sql<number>`count(*) FILTER (WHERE ${bounceTracker.bounceType} = 'hard')`,
+          soft: sql<number>`count(*) FILTER (WHERE ${bounceTracker.bounceType} = 'soft')`,
+          spam: sql<number>`count(*) FILTER (WHERE ${bounceTracker.bounceType} = 'spam')`,
+        })
         .from(bounceTracker)
         .where(eq(bounceTracker.userId, userId));
 
-      const hardBounces = bounces.filter((b: { bounceType: string }) => b.bounceType === 'hard').length;
-      const softBounces = bounces.filter((b: { bounceType: string }) => b.bounceType === 'soft').length;
-      const spamBounces = bounces.filter((b: { bounceType: string }) => b.bounceType === 'spam').length;
-      const totalBounces = bounces.length;
+      const row = result[0] || { total: 0, hard: 0, soft: 0, spam: 0 };
+      const totalBounces = row.total;
 
-      // Get total leads to calculate bounce rate
+      // Calculate bounce rate against total leads created in last 30 days
+      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       const userLeads = await storage.getLeads({ userId, limit: 10000 });
-      const bounceRate = userLeads.length > 0
-        ? Number(((totalBounces / userLeads.length) * 100).toFixed(2))
+      const recentLeads = userLeads.filter((l: any) => new Date(l.createdAt) >= since);
+      const bounceRate = recentLeads.length > 0
+        ? Number(((totalBounces / recentLeads.length) * 100).toFixed(2))
         : 0;
 
       return {
-        hardBounces,
-        softBounces,
-        spamBounces,
+        hardBounces: row.hard,
+        softBounces: row.soft,
+        spamBounces: row.spam,
         totalBounces,
-        bounceRate
+        bounceRate,
       };
     } catch (error) {
       console.error('Error getting bounce stats:', error);

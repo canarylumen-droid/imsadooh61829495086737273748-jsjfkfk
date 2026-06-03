@@ -1,0 +1,247 @@
+/**
+ * Enrollment Engine
+ * Auto-enrolls email integrations into the warmup pool.
+ * New mailboxes start as PAUSED — pool health monitor flips them to ACTIVE.
+ */
+
+import { db } from '../db/warmup-db.js';
+import { eq, and, not, inArray, sql, isNull } from 'drizzle-orm';
+import {
+  integrations,
+  users,
+  organizations,
+  teamMembers,
+  userOutreachSettings,
+  warmupMailboxes,
+} from '@audnix/shared';
+import { WARMUP_CONFIG } from '../config/warmup-config.js';
+import type { PoolType } from '../types/warmup-types.js';
+import { decrypt } from '@shared/lib/crypto/encryption.js';
+
+const ALLOWED_PROVIDERS = ['gmail', 'outlook', 'custom_email'] as const;
+const BLOCKED_HEALTH = ['suspended', 'revoked', 'error'] as const;
+
+export class EnrollmentEngine {
+  async scan(): Promise<number> {
+    console.log('[Warmup][Enrollment] Scanning for new mailboxes...');
+
+    const eligible = await this.findEligibleIntegrations();
+    let enrolled = 0;
+
+    for (const integration of eligible) {
+      try {
+        await this.enroll(integration);
+        enrolled++;
+      } catch (err: any) {
+        console.error(`[Warmup][Enrollment] Failed to enroll ${(integration as any).id}:`, err.message);
+      }
+    }
+
+    // Cleanup mailboxes whose integrations were disconnected
+    await this.cleanupDisconnected();
+
+    if (enrolled > 0) {
+      console.log(`[Warmup][Enrollment] Enrolled ${enrolled} new mailbox(es).`);
+    }
+    return enrolled;
+  }
+
+  private async findEligibleIntegrations() {
+    // Find all email integrations that are connected and healthy
+    const candidates = await db
+      .select({
+        integration: integrations,
+        user: users,
+      })
+      .from(integrations)
+      .innerJoin(users, eq(integrations.userId, users.id))
+      .where(
+        and(
+          inArray(integrations.provider, ALLOWED_PROVIDERS as any),
+          eq(integrations.connected, true),
+          not(inArray(integrations.healthStatus, BLOCKED_HEALTH as any))
+        )
+      );
+
+    // Filter out already-enrolled + trial-plan check
+    const alreadyEnrolled = await db
+      .select({ integrationId: warmupMailboxes.integrationId })
+      .from(warmupMailboxes);
+    const enrolledIds = new Set(alreadyEnrolled.map((r: any) => r.integrationId));
+
+    const eligible: Array<{
+      integrationId: string;
+      userId: string;
+      email: string;
+      provider: string;
+      organizationId: string | null;
+      plan: string;
+      subscriptionTier: string | null;
+      encryptedMeta: string | null;
+    }> = [];
+
+    for (const row of candidates) {
+      if (enrolledIds.has(row.integration.id)) continue;
+
+      // Check plan: trial users excluded unless warmup explicitly enabled
+      const isTrial = row.user.plan === 'trial' && row.user.subscriptionTier === 'free';
+      if (isTrial) {
+        const settings = await db
+          .select()
+          .from(userOutreachSettings)
+          .where(eq(userOutreachSettings.userId, row.user.id))
+          .limit(1);
+        const warmupEnabled = settings[0]?.warmupEnabled ?? true;
+        if (!warmupEnabled) continue;
+      }
+
+      // Resolve organization
+      let orgId: string | null = null;
+      const team = await db
+        .select()
+        .from(teamMembers)
+        .where(eq(teamMembers.userId, row.user.id))
+        .limit(1);
+      if (team[0]) orgId = team[0].organizationId;
+      else {
+        // Check if user owns an org
+        const org = await db
+          .select()
+          .from(organizations)
+          .where(eq(organizations.ownerId, row.user.id))
+          .limit(1);
+        if (org[0]) orgId = org[0].id;
+      }
+
+      eligible.push({
+        integrationId: row.integration.id,
+        userId: row.user.id,
+        email: row.integration?.accountType || row.user?.email || '',
+        provider: row.integration.provider,
+        organizationId: orgId,
+        plan: row.user.plan,
+        subscriptionTier: row.user.subscriptionTier,
+        encryptedMeta: (row.integration as any).encryptedMeta || null,
+      });
+    }
+
+    return eligible;
+  }
+
+  private async enroll(candidate: {
+    integrationId: string;
+    userId: string;
+    email: string;
+    provider: string;
+    organizationId: string | null;
+    plan: string;
+    subscriptionTier: string | null;
+    encryptedMeta: string | null;
+  }) {
+    const poolType = await this.classifyPool(candidate);
+
+    // Decrypt integration credentials into metadata
+    let metadata: any = {};
+    if (candidate.encryptedMeta) {
+      try {
+        metadata = JSON.parse(decrypt(candidate.encryptedMeta));
+      } catch (e) {
+        console.warn(`[Warmup][Enrollment] Failed to decrypt metadata for ${candidate.email}:`, (e as Error).message);
+      }
+    }
+
+    await db.insert(warmupMailboxes).values({
+      integrationId: candidate.integrationId,
+      userId: candidate.userId,
+      organizationId: candidate.organizationId,
+      email: candidate.email,
+      provider: candidate.provider as any,
+      status: 'paused',
+      pauseReason: poolType === 'enterprise' ? 'single_mailbox_enterprise' : 'empty_global_pool',
+      poolType,
+      dailySentCount: 0,
+      dailyReceivedCount: 0,
+      metadata,
+    });
+
+    console.log(
+      `[Warmup][Enrollment] Enrolled ${candidate.email} → pool=${poolType}, status=paused`
+    );
+  }
+
+  private async classifyPool(candidate: {
+    plan: string;
+    subscriptionTier: string | null;
+    organizationId: string | null;
+  }): Promise<PoolType> {
+    const isEnterprise =
+      candidate.plan === 'enterprise' || candidate.subscriptionTier === 'enterprise';
+    if (!isEnterprise || !candidate.organizationId) return 'global';
+
+      const countResult = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(warmupMailboxes)
+        .where(
+          and(
+            eq(warmupMailboxes.organizationId, candidate.organizationId),
+            eq(warmupMailboxes.status, 'active')
+          )
+        );
+
+      // Projected count (existing active + this new one)
+      const projected = (countResult[0]?.count ?? 0) + 1;
+      return projected >= WARMUP_CONFIG.ENTERPRISE_FLEET_THRESHOLD ? 'enterprise' : 'global';
+  }
+
+  private async cleanupDisconnected(): Promise<void> {
+    const orphaned = await db
+      .select({
+        mbId: warmupMailboxes.id,
+        integrationId: warmupMailboxes.integrationId,
+      })
+      .from(warmupMailboxes)
+      .leftJoin(integrations, eq(warmupMailboxes.integrationId, integrations.id))
+      .where(
+        and(
+          isNull(integrations.id),
+          not(eq(warmupMailboxes.status, 'unenrolled'))
+        )
+      );
+
+    if (orphaned.length > 0) {
+      for (const row of orphaned) {
+        await db
+          .update(warmupMailboxes)
+          .set({ status: 'unenrolled', pauseReason: 'integration_disconnected' })
+          .where(eq(warmupMailboxes.id, row.mbId));
+      }
+      console.log(`[Warmup][Enrollment] Cleaned up ${orphaned.length} orphaned mailbox(es) (integration disconnected).`);
+    }
+
+    // Also pause mailboxes whose integration is explicitly disconnected
+    const disconnected = await db
+      .select({
+        mbId: warmupMailboxes.id,
+      })
+      .from(warmupMailboxes)
+      .innerJoin(integrations, eq(warmupMailboxes.integrationId, integrations.id))
+      .where(
+        and(
+          eq(integrations.connected, false),
+          not(eq(warmupMailboxes.status, 'unenrolled'))
+        )
+      );
+
+    if (disconnected.length > 0) {
+      for (const row of disconnected) {
+        await db
+          .update(warmupMailboxes)
+          .set({ status: 'unenrolled', pauseReason: 'integration_disconnected' })
+          .where(eq(warmupMailboxes.id, row.mbId));
+      }
+      console.log(`[Warmup][Enrollment] Paused ${disconnected.length} mailbox(es) (integration disconnected).`);
+    }
+  }
+}
+
+export const enrollmentEngine = new EnrollmentEngine();

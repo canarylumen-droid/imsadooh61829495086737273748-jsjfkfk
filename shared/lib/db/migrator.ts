@@ -412,6 +412,129 @@ export async function runDatabaseMigrations() {
                     CREATE UNIQUE INDEX ce_campaign_lead_step_idx ON campaign_emails(campaign_id, lead_id, step_index);
                 END IF;
 
+                -- ========== P2P WARMUP SERVICE TABLES (Ghost Layer) ==========
+                -- warmup_mailboxes
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_mailboxes') THEN
+                    CREATE TABLE warmup_mailboxes (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+                        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                        organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+                        email TEXT NOT NULL,
+                        provider TEXT NOT NULL CHECK (provider IN ('gmail', 'outlook', 'custom_email')),
+                        status TEXT NOT NULL DEFAULT 'paused' CHECK (status IN ('active', 'paused', 'unenrolled', 'error')),
+                        pause_reason TEXT,
+                        pool_type TEXT NOT NULL DEFAULT 'global' CHECK (pool_type IN ('enterprise', 'global')),
+                        daily_sent_count INTEGER NOT NULL DEFAULT 0,
+                        daily_received_count INTEGER NOT NULL DEFAULT 0,
+                        last_reset_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        hidden_folder_path TEXT,
+                        hidden_folder_created_at TIMESTAMP,
+                        active_thread_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wm_status_idx') THEN
+                    CREATE INDEX wm_status_idx ON warmup_mailboxes(status);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wm_pool_type_idx') THEN
+                    CREATE INDEX wm_pool_type_idx ON warmup_mailboxes(pool_type);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wm_org_idx') THEN
+                    CREATE INDEX wm_org_idx ON warmup_mailboxes(organization_id);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wm_provider_idx') THEN
+                    CREATE INDEX wm_provider_idx ON warmup_mailboxes(provider);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wm_integration_idx') THEN
+                    CREATE UNIQUE INDEX wm_integration_idx ON warmup_mailboxes(integration_id);
+                END IF;
+
+                -- warmup_threads
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_threads') THEN
+                    CREATE TABLE warmup_threads (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        sender_mailbox_id UUID NOT NULL REFERENCES warmup_mailboxes(id) ON DELETE CASCADE,
+                        recipient_mailbox_id UUID NOT NULL REFERENCES warmup_mailboxes(id) ON DELETE CASCADE,
+                        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'completed', 'stalled', 'error')),
+                        message_count INTEGER NOT NULL DEFAULT 0,
+                        max_messages INTEGER NOT NULL DEFAULT 3,
+                        subject TEXT NOT NULL,
+                        root_message_id TEXT,
+                        last_message_id TEXT,
+                        references JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        next_send_at TIMESTAMP,
+                        next_expected_reply_at TIMESTAMP,
+                        last_interaction_at TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wt_status_next_send_idx') THEN
+                    CREATE INDEX wt_status_next_send_idx ON warmup_threads(status, next_send_at);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wt_sender_idx') THEN
+                    CREATE INDEX wt_sender_idx ON warmup_threads(sender_mailbox_id);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wt_recipient_idx') THEN
+                    CREATE INDEX wt_recipient_idx ON warmup_threads(recipient_mailbox_id);
+                END IF;
+
+                -- warmup_interactions
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_interactions') THEN
+                    CREATE TABLE warmup_interactions (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        thread_id UUID NOT NULL REFERENCES warmup_threads(id) ON DELETE CASCADE,
+                        direction TEXT NOT NULL CHECK (direction IN ('outbound', 'inbound')),
+                        from_mailbox_id UUID NOT NULL REFERENCES warmup_mailboxes(id) ON DELETE CASCADE,
+                        to_mailbox_id UUID NOT NULL REFERENCES warmup_mailboxes(id) ON DELETE CASCADE,
+                        subject TEXT NOT NULL,
+                        body TEXT NOT NULL,
+                        message_id TEXT NOT NULL UNIQUE,
+                        in_reply_to TEXT,
+                        references JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        x_audnix_warmup BOOLEAN NOT NULL DEFAULT true,
+                        expunged_from_sent BOOLEAN NOT NULL DEFAULT false,
+                        moved_to_hidden_folder BOOLEAN NOT NULL DEFAULT false,
+                        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'bounced', 'expunged')),
+                        error_message TEXT,
+                        sent_at TIMESTAMP,
+                        delivered_at TIMESTAMP,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wi_thread_idx') THEN
+                    CREATE INDEX wi_thread_idx ON warmup_interactions(thread_id);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wi_status_idx') THEN
+                    CREATE INDEX wi_status_idx ON warmup_interactions(status);
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wi_message_id_idx') THEN
+                    CREATE INDEX wi_message_id_idx ON warmup_interactions(message_id);
+                END IF;
+
+                -- warmup_pool_state
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_pool_state') THEN
+                    CREATE TABLE warmup_pool_state (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        pool_type TEXT NOT NULL CHECK (pool_type IN ('enterprise', 'global')),
+                        organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+                        total_mailboxes INTEGER NOT NULL DEFAULT 0,
+                        active_mailboxes INTEGER NOT NULL DEFAULT 0,
+                        paused_mailboxes INTEGER NOT NULL DEFAULT 0,
+                        last_snapshot_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        is_healthy BOOLEAN NOT NULL DEFAULT false,
+                        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wps_pool_type_org_idx') THEN
+                    CREATE UNIQUE INDEX wps_pool_type_org_idx ON warmup_pool_state(pool_type, organization_id);
+                END IF;
+
             END $$;
         `); });
         console.log("✅ Emergency schema synchronization completed.");

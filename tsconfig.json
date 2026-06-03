@@ -32,8 +32,6 @@
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
     "moduleResolution": "bundler",
-    "ignoreDeprecations": "6.0",
-    "baseUrl": ".",
     "typeRoots": [
       "./node_modules/@types",
       "./server/types"

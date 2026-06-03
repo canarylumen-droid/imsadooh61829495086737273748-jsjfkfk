@@ -184,7 +184,33 @@ export class CampaignQueueManager {
           console.warn('[CampaignQueue] PG job log insert failed (non-fatal):', e.message)
         );
       }
-      await campaignQueue.addBulk(bulkJobs);
+      // await campaignQueue.addBulk(bulkJobs); // REPLACED by consumer-distribution below
+    }
+
+    // ── Consumer Distribution (Any-Available-Worker) ──────────────────────
+    // Dynamically dispatch consumer pull jobs so mailboxes grab leads from the global pool
+    try {
+      const { consumerQueue } = await import('./consumer-distribution.js');
+      if (consumerQueue) {
+        const consumerBulkJobs = mailboxIds.map(mbId => {
+          const batchSize = mailboxLimits[mbId] || planDailyDefault;
+          const jobKey = `consumer-pull_${campaign.id}_${mbId}`;
+          return {
+            name: jobKey,
+            data: {
+              type: 'mailbox:pull-leads' as const,
+              campaignId: campaign.id,
+              userId: campaign.userId,
+              integrationId: mbId,
+              batchSize,
+            },
+            opts: { delay: 5000, priority: 2, jobId: jobKey, removeOnComplete: true, removeOnFail: { count: 1000 } },
+          };
+        });
+        await consumerQueue.addBulk(consumerBulkJobs);
+      }
+    } catch (err: any) {
+      console.warn('[CampaignQueue] Consumer queue unavailable (non-fatal):', err.message);
     }
 
     // Fallback: setInterval per mailbox when Redis is unavailable
@@ -636,6 +662,27 @@ async function getMailboxSentCount(userId: string, integrationId: string): Promi
 }
 
 /**
+ * Get the number of INITIAL (step 0) campaign emails sent today by this mailbox.
+ * Follow-ups and warmup are excluded so reputation throttling only affects cold outreach.
+ */
+async function getMailboxInitialSendCount(integrationId: string): Promise<number> {
+  const cacheKey = `initial:${integrationId}`;
+  const cached = sentCountCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.count;
+  }
+  const result = await db.execute(sql`
+    SELECT COUNT(*) as count FROM campaign_emails
+    WHERE integration_id = ${integrationId}::uuid
+    AND step_index = 0
+    AND sent_at >= CURRENT_DATE::timestamp
+  `);
+  const count = Number(result.rows[0].count);
+  sentCountCache.set(cacheKey, { count, expiresAt: Date.now() + SENT_COUNT_TTL_MS });
+  return count;
+}
+
+/**
  * Check if a pending auto-reply job exists for this specific mailbox.
  * Uses a Redis SET for O(1) lookup instead of scanning all delayed jobs.
  */
@@ -706,9 +753,12 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?
   // Clamp: at least 30s, at most 60 minutes for better 24/7 distribution
   const clamped = Math.min(60 * 60_000, Math.max(30_000, baseIntervalMs));
 
-  // Add ±15% random jitter to avoid mechanical patterns
-  const jitter = clamped * 0.15 * (Math.random() * 2 - 1);
-  return Math.round(clamped + jitter);
+  // 30–90s micro-delay to perfectly mimic human behavior (not ±15% which can be huge)
+  const microDelayMs = 30_000 + Math.floor(Math.random() * 60_000); // 30s–90s
+  const intervalMs = Math.round(clamped + microDelayMs);
+
+  console.log(`[CampaignWorker] ⏱️ Hourly plan: ${sentToday}/${effectiveDailyLimit} sent. Next slot in ${Math.round(intervalMs / 60000)}m (${Math.round(microDelayMs / 1000)}s micro-delay)`);
+  return intervalMs;
 }
 
 /**
@@ -727,7 +777,7 @@ async function rescheduleSendBatch(data: SendBatchJobData, delayMs: number): Pro
 // ─── PostgreSQL Job Lifecycle Helpers (Self-Healing Watchdog) ─────────────────
 // Every helper is fire-and-forget (.catch(() => {})) — logging must never crash a worker.
 
-async function logJobPending(
+export async function logJobPending(
   jobBullmqId: string,
   jobType: string,
   campaignId: string,
@@ -867,15 +917,20 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     console.log(`[CampaignWorker] ⚠️ Mailbox ${integrationId.slice(-8)} is soft paused. Throttling down to follow-ups ONLY.`);
   }
 
-  // 4. Check dynamic daily budget (respecting Warmup & Neural Brain)
-  const sentToday = await getMailboxSentCount(userId, integrationId);
-  
-  // Refetch current integration to get latest warmup status
+  // 4. Check INITIAL OUTREACH budget only (follow-ups are NEVER throttled by this)
+  const initialSentToday = await getMailboxInitialSendCount(integrationId);
+
+  // Refetch current integration to get latest reputation-adjusted limits
   const currentIntegration = await storage.getIntegrationById(integrationId);
   let effectiveLimit = dailyLimit;
-  
+
   if (currentIntegration) {
-    const warmup = warmupService.getWarmupStatus(currentIntegration as any, dailyLimit);
+    // Phase 2: OUTREACH PROTECT — use initialOutreachLimit for cold sends
+    const reputationLimit = (currentIntegration as any).initialOutreachLimit ?? dailyLimit;
+    effectiveLimit = Math.min(effectiveLimit, reputationLimit);
+
+    // Warmup cap still applies during ramp phase
+    const warmup = warmupService.getWarmupStatus(currentIntegration as any, effectiveLimit);
     if (warmup.isWarmingUp && warmup.dailyLimit < effectiveLimit) {
       effectiveLimit = warmup.dailyLimit;
     }
@@ -893,11 +948,14 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     }
   }
 
-  if (sentToday >= effectiveLimit) {
-    // Reschedule in 1 hour so the mailbox resumes when the daily limit resets (new day)
+  if (initialSentToday >= effectiveLimit) {
+    // Reschedule in 1 hour so the mailbox resumes when the initial outreach limit resets (new day)
     await rescheduleSendBatch(data, 60 * 60 * 1000);
     return;
   }
+
+  // Keep total sent count for interval/spacing calculations (follow-ups + warmup + initial)
+  const sentToday = await getMailboxSentCount(userId, integrationId);
 
   // --- LEVEL 20: AUTONOMOUS SALES PRIORITY PAUSE ---
   // If there is ANY checkout link pending dispatch, we hard-pause standard campaigns.
@@ -966,7 +1024,7 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
           // Leads assigned to this mailbox
           and(
             eq(campaignLeads.integrationId, integrationId),
-            or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'))
+            or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'), eq(campaignLeads.status, 'processing'))
           ),
           // Leads in pool (no mailbox assigned) — any healthy mailbox can pick them up
           and(
@@ -995,7 +1053,7 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
       .where(and(
         eq(campaignLeads.campaignId, campaignId),
         eq(campaignLeads.integrationId, integrationId),
-        or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued')),
+        or(eq(campaignLeads.status, 'pending'), eq(campaignLeads.status, 'queued'), eq(campaignLeads.status, 'processing')),
         gt(campaignLeads.nextActionAt, new Date())
       ))
       .orderBy(campaignLeads.nextActionAt)
@@ -1356,16 +1414,7 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   const maxMultiplier = maxMultipliers[integrationId] || config.maxDailyMultiplier || (isSmtp ? 10 : 7);
   const hardCeiling = config.totalDailyLimit || (effectiveHardLimit * maxMultiplier) || defaultCeiling;
 
-  if (sentToday >= hardCeiling) {
-    const retryDelay = 1 * 60 * 60 * 1000; // 1 hour re-check
-    console.log(`[CampaignWorker] 📉 Mailbox ${integrationId.slice(-8)} hit capacity (${sentToday}/${hardCeiling}). Rescheduling.`);
-
-    await campaignQueueManager.scheduleFollowUp(
-      campaignId, userId, campaignLeadId, integrationId, stepIndex,
-      retryDelay
-    );
-    return;
-  }
+  // REMOVED — Follow-ups are NEVER throttled by daily limits
 
   // 6. Deliver the follow-up email
   try {

@@ -2,7 +2,9 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import { bounceHandler } from '@services/email-service/src/email/bounce-handler.js';
 import { smtpAbuseProtection } from '@services/email-service/src/email/smtp-abuse-protection.js';
-import { emailWarmupWorker } from '@services/email-service/src/email/email-warmup-worker.js';
+import { db } from '@shared/lib/db/db.js';
+import { warmupMailboxes } from '@audnix/shared';
+import { eq, and, sql } from 'drizzle-orm';
 
 const router = Router();
 
@@ -59,22 +61,37 @@ router.get('/sending/limits', requireAuth, async (req: Request, res: Response): 
 });
 
 /**
- * Get email warm-up schedule
+ * Get REAL P2P warmup status — queries live warmup_mailboxes
  */
 router.get('/warmup/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
-    const todayLimit = await emailWarmupWorker.getTodaysSendLimit(userId);
+
+    const mailboxes = await db
+      .select()
+      .from(warmupMailboxes)
+      .where(eq(warmupMailboxes.userId, userId));
+
+    const active = mailboxes.filter((m) => m.status === 'active').length;
+    const total = mailboxes.length;
+    const totalSentToday = mailboxes.reduce((sum, m) => sum + (m.dailySentCount || 0), 0);
+    const totalReceivedToday = mailboxes.reduce((sum, m) => sum + (m.dailyReceivedCount || 0), 0);
 
     res.json({
       success: true,
       warmup: {
-        todayEmailsAllowed: todayLimit,
-        status: todayLimit > 0 ? 'active' : 'pending',
-        message: todayLimit > 0 
-          ? `Send up to ${todayLimit} emails today for optimal warm-up`
-          : 'Warmup schedule not yet initialized'
-      }
+        totalMailboxes: total,
+        activeMailboxes: active,
+        totalSentToday,
+        totalReceivedToday,
+        status: active > 0 ? 'active' : total > 0 ? 'paused' : 'not_enrolled',
+        message:
+          active > 0
+            ? `${active} mailbox(es) actively warming up`
+            : total > 0
+              ? 'All mailboxes paused — check pool health or daily limits'
+              : 'No warmup mailboxes enrolled. Connect an email integration to start.',
+      },
     });
   } catch (error: unknown) {
     console.error('Error getting warmup status:', error);

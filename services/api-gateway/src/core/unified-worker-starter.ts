@@ -92,6 +92,20 @@ export async function startUnifiedWorkers() {
     log.warn('Lead Recovery service not exportable as unified worker', { error: err.message });
   }
 
+  // ── Warmup Worker ─────────────────────────────────────────────────────────
+  try {
+    const { startWarmupService } = await import('@services/warmup-service/index.js');
+    workers.push({
+      name: 'Warmup',
+      start: async () => {
+        log.info('🔥 Starting Warmup workers...');
+        await startWarmupService();
+      }
+    });
+  } catch (err: any) {
+    log.warn('Warmup service not exportable as unified worker', { error: err.message });
+  }
+
   // Start all workers concurrently — they each have their own BullMQ connections
   const results = await Promise.allSettled(
     workers.map(async ({ name, start }) => {

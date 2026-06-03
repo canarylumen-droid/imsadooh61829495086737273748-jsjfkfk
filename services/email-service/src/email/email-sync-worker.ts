@@ -255,6 +255,7 @@ class EmailSyncWorker {
             htmlContent = Buffer.from(detail.payload.body.data, 'base64url').toString('utf8');
           }
 
+          const isWarmup = detail.payload.headers.some((h: any) => h.name.toLowerCase() === 'x-audnix-warmup');
           return {
             from: getHeader('from'),
             to: getHeader('to'),
@@ -262,12 +263,17 @@ class EmailSyncWorker {
             text: detail.snippet,
             date: new Date(parseInt(detail.internalDate)),
             html: htmlContent,
-            integrationId: integration.id
+            integrationId: integration.id,
+            isWarmup
           };
         }));
 
         const validMsg = fullMessages.filter(Boolean) as any[];
-        return await pagedEmailImport(userId, validMsg, () => { }, direction);
+        const nonWarmup = validMsg.filter(m => !m.isWarmup);
+        if (nonWarmup.length < validMsg.length) {
+          console.log(`[EmailSync] Filtered out ${validMsg.length - nonWarmup.length} warmup email(s)`);
+        }
+        return await pagedEmailImport(userId, nonWarmup, () => { }, direction);
       };
 
       const inbound = await processMsgList(inboxList, 'inbound');

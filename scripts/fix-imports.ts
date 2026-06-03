@@ -43,7 +43,6 @@ const replacements = [
   { p: /['"](?:\.\.\/)+lib\/email\/dns-verification\.js['"]/g, r: "'@services/email-service/src/email/dns-verification.js'" },
   { p: /['"](?:\.\.\/)+lib\/email\/bounce-handler\.js['"]/g, r: "'@services/email-service/src/email/bounce-handler.js'" },
   { p: /['"](?:\.\.\/)+lib\/email\/smtp-abuse-protection\.js['"]/g, r: "'@services/email-service/src/email/smtp-abuse-protection.js'" },
-  { p: /['"](?:\.\.\/)+lib\/email\/email-warmup-worker\.js['"]/g, r: "'@services/email-service/src/email/email-warmup-worker.js'" },
   { p: /['"](?:\.\.\/)+lib\/email\/email-tracking\.js['"]/g, r: "'@services/email-service/src/email/email-tracking.js'" },
   { p: /['"](?:\.\.\/)+lib\/email\/reputation-monitor\.js['"]/g, r: "'@services/email-service/src/email/reputation-monitor.js'" },
   { p: /['"](?:\.\.\/)+lib\/email\/email-discovery\.js['"]/g, r: "'@services/email-service/src/email/email-discovery.js'" },

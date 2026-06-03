@@ -136,9 +136,9 @@ export async function calculateReputationScore(integrationId: string): Promise<n
   // 1.8 Fast Recovery Boost: Check last 24h performance
   const oneDayAgo = new Date();
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
-  const last24hBounces = recentBounces.filter((b: any) => new Date(b.createdAt) > oneDayAgo).length;
-  
-  if (last24hBounces === 0 && stats.openRate > 20 && stats.totalMessages > 5) {
+  const last24hBounces = recentBounces.filter((b: any) => new Date(b.createdAt) > oneDayAgo);
+
+  if (last24hBounces.length === 0 && stats.openRate > 20 && stats.totalMessages > 5) {
     score += 15; // Fast recovery boost
     console.log(`🚀 [Reputation Monitor] Fast Recovery Boost (+15) for mailbox ${mailbox.id} due to high engagement and 0 bounces.`);
   }
@@ -152,57 +152,115 @@ export async function calculateReputationScore(integrationId: string): Promise<n
 
   const currentSpamRisk = (100 - score) / 100; // 0.0 to 1.0
 
-  let newDailyLimit = mailbox.dailyLimit || 50;
-  let newWarmupStatus = mailbox.warmupStatus || 'active';
-  let healthLevel: 'healthy' | 'cautious' | 'poor' | 'critical' = 'healthy';
-  let gracefulDailyLimit: number | null = null;
-  // 4-TIER PRECISE REPUTATION SYSTEM (Advisory Only - No Pausing)
-  const isNewMailbox = (stats.totalMessages ?? 0) < 10;
+  // ── Phase 2: OUTREACH PROTECT — Initial-Only Throttle + Auto-Recovery ──────
+  // Follow-ups and replies are NEVER throttled. Only initial cold outreach is.
+  // Warmup is increased during reputation repair to accelerate recovery.
 
+  let healthLevel: 'healthy' | 'cautious' | 'poor' | 'critical' = 'healthy';
+  let newInitialLimit = mailbox.initialOutreachLimit || 50;
+  let newWarmupLimit = mailbox.warmupLimit || 5;
+  const originalLimit = mailbox.originalDailyLimit ?? newInitialLimit;
+
+  // Calculate bounce & spam rates for the last 24h window (reuse existing oneDayAgo / last24hBounces)
+  const last24hHardBounces = last24hBounces.filter((b: any) => b.bounceType === 'hard').length;
+  const last24hSpam = last24hBounces.filter((b: any) => b.bounceType === 'spam').length;
+  const last24hTotal = stats.totalMessages ?? 0; // Approximation for 24h window
+
+  const hardBounceRate24h = last24hTotal > 0 ? (last24hHardBounces / last24hTotal) * 100 : 0;
+  const spamRate24h = last24hTotal > 0 ? (last24hSpam / last24hTotal) * 100 : 0;
+
+  const isThrottled = mailbox.throttleUntil && new Date(mailbox.throttleUntil) > new Date();
+  const throttleExpired = mailbox.throttleUntil && new Date(mailbox.throttleUntil) <= new Date();
+
+  // 4-TIER REPUTATION SYSTEM (only affects initial outreach, never follow-ups)
   if (score < 40) {
-    // 🔴 Critical: Reputation below 40% -> Action: Strict Throttle but NOT Paused
     healthLevel = 'poor';
-    newWarmupStatus = 'active'; 
-    gracefulDailyLimit = isNewMailbox ? null : 10; // Extreme throttle (bypassed if new)
-    console.warn(`🔴 [Reputation Monitor] Mailbox ${mailbox.id} is CRITICAL (${score}/100). Throttling to 10/day.`);
+    if (!isThrottled) {
+      // Initial-Only Throttle-Down: -5 initial outreach / +5 warmup repair
+      if (!mailbox.originalDailyLimit) {
+        await db.update(integrations).set({ originalDailyLimit: newInitialLimit }).where(eq(integrations.id, integrationId));
+      }
+      newInitialLimit = Math.max(5, newInitialLimit - 5);
+      newWarmupLimit = Math.min(10, newWarmupLimit + 5);
+      const throttleDays = 3 + Math.floor(Math.random() * 3); // 3–5 days
+      const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
+      await db.update(integrations).set({ throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      console.warn(`🔴 [Reputation Monitor] Mailbox ${mailbox.id} CRITICAL (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
+    }
   } else if (score < 65) {
-    // 🟠 Poor: Reputation below 65% -> 50% Throttling
     healthLevel = 'poor';
-    gracefulDailyLimit = isNewMailbox ? null : Math.max(15, Math.floor(newDailyLimit * 0.5));
-    console.warn(`🟠 [Reputation Monitor] Mailbox ${mailbox.id} is POOR: Throttling to 50% (${gracefulDailyLimit}) due to reputation dip (${score}/100).`);
+    if (!isThrottled) {
+      if (!mailbox.originalDailyLimit) {
+        await db.update(integrations).set({ originalDailyLimit: newInitialLimit }).where(eq(integrations.id, integrationId));
+      }
+      newInitialLimit = Math.max(10, Math.floor(newInitialLimit * 0.5));
+      newWarmupLimit = Math.min(10, newWarmupLimit + 5);
+      const throttleDays = 3 + Math.floor(Math.random() * 3);
+      const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
+      await db.update(integrations).set({ throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      console.warn(`🟠 [Reputation Monitor] Mailbox ${mailbox.id} POOR (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
+    }
   } else if (score < 85) {
-    // 🟡 Cautious: Reputation below 85% -> 80% Throttling
     healthLevel = 'cautious';
-    gracefulDailyLimit = isNewMailbox ? null : Math.max(25, Math.floor(newDailyLimit * 0.8));
-    console.warn(`🟡 [Reputation Monitor] Mailbox ${mailbox.id} is CAUTIOUS: Throttling to 80% (${gracefulDailyLimit}) due to reputation dip (${score}/100).`);
+    if (!isThrottled) {
+      if (!mailbox.originalDailyLimit) {
+        await db.update(integrations).set({ originalDailyLimit: newInitialLimit }).where(eq(integrations.id, integrationId));
+      }
+      newInitialLimit = Math.max(15, Math.floor(newInitialLimit * 0.8));
+      newWarmupLimit = Math.min(10, newWarmupLimit + 3);
+      const throttleDays = 3 + Math.floor(Math.random() * 2);
+      const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
+      await db.update(integrations).set({ throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      console.warn(`🟡 [Reputation Monitor] Mailbox ${mailbox.id} CAUTIOUS (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
+    }
   } else {
-    // 🟢 Healthy: Normal operation
+    // 🟢 Healthy
     healthLevel = 'healthy';
-    if (newDailyLimit < 500 && newWarmupStatus !== 'paused') {
-      const increment = Math.max(20, Math.floor(newDailyLimit * 0.15));
-      newDailyLimit = Math.min(500, newDailyLimit + increment);
+    if (isThrottled || throttleExpired) {
+      // Auto-Recovery: gradually throttle back up (+5 initial / -5 warmup per cycle)
+      const nextInitial = Math.min(originalLimit, newInitialLimit + 5);
+      const nextWarmup = Math.max(5, newWarmupLimit - 5);
+      newInitialLimit = nextInitial;
+      newWarmupLimit = nextWarmup;
+      if (newInitialLimit >= originalLimit) {
+        // Fully recovered — clear throttle state
+        await db.update(integrations).set({
+          throttleUntil: null,
+          originalDailyLimit: null,
+          updatedAt: new Date()
+        }).where(eq(integrations.id, integrationId));
+        console.log(`🟢 [Reputation Monitor] Mailbox ${mailbox.id} FULLY RECOVERED. Initial outreach restored to ${originalLimit}/day.`);
+      } else {
+        console.log(`🟢 [Reputation Monitor] Mailbox ${mailbox.id} RECOVERING. Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day.`);
+      }
+    } else {
+      // Healthy and not throttled — gently grow if under cap
+      if (newInitialLimit < originalLimit && newInitialLimit < 50) {
+        newInitialLimit = Math.min(50, newInitialLimit + 2);
+      }
     }
   }
 
-  // Recovery: Ensure warmupStatus remains active if it was accidentally paused
-  if (newWarmupStatus === 'paused') {
-    newWarmupStatus = 'active';
+  // Enforce 50-email safety ceiling: initial + warmup ≤ 50
+  if (newInitialLimit + newWarmupLimit > 50) {
+    const overflow = (newInitialLimit + newWarmupLimit) - 50;
+    newInitialLimit = Math.max(5, newInitialLimit - overflow);
   }
 
   await db.update(integrations).set({
     reputationScore: score,
     healthLevel,
-    gracefulDailyLimit,
     spamRiskScore: currentSpamRisk,
-    warmupStatus: newWarmupStatus as any,
-    dailyLimit: newDailyLimit,
+    initialOutreachLimit: newInitialLimit,
+    warmupLimit: newWarmupLimit,
+    dailyLimit: newInitialLimit + newWarmupLimit, // backward-compat overall cap
     updatedAt: new Date()
   }).where(eq(integrations.id, integrationId));
 
   // Notify UI
   wsSync.broadcastToUser(mailbox.userId, { 
     type: 'reputation_updated', 
-    payload: { integrationId, score, status: newWarmupStatus } 
+    payload: { integrationId, score, initialOutreachLimit: newInitialLimit, warmupLimit: newWarmupLimit } 
   });
   wsSync.notifyStatsUpdated(mailbox.userId);
 
@@ -211,7 +269,8 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     integrationId,
     score,
     userId: mailbox.userId,
-    status: newWarmupStatus
+    initialOutreachLimit: newInitialLimit,
+    warmupLimit: newWarmupLimit
   });
 
   return score;

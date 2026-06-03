@@ -227,7 +227,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     // [NEW] Workspace Benchmarks (Global Comparison)
     const { db } = await import('@shared/lib/db/db.js');
     const { leads: leadsSchema, messages: msgSchema } = await import('@audnix/shared');
-    const { sql: dSql, eq: dEq } = await import('drizzle-orm');
+    const { sql: dSql, eq: dEq, and: dAnd } = await import('drizzle-orm');
 
     // Phase 7 Fix: Use SQL aggregation for average lead score to avoid OOM
     const [scoreResult] = await db.select({
@@ -245,7 +245,13 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
       replied: dSql<number>`count(*) filter (where direction = 'inbound')`
     })
     .from(msgSchema)
-    .where(dEq(msgSchema.userId, userId));
+    .where(
+      dAnd(
+        dEq(msgSchema.userId, userId),
+        // Defensive guard: warmup never writes to messages, but ensure safety
+        dSql`${msgSchema.metadata}->>'warmupThreadId' is null`
+      )
+    );
 
     const globalOpenRate = Number(globalMsgStats?.totalSent || 0) > 0
       ? Number(((Number(globalMsgStats?.opened || 0) / Number(globalMsgStats?.totalSent || 0)) * 100).toFixed(2))
@@ -749,7 +755,9 @@ router.get('/analytics/outreach', requireAuth, async (req: Request, res: Respons
       .where(
         and(
           eq(messages.userId, userId),
-          gte(messages.createdAt, thirtyDaysAgo)
+          gte(messages.createdAt, thirtyDaysAgo),
+          // Defensive guard: warmup never writes to messages, but ensure safety
+          sql`${messages.metadata}->>'warmupThreadId' is null`
         )
       )
       .groupBy(sql`DATE_TRUNC('day', ${messages.createdAt})`, messages.direction)

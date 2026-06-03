@@ -10,4 +10,5 @@ billing_worker: npm run start:worker:billing
 orchestrator_worker: npm run start:worker:orchestrator
 knowledge_worker: npm run start:worker:knowledge
 audit_worker: npm run start:worker:audit
+warmup_worker: npm run start:worker:warmup
 infra_scaler: npm run start:infra:scaler

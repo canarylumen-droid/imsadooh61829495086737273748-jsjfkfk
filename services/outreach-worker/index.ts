@@ -34,7 +34,7 @@ async function startOutreachService() {
   startWorkerHealthServer('outreach-worker', parseInt(process.env.OUTREACH_WORKER_PORT || process.env.PORT || '8082', 10));
 
   // ── Register workers with the health monitor ──────────────────────────────
-  ['Outreach Engine', 'Autonomous Outreach', 'Campaign Engine', 'Meeting Reminders', 'Lead Governance', 'Reputation Monitor']
+  ['Outreach Engine', 'Autonomous Outreach', 'Campaign Engine', 'Meeting Reminders', 'Lead Governance', 'Reputation Monitor', 'Consumer Distribution', 'Verification Pipeline', 'Active Watchdog', 'Fleet Auditor', 'Daily Checkpoint']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorkerModule = async (name: string, startFn: () => any) => {
@@ -60,6 +60,10 @@ async function startOutreachService() {
     { autonomousOutreachWorker },
     campaignQueueModule,
     autonomousScalerModule,
+    consumerDistributionModule,
+    verificationPipelineModule,
+    activeWatchdogModule,
+    fleetAuditorModule,
   ] = await Promise.all([
     import('./workers/outreach-engine.js').catch(() => ({ outreachEngine: null as any })),
     import('./workers/meeting-reminder-worker.js').catch(() => ({ meetingReminderWorker: { start: () => {}, stop: () => {} } })),
@@ -71,6 +75,10 @@ async function startOutreachService() {
       return null;
     }),
     import('./src/outreach-lib/autonomous-scaler.js').catch(() => ({ AutonomousScalerService: null as any })),
+    import('@shared/lib/queues/consumer-distribution.js').catch(() => ({ startConsumerWorker: null as any })),
+    import('@shared/lib/queues/verification-pipeline.js').catch(() => ({ startVerificationWorker: null as any })),
+    import('@shared/lib/queues/active-watchdog.js').catch(() => ({ startActiveWatchdog: null as any })),
+    import('@shared/lib/queues/fleet-auditor.js').catch(() => ({ fleetAuditor: { start: () => {}, stop: () => {} } })),
   ]);
 
   const { AutonomousScalerService } = autonomousScalerModule;
@@ -86,6 +94,15 @@ async function startOutreachService() {
   if (campaignQueueModule) {
     log.info('Campaign Engine BullMQ Worker ✅ Initialized');
   }
+
+  await startWorkerModule('Consumer Distribution', () => consumerDistributionModule?.startConsumerWorker?.());
+  await startWorkerModule('Verification Pipeline', () => verificationPipelineModule?.startVerificationWorker?.());
+  await startWorkerModule('Active Watchdog',       () => activeWatchdogModule?.startActiveWatchdog?.());
+  await startWorkerModule('Fleet Auditor',         () => fleetAuditorModule?.fleetAuditor?.start?.());
+  await startWorkerModule('Daily Checkpoint',      () => {
+    const { dailyCheckpoint } = require('@shared/lib/queues/daily-checkpoint.js');
+    dailyCheckpoint?.start?.();
+  });
 
   // ── Self-Healing Job Watchdog ───────────────────────────────────────────────
   // Sweeps campaign_job_logs every hour for jobs stuck in 'pending'/'processing'

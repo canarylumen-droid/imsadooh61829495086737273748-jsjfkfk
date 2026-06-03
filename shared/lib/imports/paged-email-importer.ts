@@ -75,6 +75,15 @@ async function processEmailForLead(
     }
     // ─────────────────────────────────────────────────────────────────────────
 
+    // Skip warmup emails (defensive — should have been filtered upstream by IMAP idle)
+    if (email.isWarmup || (email.headers && (
+      (email.headers.get && email.headers.get('x-audnix-warmup')) ||
+      email.headers['x-audnix-warmup']
+    ))) {
+      results.skipped++;
+      return;
+    }
+
     // Skip if email is transactional (only for inbound)
     if (direction === 'inbound' && isTransactionalEmail(email)) {
       results.skipped++;

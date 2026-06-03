@@ -52,7 +52,7 @@ async function startEmailService() {
   });
 
   // ── Register workers with the health monitor ──────────────────────────────
-  ['IMAP IDLE', 'Email Sync', 'Email Warmup', 'Mailbox Health', 'Lead Redistribution',
+  ['IMAP IDLE', 'Email Sync', 'Mailbox Health', 'Lead Redistribution',
    'Email Verification', 'Email Routing']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
@@ -73,14 +73,12 @@ async function startEmailService() {
   // ── Load all email-domain workers from lib/ ───────────────────────────────
   const [
     { emailSyncWorker },
-    { emailWarmupWorker },
     { mailboxHealthService },
     { redistributionWorker },
     { imapIdleManager },
     { PushNotificationService },
   ] = await Promise.all([
     import('@services/email-service/src/email/email-sync-worker.js'),
-    import('@services/email-service/src/email/email-warmup-worker.js'),
     import('@services/email-service/src/email/mailbox-health-service.js'),
     import('@services/email-service/src/email/redistribution-worker.js'),
     import('@services/email-service/src/email/imap-idle-manager.js'),
@@ -88,7 +86,6 @@ async function startEmailService() {
   ]);
 
   await startWorkerModule('Email Sync',            () => emailSyncWorker.start());
-  await startWorkerModule('Email Warmup',          () => emailWarmupWorker.start());
   await startWorkerModule('Mailbox Health',        () => mailboxHealthService.start());
   await startWorkerModule('Lead Redistribution',   () => redistributionWorker.start());
   await startWorkerModule('IMAP IDLE Manager',     () => imapIdleManager.start());

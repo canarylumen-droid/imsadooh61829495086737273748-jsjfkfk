@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\USER\\audnix-ai-project\\logs\\.ba646af0a93c0a54bd6b875d32eab403baffff3c-audit.json",
+    "files": [
+        {
+            "date": 1780444689129,
+            "name": "C:\\Users\\USER\\audnix-ai-project\\logs\\error-2026-06-02.log",
+            "hash": "550a1f8ac829b53d50a66b46a9ee20b8475f393fdbd1e80ee5f11176d127e61c"
+        }
+    ],
+    "hashType": "sha256"
+}

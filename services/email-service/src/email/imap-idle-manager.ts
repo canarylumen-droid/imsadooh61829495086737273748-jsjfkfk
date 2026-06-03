@@ -971,7 +971,8 @@ class ImapIdleManager {
                                         uid: attrs?.uid || seqno,
                                         messageId: parsed.messageId,
                                         inReplyTo: parsed.inReplyTo,
-                                        isSpam: isSpam
+                                        isSpam: isSpam,
+                                        headers: parsed.headers
                                     });
                                 }
                             });
@@ -982,15 +983,19 @@ class ImapIdleManager {
                     fetch.once('end', async () => {
                         try {
                             if (emails.length > 0) {
-                                console.log(`📥 Processing ${emails.length} ${direction} emails from ${folderName}`);
-                                const importRes = await pagedEmailImport(userId, emails.map(e => ({
+                                const nonWarmupEmails = emails.filter(e => !e.headers?.get('x-audnix-warmup'));
+                                if (nonWarmupEmails.length < emails.length) {
+                                    console.log(`[IMAP] Filtered out ${emails.length - nonWarmupEmails.length} warmup email(s)`);
+                                }
+                                console.log(`📥 Processing ${nonWarmupEmails.length} ${direction} emails from ${folderName}`);
+                                const importRes = await pagedEmailImport(userId, nonWarmupEmails.map(e => ({
                                     from: e.from?.split('<')[1]?.split('>')[0] || e.from,
                                     to: e.to?.split('<')[1]?.split('>')[0] || e.to,
                                     subject: e.subject,
                                     text: e.text,
                                     date: e.date,
                                     html: e.html,
-                                    isRead: e.flags?.includes('\\Seen') || false,
+                                    isRead: e.flags?.includes('\Seen') || false,
                                     messageId: e.messageId,
                                     inReplyTo: e.inReplyTo,
                                     integrationId: integrationId,
@@ -1532,7 +1537,8 @@ class ImapIdleManager {
                                             html: parsed.html,
                                             flags,
                                             messageId: parsed.messageId,
-                                            inReplyTo: parsed.inReplyTo
+                                            inReplyTo: parsed.inReplyTo,
+                                            headers: parsed.headers
                                         });
                                     }
                                 });
@@ -1543,7 +1549,11 @@ class ImapIdleManager {
                         fetch.once('end', async () => {
                             try {
                                 if (emails.length > 0) {
-                                    const res = await pagedEmailImport(userId, emails.map(e => ({
+                                    const nonWarmupEmails = emails.filter(e => !e.headers?.get('x-audnix-warmup'));
+                                    if (nonWarmupEmails.length < emails.length) {
+                                        console.log(`[IMAP] Filtered out ${emails.length - nonWarmupEmails.length} warmup email(s)`);
+                                    }
+                                    const res = await pagedEmailImport(userId, nonWarmupEmails.map(e => ({
                                         from: e.from?.split('<')[1]?.split('>')[0] || e.from,
                                         to: e.to?.split('<')[1]?.split('>')[0] || e.to,
                                         subject: e.subject,

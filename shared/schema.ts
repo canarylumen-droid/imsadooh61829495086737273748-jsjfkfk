@@ -175,6 +175,7 @@ export const leads = pgTable("leads", {
   leadsUserIdChannelIdx: index("leads_user_id_channel_idx").on(table.userId, table.channel),
   // Phase 15: Composite indices for sub-100ms dashboard queries
   leadsUserStatusIdx: index("leads_user_status_idx").on(table.userId, table.status),
+  leadsUserEmailUnique: uniqueIndex("leads_user_email_unique_idx").on(table.userId, table.email),
   leadsLastMsgIdx: index("leads_last_msg_idx").on(table.lastMessageAt),
 }));
 
@@ -325,6 +326,10 @@ export const integrations = pgTable("integrations", {
   warmupStatus: text("warmup_status", { enum: ["active", "paused", "completed", "none"] }).notNull().default("none"),
   syncMetadata: jsonb("sync_metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
   workerId: text("worker_id"),
+  initialOutreachLimit: integer("initial_outreach_limit").notNull().default(50),
+  warmupLimit: integer("warmup_limit").notNull().default(5),
+  throttleUntil: timestamp("throttle_until"),
+  originalDailyLimit: integer("original_daily_limit"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -596,14 +601,6 @@ export const followUpQueue = pgTable("follow_up_queue", {
 }));
 
 
-export const emailWarmupSchedules = pgTable("email_warmup_schedules", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  day: integer("day").notNull(), // 1-30
-  dailyLimit: integer("daily_limit").notNull(), // emails to send today
-  randomDelay: boolean("random_delay").notNull().default(true), // 2-12s delays
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
 
 export const bounceTracker = pgTable("bounce_tracker", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1034,7 +1031,7 @@ export const campaignLeads = pgTable("campaign_leads", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   campaignId: uuid("campaign_id").notNull().references(() => outreachCampaigns.id, { onDelete: "cascade" }),
   leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
-  status: text("status", { enum: ["pending", "sent", "failed", "replied", "aborted", "queued"] }).notNull().default("pending"),
+  status: text("status", { enum: ["pending", "processing", "sent", "failed", "replied", "aborted", "queued"] }).notNull().default("pending"),
   currentStep: integer("current_step").notNull().default(0),
   nextActionAt: timestamp("next_action_at"),
   sentAt: timestamp("sent_at"),
@@ -1129,7 +1126,6 @@ export const insertBrandEmbeddingSchema = createInsertSchema(brandEmbeddings);
 export const insertOnboardingProfileSchema = createInsertSchema(onboardingProfiles);
 export const insertOAuthAccountSchema = createInsertSchema(oauthAccounts);
 export const insertOtpCodeSchema = createInsertSchema(otpCodes);
-export const insertEmailWarmupScheduleSchema = createInsertSchema(emailWarmupSchedules);
 export const insertBounceTrackerSchema = createInsertSchema(bounceTracker);
 export const insertCalendarSettingsSchema = createInsertSchema(calendarSettings);
 export const insertVideoAssetSchema = createInsertSchema(videoAssets);
@@ -1188,8 +1184,6 @@ export type Organization = typeof organizations.$inferSelect;
 export type InsertOrganization = typeof organizations.$inferInsert;
 export type OtpCode = typeof otpCodes.$inferSelect;
 export type InsertOtpCode = typeof otpCodes.$inferInsert;
-export type EmailWarmupSchedule = typeof emailWarmupSchedules.$inferSelect;
-export type InsertEmailWarmupSchedule = typeof emailWarmupSchedules.$inferInsert;
 export type BounceTracker = typeof bounceTracker.$inferSelect;
 export type InsertBounceTracker = typeof bounceTracker.$inferInsert;
 export type VideoMonitor = typeof videoMonitors.$inferSelect;
@@ -1698,3 +1692,118 @@ export const memoryEpisodesSelect = createSelectSchema(memoryEpisodes);
 export const memoryEpisodesInsert = createInsertSchema(memoryEpisodes);
 export const agentSkillsSelect = createSelectSchema(agentSkills);
 export const agentSkillsInsert = createInsertSchema(agentSkills);
+
+// ========== P2P WARMUP SERVICE (Ghost Layer) ==========
+// These tables are STRICTLY ISOLATED from the main app.
+// No reads or writes from campaign_leads, messages, outreach_campaigns, etc.
+
+export const warmupMailboxes = pgTable("warmup_mailboxes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  integrationId: uuid("integration_id").notNull().references(() => integrations.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  provider: text("provider", { enum: ["gmail", "outlook", "custom_email"] }).notNull(),
+  status: text("status", { enum: ["active", "paused", "unenrolled", "error"] }).notNull().default("paused"),
+  pauseReason: text("pause_reason"),
+  poolType: text("pool_type", { enum: ["enterprise", "global"] }).notNull().default("global"),
+  dailySentCount: integer("daily_sent_count").notNull().default(0),
+  dailyReceivedCount: integer("daily_received_count").notNull().default(0),
+  lastResetAt: timestamp("last_reset_at").notNull().defaultNow(),
+  hiddenFolderPath: text("hidden_folder_path"),
+  hiddenFolderCreatedAt: timestamp("hidden_folder_created_at"),
+  activeThreadIds: jsonb("active_thread_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  metadata: jsonb("metadata").$type<{
+    smtpHost?: string; smtpPort?: number; imapHost?: string; imapPort?: number;
+    lastError?: string; lastErrorAt?: string;
+  }>().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  wmStatusIdx: index("wm_status_idx").on(table.status),
+  wmPoolTypeIdx: index("wm_pool_type_idx").on(table.poolType),
+  wmOrgIdx: index("wm_org_idx").on(table.organizationId),
+  wmProviderIdx: index("wm_provider_idx").on(table.provider),
+  wmIntegrationIdx: uniqueIndex("wm_integration_idx").on(table.integrationId),
+}));
+
+export const warmupThreads = pgTable("warmup_threads", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  senderMailboxId: uuid("sender_mailbox_id").notNull().references(() => warmupMailboxes.id, { onDelete: "cascade" }),
+  recipientMailboxId: uuid("recipient_mailbox_id").notNull().references(() => warmupMailboxes.id, { onDelete: "cascade" }),
+  status: text("status", { enum: ["active", "completed", "stalled", "error"] }).notNull().default("active"),
+  messageCount: integer("message_count").notNull().default(0),
+  maxMessages: integer("max_messages").notNull().default(3),
+  subject: text("subject").notNull(),
+  rootMessageId: text("root_message_id"),
+  lastMessageId: text("last_message_id"),
+  references: jsonb("references").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  nextSendAt: timestamp("next_send_at"),
+  nextExpectedReplyAt: timestamp("next_expected_reply_at"),
+  lastInteractionAt: timestamp("last_interaction_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  wtStatusNextSendIdx: index("wt_status_next_send_idx").on(table.status, table.nextSendAt),
+  wtSenderIdx: index("wt_sender_idx").on(table.senderMailboxId),
+  wtRecipientIdx: index("wt_recipient_idx").on(table.recipientMailboxId),
+}));
+
+export const warmupInteractions = pgTable("warmup_interactions", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  threadId: uuid("thread_id").notNull().references(() => warmupThreads.id, { onDelete: "cascade" }),
+  direction: text("direction", { enum: ["outbound", "inbound"] }).notNull(),
+  fromMailboxId: uuid("from_mailbox_id").notNull().references(() => warmupMailboxes.id, { onDelete: "cascade" }),
+  toMailboxId: uuid("to_mailbox_id").notNull().references(() => warmupMailboxes.id, { onDelete: "cascade" }),
+  subject: text("subject").notNull(),
+  body: text("body").notNull(),
+  messageId: text("message_id").notNull().unique(),
+  inReplyTo: text("in_reply_to"),
+  references: jsonb("references").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  xAudnixWarmup: boolean("x_audnix_warmup").notNull().default(true),
+  expungedFromSent: boolean("expunged_from_sent").notNull().default(false),
+  movedToHiddenFolder: boolean("moved_to_hidden_folder").notNull().default(false),
+  status: text("status", { enum: ["pending", "sent", "delivered", "failed", "bounced", "expunged"] }).notNull().default("pending"),
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  wiThreadIdx: index("wi_thread_idx").on(table.threadId),
+  wiStatusIdx: index("wi_status_idx").on(table.status),
+  wiMessageIdIdx: index("wi_message_id_idx").on(table.messageId),
+}));
+
+export const warmupPoolState = pgTable("warmup_pool_state", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  poolType: text("pool_type", { enum: ["enterprise", "global"] }).notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  totalMailboxes: integer("total_mailboxes").notNull().default(0),
+  activeMailboxes: integer("active_mailboxes").notNull().default(0),
+  pausedMailboxes: integer("paused_mailboxes").notNull().default(0),
+  lastSnapshotAt: timestamp("last_snapshot_at").notNull().defaultNow(),
+  isHealthy: boolean("is_healthy").notNull().default(false),
+  metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  wpsPoolTypeOrgIdx: uniqueIndex("wps_pool_type_org_idx").on(table.poolType, table.organizationId),
+}));
+
+export const warmupMailboxesSelect = createSelectSchema(warmupMailboxes);
+export const warmupMailboxesInsert = createInsertSchema(warmupMailboxes);
+export const warmupThreadsSelect = createSelectSchema(warmupThreads);
+export const warmupThreadsInsert = createInsertSchema(warmupThreads);
+export const warmupInteractionsSelect = createSelectSchema(warmupInteractions);
+export const warmupInteractionsInsert = createInsertSchema(warmupInteractions);
+export const warmupPoolStateSelect = createSelectSchema(warmupPoolState);
+export const warmupPoolStateInsert = createInsertSchema(warmupPoolState);
+
+export type WarmupMailbox = z.infer<typeof warmupMailboxesSelect>;
+export type InsertWarmupMailbox = z.infer<typeof warmupMailboxesInsert>;
+export type WarmupThread = z.infer<typeof warmupThreadsSelect>;
+export type InsertWarmupThread = z.infer<typeof warmupThreadsInsert>;
+export type WarmupInteraction = z.infer<typeof warmupInteractionsSelect>;
+export type InsertWarmupInteraction = z.infer<typeof warmupInteractionsInsert>;
+export type WarmupPoolState = z.infer<typeof warmupPoolStateSelect>;
+export type InsertWarmupPoolState = z.infer<typeof warmupPoolStateInsert>;

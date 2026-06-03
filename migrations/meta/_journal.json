@@ -344,6 +344,13 @@
       "when": 1776201694378,
       "tag": "0048_thick_speed",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1780444425125,
+      "tag": "0049_sloppy_tenebrous",
+      "breakpoints": true
     }
   ]
 }

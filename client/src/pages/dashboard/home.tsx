@@ -42,6 +42,7 @@ import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { AutonomousActionFeed } from "@/components/outreach/AutonomousActionFeed";
 import { ReputationCard } from "@/components/outreach/ReputationCard";
 import { ReputationTrendChart } from "@/components/outreach/ReputationTrendChart";
+import { CampaignHealthDashboard } from "@/components/outreach/CampaignHealthDashboard";
 import { RecentConversations } from "@/components/dashboard/RecentConversations";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
@@ -271,6 +272,14 @@ export default function DashboardHome() {
     refetchOnWindowFocus: false,
     enabled: !!activities && activities.length > 0 && !!user, // Only fetch inside dashboard if activities exist
   });
+
+  const { data: campaigns } = useQuery<any[]>({
+    queryKey: ["/api/outreach/campaigns"],
+    staleTime: 30_000,
+    enabled: !!user,
+  });
+
+  const activeCampaign = campaigns?.find((c: any) => c.status === 'active' || c.status === 'running');
 
   const isSmtpConnected = integrations?.some((i: any) => (i.provider === 'gmail' || i.provider === 'outlook' || i.provider === 'custom_email') && i.connected);
   const stats = statsData;
@@ -568,6 +577,11 @@ export default function DashboardHome() {
                 </h4>
                 {cleanInsightSummary ? cleanInsightSummary : ""}
               </motion.div>
+            )}
+            {activeCampaign && (
+              <div className="space-y-4">
+                <CampaignHealthDashboard campaignId={activeCampaign.id} />
+              </div>
             )}
             <div className="h-[480px]">
               <RecentConversations />

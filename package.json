@@ -41,9 +41,10 @@
     "start:worker:audit": "node --import tsx --import ./instrument.ts shared/services/audit/index.ts",
     "start:worker:rag": "node --import tsx --import ./instrument.ts services/rag-worker/index.ts",
     "start:worker:vectordb": "node --import tsx --import ./instrument.ts services/vector-db-service/index.ts",
+    "start:worker:warmup": "node --import tsx --import ./instrument.ts services/warmup-service/index.ts",
     "start:infra:scaler": "node --import tsx --import ./instrument.ts services/outreach-worker/src/outreach-lib/infra-scaler-entry.ts",
     "start:all": "concurrently \"npm run start:api\" \"npm run start:all-workers\"",
-    "start:all-workers": "concurrently \"npm run start:worker:email\" \"npm run start:worker:imap\" \"npm run start:worker:ai\" \"npm run start:worker:outreach\" \"npm run start:worker:lead-recovery\" \"npm run start:worker:social\" \"npm run start:worker:billing\" \"npm run start:worker:orchestrator\" \"npm run start:worker:knowledge\" \"npm run start:worker:audit\" \"npm run start:infra:scaler\""
+    "start:all-workers": "concurrently \"npm run start:worker:email\" \"npm run start:worker:imap\" \"npm run start:worker:ai\" \"npm run start:worker:outreach\" \"npm run start:worker:lead-recovery\" \"npm run start:worker:social\" \"npm run start:worker:billing\" \"npm run start:worker:orchestrator\" \"npm run start:worker:knowledge\" \"npm run start:worker:audit\" \"npm run start:worker:warmup\" \"npm run start:infra:scaler\""
   },
   "engines": {
     "node": "22.x"

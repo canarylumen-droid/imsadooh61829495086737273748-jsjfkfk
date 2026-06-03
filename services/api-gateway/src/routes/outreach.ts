@@ -543,6 +543,43 @@ router.post('/campaigns/:id/abort', requireAuth, async (req, res) => {
 });
 
 /**
+ * POST /api/outreach/campaigns/:id/force-requeue
+ * Manually release stuck 'processing' leads back to 'pending' for immediate re-assignment.
+ */
+router.post('/campaigns/:id/force-requeue', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.session?.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    if (!db) return res.status(503).json({ error: 'Database unavailable' });
+
+    const result = await db.execute(sql`
+      UPDATE campaign_leads
+      SET status = 'pending', integration_id = NULL, updated_at = NOW()
+      WHERE campaign_id = ${id}
+        AND status = 'processing'
+      RETURNING id;
+    `);
+
+    const releasedCount = result.rows.length;
+
+    // Notify user in real-time
+    wsSync.broadcastToUser(userId, { type: 'watchdog_alert', payload: {
+      type: 'manual_force_requeue',
+      campaignId: id,
+      count: releasedCount,
+      message: `Force Re-Queue completed. ${releasedCount} leads released.`
+    }});
+
+    return res.json({ success: true, released: releasedCount });
+  } catch (err: any) {
+    console.error('[Outreach] Force Re-Queue failed:', err);
+    return res.status(500).json({ error: 'Failed to force re-queue leads' });
+  }
+});
+
+/**
  * DELETE /api/outreach/campaigns/:id
  * Delete a campaign and all its data
  */
