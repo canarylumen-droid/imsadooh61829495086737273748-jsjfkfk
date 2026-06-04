@@ -248,8 +248,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     .where(
       dAnd(
         dEq(msgSchema.userId, userId),
-        // Defensive guard: warmup never writes to messages, but ensure safety
-        dSql`${msgSchema.metadata}->>'warmupThreadId' is null`
+        dEq(msgSchema.isWarmup, false)
       )
     );
 
@@ -756,8 +755,7 @@ router.get('/analytics/outreach', requireAuth, async (req: Request, res: Respons
         and(
           eq(messages.userId, userId),
           gte(messages.createdAt, thirtyDaysAgo),
-          // Defensive guard: warmup never writes to messages, but ensure safety
-          sql`${messages.metadata}->>'warmupThreadId' is null`
+          eq(messages.isWarmup, false)
         )
       )
       .groupBy(sql`DATE_TRUNC('day', ${messages.createdAt})`, messages.direction)

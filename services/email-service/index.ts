@@ -53,7 +53,7 @@ async function startEmailService() {
 
   // ── Register workers with the health monitor ──────────────────────────────
   ['IMAP IDLE', 'Email Sync', 'Mailbox Health', 'Lead Redistribution',
-   'Email Verification', 'Email Routing']
+   'Email Verification', 'Email Routing', 'Spam Rescue', 'Inbound Sweep']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorkerModule = async (name: string, startFn: () => any) => {
@@ -77,12 +77,16 @@ async function startEmailService() {
     { redistributionWorker },
     { imapIdleManager },
     { PushNotificationService },
+    { spamRescueWorker },
+    { inboundSweepWorker },
   ] = await Promise.all([
     import('@services/email-service/src/email/email-sync-worker.js'),
     import('@services/email-service/src/email/mailbox-health-service.js'),
     import('@services/email-service/src/email/redistribution-worker.js'),
     import('@services/email-service/src/email/imap-idle-manager.js'),
     import('@services/email-service/src/email/push-notification-service.js'),
+    import('@services/email-service/src/imap/spam-rescue.js'),
+    import('@services/email-service/src/imap/inbound-sweep.js'),
   ]);
 
   await startWorkerModule('Email Sync',            () => emailSyncWorker.start());
@@ -90,6 +94,8 @@ async function startEmailService() {
   await startWorkerModule('Lead Redistribution',   () => redistributionWorker.start());
   await startWorkerModule('IMAP IDLE Manager',     () => imapIdleManager.start());
   await startWorkerModule('Native Push',           () => PushNotificationService.initializeAll());
+  await startWorkerModule('Spam Rescue',           () => spamRescueWorker.start());
+  await startWorkerModule('Inbound Sweep',         () => inboundSweepWorker.start());
 
   // ── Worker Discovery Registry ───────────────────────────────────────────
   await discoveryRegistry.register();

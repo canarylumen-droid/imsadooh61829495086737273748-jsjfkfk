@@ -675,6 +675,8 @@ async function getMailboxInitialSendCount(integrationId: string): Promise<number
     SELECT COUNT(*) as count FROM campaign_emails
     WHERE integration_id = ${integrationId}::uuid
     AND step_index = 0
+    AND status = 'sent'
+    AND (is_warmup IS NULL OR is_warmup = false)
     AND sent_at >= CURRENT_DATE::timestamp
   `);
   const count = Number(result.rows[0].count);
@@ -1168,6 +1170,14 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
           .where(eq(campaignLeads.id, leadEntry.id)));
         continue;
       }
+    }
+
+    // --- MID-BATCH COLLISION CHECK ---
+    // If an auto-reply appeared while we were iterating leads, yield so the reply lands first.
+    if (await mailboxHasPendingReply(integrationId)) {
+      console.log(`[CampaignWorker] ⚠️ Auto-reply appeared mid-batch for ${integrationId.slice(-8)}. Yielding remaining sends.`);
+      await rescheduleSendBatch(data, 5 * 60 * 1000);
+      break;
     }
 
     // 7. FAULT-TOLERANT SEND
@@ -1883,6 +1893,8 @@ async function deliverCampaignEmail(
       subject,
       body,
       stepIndex: leadEntry.currentStep,
+      integrationId,
+      isWarmup: false,
       status: 'sending',
     })
     .onConflictDoNothing({
@@ -2186,6 +2198,8 @@ async function deliverCampaignInstagram(
       subject: 'Instagram DM',
       body,
       stepIndex: leadEntry.currentStep,
+      integrationId,
+      isWarmup: false,
       status: 'sending',
     })
     .onConflictDoNothing({

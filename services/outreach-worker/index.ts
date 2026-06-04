@@ -34,7 +34,7 @@ async function startOutreachService() {
   startWorkerHealthServer('outreach-worker', parseInt(process.env.OUTREACH_WORKER_PORT || process.env.PORT || '8082', 10));
 
   // ── Register workers with the health monitor ──────────────────────────────
-  ['Outreach Engine', 'Autonomous Outreach', 'Campaign Engine', 'Meeting Reminders', 'Lead Governance', 'Reputation Monitor', 'Consumer Distribution', 'Verification Pipeline', 'Active Watchdog', 'Fleet Auditor', 'Daily Checkpoint']
+  ['Outreach Engine', 'Autonomous Outreach', 'Campaign Engine', 'Meeting Reminders', 'Lead Governance', 'Reputation Monitor', 'Consumer Distribution', 'Verification Pipeline', 'Active Watchdog', 'Fleet Auditor', 'Daily Checkpoint', 'Hourly Distribution']
     .forEach(n => workerHealthMonitor.registerWorker(n));
 
   const startWorkerModule = async (name: string, startFn: () => any) => {
@@ -102,6 +102,10 @@ async function startOutreachService() {
   await startWorkerModule('Daily Checkpoint',      () => {
     const { dailyCheckpoint } = require('@shared/lib/queues/daily-checkpoint.js');
     dailyCheckpoint?.start?.();
+  });
+  await startWorkerModule('Hourly Distribution',   () => {
+    const { hourlyDistribution } = require('@shared/lib/queues/hourly-distribution.js');
+    hourlyDistribution?.start?.();
   });
 
   // ── Self-Healing Job Watchdog ───────────────────────────────────────────────

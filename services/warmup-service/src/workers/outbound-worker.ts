@@ -14,6 +14,7 @@ import { pairingEngine } from '../lib/pairing-engine.js';
 import { threadManager } from '../lib/thread-manager.js';
 import { llmCopywriter } from '../lib/llm-copywriter.js';
 import { smtpSender } from '../lib/smtp-sender.js';
+import { imapStealth } from '../lib/imap-stealth.js';
 import { warmupInboundQueue } from '../queues/warmup-queues.js';
 
 export function createOutboundWorker(): Worker {
@@ -196,15 +197,13 @@ export function createOutboundWorker(): Worker {
           { delay: replyDelay * 60 * 60 * 1000 }
         );
 
-        // Queue sent-folder expunge
-        await warmupInboundQueue.add(
-          'expunge-sent',
-          {
-            mailboxId: sender[0].id,
-            messageId,
-          },
-          { delay: 5000 }
-        );
+        // Synchronous sent-folder expunge — runs immediately after SMTP 250 OK.
+        // Retries up to 3 times with 1.5s backoff if the message hasn't appeared
+        // in the Sent folder yet (some providers have sub-second indexing delay).
+        // Target: < 800ms from SMTP success to IMAP EXPUNGE.
+        expungeSentSync(sender[0], messageId).catch((err: any) => {
+          console.warn(`[Warmup][Outbound] Sent-folder expunge failed for ${messageId}:`, err.message);
+        });
       }
 
       return { success: result.success, interactionId: interaction?.id };
@@ -225,5 +224,40 @@ function getDefaultSmtpHost(provider: string): string {
     default:
       console.warn(`[Warmup][Outbound] Unknown provider "${provider}" — cannot determine SMTP host`);
       return '';
+  }
+}
+
+/**
+ * Synchronously expunge a warmup email from the Sent folder immediately after
+ * SMTP delivery. Retries up to 3 times with 1.5s backoff if the message hasn't
+ * appeared in the Sent folder yet (some providers have sub-second indexing delay).
+ *
+ * Target: < 800ms from SMTP 250 OK to IMAP EXPUNGE.
+ * Replaces the previous 5-second delayed BullMQ job approach.
+ */
+async function expungeSentSync(
+  mailbox: any,
+  messageId: string,
+  attempt: number = 1
+): Promise<void> {
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 1500;
+
+  try {
+    const success = await imapStealth.expungeSentWarmup(mailbox, messageId);
+    if (!success && attempt < MAX_RETRIES) {
+      // Message not yet indexed in Sent folder — retry after short delay
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      return expungeSentSync(mailbox, messageId, attempt + 1);
+    }
+    if (success) {
+      console.log(`[Warmup][Outbound] ✅ Sent-folder expunged for ${messageId} (attempt ${attempt})`);
+    }
+  } catch (err: any) {
+    if (attempt < MAX_RETRIES) {
+      await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      return expungeSentSync(mailbox, messageId, attempt + 1);
+    }
+    throw err;
   }
 }

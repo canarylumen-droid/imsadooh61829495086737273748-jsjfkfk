@@ -14,13 +14,14 @@
 
 import { db } from '@shared/lib/db/db.js';
 import { campaignLeads, integrations, outreachCampaigns } from '@audnix/shared';
-import { eq, and, sql, gte, ne, count } from 'drizzle-orm';
+import { eq, and, sql, gte, ne, count, inArray, or, isNull } from 'drizzle-orm';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 
 const AUDIT_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
-const OVERLOAD_THRESHOLD = 50;          // More than 50 pending leads = overloaded
-const INACTIVE_THRESHOLD = 5;           // Fewer than 5 pending leads = can receive
-const RAMP_CAP_DEFAULT = 45;            // Default daily initial outreach cap
+const OVERLOAD_MULTIPLIER = 2;            // pending > dailyCap × 2 = overloaded
+const INACTIVE_RATIO = 0.1;              // pending < dailyCap × 0.1 = inactive (can receive)
+const RAMP_CAP_DEFAULT = 45;             // Default daily initial outreach cap
+const MAX_BATCH_SWAP = 20;               // Max leads per swap batch
 
 class FleetAuditor {
   private interval: NodeJS.Timeout | null = null;
@@ -62,15 +63,29 @@ class FleetAuditor {
         )
         .groupBy(campaignLeads.integrationId, campaignLeads.campaignId);
 
-      // 2. Categorize mailboxes
+      // 2. Fetch mailbox limits and health for dynamic thresholds
+      const allMailboxIds = [...new Set(pendingCounts.map(r => r.integrationId).filter(Boolean))];
+      const mailboxProfiles = await this.getMailboxProfiles(allMailboxIds as string[]);
+
+      // 3. Categorize mailboxes using dynamic thresholds
       const overloaded: Array<{ integrationId: string; campaignId: string; count: number }> = [];
       const inactive: Array<{ integrationId: string; campaignId: string; count: number }> = [];
 
       for (const row of pendingCounts) {
         if (!row.integrationId) continue;
-        if (Number(row.count) > OVERLOAD_THRESHOLD) {
+        const profile = mailboxProfiles.get(row.integrationId);
+        if (!profile) continue;
+
+        // Skip unhealthy mailboxes entirely
+        if (profile.healthStatus === 'failed' || profile.isHardPaused) continue;
+
+        const dailyCap = profile.initialOutreachLimit || profile.dailyLimit || RAMP_CAP_DEFAULT;
+        const overloadThreshold = dailyCap * OVERLOAD_MULTIPLIER;
+        const inactiveThreshold = Math.max(1, Math.floor(dailyCap * INACTIVE_RATIO));
+
+        if (Number(row.count) > overloadThreshold) {
           overloaded.push({ integrationId: row.integrationId, campaignId: row.campaignId, count: Number(row.count) });
-        } else if (Number(row.count) < INACTIVE_THRESHOLD) {
+        } else if (Number(row.count) < inactiveThreshold) {
           inactive.push({ integrationId: row.integrationId, campaignId: row.campaignId, count: Number(row.count) });
         }
       }
@@ -80,15 +95,23 @@ class FleetAuditor {
         return { swapped: 0, fromMailboxes: 0, toMailboxes: 0 };
       }
 
-      // 3. Fetch ramp caps for inactive mailboxes (respect daily limits)
+      // 4. Fetch ramp caps and health for inactive mailboxes
       const inactiveIds = inactive.map(i => i.integrationId);
       const caps = await db
-        .select({ id: integrations.id, initialOutreachLimit: integrations.initialOutreachLimit })
+        .select({
+          id: integrations.id,
+          initialOutreachLimit: integrations.initialOutreachLimit,
+          dailyLimit: integrations.dailyLimit,
+          warmupStatus: integrations.warmupStatus,
+        })
         .from(integrations)
-        .where(sql`${integrations.id} IN (${sql.join(inactiveIds.map(id => sql`${id}`), sql`, `)})`);
-      const capMap = new Map(caps.map(c => [c.id, c.initialOutreachLimit ?? RAMP_CAP_DEFAULT]));
+        .where(inArray(integrations.id, inactiveIds));
+      const capMap = new Map(caps.map(c => [c.id, {
+        limit: c.initialOutreachLimit ?? c.dailyLimit ?? RAMP_CAP_DEFAULT,
+        isWarmingUp: c.warmupStatus === 'active',
+      }]));
 
-      // 4. Execute swaps: move pending leads from overloaded → inactive within same campaign
+      // 5. Execute swaps: move pending leads from overloaded → inactive within same campaign
       let totalSwapped = 0;
       const usedFrom = new Set<string>();
       const usedTo = new Set<string>();
@@ -99,13 +122,19 @@ class FleetAuditor {
         if (candidates.length === 0) continue;
 
         for (const candidate of candidates) {
-          const rampCap = capMap.get(candidate.integrationId) ?? RAMP_CAP_DEFAULT;
+          const profile = capMap.get(candidate.integrationId);
+          const rampCap = profile?.limit ?? RAMP_CAP_DEFAULT;
+
+          // Skip warming-up mailboxes — they can't handle overflow yet
+          if (profile?.isWarmingUp) continue;
+
           // How many leads can this inactive mailbox receive today?
           const headroom = Math.max(0, rampCap - candidate.count);
           if (headroom <= 0) continue;
 
-          // How many leads to move? Up to 20 at a time, respecting headroom
-          const batchSize = Math.min(20, headroom, over.count - OVERLOAD_THRESHOLD);
+          // How many leads to move? Up to MAX_BATCH_SWAP at a time, respecting headroom
+          const overloadThreshold = rampCap * OVERLOAD_MULTIPLIER;
+          const batchSize = Math.min(MAX_BATCH_SWAP, headroom, over.count - overloadThreshold);
           if (batchSize <= 0) continue;
 
           // Atomically reassign leads using FOR UPDATE SKIP LOCKED
@@ -135,8 +164,16 @@ class FleetAuditor {
             console.log(`[FleetAuditor] Swapped ${moved} leads from ${over.integrationId.slice(0,8)} → ${candidate.integrationId.slice(0,8)} (campaign ${over.campaignId.slice(0,8)})`);
           }
 
-          if (over.count <= OVERLOAD_THRESHOLD) break; // This mailbox is now balanced
+          if (over.count <= overloadThreshold) break; // This mailbox is now balanced
         }
+      }
+
+      // 6. Trigger Hourly Distribution recalculation for affected mailboxes
+      if (totalSwapped > 0) {
+        try {
+          const { hourlyDistribution } = await import('./hourly-distribution.js');
+          await hourlyDistribution.recalculateAll().catch(() => {});
+        } catch { /* non-critical */ }
       }
 
       // 5. Notify affected users
@@ -157,6 +194,42 @@ class FleetAuditor {
       console.error('[FleetAuditor] Audit failed:', err.message);
       return { swapped: 0, fromMailboxes: 0, toMailboxes: 0 };
     }
+  }
+
+  private async getMailboxProfiles(mailboxIds: string[]): Promise<Map<string, {
+    dailyLimit: number;
+    initialOutreachLimit: number | null;
+    healthStatus: string;
+    isHardPaused: boolean;
+  }>> {
+    const profiles = new Map<string, any>();
+    if (mailboxIds.length === 0) return profiles;
+
+    const rows = await db
+      .select({
+        id: integrations.id,
+        dailyLimit: integrations.dailyLimit,
+        initialOutreachLimit: integrations.initialOutreachLimit,
+        healthStatus: integrations.healthStatus,
+        mailboxPauseUntil: integrations.mailboxPauseUntil,
+      })
+      .from(integrations)
+      .where(inArray(integrations.id, mailboxIds));
+
+    for (const row of rows) {
+      const isHardPaused = row.mailboxPauseUntil
+        ? new Date(row.mailboxPauseUntil).getTime() > Date.now()
+        : false;
+
+      profiles.set(row.id, {
+        dailyLimit: row.dailyLimit ?? RAMP_CAP_DEFAULT,
+        initialOutreachLimit: row.initialOutreachLimit,
+        healthStatus: row.healthStatus ?? 'connected',
+        isHardPaused,
+      });
+    }
+
+    return profiles;
   }
 }
 

@@ -80,6 +80,7 @@ class StatsService {
         and(
           eq(messages.userId, userId),
           eq(messages.direction, 'outbound'),
+          eq(messages.isWarmup, false),
           gte(messages.createdAt, startDate),
           lte(messages.createdAt, endDate)
         )
@@ -111,6 +112,7 @@ class StatsService {
         and(
           eq(messages.userId, userId),
           eq(messages.direction, 'outbound'),
+          eq(messages.isWarmup, false),
           gte(messages.createdAt, startDate),
           lte(messages.createdAt, endDate)
         )

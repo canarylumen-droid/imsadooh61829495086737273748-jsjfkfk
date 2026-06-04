@@ -947,6 +947,7 @@ export class DrizzleStorage implements IStorage {
         clickedAt: message.clickedAt || null,
         repliedAt: message.repliedAt || null,
         isRead: message.isRead ?? (message.direction === 'outbound'),
+        isWarmup: message.isWarmup ?? false,
         createdAt: new Date(),
         metadata: message.metadata || {},
         integrationId: message.integrationId || (message.metadata as any)?.integrationId || null,
@@ -2411,7 +2412,7 @@ export class DrizzleStorage implements IStorage {
 
     // Build filters
     let leadsWhere = eq(leads.userId, userId);
-    let messagesWhere = eq(messages.userId, userId);
+    let messagesWhere = and(eq(messages.userId, userId), eq(messages.isWarmup, false))!;
     let dealsWhere = eq(deals.userId, userId);
 
     if (options?.start) {
@@ -2558,6 +2559,7 @@ export class DrizzleStorage implements IStorage {
         FROM messages m1
         JOIN messages m2 ON m1.lead_id = m2.lead_id
         WHERE m1.direction = 'outbound'
+          AND m1.is_warmup = false
           AND m2.direction = 'inbound'
           AND m2.created_at > m1.created_at
           AND m1.user_id = ${userId}

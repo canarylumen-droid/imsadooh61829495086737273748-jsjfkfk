@@ -535,6 +535,26 @@ export async function runDatabaseMigrations() {
                     CREATE UNIQUE INDEX wps_pool_type_org_idx ON warmup_pool_state(pool_type, organization_id);
                 END IF;
 
+                -- KPI Isolation: is_warmup flag on messages and campaign_emails
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='messages') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_warmup') THEN
+                        ALTER TABLE messages ADD COLUMN is_warmup BOOLEAN NOT NULL DEFAULT false;
+                    END IF;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='campaign_emails') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='campaign_emails' AND column_name='is_warmup') THEN
+                        ALTER TABLE campaign_emails ADD COLUMN is_warmup BOOLEAN NOT NULL DEFAULT false;
+                    END IF;
+                END IF;
+
+                -- Performance: Partial index for KPI outbound queries (avoids full scan at 50k+ scale)
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='messages') THEN
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'msgs_kpi_outbound_idx') THEN
+                        CREATE INDEX msgs_kpi_outbound_idx ON messages(user_id, created_at)
+                        WHERE direction = 'outbound' AND is_warmup = false;
+                    END IF;
+                END IF;
+
             END $$;
         `); });
         console.log("✅ Emergency schema synchronization completed.");

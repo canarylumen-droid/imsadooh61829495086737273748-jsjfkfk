@@ -117,7 +117,8 @@ router.get("/metrics", async (req: express.Request, res: express.Response): Prom
       .from(messages)
       .where(and(
         gte(messages.createdAt, today),
-        eq(messages.direction, 'outbound')
+        eq(messages.direction, 'outbound'),
+        eq(messages.isWarmup, false)
       ));
     const apiBurn = Number(apiBurnResult[0]?.count || 0);
 

@@ -86,23 +86,34 @@ export class AutonomousScalerService {
 
     newLimit = Math.min(newLimit, safeHardCap);
 
+    // REPUTATION MONITOR GUARD: If the reputation monitor has already adjusted
+    // initialOutreachLimit (it won't be the default 50), it owns the sending caps.
+    // The scaler must NOT overwrite dailyLimit in this case — the reputation
+    // monitor is the single source of truth for throttled mailboxes.
+    const reputationActive = (integration.initialOutreachLimit != null && integration.initialOutreachLimit !== 50)
+      || (integration.healthLevel && integration.healthLevel !== 'healthy');
+
     if (newLimit !== oldLimit) {
-      await db.update(integrations)
-        .set({
-          dailyLimit: newLimit,
-          updatedAt: new Date()
-        })
-        .where(eq(integrations.id, integration.id));
+      if (reputationActive) {
+        console.log(`[MailboxDeliveryLimitScaler] Skipping ${integration.id}: reputation monitor is active (initialOutreachLimit=${integration.initialOutreachLimit}, healthLevel=${integration.healthLevel}). Scaler recommends ${newLimit} but defers to reputation authority.`);
+      } else {
+        await db.update(integrations)
+          .set({
+            dailyLimit: newLimit,
+            updatedAt: new Date()
+          })
+          .where(eq(integrations.id, integration.id));
 
-      console.log(`[MailboxDeliveryLimitScaler] Adjusted ${integration.id}: ${oldLimit} -> ${newLimit}`);
+        console.log(`[MailboxDeliveryLimitScaler] Adjusted ${integration.id}: ${oldLimit} -> ${newLimit}`);
 
-      await storage.createNotification({
-        userId,
-        type: 'insight',
-        title: 'Mailbox delivery limit adjusted',
-        message: `Audnix adjusted your daily mailbox send limit to ${newLimit} based on recent mailbox health.`,
-        metadata: { integrationId: integration.id, newLimit, oldLimit }
-      });
+        await storage.createNotification({
+          userId,
+          type: 'insight',
+          title: 'Mailbox delivery limit adjusted',
+          message: `Audnix adjusted your daily mailbox send limit to ${newLimit} based on recent mailbox health.`,
+          metadata: { integrationId: integration.id, newLimit, oldLimit }
+        });
+      }
     }
   }
 

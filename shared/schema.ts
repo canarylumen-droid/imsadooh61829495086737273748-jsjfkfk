@@ -265,6 +265,7 @@ export const messages = pgTable("messages", {
   integrationId: uuid("integration_id").references(() => integrations.id, { onDelete: "set null" }),
   uid: integer("uid"),
   targetUrl: text("target_url"),
+  isWarmup: boolean("is_warmup").notNull().default(false),
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -591,6 +592,7 @@ export const followUpQueue = pgTable("follow_up_queue", {
   scheduledAt: timestamp("scheduled_at"),
   status: text("status", { enum: ["pending", "processing", "completed", "failed"] }).notNull().default("pending"),
   processedAt: timestamp("processed_at"),
+  integrationId: uuid("integration_id").references(() => integrations.id, { onDelete: "set null" }),
   context: jsonb("context").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -598,6 +600,7 @@ export const followUpQueue = pgTable("follow_up_queue", {
   // Phase 15: Critical for worker polling performance (status first = best selectivity for pending filter)
   followUpStatusScheduledIdx: index("follow_up_status_scheduled_idx").on(table.status, table.scheduledAt),
   followUpUserIdIdx: index("follow_up_user_id_idx").on(table.userId),
+  followUpIntegrationStatusIdx: index("follow_up_integration_status_idx").on(table.integrationId, table.status),
 }));
 
 
@@ -1070,7 +1073,9 @@ export const campaignEmails = pgTable("campaign_emails", {
   sentAt: timestamp("sent_at").notNull().defaultNow(),
   status: text("status", { enum: ["sending", "sent", "delivered", "opened", "clicked", "replied", "bounced", "suppressed"] }).notNull().default("sent"),
   stepIndex: integer("step_index").notNull().default(0),
+  integrationId: uuid("integration_id").references(() => integrations.id, { onDelete: "set null" }),
   targetUrl: text("target_url"),
+  isWarmup: boolean("is_warmup").notNull().default(false),
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
 }, (table) => ({
   // PG-level idempotency guard — prevents duplicate sends at the database layer
@@ -1078,6 +1083,8 @@ export const campaignEmails = pgTable("campaign_emails", {
   ceCampaignLeadStepIdx: uniqueIndex("ce_campaign_lead_step_idx").on(table.campaignId, table.leadId, table.stepIndex),
   // High-throughput status scan for watchdog / analytics at 1M+ scale
   ceStatusSentAtIdx: index("ce_status_sent_at_idx").on(table.status, table.sentAt),
+  // Reputation monitor: per-mailbox daily initial-send count (step 0 only)
+  ceIntegrationStatusSentAtIdx: index("ce_integration_status_sent_at_idx").on(table.integrationId, table.status, table.sentAt),
 }));
 
 export const emailReplyStore = pgTable("email_reply_store", {
