@@ -8,6 +8,9 @@ import { bounceHandler } from '@services/email-service/src/email/bounce-handler.
 import { EmailDiscoveryService } from '@services/email-service/src/email/email-discovery.js';
 import { checkDomainHealth } from '@shared/lib/deliverability/dns-health-checker.js';
 import validator from 'validator';
+import { db } from '@shared/lib/db/db.js';
+import { outreachCampaigns } from '@audnix/shared';
+import { eq, and } from 'drizzle-orm';
 
 const router = Router();
 
@@ -183,6 +186,23 @@ interface ConnectRequestBody {
   fromName?: string;
 }
 
+interface BulkMailboxImportRow extends Partial<ConnectRequestBody> {
+  smtpUser?: string;
+  imapUser?: string;
+}
+
+const BULK_MAILBOX_LIMIT = 1000;
+const HOST_REGEX = /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]+)?[a-zA-Z0-9]$/;
+
+function normalizePort(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function isEnterpriseUser(user: any): boolean {
+  return user?.plan === 'enterprise' || user?.subscriptionTier === 'enterprise';
+}
+
 /**
  * Connect custom email domain
  */
@@ -216,8 +236,7 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
     }
 
     // Basic hostname check — must look like a domain
-    const hostRegex = /^[a-zA-Z0-9]([a-zA-Z0-9\-\.]+)?[a-zA-Z0-9]$/;
-    if (!hostRegex.test(smtpHost)) {
+    if (!HOST_REGEX.test(smtpHost)) {
       res.status(400).json({ error: `"${smtpHost}" does not look like a valid SMTP hostname.` });
       return;
     }
@@ -305,11 +324,25 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       const integrations = await storage.getIntegrations(userId);
       const customEmail = integrations.find((i: any) => i.provider === 'custom_email' && i.accountType === email);
       if (customEmail) {
-        distributeLeadsFromPool(userId, customEmail.id).catch(err =>
-          console.error('[Email Connect] Lead distribution failed:', err)
-        );
+        // Bug #9 fix: Only redistribute leads if the user has an active campaign.
+        // Firing on every mailbox connect caused massive unnecessary DB writes and
+        // a race condition when connecting multiple mailboxes in quick succession.
+        const [activeCampaign] = await db
+          .select({ id: outreachCampaigns.id })
+          .from(outreachCampaigns)
+          .where(and(eq(outreachCampaigns.userId, userId), eq(outreachCampaigns.status, 'active')))
+          .limit(1);
+
+        if (activeCampaign) {
+          distributeLeadsFromPool(userId, customEmail.id).catch((err: any) =>
+            console.error('[Email Connect] Lead distribution failed:', err)
+          );
+        } else {
+          console.log(`[Email Connect] Skipping lead redistribution for ${email} — no active campaigns.`);
+        }
+
         const { notifyMailboxConnected } = await import('@shared/lib/queues/verification-routing-queue.js');
-        notifyMailboxConnected(userId, customEmail.id).catch(err =>
+        notifyMailboxConnected(userId, customEmail.id).catch((err: any) =>
           console.error('[Email Connect] Smart reroute failed:', err)
         );
       }
@@ -341,6 +374,182 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
     res.status(500).json({
       error: 'Failed to connect custom email',
       details: errorMsg
+    });
+  }
+});
+
+/**
+ * Enterprise bulk import for custom SMTP/IMAP mailboxes.
+ * The browser parses CSV/XLS-exported text and posts normalized rows here.
+ */
+router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req)!;
+    const user = await storage.getUserById(userId);
+
+    if (!isEnterpriseUser(user)) {
+      res.status(403).json({
+        error: 'Enterprise plan required',
+        details: 'Bulk mailbox import is only available for enterprise accounts.'
+      });
+      return;
+    }
+
+    const mailboxes = Array.isArray(req.body?.mailboxes)
+      ? req.body.mailboxes as BulkMailboxImportRow[]
+      : [];
+
+    if (mailboxes.length === 0) {
+      res.status(400).json({ error: 'No mailboxes provided' });
+      return;
+    }
+
+    if (mailboxes.length > BULK_MAILBOX_LIMIT) {
+      res.status(400).json({
+        error: 'Bulk import limit exceeded',
+        details: `Upload ${BULK_MAILBOX_LIMIT} mailboxes or fewer per import.`
+      });
+      return;
+    }
+
+    const existingIntegrations = await storage.getIntegrations(userId);
+    const existingEmails = new Set(
+      existingIntegrations
+        .filter((i: any) => ['custom_email', 'gmail', 'outlook'].includes(i.provider))
+        .map((i: any) => String(i.accountType || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const seenInUpload = new Set<string>();
+    const imported: Array<{ id: string; email: string }> = [];
+    const skipped: Array<{ row: number; email?: string; reason: string }> = [];
+    const errors: Array<{ row: number; email?: string; error: string }> = [];
+
+    for (let index = 0; index < mailboxes.length; index++) {
+      const rowNumber = index + 1;
+      const row = mailboxes[index] || {};
+      const email = String(row.email || row.smtpUser || row.imapUser || '').trim().toLowerCase();
+      const smtpHost = String(row.smtpHost || '').trim().toLowerCase();
+      const imapHostRaw = String(row.imapHost || '').trim().toLowerCase();
+      const password = String(row.password || '').trim();
+      const fromName = String(row.fromName || '').trim();
+
+      if (!email || !smtpHost || !password) {
+        errors.push({ row: rowNumber, email, error: 'Missing email, SMTP host, or password.' });
+        continue;
+      }
+
+      if (!validator.isEmail(email)) {
+        errors.push({ row: rowNumber, email, error: 'Invalid email address format.' });
+        continue;
+      }
+
+      if (!HOST_REGEX.test(smtpHost)) {
+        errors.push({ row: rowNumber, email, error: 'Invalid SMTP hostname.' });
+        continue;
+      }
+
+      const effectiveImapHost = imapHostRaw || smtpHost.replace(/^smtp\./i, 'imap.');
+      if (!HOST_REGEX.test(effectiveImapHost)) {
+        errors.push({ row: rowNumber, email, error: 'Invalid IMAP hostname.' });
+        continue;
+      }
+
+      if (seenInUpload.has(email)) {
+        skipped.push({ row: rowNumber, email, reason: 'Duplicate mailbox in upload.' });
+        continue;
+      }
+      seenInUpload.add(email);
+
+      if (existingEmails.has(email)) {
+        skipped.push({ row: rowNumber, email, reason: 'Mailbox already connected.' });
+        continue;
+      }
+
+      const smtpPort = normalizePort(row.smtpPort, 587);
+      const imapPort = normalizePort(row.imapPort, 993);
+      if (smtpPort < 1 || smtpPort > 65535 || imapPort < 1 || imapPort > 65535) {
+        errors.push({ row: rowNumber, email, error: 'SMTP or IMAP port is outside the valid range.' });
+        continue;
+      }
+
+      const credentials: any = {
+        smtp_host: smtpHost,
+        smtpHost,
+        smtp_port: smtpPort,
+        smtpPort,
+        imap_host: effectiveImapHost,
+        imapHost: effectiveImapHost,
+        imap_port: imapPort,
+        imapPort,
+        smtp_user: email,
+        smtpUser: email,
+        imap_user: String(row.imapUser || email).trim().toLowerCase(),
+        imapUser: String(row.imapUser || email).trim().toLowerCase(),
+        smtp_pass: password,
+        smtpPass: password,
+        password,
+        from_name: fromName,
+        fromName,
+        provider: 'custom',
+        enterpriseBulkImport: true,
+      };
+
+      try {
+        const encryptedMeta = await encrypt(JSON.stringify(credentials));
+        const integration = await storage.createIntegration({
+          userId,
+          provider: 'custom_email',
+          encryptedMeta,
+          connected: true,
+          accountType: email,
+        });
+        existingEmails.add(email);
+        imported.push({ id: integration.id, email });
+      } catch (err: any) {
+        errors.push({ row: rowNumber, email, error: err?.message || 'Failed to save mailbox.' });
+      }
+    }
+
+    try {
+      const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
+      imapIdleManager.syncConnections();
+
+      const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+      wsSync.notifySettingsUpdated(userId);
+      wsSync.notifySyncStatus(userId, { syncing: imported.length > 0 });
+    } catch (syncErr) {
+      console.warn('[Bulk Email Import] Could not trigger immediate sync:', syncErr);
+    }
+
+    if (imported.length > 0) {
+      (async () => {
+        try {
+          const { notifyMailboxConnected } = await import('@shared/lib/queues/verification-routing-queue.js');
+          for (const mailbox of imported) {
+            await notifyMailboxConnected(userId, mailbox.id);
+          }
+        } catch (queueErr) {
+          console.warn('[Bulk Email Import] Smart reroute queue failed:', queueErr);
+        }
+      })();
+    }
+
+    res.json({
+      success: true,
+      imported: imported.length,
+      skipped: skipped.length,
+      failed: errors.length,
+      importedMailboxes: imported,
+      skippedRows: skipped.slice(0, 100),
+      errors: errors.slice(0, 100),
+      truncated: skipped.length > 100 || errors.length > 100,
+    });
+  } catch (error: any) {
+    console.error('[Bulk Email Import] Fatal error:', error);
+    res.status(500).json({
+      error: 'Failed to bulk import mailboxes',
+      details: error?.message || String(error)
     });
   }
 });

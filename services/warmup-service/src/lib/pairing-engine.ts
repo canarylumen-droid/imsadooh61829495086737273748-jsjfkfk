@@ -4,8 +4,8 @@
  */
 
 import { db } from '../db/warmup-db.js';
-import { eq, and, not, sql, isNull, ne } from 'drizzle-orm';
-import { warmupMailboxes, warmupThreads } from '@audnix/shared';
+import { eq, and, not, sql } from 'drizzle-orm';
+import { integrations, warmupMailboxes, warmupThreads } from '@audnix/shared';
 import type { WarmupMailbox, PairingCandidate } from '../types/warmup-types.js';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 
@@ -53,13 +53,14 @@ export class PairingEngine {
         lastInteractionAt: warmupMailboxes.updatedAt,
       })
       .from(warmupMailboxes)
+      .innerJoin(integrations, eq(warmupMailboxes.integrationId, integrations.id))
       .where(
         and(
           eq(warmupMailboxes.organizationId, organizationId),
           eq(warmupMailboxes.status, 'active'),
           not(eq(warmupMailboxes.id, excludeMailboxId)),
-          sql`${warmupMailboxes.dailySentCount} < ${WARMUP_CONFIG.DAILY_SENT_LIMIT}`,
-          sql`${warmupMailboxes.dailyReceivedCount} < ${WARMUP_CONFIG.DAILY_RECEIVED_LIMIT}`
+          sql`${warmupMailboxes.dailySentCount} < COALESCE(${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_SENT_LIMIT})`,
+          sql`${warmupMailboxes.dailyReceivedCount} < COALESCE(${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_RECEIVED_LIMIT})`
         )
       );
 
@@ -91,13 +92,14 @@ export class PairingEngine {
         lastInteractionAt: warmupMailboxes.updatedAt,
       })
       .from(warmupMailboxes)
+      .innerJoin(integrations, eq(warmupMailboxes.integrationId, integrations.id))
       .where(
         and(
           eq(warmupMailboxes.poolType, 'global'),
           eq(warmupMailboxes.status, 'active'),
           not(eq(warmupMailboxes.id, excludeMailboxId)),
-          sql`${warmupMailboxes.dailySentCount} < ${WARMUP_CONFIG.DAILY_SENT_LIMIT}`,
-          sql`${warmupMailboxes.dailyReceivedCount} < ${WARMUP_CONFIG.DAILY_RECEIVED_LIMIT}`
+          sql`${warmupMailboxes.dailySentCount} < COALESCE(${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_SENT_LIMIT})`,
+          sql`${warmupMailboxes.dailyReceivedCount} < COALESCE(${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_RECEIVED_LIMIT})`
         )
       );
 

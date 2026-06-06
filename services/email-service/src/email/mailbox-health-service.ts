@@ -938,7 +938,7 @@ class MailboxHealthService {
    */
   private async checkDNSHealth(integration: any): Promise<{ valid: boolean; details: any; missing: string[] }> {
     const meta = decryptToJSON(integration.encryptedMeta) || {};
-    const email = meta.smtp_user || meta.user || '';
+    const email = meta.smtp_user || meta.smtpUser || meta.user || meta.email || integration.accountType || '';
     if (!email.includes('@')) return { valid: true, details: { spf: true, dkim: true, dmarc: true }, missing: [] };
 
     const domain = email.split('@')[1];

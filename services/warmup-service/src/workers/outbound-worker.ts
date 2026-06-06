@@ -98,9 +98,9 @@ export function createOutboundWorker(): Worker {
 
       // Extract SMTP credentials
       const meta = sender[0].metadata as any;
-      const host = meta?.smtpHost || getDefaultSmtpHost(sender[0].provider);
-      const port = meta?.smtpPort || 587;
-      const pass = meta?.smtpPass || '';
+      const host = meta?.smtpHost || meta?.smtp_host || getDefaultSmtpHost(sender[0].provider);
+      const port = meta?.smtpPort || meta?.smtp_port || 587;
+      const pass = meta?.smtpPass || meta?.smtp_pass || meta?.password || '';
 
       // Credential validation for custom_email
       if (sender[0].provider === 'custom_email') {
@@ -122,7 +122,7 @@ export function createOutboundWorker(): Worker {
       const credentials = {
         host,
         port,
-        user: meta?.smtpUser || sender[0].email,
+        user: meta?.smtpUser || meta?.smtp_user || meta?.user || sender[0].email,
         pass,
         secure,
         provider: sender[0].provider,

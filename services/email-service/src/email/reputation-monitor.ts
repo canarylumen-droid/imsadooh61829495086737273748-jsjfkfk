@@ -69,7 +69,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
   let domain = '';
   try {
     const meta = JSON.parse(decrypt(mailbox.encryptedMeta));
-    const emailStr = meta.user || meta.email || (mailbox as any).email || '';
+    const emailStr = meta.smtp_user || meta.smtpUser || meta.user || meta.email || mailbox.accountType || (mailbox as any).email || '';
     if (emailStr && emailStr.includes('@')) {
       domain = emailStr.split('@')[1];
     }
@@ -80,7 +80,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
   if (domain) {
     const [latestDns] = await db.select()
       .from(domainVerifications)
-      .where(eq(domainVerifications.domain, domain))
+      .where(and(eq(domainVerifications.userId, mailbox.userId), eq(domainVerifications.domain, domain)))
       .orderBy(desc(domainVerifications.createdAt))
       .limit(1);
 
@@ -102,10 +102,6 @@ export async function calculateReputationScore(integrationId: string): Promise<n
         if (!result.dmarc?.found || !result.dmarc?.valid) {
           score -= 30; // 2024 compliance requirement
           console.log(`⚠️ [Reputation Monitor] Mailbox ${mailbox.id} penalty: FAILED DMARC (-30)`);
-        }
-        if (result.ptr && (!result.ptr.found || !result.ptr.valid)) {
-          score -= 25; // Critical for B2B deliverability
-          console.log(`⚠️ [Reputation Monitor] Mailbox ${mailbox.id} penalty: FAILED PTR (-25)`);
         }
       }
     }

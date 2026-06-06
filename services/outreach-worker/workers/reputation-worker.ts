@@ -51,7 +51,7 @@ export class ReputationWorker {
             for (const { integration, user } of emailIntegrations) {
                 try {
                     const meta = tryDecryptToJSON(integration.encryptedMeta) || ({} as any);
-                    const email = meta.email || meta.user || (integration as any).email;
+                    const email = meta.smtp_user || meta.smtpUser || meta.email || meta.user || integration.accountType || (integration as any).email;
                     if (!email) continue;
 
                     const domain = email.split('@')[1];

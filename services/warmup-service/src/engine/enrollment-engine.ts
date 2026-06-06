@@ -5,7 +5,7 @@
  */
 
 import { db } from '../db/warmup-db.js';
-import { eq, and, not, inArray, sql, isNull } from 'drizzle-orm';
+import { eq, and, not, inArray, isNull } from 'drizzle-orm';
 import {
   integrations,
   users,
@@ -14,7 +14,6 @@ import {
   userOutreachSettings,
   warmupMailboxes,
 } from '@audnix/shared';
-import { WARMUP_CONFIG } from '../config/warmup-config.js';
 import type { PoolType } from '../types/warmup-types.js';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
 
@@ -138,8 +137,6 @@ export class EnrollmentEngine {
     subscriptionTier: string | null;
     encryptedMeta: string | null;
   }) {
-    const poolType = await this.classifyPool(candidate);
-
     // Decrypt integration credentials into metadata
     let metadata: any = {};
     if (candidate.encryptedMeta) {
@@ -150,11 +147,20 @@ export class EnrollmentEngine {
       }
     }
 
+    const poolType = await this.classifyPool(candidate);
+    const mailboxEmail =
+      metadata.smtp_user ||
+      metadata.smtpUser ||
+      metadata.user ||
+      metadata.email ||
+      metadata.accountType ||
+      candidate.email;
+
     await db.insert(warmupMailboxes).values({
       integrationId: candidate.integrationId,
       userId: candidate.userId,
       organizationId: candidate.organizationId,
-      email: candidate.email,
+      email: mailboxEmail,
       provider: candidate.provider as any,
       status: 'paused',
       pauseReason: poolType === 'enterprise' ? 'single_mailbox_enterprise' : 'empty_global_pool',
@@ -178,19 +184,9 @@ export class EnrollmentEngine {
       candidate.plan === 'enterprise' || candidate.subscriptionTier === 'enterprise';
     if (!isEnterprise || !candidate.organizationId) return 'global';
 
-      const countResult = await db
-        .select({ count: sql<number>`count(*)` })
-        .from(warmupMailboxes)
-        .where(
-          and(
-            eq(warmupMailboxes.organizationId, candidate.organizationId),
-            eq(warmupMailboxes.status, 'active')
-          )
-        );
-
-      // Projected count (existing active + this new one)
-      const projected = (countResult[0]?.count ?? 0) + 1;
-      return projected >= WARMUP_CONFIG.ENTERPRISE_FLEET_THRESHOLD ? 'enterprise' : 'global';
+    // Enterprise org mailboxes must never leak into the shared global warmup pool.
+    // Pool health activation can still keep them paused until the org has enough peers.
+    return 'enterprise';
   }
 
   private async cleanupDisconnected(): Promise<void> {

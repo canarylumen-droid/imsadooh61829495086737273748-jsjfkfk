@@ -623,7 +623,7 @@ export class OutreachEngine {
       try {
         // [PHASE 18] REAL-TIME SAFETY INTERLOCK
         // Pre-flight check domain safety against blacklists/DNS records
-        const emailStr = meta.user || meta.email || (integration as any).email || '';
+        const emailStr = meta.smtp_user || meta.smtpUser || meta.user || meta.email || integration.accountType || (integration as any).email || '';
         const domain = emailStr.includes('@') ? emailStr.split('@')[1] : '';
         
         if (domain) {
@@ -640,7 +640,7 @@ export class OutreachEngine {
         let activeVerifications = domainVerifications;
         if (integration.encryptedMeta) {
            const meta = decryptToJSON(integration.encryptedMeta) || {};
-           const email = meta.user || meta.email || '';
+           const email = meta.smtp_user || meta.smtpUser || meta.user || meta.email || integration.accountType || '';
            if (email && email.includes('@')) {
                const d = email.split('@')[1];
                activeVerifications = activeVerifications.filter(v => v.domain === d);
@@ -678,6 +678,9 @@ export class OutreachEngine {
         }
       } catch (err) {
         console.error(`[OutreachEngine] Error assessing domain health for limit adaptation:`, err);
+        if (!isHighPriority) {
+          return false;
+        }
       }
     }
 

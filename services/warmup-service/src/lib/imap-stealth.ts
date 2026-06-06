@@ -255,9 +255,9 @@ export class ImapStealth {
     const defaults: Record<string, { host: string; port: number; secure: boolean }> = {
       gmail: { host: 'imap.gmail.com', port: 993, secure: true },
       outlook: { host: 'outlook.office365.com', port: 993, secure: true },
-      custom_email: { host: meta?.imapHost || '', port: meta?.imapPort || 993, secure: true },
+      custom_email: { host: meta?.imapHost || meta?.imap_host || '', port: meta?.imapPort || meta?.imap_port || 993, secure: true },
     };
-    if (mailbox.provider === 'custom_email' && !meta?.imapHost) {
+    if (mailbox.provider === 'custom_email' && !(meta?.imapHost || meta?.imap_host)) {
       console.warn(`[Warmup][IMAP] custom_email integration missing imapHost in metadata — cannot connect to IMAP`);
     }
 
@@ -277,7 +277,7 @@ export class ImapStealth {
       user: mailbox.email,
       // Prefer dedicated IMAP password, fall back to SMTP password.
       // Some providers use different credentials for IMAP vs SMTP.
-      pass: meta?.imapPass || meta?.smtpPass || '',
+      pass: meta?.imapPass || meta?.imap_pass || meta?.smtpPass || meta?.smtp_pass || meta?.password || '',
     };
 
     // OAuth for Gmail / Outlook

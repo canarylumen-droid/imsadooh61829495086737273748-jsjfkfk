@@ -1,4 +1,5 @@
 
+import 'dotenv/config';
 import { db } from "@shared/lib/db/db.js";
 import { users } from "../shared/schema.js";
 import { sql } from "drizzle-orm";

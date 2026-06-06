@@ -166,17 +166,34 @@ class MultiProviderEmailFailover {
           email.subject,
           email.html
         );
-        // Fire and forget
-        imapIdleManager.appendSentMessage(userId, '', rawMime, {
-          smtp_host: smtpConfig.smtp_host,
-          smtp_port: smtpConfig.smtp_port,
-          smtp_user: smtpConfig.smtp_user,
-          smtp_pass: smtpConfig.smtp_pass
-        }).catch(err => {
-          console.error(`Failed to append to sent folder for user ${userId}:`, err);
-        });
+
+        // Bug fix: resolve the real integration ID instead of passing ''
+        // Passing '' caused appendSentMessage to fail silently — sent emails were never saved.
+        const allIntegrations = await storage.getIntegrations(userId);
+        const senderEmail = (email.from || smtpConfig.smtp_user).toLowerCase();
+        const targetInt = allIntegrations.find(
+          (i: any) => i.provider === 'custom_email' &&
+            i.connected &&
+            String(i.accountType || '').toLowerCase() === senderEmail
+        ) || allIntegrations.find(
+          (i: any) => i.provider === 'custom_email' && i.connected
+        );
+
+        if (targetInt) {
+          // Fire and forget — do not block send path
+          imapIdleManager.appendSentMessage(userId, targetInt.id, rawMime, {
+            smtp_host: smtpConfig.smtp_host,
+            smtp_port: smtpConfig.smtp_port,
+            smtp_user: smtpConfig.smtp_user,
+            smtp_pass: smtpConfig.smtp_pass
+          }).catch((err: any) => {
+            console.error(`[MultiProviderFailover] Failed to append to sent folder for user ${userId}:`, err.message);
+          });
+        } else {
+          console.warn(`[MultiProviderFailover] No matching custom_email integration found for ${senderEmail} — skipping Sent folder append.`);
+        }
       } catch (err) {
-        console.error('Error importing imap-idle-manager or creating mime:', err);
+        console.error('[MultiProviderFailover] Error during Sent folder append setup:', err);
       }
     }
   }

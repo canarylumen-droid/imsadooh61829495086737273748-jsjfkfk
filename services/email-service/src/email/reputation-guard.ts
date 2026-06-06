@@ -73,9 +73,14 @@ export class ReputationGuard {
       return result;
     } catch (error) {
       console.error(`[ReputationGuard] Error during safety check for ${domain}:`, error);
-      // Fail-safe: if the check fails, we assume it's safe to continue rather than blocking everything,
-      // unless we want to be ultra-conservative.
-      return { isSafe: true, score: 100, status: 'unknown' };
+      const result: SafetyResult = {
+        isSafe: false,
+        score: 0,
+        status: 'unknown',
+        reason: 'Reputation safety check failed; blocking initial sends until DNS/blacklist status can be verified',
+      };
+      await this.triggerSafetyPause(integrationId, userId, result.reason || 'Reputation safety check failed');
+      return result;
     }
   }
 

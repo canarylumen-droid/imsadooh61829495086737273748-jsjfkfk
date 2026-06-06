@@ -139,12 +139,12 @@ export class AvailabilityService {
    * Blocks: 22:00 - 06:00 (strict No-Book rule)
    * Prevents booking on weekends too.
    */
-  /**
-   * Helper to determine valid booking times.
-   * 24/7 MODE: All hours and days are now considered valid for autonomous outreach and booking.
-   */
   public isWithinUserBusinessHours(date: Date, timeZone: string): boolean {
-    return true; // No limitations
+    const dayStr = timezoneService.formatForUser(date, timeZone, 'EEEE');
+    if (dayStr === 'Saturday' || dayStr === 'Sunday') {
+      return false;
+    }
+    return !timezoneService.isNightWatch(date, timeZone);
   }
 
   /**

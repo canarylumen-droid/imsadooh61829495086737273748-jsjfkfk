@@ -15,8 +15,10 @@ export type PauseReason =
   | 'empty_global_pool'
   | 'user_disabled'
   | 'daily_limit_reached'
+  | 'daily_received_limit_reached'
   | 'imap_error'
   | 'smtp_error'
+  | 'integration_disconnected'
   | 'empty_pool_defensive';
 
 export interface PairingCandidate {

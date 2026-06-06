@@ -1,9 +1,10 @@
-import dns from 'dns/promises';
-
 export interface DomainHealth {
   spf: boolean;
   dmarc: boolean;
-  dkim?: boolean; // Hard to verify without selector, but we'll try common ones
+  dkim?: boolean;
+  blacklist?: boolean;
+  score?: number;
+  status?: string;
   riskLevel: 'low' | 'medium' | 'high';
   warnings: string[];
 }
@@ -17,31 +18,29 @@ export async function checkDomainHealth(domain: string): Promise<DomainHealth> {
   };
 
   try {
-    // 1. Check SPF (TXT records on root domain)
-    const txtRecords = await dns.resolveTxt(domain).catch(() => []);
-    const spfRecord = txtRecords.find(record => record.join('').includes('v=spf1'));
-    
-    if (spfRecord) {
-      health.spf = true;
-    } else {
-      health.warnings.push('Missing SPF record. Your emails are very likely to go to spam.');
+    const { verifyDomainDns } = await import('@services/email-service/src/email/dns-verification.js');
+    const result = await verifyDomainDns(domain, undefined, true);
+
+    health.spf = result.spf.valid;
+    health.dkim = result.dkim.valid;
+    health.dmarc = result.dmarc.valid;
+    health.blacklist = result.blacklist.isBlacklisted;
+    health.score = result.overallScore;
+    health.status = result.overallStatus;
+    health.warnings = [...result.recommendations];
+
+    if (result.blacklist.isBlacklisted || result.overallStatus === 'poor') {
       health.riskLevel = 'high';
-    }
-
-    // 2. Check DMARC (TXT records on _dmarc.domain)
-    const dmarcRecords = await dns.resolveTxt(`_dmarc.${domain}`).catch(() => []);
-    const dmarcRecord = dmarcRecords.find(record => record.join('').includes('v=DMARC1'));
-
-    if (dmarcRecord) {
-      health.dmarc = true;
+    } else if (result.overallStatus === 'fair' || !result.dkim.valid || !result.dmarc.valid) {
+      health.riskLevel = 'medium';
     } else {
-      health.warnings.push('Missing DMARC record. This lowers your domain reputation.');
-      if (health.riskLevel === 'low') health.riskLevel = 'medium';
+      health.riskLevel = 'low';
     }
 
-    // We skip exact DKIM validation because we don't know the selector the user's provider uses
-    // But SPF + DMARC absence is enough to trigger the high risk warning.
-    
+    if (!result.spf.valid) health.warnings.push('SPF is missing or invalid.');
+    if (!result.dkim.valid) health.warnings.push('DKIM is missing or invalid.');
+    if (!result.dmarc.valid) health.warnings.push('DMARC is missing or invalid.');
+
     return health;
   } catch (error) {
     console.error(`[DNS Health] Failed to check domain ${domain}:`, error);

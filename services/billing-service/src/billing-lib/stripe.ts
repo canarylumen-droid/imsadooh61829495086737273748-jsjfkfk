@@ -1,6 +1,7 @@
 import Stripe from 'stripe';
 import { getStripeClient } from '@services/billing-service/src/billing-lib/stripe-client.js';
 import { storage } from '@shared/lib/storage/storage.js';
+import { PRICING_TIERS } from '@shared/pricing-config.js';
 
 export const isDemoMode = process.env.DISABLE_EXTERNAL_API === "true";
 
@@ -13,29 +14,37 @@ let stripe: Stripe | null = null;
 export { stripe };
 
 /**
- * Plan configurations
+ * Plan configurations — single source of truth: shared/pricing-config.ts
+ * Use env vars to override limits for legacy deployments; defaults match pricing-config.
  */
+const _starterTier = PRICING_TIERS.find(t => t.id === 'starter');
+const _proTier = PRICING_TIERS.find(t => t.id === 'pro');
+const _enterpriseTier = PRICING_TIERS.find(t => t.id === 'enterprise');
+
 export const PLANS = {
   starter: {
     priceId: process.env.STRIPE_PRICE_ID_MONTHLY_49 || "price_starter",
     name: "Starter",
     price: 49.99,
-    leads_limit: parseInt(process.env.LEADS_LIMIT_PLAN_49 || "2500"),
-    voice_minutes: parseInt(process.env.VOICE_MINUTES_PLAN_49 || "100"),
+    // Default to pricing-config.ts value (25,000); env var for emergency override only
+    leads_limit: parseInt(process.env.LEADS_LIMIT_PLAN_49 || String(_starterTier?.leadsLimit ?? 25000)),
+    voice_minutes: parseInt(process.env.VOICE_MINUTES_PLAN_49 || String(_starterTier?.voiceMinutes ?? 250)),
   },
   pro: {
     priceId: process.env.STRIPE_PRICE_ID_MONTHLY_99 || "price_pro",
     name: "Pro",
     price: 99.99,
-    leads_limit: parseInt(process.env.LEADS_LIMIT_PLAN_99 || "7000"),
-    voice_minutes: parseInt(process.env.VOICE_MINUTES_PLAN_99 || "400"),
+    // Default to pricing-config.ts value (100,000)
+    leads_limit: parseInt(process.env.LEADS_LIMIT_PLAN_99 || String(_proTier?.leadsLimit ?? 100000)),
+    voice_minutes: parseInt(process.env.VOICE_MINUTES_PLAN_99 || String(_proTier?.voiceMinutes ?? 1000)),
   },
   enterprise: {
     priceId: process.env.STRIPE_PRICE_ID_MONTHLY_199 || "price_enterprise",
     name: "Enterprise",
     price: 199.99,
-    leads_limit: parseInt(process.env.LEADS_LIMIT_PLAN_199 || "20000"),
-    voice_minutes: parseInt(process.env.VOICE_MINUTES_PLAN_199 || "1000"),
+    // -1 means unlimited (matches pricing-config.ts enterprise tier)
+    leads_limit: parseInt(process.env.LEADS_LIMIT_PLAN_199 || String(_enterpriseTier?.leadsLimit ?? -1)),
+    voice_minutes: parseInt(process.env.VOICE_MINUTES_PLAN_199 || String(_enterpriseTier?.voiceMinutes ?? -1)),
   },
 };
 

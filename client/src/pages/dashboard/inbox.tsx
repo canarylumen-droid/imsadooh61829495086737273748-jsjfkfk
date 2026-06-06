@@ -294,7 +294,8 @@ export default function InboxPage() {
 
             const newMsg = {
               id: msgData.id || `temp-${Date.now()}`,
-              content: msgData.content || '',
+              body: msgData.body || msgData.content || '',
+              content: msgData.content || msgData.body || '',
               direction: msgData.direction || 'inbound',
               createdAt: msgData.createdAt || new Date().toISOString(),
               userId: user?.id,
@@ -692,7 +693,7 @@ export default function InboxPage() {
     if (!replyMessage || isPolishing) return;
     setIsPolishing(true);
     try {
-      const res = await fetch("/api/leads/magic-pencil", {
+        const res = await fetch("/api/ai/magic-pencil", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -724,7 +725,7 @@ export default function InboxPage() {
     const timeout = setTimeout(async () => {
       setIsCheckingGrammar(true);
       try {
-        const res = await fetch("/api/leads/check-grammar", {
+        const res = await fetch("/api/ai/check-grammar", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: replyMessage })

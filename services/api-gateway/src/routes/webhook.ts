@@ -73,7 +73,12 @@ router.post('/fathom', async (req: Request, res: Response): Promise<void> => {
     const webhookSignature = req.headers['webhook-signature'] as string;
     const secret = process.env.FATHOM_WEBHOOK_SECRET;
     
-    if (secret && secret.startsWith('whsec_')) {
+    if (!secret || !secret.startsWith('whsec_')) {
+      res.status(500).json({ error: 'Fathom webhook secret is not configured' });
+      return;
+    }
+
+    if (secret.startsWith('whsec_')) {
       if (!webhookSignature || !webhookId || !webhookTimestamp) {
         res.status(401).json({ error: 'Missing fathom security headers' });
         return;
@@ -101,7 +106,9 @@ router.post('/fathom', async (req: Request, res: Response): Promise<void> => {
       const parts = webhookSignature.split(',');
       const providedSig = parts[0] === 'v1' ? parts[1] : parts.find(p => p.startsWith('v1,'))?.substring(3);
         
-      if (!providedSig || !crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(providedSig))) {
+      const expectedBuffer = Buffer.from(expected);
+      const providedBuffer = Buffer.from(providedSig || '');
+      if (!providedSig || expectedBuffer.length !== providedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, providedBuffer)) {
         console.error('[Fathom Webhook] Invalid HMAC signature detected.');
         res.status(401).json({ error: 'Invalid signature' });
         return;

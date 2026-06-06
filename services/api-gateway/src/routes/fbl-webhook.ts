@@ -18,7 +18,7 @@
 
 import { Router } from 'express';
 import { db } from '@shared/lib/db/db.js';
-import { campaignEmails, leads, integrations, auditTrail } from '@audnix/shared';
+import { campaignEmails, leads, auditTrail, bounceTracker } from '@audnix/shared';
 import { eq, and } from 'drizzle-orm';
 import { createLogger } from '../core/logger.js';
 import { getRedisClient } from '@shared/lib/redis/redis.js';
@@ -82,9 +82,29 @@ async function suppressEmailAddress(email: string, metadata: Record<string, any>
 
     // Degrade the associated mailbox's reputation
     if (lead.integrationId) {
+      await db.insert(bounceTracker).values({
+        userId: lead.userId,
+        leadId: lead.id,
+        integrationId: lead.integrationId,
+        bounceType: 'spam',
+        email,
+        metadata: {
+          source: 'fbl',
+          ...metadata,
+          recordedAt: new Date().toISOString(),
+        },
+      }).catch((err: any) => {
+        log.warn('Failed to record FBL spam bounce', { email, integrationId: lead.integrationId, error: err.message });
+      });
+
       const redis = await getRedisClient();
       await redis?.hIncrBy(`mailbox:complaints:${lead.integrationId}`, 'count', 1);
       await redis?.expire(`mailbox:complaints:${lead.integrationId}`, 86400 * 30); // 30 days
+
+      const { calculateReputationScore } = await import('@services/email-service/src/email/reputation-monitor.js');
+      await calculateReputationScore(lead.integrationId).catch((err: any) => {
+        log.warn('Failed to recalculate reputation after FBL complaint', { integrationId: lead.integrationId, error: err.message });
+      });
     }
 
     // Audit trail

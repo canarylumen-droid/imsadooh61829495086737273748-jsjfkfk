@@ -102,8 +102,10 @@ export class MeetingReminderWorker {
 
           // Post-Meeting Autonomous Action via Fathom (Checks completed meetings)
           if (booking.status === 'scheduled' && now.getTime() > new Date(booking.endTime).getTime() && !metadata.post_meeting_handled) {
-            await this.processPostMeetingSummary(booking);
-            await this.markReminderSent(booking.id, 'post_meeting_handled');
+            const handled = await this.processPostMeetingSummary(booking);
+            if (handled) {
+              await this.markReminderSent(booking.id, 'post_meeting_handled');
+            }
           }
         } catch (bookingError: any) {
           console.error(`[MeetingReminder] Error processing booking ${booking.id}:`, bookingError);
@@ -280,26 +282,27 @@ Output requirements:
     );
   }
 
-  private async processPostMeetingSummary(booking: any): Promise<void> {
+  private async processPostMeetingSummary(booking: any): Promise<boolean> {
     const fathomApiKey = process.env.FATHOM_API_KEY;
-    if (!fathomApiKey || !booking.externalEventId) return;
+    const externalEventId = booking.externalEventId || booking.externalId;
+    if (!fathomApiKey || !externalEventId) return false;
 
     const user = await storage.getUserById(booking.userId);
     const lead = booking.leadId ? await storage.getLeadById(booking.leadId) : null;
     
-    if (!user || !lead || !lead.email) return;
+    if (!user || !lead || !lead.email) return false;
 
     try {
-      console.log(`[MeetingReminder] Querying Fathom API for completed meeting ${booking.externalEventId}`);
+      console.log(`[MeetingReminder] Querying Fathom API for completed meeting ${externalEventId}`);
       // Query Fathom for the transcript/summary of the completed call
-      const fathomRes = await fetch(`https://api.fathom.video/v1/calls?event_id=${booking.externalEventId}`, {
+      const fathomRes = await fetch(`https://api.fathom.video/v1/calls?event_id=${externalEventId}`, {
         headers: { 'Authorization': `Bearer ${fathomApiKey}` }
       });
 
       if (!fathomRes.ok) {
-        console.warn(`[MeetingReminder] Fathom API wait: Call summary not ready or 404 for ${booking.externalEventId}`);
+        console.warn(`[MeetingReminder] Fathom API wait: Call summary not ready or 404 for ${externalEventId}`);
         // Let it retry next tick if it's just delayed
-        return;
+        return false;
       }
 
       const callData = await fathomRes.json();
@@ -307,15 +310,15 @@ Output requirements:
       // Handle actual Fathom no-show status detection
       if (callData.data && callData.data[0]?.status === 'no_show') {
          await db.update(calendarEvents).set({ status: 'no_show' }).where(eq(calendarEvents.id, booking.id));
-         return; // The no-show handler will pick it up
+         return true; // The no-show handler will pick it up
       }
 
       const summary = callData.data?.[0]?.summary || callData.data?.[0]?.transcript;
       
       // If Fathom doesn't have the summary or transcript yet, abort and try again later
       if (!summary) {
-         console.warn(`[MeetingReminder] Fathom summary/transcript not available yet for ${booking.externalEventId}`);
-         return;
+         console.warn(`[MeetingReminder] Fathom summary/transcript not available yet for ${externalEventId}`);
+         return false;
       }
 
       // Phase 7: Use Unified Autonomous Agent for Expert NBA
@@ -324,9 +327,11 @@ Output requirements:
       
       // Mark booking as completed
       await db.update(calendarEvents).set({ status: 'completed' }).where(eq(calendarEvents.id, booking.id));
+      return true;
 
     } catch (err) {
       console.error(`[MeetingReminder] Error processing Fathom post-meeting summary:`, err);
+      return false;
     }
   }
 

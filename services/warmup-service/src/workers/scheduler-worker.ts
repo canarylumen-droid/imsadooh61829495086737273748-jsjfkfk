@@ -183,7 +183,12 @@ export class WarmupScheduler {
       await warmupOutboundQueue.add(
         'send-first',
         { threadId: thread.id },
-        { delay: sendDelay * 1000 }
+        {
+          delay: sendDelay * 1000,
+          jobId: `warmup-send-first:${thread.id}`,
+          removeOnComplete: true,
+          removeOnFail: 100,
+        }
       );
     }
   }
@@ -195,7 +200,16 @@ export class WarmupScheduler {
       .where(eq(warmupMailboxes.status, 'active'));
 
     for (const mb of activeMailboxes) {
-      await warmupInboundQueue.add('inbox-sweep', { mailboxId: mb.id }, { delay: 0 });
+      await warmupInboundQueue.add(
+        'inbox-sweep',
+        { mailboxId: mb.id },
+        {
+          delay: 0,
+          jobId: `warmup-inbox-sweep:${mb.id}`,
+          removeOnComplete: true,
+          removeOnFail: 100,
+        }
+      );
     }
   }
 

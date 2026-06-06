@@ -88,6 +88,127 @@ interface UserData {
   totalLeads?: number;
 }
 
+interface BulkMailboxImportRow {
+  email: string;
+  password: string;
+  smtpHost: string;
+  smtpPort?: string;
+  imapHost?: string;
+  imapPort?: string;
+  fromName?: string;
+  smtpUser?: string;
+  imapUser?: string;
+}
+
+type BulkMailboxField = keyof BulkMailboxImportRow;
+
+const BULK_MAILBOX_HEADERS: Record<BulkMailboxField, string[]> = {
+  email: ["email", "mailbox", "address", "username", "smtpuser", "smtp_user", "smtp user"],
+  password: ["password", "pass", "apppassword", "app_password", "app password", "smtppass", "smtp_pass", "smtp pass"],
+  smtpHost: ["smtphost", "smtp_host", "smtp host", "smtpserver", "smtp_server", "smtp server"],
+  smtpPort: ["smtpport", "smtp_port", "smtp port"],
+  imapHost: ["imaphost", "imap_host", "imap host", "imapserver", "imap_server", "imap server"],
+  imapPort: ["imapport", "imap_port", "imap port"],
+  fromName: ["fromname", "from_name", "from name", "name", "displayname", "display_name", "display name"],
+  smtpUser: ["smtpusername", "smtp_username", "smtp username"],
+  imapUser: ["imapuser", "imap_user", "imap user", "imapusername", "imap_username", "imap username"],
+};
+
+function normalizeBulkHeader(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9_ ]/g, '').replace(/\s+/g, ' ');
+}
+
+function mapBulkHeader(header: string): BulkMailboxField | null {
+  const normalized = normalizeBulkHeader(header);
+  for (const [field, aliases] of Object.entries(BULK_MAILBOX_HEADERS)) {
+    if (aliases.includes(normalized) || aliases.includes(normalized.replace(/\s/g, ''))) {
+      return field as BulkMailboxField;
+    }
+  }
+  return null;
+}
+
+function parseDelimitedRows(content: string, delimiter: ',' | '\t'): string[][] {
+  const rows: string[][] = [];
+  let current = '';
+  let row: string[] = [];
+  let inQuotes = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+    const next = content[i + 1];
+
+    if (char === '"' && inQuotes && next === '"') {
+      current += '"';
+      i++;
+      continue;
+    }
+
+    if (char === '"') {
+      inQuotes = !inQuotes;
+      continue;
+    }
+
+    if (char === delimiter && !inQuotes) {
+      row.push(current.trim());
+      current = '';
+      continue;
+    }
+
+    if ((char === '\n' || char === '\r') && !inQuotes) {
+      if (char === '\r' && next === '\n') i++;
+      row.push(current.trim());
+      if (row.some(Boolean)) rows.push(row);
+      row = [];
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  row.push(current.trim());
+  if (row.some(Boolean)) rows.push(row);
+  return rows;
+}
+
+function parseBulkMailboxFile(content: string): { rows: BulkMailboxImportRow[]; errors: string[] } {
+  const firstLine = content.split(/\r?\n/, 1)[0] || '';
+  const delimiter = (firstLine.match(/\t/g)?.length || 0) > (firstLine.match(/,/g)?.length || 0) ? '\t' : ',';
+  const parsed = parseDelimitedRows(content, delimiter);
+  if (parsed.length < 2) return { rows: [], errors: ["The file needs a header row and at least one mailbox row."] };
+
+  const fields = parsed[0].map(mapBulkHeader);
+  const required = new Set<BulkMailboxField>(["email", "password", "smtpHost"]);
+  const mappedRequired = new Set(fields.filter(Boolean) as BulkMailboxField[]);
+  const missing = [...required].filter(field => !mappedRequired.has(field));
+  if (missing.length > 0) {
+    return {
+      rows: [],
+      errors: [`Missing required columns: ${missing.join(', ')}. Required: email, password, smtpHost.`]
+    };
+  }
+
+  const errors: string[] = [];
+  const rows: BulkMailboxImportRow[] = [];
+  for (let i = 1; i < parsed.length; i++) {
+    const source = parsed[i];
+    const row: Partial<BulkMailboxImportRow> = {};
+    fields.forEach((field, index) => {
+      if (field && source[index]) row[field] = source[index];
+    });
+
+    if (!row.email || !row.password || !row.smtpHost) {
+      errors.push(`Row ${i + 1}: missing email, password, or SMTP host.`);
+      continue;
+    }
+
+    rows.push(row as BulkMailboxImportRow);
+  }
+
+  return { rows, errors };
+}
+
 const integrationCards: Array<{
   do: "social" | "calendar";
   id: string;
@@ -208,6 +329,10 @@ export default function IntegrationsPage() {
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [appPasswordGuide, setAppPasswordGuide] = useState<any>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
+  const bulkMailboxInputRef = useRef<HTMLInputElement>(null);
+  const [bulkMailboxFileName, setBulkMailboxFileName] = useState("");
+  const [bulkMailboxRows, setBulkMailboxRows] = useState<BulkMailboxImportRow[]>([]);
+  const [bulkMailboxErrors, setBulkMailboxErrors] = useState<string[]>([]);
   const [mailboxSearch, setMailboxSearch] = useState("");
   const [mailboxPage, setMailboxPage] = useState(0);
   const MAILBOXES_PER_PAGE = 25;
@@ -382,6 +507,34 @@ export default function IntegrationsPage() {
     }
   });
 
+  const bulkMailboxImportMutation = useMutation({
+    mutationFn: async (mailboxes: BulkMailboxImportRow[]) => {
+      const response = await apiRequest("POST", "/api/custom-email/bulk-import", { mailboxes });
+      return response.json();
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      setBulkMailboxRows([]);
+      setBulkMailboxErrors([]);
+      setBulkMailboxFileName("");
+      if (bulkMailboxInputRef.current) bulkMailboxInputRef.current.value = "";
+      toast({
+        title: "Bulk Import Complete",
+        description: `${result.imported || 0} imported, ${result.skipped || 0} skipped, ${result.failed || 0} failed.`
+      });
+    },
+    onError: (error: Error) => {
+      let errorMsg = error.message;
+      try {
+        const jsonStr = error.message.replace(/^\d+:\s*/, '');
+        const parsed = JSON.parse(jsonStr);
+        errorMsg = parsed.details || parsed.error || errorMsg;
+      } catch { }
+      toast({ title: "Bulk Import Failed", description: errorMsg, variant: "destructive" });
+    }
+  });
+
   const disconnectCustomEmailMutation = useMutation({
     mutationFn: async (integrationId?: string) => apiRequest("POST", "/api/custom-email/disconnect", { integrationId }),
     onSuccess: () => {
@@ -500,6 +653,20 @@ export default function IntegrationsPage() {
     } finally {
       setIsUploadingVoice(false);
     }
+  };
+
+  const handleBulkMailboxFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const content = await file.text();
+    const parsed = parseBulkMailboxFile(content);
+    setBulkMailboxFileName(file.name);
+    setBulkMailboxRows(parsed.rows.slice(0, 1000));
+    setBulkMailboxErrors(parsed.rows.length > 1000
+      ? [...parsed.errors, "Only the first 1,000 mailbox rows will be imported."]
+      : parsed.errors
+    );
   };
 
   const confirmDisconnect = (provider: string, integrationId?: string) => {
@@ -731,6 +898,84 @@ export default function IntegrationsPage() {
                         <span className="text-[10px] font-bold uppercase tracking-widest">Custom SMTP</span>
                       </Button>
                     </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-5 space-y-4">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Upload className="h-4 w-4 text-emerald-500" />
+                          <h4 className="text-xs font-black uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400">
+                            Enterprise Bulk Import
+                          </h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Upload CSV or TSV with email, password, smtpHost, smtpPort, imapHost, imapPort, and fromName columns.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <input
+                          ref={bulkMailboxInputRef}
+                          type="file"
+                          accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+                          className="hidden"
+                          onChange={handleBulkMailboxFileSelect}
+                        />
+                        <Button
+                          variant="outline"
+                          className="rounded-xl gap-2"
+                          disabled={getActivePlanId(userData) !== 'enterprise' || bulkMailboxImportMutation.isPending}
+                          onClick={() => bulkMailboxInputRef.current?.click()}
+                        >
+                          <FileText className="h-4 w-4" />
+                          Choose File
+                        </Button>
+                        <Button
+                          className="rounded-xl gap-2 bg-emerald-600 hover:bg-emerald-700"
+                          disabled={getActivePlanId(userData) !== 'enterprise' || bulkMailboxRows.length === 0 || bulkMailboxImportMutation.isPending}
+                          onClick={() => bulkMailboxImportMutation.mutate(bulkMailboxRows)}
+                        >
+                          {bulkMailboxImportMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                          Import {bulkMailboxRows.length || ''} Mailboxes
+                        </Button>
+                      </div>
+                    </div>
+
+                    {getActivePlanId(userData) !== 'enterprise' && (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Bulk mailbox import is available on the enterprise plan.
+                      </p>
+                    )}
+
+                    {(bulkMailboxFileName || bulkMailboxErrors.length > 0) && (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                        <div className="rounded-xl border border-border/40 bg-background/60 p-3">
+                          <p className="font-bold text-foreground">File</p>
+                          <p className="text-muted-foreground truncate">{bulkMailboxFileName || "No file selected"}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/40 bg-background/60 p-3">
+                          <p className="font-bold text-foreground">Ready Rows</p>
+                          <p className="text-muted-foreground">{bulkMailboxRows.length}</p>
+                        </div>
+                        <div className="rounded-xl border border-border/40 bg-background/60 p-3">
+                          <p className="font-bold text-foreground">Parser Errors</p>
+                          <p className="text-muted-foreground">{bulkMailboxErrors.length}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {bulkMailboxErrors.length > 0 && (
+                      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 mb-2">
+                          Rows Needing Attention
+                        </p>
+                        <ul className="space-y-1 text-xs text-muted-foreground">
+                          {bulkMailboxErrors.slice(0, 5).map((error, index) => (
+                            <li key={`${error}-${index}`}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-border/40">

@@ -46,7 +46,9 @@ export function verifyCalendlySignature(req: Request, secret: string): boolean {
     .digest('hex');
 
   const incomingSignature = signature.replace('v1=', '');
-  return incomingSignature === expectedSignature;
+  const expected = Buffer.from(expectedSignature, 'hex');
+  const incoming = Buffer.from(incomingSignature, 'hex');
+  return expected.length === incoming.length && crypto.timingSafeEqual(expected, incoming);
 }
 
 /**

@@ -499,7 +499,7 @@ export class RoutingEngine {
     if (!mailbox) return { reassigned: 0 };
     
     const meta = await decryptMeta(mailbox);
-    const email = meta.smtp_user || meta.user || (mailbox as any).email || '';
+    const email = meta.smtp_user || meta.smtpUser || meta.user || meta.email || mailbox.accountType || (mailbox as any).email || '';
     const newMailboxDomain = email.split('@')[1]?.toLowerCase() || '';
     const newMailboxProviderFamily = await detectProviderFamily(newMailboxDomain);
 
@@ -676,7 +676,7 @@ async function buildMailboxInfo(mb: any, capacity: number): Promise<MailboxInfo 
   if (mb.healthStatus === 'failed') return null;
 
   const meta = await decryptMeta(mb);
-  const email: string = meta.smtp_user || meta.user || mb.email || '';
+  const email: string = meta.smtp_user || meta.smtpUser || meta.user || meta.email || mb.accountType || mb.email || '';
   const domain = email.split('@')[1]?.toLowerCase() || '';
   const providerFamily = await detectProviderFamily(domain);
 

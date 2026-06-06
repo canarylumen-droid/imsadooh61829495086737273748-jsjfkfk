@@ -449,13 +449,22 @@ export class ImapConnectionManager {
     if (!integration.encryptedMeta) return null;
     try {
       const meta = JSON.parse(await decrypt(integration.encryptedMeta));
-      const host: string = meta.imap_host || (meta.smtp_host || '').replace('smtp', 'imap');
-      const port: number = meta.imap_port || 993;
+      const smtpHost = meta.smtp_host || meta.smtpHost || '';
+      const imapHost = meta.imap_host || meta.imapHost || smtpHost.replace(/^smtp\./i, 'imap.');
+      const port: number = Number(meta.imap_port || meta.imapPort || 993);
+      const user = meta.smtp_user || meta.smtpUser || meta.user || meta.email || integration.accountType || '';
+      const pass = meta.smtp_pass || meta.smtpPass || meta.imap_pass || meta.imapPass || meta.password || '';
+
+      if (!imapHost || !user || !pass) {
+        console.warn(`[IMAP] Custom email config incomplete for ${integration.id}: host/user/pass required.`);
+        return null;
+      }
+
       return {
-        host,
+        host: imapHost,
         port,
         secure: port === 993,
-        auth: { user: meta.smtp_user, pass: meta.smtp_pass },
+        auth: { user, pass },
       };
     } catch (err: any) {
       console.error(`[IMAP] Failed to decrypt meta for ${integration.id}:`, err.message);
