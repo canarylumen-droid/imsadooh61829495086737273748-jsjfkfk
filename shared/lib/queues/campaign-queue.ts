@@ -1038,6 +1038,8 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
         or(isNull(campaignLeads.nextActionAt), lte(campaignLeads.nextActionAt, new Date())),
         eq(leads.aiPaused, false),
         ne(leads.status, 'replied'),
+        ne(leads.status, 'warm'),
+        ne(leads.status, 'qualified'),
         ne(leads.status, 'booked'),
         ne(leads.status, 'converted'),
         ne(leads.status, 'not_interested'),
@@ -1386,8 +1388,17 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
     return;
   }
 
-  // 4. Check if the lead has replied or unsubscribed since the follow-up was scheduled
-  if (lead.status === 'replied' || lead.status === 'converted' || lead.status === 'booked' || lead.status === 'unsubscribed') {
+  // 4. Check if the lead has replied, expressed interest, or unsubscribed since the follow-up was scheduled.
+  //    'warm' and 'qualified' are hand-off states — the human team takes over, AI MUST NOT send.
+  if (
+    lead.status === 'replied' ||
+    lead.status === 'warm' ||
+    lead.status === 'qualified' ||
+    lead.status === 'converted' ||
+    lead.status === 'booked' ||
+    lead.status === 'unsubscribed'
+  ) {
+    console.log(`[CampaignWorker] 🛑 Follow-up aborted for lead ${lead.id.slice(-8)} — status is '${lead.status}' (hand-off or unsubscribed)`);
     return;
   }
 

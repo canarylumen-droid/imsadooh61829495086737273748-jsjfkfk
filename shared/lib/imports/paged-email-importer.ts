@@ -334,6 +334,7 @@ async function processEmailForLead(
     let aiShouldWait = false; // Flag to determine if AI should hold off
     let fullAnalysis: any = { intent: { score: 0, label: 'nurture' }, urgencyLevel: 0, qualityScore: 0 };
     let isNegativeIntent = false;
+    let isPositiveIntent = false;
     let globalAutoReplyBody: string | null = null;
 
     if (direction === 'inbound') {
@@ -388,6 +389,10 @@ async function processEmailForLead(
                              fullAnalysis.intent?.label === 'unsubscribe' || 
                              fullAnalysis.qualityScore < 30;
 
+          isPositiveIntent = fullAnalysis.intent?.readyToBuy === true ||
+                             fullAnalysis.intent?.wantsToSchedule === true ||
+                             fullAnalysis.deepIntent?.intentLevel === "high";
+
           // Phase 11: Trigger Intelligence-governed Automation Rules
           const { AutomationRuleEngine } = await import('../automation/rule-engine.js');
           await AutomationRuleEngine.processEvent(userId, lead.id, {
@@ -407,7 +412,7 @@ async function processEmailForLead(
         try {
           const { campaignLeads, outreachCampaigns } = await import('@audnix/shared');
           const { db } = await import('@shared/lib/db/db.js');
-          const { eq, and, or, sql } = await import('drizzle-orm');
+          const { eq, and, or, sql, desc } = await import('drizzle-orm');
 
           // DEEP LINKING: Try to find campaign via inReplyTo header
           if (email.inReplyTo) {
@@ -456,6 +461,12 @@ async function processEmailForLead(
                 // BUG A4 FIX: Skip campaign auto-reply if intent is negative
                 if (pendingAutoReply && isNegativeIntent) {
                   console.log(`[EMAIL_IMPORT] Skipping campaign auto-reply due to negative AI intent: ${fullAnalysis.intent?.label}`);
+                  pendingAutoReply = false;
+                }
+                
+                // Skip campaign auto-reply if intent is positive (human hand-off required)
+                if (pendingAutoReply && isPositiveIntent) {
+                  console.log(`[EMAIL_IMPORT] Skipping campaign auto-reply due to positive AI intent`);
                   pendingAutoReply = false;
                 }
                 
@@ -560,6 +571,7 @@ async function processEmailForLead(
 
             // Log to emailReplyStore
             try {
+              const { emailReplyStore } = await import('@audnix/shared');
               await db.insert(emailReplyStore).values({
                 messageId: email.messageId || `reply_${Date.now()}_${Math.random()}`,
                 inReplyTo: email.inReplyTo || '',
@@ -578,8 +590,11 @@ async function processEmailForLead(
           console.warn('[EMAIL_IMPORT] Failed to update campaign status:', campaignStatusError);
         }
 
-        // AI analysis moved to top of try block for intent verification
-
+        // Reload lead to get latest status and aiPaused after analyzer/sequence-killer updates
+        const freshLead = await storage.getLeadById(lead.id);
+        if (freshLead) {
+          lead = freshLead;
+        }
 
         // Check if we should auto-reply (lead not paused, not recently replied)
         const existingOutbound = existingMessages.filter(m => m.direction === 'outbound');
@@ -592,14 +607,16 @@ async function processEmailForLead(
         // Only auto-reply if:
         // 1. Lead doesn't have AI paused
         // 2. We haven't replied in the last 2 hours (avoid rapid back-and-forth)
-        // 3. Lead is not converted or not_interested
+        // 3. Lead is not converted, not_interested, qualified, warm, or booked
         // 4. Email is RECENT (within last 1 hour) - SAFETY CHECK for imports
         // 5. The campaign is not currently handling the auto-reply (!aiShouldWait)
+        // 6. No positive intent was detected
         const isRecent = new Date(email.date).getTime() > Date.now() - 1000 * 60 * 60;
 
         if (!lead.aiPaused &&
           hoursSinceLastOutbound > 2 &&
-          !['converted', 'not_interested'].includes(lead.status) &&
+          !['converted', 'not_interested', 'qualified', 'warm', 'booked'].includes(lead.status) &&
+          !isPositiveIntent &&
           isRecent &&
           !isHistorical &&
           !aiShouldWait) {

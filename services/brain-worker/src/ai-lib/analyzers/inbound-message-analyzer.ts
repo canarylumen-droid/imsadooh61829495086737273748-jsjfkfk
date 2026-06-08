@@ -6,6 +6,7 @@ import { autoUpdateLeadStatus, detectConversationStatus } from "../core/conversa
 import { learningEngine } from "../engines/learning-engine.js";
 import { universalSalesAI } from "../../orchestrator/agents/universal-sales-agent.js";
 import { createLogger } from '@services/api-gateway/src/core/logger.js';
+import { killLeadSequence } from '@shared/lib/queues/sequence-killer.js';
 import type { Message, Lead } from "@audnix/shared";
 
 const log = createLogger('INBOUND-ANALYZER');
@@ -114,21 +115,53 @@ export async function analyzeInboundMessage(
   ]);
 
   const urgencyLevel = determineUrgency(intent, deepIntent, objection, churnRisk, competitorMention, priceObjection);
-  const shouldAutoReply = determineShouldAutoReply(lead, intent, urgencyLevel);
   const suggestedAction = determineBestAction(intent, deepIntent, objection, churnRisk, competitorMention, qualityResult, priceObjection);
 
-  // Status mapping based on deep AI intent
+  // ─── POSITIVE INTENT DETECTION — SEQUENCE KILL + HAND-OFF ────────────────
+  // This is the most critical block in the entire AI pipeline.
+  // The instant a lead shows any real buying interest we:
+  //   1. Kill all pending automated sequences (BullMQ + campaignLeads DB).
+  //   2. Pause AI at the leads table level.
+  //   3. Fire a human hand-off notification to the dashboard.
+  //   4. Set status to 'qualified' (terminal hand-off state).
+  // Auto-reply is explicitly disabled for positive leads — a human must close.
+  const isPositiveIntent =
+    intent?.readyToBuy === true ||
+    intent?.wantsToSchedule === true ||
+    deepIntent?.intentLevel === "high";
+
   let finalStatus = lead.status;
-  if (deepIntent) {
-    if (deepIntent.intentLevel === "high" && !["booked"].includes(lead.status)) {
-      finalStatus = "warm";
-    } else if (deepIntent.intentLevel === "not_interested" && lead.status !== "booked") {
-      finalStatus = "not_interested";
-    }
+
+  if (isPositiveIntent && !['booked', 'converted', 'qualified'].includes(lead.status)) {
+    log.info(`🔥 [ANALYZER] POSITIVE INTENT detected for lead ${leadId} — killing sequence and flagging for hand-off`);
+    finalStatus = 'qualified';
+
+    // Kill the sequence in the background — non-blocking so analysis result is
+    // still returned quickly. The kill itself is logged and audited internally.
+    killLeadSequence(
+      leadId,
+      lead.userId,
+      'positive_intent_detected',
+      deepIntent?.intentLevel || 'high',
+      suggestedAction
+    ).catch((e: any) =>
+      log.error('[ANALYZER] killLeadSequence failed', { error: e.message })
+    );
+  } else if (deepIntent?.intentLevel === "not_interested" && lead.status !== "booked") {
+    finalStatus = "not_interested";
   }
 
-  // Preserve existing auto-update logic but allow deepIntent to override
-  await autoUpdateLeadStatus(leadId, allMessages);
+  // shouldAutoReply must be computed AFTER positive intent detection so it
+  // returns false for hand-off leads (a human must close, not the AI).
+  const shouldAutoReply = determineShouldAutoReply(lead, intent, urgencyLevel, isPositiveIntent);
+
+  // Only run generic status auto-update for non-positive-intent leads.
+  // For positive-intent leads, killLeadSequence already set the terminal state
+  // ('qualified' + aiPaused=true). Calling autoUpdateLeadStatus here would
+  // risk it overwriting aiPaused back to false (it hardcodes aiPaused:false).
+  if (!isPositiveIntent) {
+    await autoUpdateLeadStatus(leadId, allMessages);
+  }
 
   const mappedCompetitorMention = competitorMention ? {
     mentionFound: competitorMention.detected,
@@ -289,10 +322,16 @@ function determineUrgency(
 function determineShouldAutoReply(
   lead: Lead,
   intent: IntentAnalysis | null,
-  urgency: string
+  urgency: string,
+  isPositiveIntent: boolean = false
 ): boolean {
   if (lead.aiPaused) return false;
   if (intent?.isNegative) return false;
+
+  // CRITICAL: Never auto-reply to a lead that has shown positive intent.
+  // A human must handle closing — an AI follow-up here loses the sale.
+  if (isPositiveIntent) return false;
+  if (intent?.readyToBuy || intent?.wantsToSchedule) return false;
 
   // HARDENING: Only auto-reply if urgency is high or critical, 
   // or if the lead is warm/interested with high confidence.

@@ -73,6 +73,7 @@ export default function SettingsPage() {
     voiceNotesEnabled: true,
     autonomousMode: true,
     discoverInboundLeads: true,
+    prioritizeCalls: true,
     defaultPaymentLink: "",
     offerDescription: "",
     offerValue: 0,
@@ -96,6 +97,7 @@ export default function SettingsPage() {
         voiceNotesEnabled: user.voiceNotesEnabled ?? true,
         autonomousMode: (user as any).config?.autonomousMode !== false,
         discoverInboundLeads: (user as any).config?.discoverInboundLeads !== false,
+        prioritizeCalls: (user as any).config?.prioritizeCalls !== false,
         defaultPaymentLink: user.defaultPaymentLink || "",
         offerDescription: (user as any).offerDescription || "",
         offerValue: (user as any).offerValue || 0,
@@ -111,14 +113,15 @@ export default function SettingsPage() {
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
       // Ensure we nest config if it's in the data
-      const { autonomousMode, discoverInboundLeads, ...rest } = data;
+      const { autonomousMode, discoverInboundLeads, prioritizeCalls, ...rest } = data;
       const payload = {
         ...rest,
-        ...((autonomousMode !== undefined || discoverInboundLeads !== undefined) && {
+        ...((autonomousMode !== undefined || discoverInboundLeads !== undefined || prioritizeCalls !== undefined) && {
           config: {
             ...((user as any)?.config || {}),
             ...(autonomousMode !== undefined && { autonomousMode }),
-            ...(discoverInboundLeads !== undefined && { discoverInboundLeads })
+            ...(discoverInboundLeads !== undefined && { discoverInboundLeads }),
+            ...(prioritizeCalls !== undefined && { prioritizeCalls })
           }
         })
       };
@@ -478,6 +481,30 @@ export default function SettingsPage() {
                   <Switch
                     checked={formData.discoverInboundLeads}
                     onCheckedChange={c => handleFieldChange('discoverInboundLeads', c)}
+                    className="data-[state=checked]:bg-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
+                <div className="flex gap-4">
+                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
+                    <Phone className="w-8 h-8 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-base flex items-center gap-2">
+                      Prioritize Booked Calls
+                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">Closing Strategy</Badge>
+                    </h4>
+                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
+                      Force the AI to prioritize getting leads onto a booked call or demo instead of discussing pricing or negotiating discounts directly over email/DMs.
+                    </p>
+                  </div>
+                </div>
+                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
+                  <Switch
+                    checked={formData.prioritizeCalls}
+                    onCheckedChange={c => handleFieldChange('prioritizeCalls', c)}
                     className="data-[state=checked]:bg-primary"
                   />
                 </div>

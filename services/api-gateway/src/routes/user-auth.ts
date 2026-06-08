@@ -1322,7 +1322,7 @@ router.patch('/config', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { autonomousMode } = req.body;
+    const { autonomousMode, prioritizeCalls } = req.body;
     const user = await storage.getUserById(userId);
     if (!user) {
       res.status(404).json({ error: 'User not found' });
@@ -1331,12 +1331,23 @@ router.patch('/config', async (req: Request, res: Response): Promise<void> => {
 
     const newConfig = {
       ...(user.config as any || {}),
-      autonomousMode: !!autonomousMode
     };
+
+    if (autonomousMode !== undefined) {
+      newConfig.autonomousMode = !!autonomousMode;
+    }
+    if (prioritizeCalls !== undefined) {
+      newConfig.prioritizeCalls = !!prioritizeCalls;
+    }
 
     const updatedUser = await storage.updateUser(userId, { config: newConfig });
     
-    console.log(`🤖 AI Engine toggle for user ${userId}: ${autonomousMode ? 'ON' : 'OFF'}`);
+    if (autonomousMode !== undefined) {
+      console.log(`🤖 AI Engine toggle for user ${userId}: ${autonomousMode ? 'ON' : 'OFF'}`);
+    }
+    if (prioritizeCalls !== undefined) {
+      console.log(`📞 Prioritize Calls toggle for user ${userId}: ${prioritizeCalls ? 'ON' : 'OFF'}`);
+    }
 
     if (autonomousMode && !(user.config as any)?.autonomousMode) {
       try {

@@ -35,9 +35,16 @@ import { HallucinationGuard } from './hallucination-guard.js';
 import { handleLanguageDetection, localizeAndOptimize } from '../utils/language-util.js';
 import { handleObjection } from '../utils/objection-handler.js';
 import { getCustomKnowledge } from '@shared/lib/storage/custom-training-storage.js';
+import {
+  processObjection,
+  recordTacticSent,
+  classifyObjectionFromText,
+  estimateObjectionIntensity,
+  type ObjectionCategory,
+} from '@shared/lib/intelligence/objection-state-machine.js';
 
 const isDemoMode = false;
-const PROMPT_VERSION = 'v1.2.0-resilience';
+const PROMPT_VERSION = 'v1.3.0-osm';
 
 /**
  * Detect if lead is actively engaged (replying immediately)
@@ -138,6 +145,15 @@ export async function autoUpdateLeadStatus(
   try {
     const lead = await storage.getLeadById(leadId);
     if (!lead) return;
+
+    // TERMINAL STATE GUARD: never overwrite these statuses or reset aiPaused.
+    // 'qualified' and 'converted' are human hand-off states set by the sequence killer.
+    // 'booked' is protected further below. Touching any of these here would undo the kill.
+    const TERMINAL_STATES = ['qualified', 'converted', 'booked'];
+    if (TERMINAL_STATES.includes(lead.status)) {
+      console.log(`[autoUpdateLeadStatus] Skipping — lead ${leadId} is in terminal state '${lead.status}'`);
+      return;
+    }
 
     const userResults = await db.select().from(users).where(eq(users.id, lead.userId)).limit(1);
     const oldStatus = lead.status;
@@ -294,6 +310,13 @@ export async function generateAIReply(
     getCustomKnowledge(lead.userId).catch(() => null)
   ]);
 
+  // ─── NICHE + TIMEZONE INTELLIGENCE ───────────────────────────────────────
+  const leadLocalTz   = leadTzProfile?.detectedTimezone || 'unknown local time';
+  const leadNiche     = leadTzProfile?.niche || (lead.metadata as any)?.niche || (lead.metadata as any)?.industry || 'their industry';
+  const leadCity      = leadTzProfile?.detectedCity || (lead as any).city || null;
+  const preferredWindowStart = leadTzProfile?.preferredContactStart ?? 10;
+  const preferredWindowEnd   = leadTzProfile?.preferredContactEnd   ?? 18;
+
   // --- DEDUPLICATION CONTEXT ---
   const lastOutbound = conversationHistory.filter(m => m.direction === 'outbound').pop();
   const lastOutboundBody = lastOutbound?.body || "";
@@ -365,25 +388,81 @@ ${ck.faqs && ck.faqs.length > 0 ? `Frequently Asked Questions:\n${ck.faqs.map((f
     }
   }
 
-  // --- OBJECTION HANDLING LOOP ---
-  // PHASE 52: Inject winning handles from Objection Service
+  // --- OBJECTION STATE MACHINE (PHASE 52+) ---
+  // Multi-objection cross-conversation intelligence.
+  // Replaces single-shot handler — every objection is aware of the full history,
+  // never repeats a failed tactic, escalates intelligently, and injects a rich
+  // priority context block into the main system prompt.
   const winningPlaybook = objectionService.formatPlaybookForPrompt(lead.userId);
+  let objectionStateBlock = '';
+  let objectionDecision: any = null;
 
   if (intent?.hasObjection || intent?.isNegative) {
-    const objectionResponse = await handleObjection(lastLeadMessage?.body || "", {
-      userId: lead.userId,
-      leadName: lead.name || "there",
-      leadIndustry: (lead.metadata?.industry as string) || "general",
-      previousMessages: allMessages,
-      brandName: (brandContext as any)?.businessName || "Our platform",
-      userIndustry: (brandContext as any)?.industry || "all"
-    });
+    try {
+      const rawText = lastLeadMessage?.body || '';
+      const { category } = classifyObjectionFromText(rawText);
+      const intensity = estimateObjectionIntensity(rawText);
 
-    return {
-      text: objectionResponse.response,
-      useVoice: false,
-      detections: intent
-    };
+      // Use AI-detected hidden objection if available, else use category
+      const hiddenObjection =
+        (intent as any)?.hiddenObjection ||
+        (intent as any)?.objectionReason ||
+        `${category} concern: ${rawText.substring(0, 80)}`;
+
+      objectionDecision = await processObjection({
+        leadId: lead.id,
+        userId: lead.userId,
+        leadName: lead.name || 'the lead',
+        objectionText: rawText,
+        category: category as ObjectionCategory,
+        hiddenObjection,
+        intensity,
+        businessContext: {
+          businessName: brandContext.companyName,
+          coreOffer: brandContext.offer || (customKnowledge as any)?.coreOffer || 'our services',
+          userIndustry: brandContext.industry || 'our industry',
+          leadNiche: leadNiche,
+          prioritizeCalls: (user?.config as any)?.prioritizeCalls !== false
+        }
+      });
+
+      objectionStateBlock = objectionDecision.systemPromptBlock;
+
+      // If flagged for human review, create a notification and still generate
+      // one final reply — the AI will use the 'final_push' tactic
+      if (objectionDecision.shouldFlagForHuman) {
+        storage.createNotification({
+          userId: lead.userId,
+          type: 'system',
+          title: '🧠 Lead Needs Human Touch',
+          message: `${lead.name} has objected ${objectionDecision.state.totalObjections} times. AI has exhausted major tactics. Time for a human rep to step in.`,
+          metadata: {
+            leadId: lead.id,
+            objectionState: objectionDecision.state,
+            actionUrl: `/dashboard/inbox?leadId=${lead.id}`
+          }
+        }).catch(() => {});
+      }
+    } catch (osmErr: any) {
+      console.error('[ConversationAI] Objection state machine failed, falling back to legacy handler:', osmErr.message);
+      // Graceful fallback to the old single-shot handler
+      const objectionResponse = await handleObjection(lastLeadMessage?.body || '', {
+        userId: lead.userId,
+        leadName: lead.name || 'there',
+        leadIndustry: (lead.metadata?.industry as string) || 'general',
+        previousMessages: allMessages,
+        brandName: (brandContext as any)?.businessName || 'Our platform',
+        userIndustry: (brandContext as any)?.industry || 'all'
+      });
+      return {
+        text: objectionResponse.response,
+        useVoice: false,
+        detections: intent
+      };
+    }
+    // NOTE: We do NOT return early here — we fall through to the main generation
+    // flow so the objectionStateBlock is injected into the full system prompt,
+    // giving the reply the benefit of deduplication + hallucination guards too.
   }
 
   // --- OOO & WRONG PERSON HANDLING (PHASE 30) ---
@@ -438,11 +517,8 @@ ${ck.faqs && ck.faqs.length > 0 ? `Frequently Asked Questions:\n${ck.faqs.map((f
   const CONTEXT_TOKEN_BUDGET = 3000;
   
   // ─── NICHE + TIMEZONE INTELLIGENCE ───────────────────────────────────────
-  const leadLocalTz   = leadTzProfile?.detectedTimezone || 'unknown local time';
-  const leadNiche     = leadTzProfile?.niche || (lead.metadata as any)?.niche || (lead.metadata as any)?.industry || 'their industry';
-  const leadCity      = leadTzProfile?.detectedCity || (lead as any).city || null;
-  const preferredWindowStart = leadTzProfile?.preferredContactStart ?? 10;
-  const preferredWindowEnd   = leadTzProfile?.preferredContactEnd   ?? 18;
+  // (leadLocalTz, leadNiche, leadCity, preferredWindowStart, preferredWindowEnd are declared above)
+
 
   const leadIntelContext = `
 LEAD PROFILE:
@@ -590,7 +666,7 @@ Only meeting reminders are authorised. Do not generate a response.`,
 
   const systemPrompt = `You are an elite sales advisor — a real person, not a bot. You know this lead, their niche (${leadNiche}), and you behave like a sharp, experienced closer who always knows what happens next.
 
-${ragContext}
+${objectionStateBlock ? objectionStateBlock + '\n\n' : ''}${ragContext}
 
 [BRAND GUIDELINES]
 ${brandGuidelines}
@@ -956,10 +1032,15 @@ ONLY use the following links if necessary: ${allowedLinks.join(', ')}.`;
 
     console.log(`📝 Channel-formatted reply for ${platform}: ${formattedReply.message.substring(0, 100)}...`);
 
+    // Record what tactic we actually sent so the state machine knows for next time
+    if (objectionDecision && optimizedText) {
+      recordTacticSent(lead.id, lead.userId, optimizedText.substring(0, 200)).catch(() => {});
+    }
+
     return {
       text: optimizedText,
       useVoice: false,
-      detections: { ...(intent || {}), channelFormatted: true },
+      detections: { ...(intent || {}), channelFormatted: true, osmTactic: objectionDecision?.nextTactic },
       metadata: { promptVersion: PROMPT_VERSION }
     } as AIReplyResult;
   } catch (error) {

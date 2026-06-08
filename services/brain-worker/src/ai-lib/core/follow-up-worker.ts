@@ -336,7 +336,8 @@ export class FollowUpWorker {
       const globalAutonomousMode = (userDetail?.config as any)?.autonomousMode !== false;
 
       // CHECK 2: Lead-level opt-out
-      if (lead.aiPaused || lead.status === 'unsubscribed' || lead.status === 'bounced') {
+      if (lead.aiPaused || 
+          ['unsubscribed', 'bounced', 'qualified', 'converted', 'booked', 'warm'].includes(lead.status)) {
         console.log(`⏸️  Skipping follow-up for lead ${lead.name} (Status: ${lead.status}${lead.aiPaused ? ', AI paused' : ''})`);
         await db.update(followUpQueue).set({ status: 'completed', processedAt: new Date() }).where(eq(followUpQueue.id, job.id));
         return;

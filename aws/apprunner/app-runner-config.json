@@ -1,0 +1,87 @@
+{
+  "serviceName": "audnix-ai-monolith",
+  "sourceConfiguration": {
+    "imageRepository": {
+      "imageIdentifier": "audnix-ai:latest",
+      "imageConfiguration": {
+        "port": "5000",
+        "environmentVariables": [
+          {
+            "name": "NODE_ENV",
+            "value": "production"
+          },
+          {
+            "name": "APP_ROLE",
+            "value": "unified"
+          },
+          {
+            "name": "PORT",
+            "value": "5000"
+          },
+          {
+            "name": "DATABASE_URL",
+            "value": "{{DATABASE_URL}}"
+          },
+          {
+            "name": "REDIS_URL",
+            "value": "{{REDIS_URL}}"
+          },
+          {
+            "name": "SESSION_SECRET",
+            "value": "{{SESSION_SECRET}}"
+          },
+          {
+            "name": "ENCRYPTION_KEY",
+            "value": "{{ENCRYPTION_KEY}}"
+          },
+          {
+            "name": "DEEPSEEK_API_KEY",
+            "value": "{{DEEPSEEK_API_KEY}}"
+          },
+          {
+            "name": "GEMINI_API_KEY",
+            "value": "{{GEMINI_API_KEY}}"
+          },
+          {
+            "name": "STRIPE_SECRET_KEY",
+            "value": "{{STRIPE_SECRET_KEY}}"
+          },
+          {
+            "name": "REDIS_PASSWORD",
+            "value": "{{REDIS_PASSWORD}}"
+          }
+        ]
+      },
+      "imageRepositoryType": "ECR"
+    },
+    "autoDeploymentsEnabled": true,
+    "authenticationConfiguration": {
+      "accessRoleArn": "{{AWS_APPRUNNER_ACCESS_ROLE_ARN}}"
+    }
+  },
+  "instanceConfiguration": {
+    "cpu": "4096",
+    "memory": "8192",
+    "instanceRoleArn": "{{AWS_APPRUNNER_INSTANCE_ROLE_ARN}}"
+  },
+  "healthCheckConfiguration": {
+    "protocol": "HTTP",
+    "path": "/health",
+    "interval": 30,
+    "timeout": 5,
+    "healthyThreshold": 1,
+    "unhealthyThreshold": 3
+  },
+  "networkConfiguration": {
+    "egressConfiguration": {
+      "egressType": "DEFAULT"
+    },
+    "ingressConfiguration": {
+      "isPubliclyAccessible": true
+    }
+  },
+  "observabilityConfiguration": {
+    "isObservabilityEnabled": true
+  },
+  "autoScalingConfigurationArn": "{{AWS_APPRUNNER_AUTOSCALING_ARN}}"
+}

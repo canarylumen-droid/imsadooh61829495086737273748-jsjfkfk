@@ -1,0 +1,308 @@
+module.exports = {
+  apps: [
+    {
+      name: 'audnix-api-gateway',
+      script: './services/api-gateway/api-only.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'api',
+        PORT: 5000,
+        API_DISABLE_SOCKET: 'true'
+      },
+      error_file: './logs/api-error.log',
+      out_file: './logs/api-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '1G'
+    },
+    {
+      name: 'audnix-socket-server',
+      script: './services/socket-service/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'socket',
+        PORT: 5001
+      },
+      error_file: './logs/socket-error.log',
+      out_file: './logs/socket-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '512M'
+    },
+    {
+      name: 'audnix-worker-email',
+      script: './services/email-service/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'email'
+      },
+      error_file: './logs/email-error.log',
+      out_file: './logs/email-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '1G'
+    },
+    {
+      name: 'audnix-worker-imap',
+      script: './services/email-worker/src/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'imap'
+      },
+      error_file: './logs/imap-error.log',
+      out_file: './logs/imap-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '512M'
+    },
+    {
+      name: 'audnix-worker-ai',
+      script: './services/brain-worker/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'ai'
+      },
+      error_file: './logs/ai-error.log',
+      out_file: './logs/ai-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '2G'
+    },
+    {
+      name: 'audnix-worker-outreach',
+      script: './services/outreach-worker/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'outreach'
+      },
+      error_file: './logs/outreach-error.log',
+      out_file: './logs/outreach-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '2G'
+    },
+    {
+      name: 'audnix-worker-lead-recovery',
+      script: './services/lead-recovery-worker/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'lead-recovery'
+      },
+      error_file: './logs/lead-recovery-error.log',
+      out_file: './logs/lead-recovery-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '1G'
+    },
+    {
+      name: 'audnix-worker-social',
+      script: './services/social-worker/src/social/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'social'
+      },
+      error_file: './logs/social-error.log',
+      out_file: './logs/social-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '512M'
+    },
+    {
+      name: 'audnix-worker-billing',
+      script: './services/billing-service/src/billing/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'billing'
+      },
+      error_file: './logs/billing-error.log',
+      out_file: './logs/billing-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '512M'
+    },
+    {
+      name: 'audnix-worker-orchestrator',
+      script: './services/brain-worker/src/orchestrator/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'orchestrator'
+      },
+      error_file: './logs/orchestrator-error.log',
+      out_file: './logs/orchestrator-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '1G'
+    },
+    {
+      name: 'audnix-worker-rag',
+      script: './services/rag-worker/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'rag'
+      },
+      error_file: './logs/rag-error.log',
+      out_file: './logs/rag-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '2G'
+    },
+    {
+      name: 'audnix-worker-audit',
+      script: './shared/services/audit/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'audit'
+      },
+      error_file: './logs/audit-error.log',
+      out_file: './logs/audit-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '512M'
+    },
+    {
+      name: 'audnix-worker-vectordb',
+      script: './services/vector-db-service/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'vectordb'
+      },
+      error_file: './logs/vectordb-error.log',
+      out_file: './logs/vectordb-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '512M'
+    },
+    {
+      name: 'audnix-worker-warmup',
+      script: './services/warmup-service/index.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'warmup'
+      },
+      error_file: './logs/warmup-error.log',
+      out_file: './logs/warmup-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '512M'
+    },
+    {
+      name: 'audnix-infra-scaler',
+      script: './services/outreach-worker/src/outreach-lib/infra-scaler-entry.ts',
+      interpreter: 'node',
+      interpreter_args: '--import tsx --import ./instrument.ts',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'infra-scaler',
+        QUEUE_AUTOSCALER_ENABLED: 'true'
+      },
+      error_file: './logs/infra-scaler-error.log',
+      out_file: './logs/infra-scaler-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '256M'
+    }
+  ]
+};

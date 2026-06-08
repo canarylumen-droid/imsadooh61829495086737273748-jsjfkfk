@@ -288,9 +288,10 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
     const messages = await storage.getMessagesByLeadId(lead.id);
     const latestMessage = messages.find(m => m.body === messageText);
     
+    let fullAnalysis: any = null;
     if (latestMessage) {
       try {
-        const fullAnalysis = await analyzeInboundMessage(lead.id, latestMessage, lead as any);
+        fullAnalysis = await analyzeInboundMessage(lead.id, latestMessage, lead as any);
         console.log(`[IG_EVENT] Full inbound analysis: urgency=${fullAnalysis.urgencyLevel}, quality=${fullAnalysis.qualityScore}, action=${fullAnalysis.suggestedAction}`);
 
         // Phase 11: Trigger Intelligence-governed Automation Rules
@@ -307,11 +308,54 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
       }
     }
 
+    // Reload the lead to see if the analyzer marked it as qualified or paused
+    const freshLead = await storage.getLeadById(lead.id);
+    const leadToUse = freshLead || lead;
 
-    const intent = await analyzeLeadIntent(messageText, lead as any);
+    // Check if positive intent was detected or lead is in a terminal status after analysis
+    const isPositiveIntent =
+      fullAnalysis?.intent?.readyToBuy === true ||
+      fullAnalysis?.intent?.wantsToSchedule === true ||
+      fullAnalysis?.deepIntent?.intentLevel === "high";
 
-    let newStatus = lead.status;
-    let newTags = [...(lead.tags || [])];
+    const isTerminalState = ['qualified', 'converted', 'booked'].includes(leadToUse.status) || leadToUse.aiPaused || isPositiveIntent;
+
+    if (isTerminalState) {
+      console.log(`[IG_EVENT] skipping DM automation & status updates - lead ${lead.name} is in positive or paused/terminal status: ${leadToUse.status} (Paused: ${leadToUse.aiPaused})`);
+      
+      const intent = fullAnalysis?.intent || { isInterested: false, isNegative: false, needsMoreInfo: false, wantsToSchedule: false, readyToBuy: false };
+      
+      // 7. Recent Activity (Audit Trail)
+      await storage.createAuditLog({
+        userId: integration.userId,
+        leadId: lead.id,
+        integrationId: integration.id,
+        action: 'message_received',
+        details: {
+          channel: 'instagram',
+          description: `${lead.name} sent: "${messageText.substring(0, 50)}..."`,
+          intent,
+          auto_tagged: true
+        }
+      });
+
+      // 8. Memory
+      try {
+        const messages = await storage.getMessagesByLeadId(lead.id);
+        if (messages.length > 0) {
+          await saveConversationToMemory(integration.userId, leadToUse as any, messages);
+        }
+      } catch (memoryError) {
+        console.error('Failed to save conversation to memory:', memoryError);
+      }
+      return;
+    }
+
+    // Reuse the intent analysis from the analyzer to avoid duplicate API calls
+    const intent = fullAnalysis?.intent || await analyzeLeadIntent(messageText, leadToUse as any);
+
+    let newStatus = leadToUse.status;
+    let newTags = [...(leadToUse.tags || [])];
 
     if (intent.isInterested && ((intent as any).confidence ?? 1) > 0.7) {
       newStatus = 'open'; // mapped 'interested' -> 'open' (schema enum)
@@ -346,8 +390,8 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
       status: newStatus as any,
       tags: Array.from(new Set(newTags)),
       lastMessageAt: new Date(),
-      score: calculateLeadScore(intent, lead as any),
-      metadata: { ...lead.metadata, intent_analysis: intent }
+      score: calculateLeadScore(intent, leadToUse as any),
+      metadata: { ...leadToUse.metadata, intent_analysis: intent }
     });
 
     // 6. Follow Up Queue
@@ -358,7 +402,7 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
         leadId: lead.id,
         channel: 'instagram',
         status: 'pending',
-        scheduledAt: new Date(getSmartScheduleTime(intent, lead as any)),
+        scheduledAt: new Date(getSmartScheduleTime(intent, leadToUse as any)),
         context: {
           last_message: messageText,
           intent,
@@ -381,13 +425,11 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
       }
     });
 
-    // 8. Memory & Automation (Kept as is, assuming they use storage or are independent)
+    // 8. Memory & Automation
     try {
       const messages = await storage.getMessagesByLeadId(lead.id);
-      const leadData = await storage.getLeadById(lead.id);
-
-      if (messages.length > 0 && leadData) {
-        await saveConversationToMemory(integration.userId, leadData, messages);
+      if (messages.length > 0) {
+        await saveConversationToMemory(integration.userId, leadToUse as any, messages);
       }
     } catch (memoryError) {
       console.error('Failed to save conversation to memory:', memoryError);

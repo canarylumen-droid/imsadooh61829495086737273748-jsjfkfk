@@ -82,5 +82,6 @@ CMD ["sh", "-c", "\
     infra-scaler) npm run start:infra:scaler ;; \
     vectordb)     npm run start:worker:vectordb ;; \
     warmup)       npm run start:worker:warmup ;; \
-    *)            npm run start:unified ;; \
+    unified)      npm run start:pm2:production ;; \
+    *)            npm run start:pm2:production ;; \
   esac"]

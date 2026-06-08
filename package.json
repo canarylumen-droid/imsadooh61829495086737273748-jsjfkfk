@@ -44,7 +44,14 @@
     "start:worker:warmup": "node --import tsx --import ./instrument.ts services/warmup-service/index.ts",
     "start:infra:scaler": "node --import tsx --import ./instrument.ts services/outreach-worker/src/outreach-lib/infra-scaler-entry.ts",
     "start:all": "concurrently \"npm run start:api\" \"npm run start:all-workers\"",
-    "start:all-workers": "concurrently \"npm run start:worker:email\" \"npm run start:worker:imap\" \"npm run start:worker:ai\" \"npm run start:worker:outreach\" \"npm run start:worker:lead-recovery\" \"npm run start:worker:social\" \"npm run start:worker:billing\" \"npm run start:worker:orchestrator\" \"npm run start:worker:knowledge\" \"npm run start:worker:audit\" \"npm run start:worker:warmup\" \"npm run start:infra:scaler\""
+    "start:all-workers": "concurrently \"npm run start:worker:email\" \"npm run start:worker:imap\" \"npm run start:worker:ai\" \"npm run start:worker:outreach\" \"npm run start:worker:lead-recovery\" \"npm run start:worker:social\" \"npm run start:worker:billing\" \"npm run start:worker:orchestrator\" \"npm run start:worker:knowledge\" \"npm run start:worker:audit\" \"npm run start:worker:warmup\" \"npm run start:infra:scaler\"",
+    "start:pm2": "pm2 start ecosystem.config.js",
+    "start:pm2:production": "pm2 start ecosystem.config.js --env production",
+    "stop:pm2": "pm2 stop ecosystem.config.js",
+    "restart:pm2": "pm2 restart ecosystem.config.js",
+    "delete:pm2": "pm2 delete ecosystem.config.js",
+    "logs:pm2": "pm2 logs",
+    "monit:pm2": "pm2 monit"
   },
   "engines": {
     "node": "22.x"
@@ -233,7 +240,8 @@
     "wouter": "^3.3.5",
     "ws": "^8.18.2",
     "zod": "^3.24.2",
-    "zod-validation-error": "^3.4.0"
+    "zod-validation-error": "^3.4.0",
+    "pm2": "^5.4.2"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.24.0",
