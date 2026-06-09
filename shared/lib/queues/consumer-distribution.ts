@@ -1,7 +1,7 @@
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import { Queue, Worker, Job } from 'bullmq';
-import { hasRedis, redisConnection } from './redis-config.js';
+import { createFreshConnection, hasRedis, redisConnection } from './redis-config.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 
 /**
@@ -100,7 +100,7 @@ export const startConsumerWorker = () => {
       return { status: 'processing', count: pulledLeads.length };
     },
     {
-      connection: redisConnection as any,
+      connection: createFreshConnection() as any,
       concurrency: 200, // High concurrency for 500+ mailbox fleet
       limiter: {
         max: 500,

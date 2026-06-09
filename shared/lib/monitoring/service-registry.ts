@@ -1,5 +1,6 @@
-import { Redis } from 'ioredis';
+import type { Redis } from 'ioredis';
 import { randomUUID } from 'crypto';
+import { getSharedRedisConnection } from '@shared/lib/queues/redis-config.js';
 
 function getTaskId(): string {
   // ECS Fargate: metadata endpoint provides task ID
@@ -29,8 +30,10 @@ export class ServiceRegistry {
   private readonly HEARTBEAT_MS = 30_000;
   private readonly TTL_SECONDS = 90;
 
-  constructor(redisUrl: string, role: string) {
-    this.redis = new Redis(redisUrl);
+  constructor(redisOrUrl: string | Redis, role: string) {
+    this.redis = typeof redisOrUrl === 'string'
+      ? getSharedRedisConnection()
+      : redisOrUrl;
     this.serviceId = `${role}-${getTaskId()}`;
     this.role = role;
   }

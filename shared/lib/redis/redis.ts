@@ -8,7 +8,7 @@ let isInitializing = false;
 
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-export const hasRedis = !!process.env.REDIS_URL;
+export const hasRedis = !!process.env.REDIS_URL || !!process.env.REDIS_HOST;
 export const redisConnection = {
   get client() { return redisClient; },
   get isConnected() { return !!redisClient; }
@@ -64,10 +64,11 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
   if (redisClient) return redisClient;
 
   const rawRedisUrl = process.env.REDIS_URL;
+  const redisHost = process.env.REDIS_HOST;
 
-  if (!rawRedisUrl) {
+  if (!rawRedisUrl && !redisHost) {
     if (IS_PROD) {
-      throw new Error('[RedisClient] REDIS_URL is required in production');
+      throw new Error('[RedisClient] REDIS_URL or REDIS_HOST is required in production');
     }
     return null;
   }
@@ -80,7 +81,11 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
   isInitializing = true;
 
   try {
-    const redisUrl = validateRedisEndpoint(rawRedisUrl, 'REDIS_URL');
+    const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
+    const useTls = (rawRedisUrl || '').startsWith('rediss://') || process.env.REDIS_TLS === 'true';
+    const redisUrl = rawRedisUrl
+      ? validateRedisEndpoint(rawRedisUrl, 'REDIS_URL')
+      : validateRedisEndpoint(`${useTls ? 'rediss' : 'redis'}://default:placeholder@${redisHost}:${redisPort}`, 'REDIS_HOST');
     const parsed = new URL(redisUrl);
     const tls = parsed.protocol === 'rediss:' || process.env.REDIS_TLS === 'true';
 
@@ -90,15 +95,25 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
       privateEndpointRequired: process.env.REDIS_PRIVATE_ENDPOINT_REQUIRED !== 'false',
     });
 
-    const client = createClient({
+    const socketOptions = {
+      connectTimeout: readInt('REDIS_CONNECT_TIMEOUT_MS', 5000),
+      reconnectStrategy: createReconnectStrategy('shared'),
+      tls,
+      rejectUnauthorized: process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== 'false',
+    } as any;
+
+    const client = rawRedisUrl ? createClient({
       url: redisUrl,
       password: parsed.password ? undefined : process.env.REDIS_PASSWORD || undefined,
+      socket: socketOptions
+    }) : createClient({
+      username: process.env.REDIS_USERNAME || undefined,
+      password: process.env.REDIS_PASSWORD || undefined,
       socket: {
-        connectTimeout: readInt('REDIS_CONNECT_TIMEOUT_MS', 5000),
-        reconnectStrategy: createReconnectStrategy('shared'),
-        tls,
-        rejectUnauthorized: process.env.REDIS_TLS_REJECT_UNAUTHORIZED !== 'false',
-      } as any
+        ...socketOptions,
+        host: redisHost,
+        port: redisPort,
+      }
     });
 
     client.on('error', (err) => {

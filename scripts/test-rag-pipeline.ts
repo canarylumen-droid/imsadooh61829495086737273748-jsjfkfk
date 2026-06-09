@@ -12,7 +12,7 @@
 import '@services/api-gateway/src/core/bootstrap.js';
 import { ragQueue } from '@shared/lib/queue.js';
 import { QueueEvents } from 'bullmq';
-import { bullmqRedisConnection } from '@shared/lib/redis.js';
+import { createFreshConnection } from '@shared/lib/queues/redis-config.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 
@@ -66,7 +66,7 @@ async function runVerification() {
   console.log('  AUDNIX RAG PIPELINE — PHASE 9 VERIFICATION');
   console.log('═'.repeat(60) + '\n');
 
-  const ragQueueEvents = new QueueEvents(ragQueue.name, { connection: bullmqRedisConnection });
+  const ragQueueEvents = new QueueEvents(ragQueue.name, { connection: createFreshConnection() });
 
   try {
     // ── Step 1: Clean test slate ──────────────────────────────

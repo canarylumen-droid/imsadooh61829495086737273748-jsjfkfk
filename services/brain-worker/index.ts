@@ -7,7 +7,7 @@ import '@services/api-gateway/src/core/bootstrap.js';
 import { createLogger } from '@services/api-gateway/src/core/logger.js';
 import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-health-server.js';
 import { Worker, Job } from 'bullmq';
-import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
+import { createFreshConnection, redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { startMemoryWatchdog } from '@shared/lib/monitoring/memory-watchdog.js';
 import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
@@ -125,7 +125,7 @@ async function startAIService() {
         'fathom-processing',
         async (job: Job) => { await processFathomWebhook(job.data); },
         { 
-          connection: redisConnection as any, 
+          connection: createFreshConnection() as any, 
           concurrency: parseInt(process.env.FATHOM_CONCURRENCY || '5', 10) 
         }
       );
@@ -142,7 +142,7 @@ async function startAIService() {
         'calendly-processing',
         async (job: Job) => { await processCalendlyWebhook(job.data); },
         { 
-          connection: redisConnection as any, 
+          connection: createFreshConnection() as any, 
           concurrency: parseInt(process.env.CALENDLY_CONCURRENCY || '10', 10) 
         }
       );
@@ -161,7 +161,7 @@ async function startAIService() {
           if (type === 'pending-payment' && paymentId) await checkoutWorker.processPendingPayment(paymentId);
         },
         { 
-          connection: redisConnection as any, 
+          connection: createFreshConnection() as any, 
           concurrency: parseInt(process.env.BILLING_CONCURRENCY || '5', 10) 
         }
       );

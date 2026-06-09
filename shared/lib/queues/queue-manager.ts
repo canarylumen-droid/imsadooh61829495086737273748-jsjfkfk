@@ -4,7 +4,7 @@ import { Redis } from 'ioredis';
 const REDIS_URL = process.env.REDIS_URL;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
-import { getSharedRedisConnection as getRedisConfigConnection } from './redis-config.js';
+import { createFreshConnection, getSharedRedisConnection as getRedisConfigConnection } from './redis-config.js';
 
 export function getSharedRedisConnection(): Redis {
   return getRedisConfigConnection();
@@ -34,13 +34,13 @@ export function createQueue<T = any>(name: string) {
 
 export function createWorker<T = any>(name: string, processor: (job: any) => Promise<any>, options = {}) {
   return new Worker<T>(name, processor, {
-    connection: getSharedRedisConnection() as any,
+    connection: createFreshConnection() as any,
     ...options,
   });
 }
 
 export function createQueueEvents(name: string) {
   return new QueueEvents(name, {
-    connection: getSharedRedisConnection() as any,
+    connection: createFreshConnection() as any,
   });
 }

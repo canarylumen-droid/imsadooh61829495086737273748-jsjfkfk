@@ -15,7 +15,7 @@ import '@services/api-gateway/src/core/bootstrap.js';
 import { createLogger } from '@services/api-gateway/src/core/logger.js';
 import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-health-server.js';
 import { Worker, Job } from 'bullmq';
-import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
+import { createFreshConnection, redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
 import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
@@ -87,7 +87,7 @@ async function startBillingService() {
         }
       },
       {
-        connection: redisConnection as any,
+        connection: createFreshConnection() as any,
         concurrency: 2, // Billing: low concurrency by design
         removeOnComplete: { count: 500 },
         removeOnFail: { count: 2000 }, // Keep many failures for audit trail

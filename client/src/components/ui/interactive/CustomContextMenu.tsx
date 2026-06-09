@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { queryClient } from '@/lib/queryClient';
 import { Scissors, Copy, ClipboardPaste, Link2, Download, Trash2, RefreshCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -124,9 +125,7 @@ export function CustomContextMenu({
                                         }
                                         if (item.id === 'refresh') {
                                             // Real-time invalidation instead of reload
-                                            import('@/lib/queryClient').then(({ queryClient }) => {
-                                                queryClient.invalidateQueries();
-                                            });
+                                            queryClient.invalidateQueries();
                                         }
                                         onAction?.(item.id!, config.data);
                                         onClose();

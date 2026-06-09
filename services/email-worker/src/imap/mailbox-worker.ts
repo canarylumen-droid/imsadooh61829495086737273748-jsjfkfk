@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { redisConnection } from '@shared/lib/queues/redis-config.js';
+import { createFreshConnection } from '@shared/lib/queues/redis-config.js';
 import { ImapConnectionManager } from './imap-connection-manager.js';
 
 /**
@@ -35,7 +35,7 @@ export function createMailboxWorker(connectionManager: ImapConnectionManager) {
       }
     },
     {
-      connection: redisConnection as any,
+      connection: createFreshConnection() as any,
       concurrency: 50, // High concurrency for command processing
     }
   );

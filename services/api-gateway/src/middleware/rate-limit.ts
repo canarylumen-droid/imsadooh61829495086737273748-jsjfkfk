@@ -1,6 +1,5 @@
 import rateLimit, { type Options } from 'express-rate-limit';
 import RedisStore, { type SendCommandFn } from 'rate-limit-redis';
-import { createClient, type RedisClientType } from 'redis';
 import type { Request } from 'express';
 
 interface RateLimitSessionData {
@@ -18,28 +17,21 @@ function getSessionUserId(req: Request): string | undefined {
 
 import { getRedisClient } from '@shared/lib/redis/redis.js';
 
-let redisClient: any = null;
-
-async function initRedis(): Promise<void> {
-  const sharedClient = await getRedisClient();
-  if (sharedClient) {
-    redisClient = sharedClient;
-  }
-}
-
-initRedis().catch(() => { });
-
 function createRedisStoreConfig(prefix: string): RedisStoreConfig | undefined {
-  if (!redisClient) {
-    console.warn(`⚠️ Rate Limiter [${prefix}] falling back to in-memory storage (Redis not connected)`);
+  if (!process.env.REDIS_URL && !process.env.REDIS_HOST) {
+    console.warn(`⚠️ Rate Limiter [${prefix}] falling back to in-memory storage (Redis not configured)`);
     return undefined;
   }
-  const client = redisClient;
+
   const sendCommand: SendCommandFn = (async (...args: string[]) => {
     try {
+      const client = await getRedisClient();
+      if (!client) {
+        throw new Error('Redis client not initialized');
+      }
       return await client.sendCommand(args);
     } catch (err) {
-      console.error(`❌ Redis Command Error in Rate Limiter [${prefix}]:`, err);
+      console.error(`❌ Redis Command Error in Rate Limiter [${prefix}]:`, (err as Error).message);
       throw err;
     }
   }) as SendCommandFn;

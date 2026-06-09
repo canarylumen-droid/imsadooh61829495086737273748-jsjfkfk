@@ -1,5 +1,5 @@
 import { Queue, Worker, Job } from 'bullmq';
-import { hasRedis, redisConnection } from './redis-config.js';
+import { createFreshConnection, hasRedis, redisConnection } from './redis-config.js';
 import { db } from '@shared/lib/db/db.js';
 import { leads, campaignLeads } from '@audnix/shared';
 import { sql } from 'drizzle-orm';
@@ -121,7 +121,7 @@ export const startVerificationWorker = () => {
       return { processed: batch.length, valid: validLeads.length };
     },
     {
-      connection: redisConnection as any,
+      connection: createFreshConnection() as any,
       concurrency: 50 // 50 concurrent validation workers
     }
   );

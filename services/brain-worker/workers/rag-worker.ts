@@ -1,5 +1,5 @@
 import { Worker, Job } from 'bullmq';
-import { bullmqRedisConnection } from '@shared/lib/redis.js';
+import { createFreshConnection } from '@shared/lib/queues/redis-config.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import { embed } from '../src/ai-lib/core/ai-service.js';
@@ -15,7 +15,7 @@ export class RagWorker {
 
   constructor() {
     this.worker = new Worker('ragQueue', this.processJob.bind(this), {
-      connection: bullmqRedisConnection,
+      connection: createFreshConnection(),
       concurrency: 10,
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 100 }

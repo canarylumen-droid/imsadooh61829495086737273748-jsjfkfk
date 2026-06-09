@@ -22,7 +22,7 @@ export default function NotFound() {
       {/* Dynamic Background Elements */}
       <div className="absolute top-0 left-0 w-full h-full">
         <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-primary/20 blur-[120px] rounded-full animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-indigo-500/10 blur-[100px] rounded-full animate-bounce duration-[10000ms]" />
+        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-indigo-500/10 blur-[100px] rounded-full animate-bounce [animation-duration:10000ms]" />
       </div>
 
       <motion.div

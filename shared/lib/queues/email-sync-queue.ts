@@ -12,7 +12,7 @@
  */
 
 import { Queue, Worker, type Job } from 'bullmq';
-import { getSharedRedisConnection, hasRedis } from './redis-config.js';
+import { createFreshConnection, getSharedRedisConnection, hasRedis } from './redis-config.js';
 import { imapIdleManager } from '@services/email-service/src/email/imap-idle-manager.js';
 import { emailSyncWorker } from '@services/email-service/src/email/email-sync-worker.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
@@ -186,7 +186,7 @@ export function startEmailSyncWorker() {
         }
       },
       {
-        connection: getSharedRedisConnection(),
+        connection: createFreshConnection(),
         concurrency: 50, // High concurrency — each new-mail fetch is fast (envelope only)
         removeOnComplete: { count: 500 },
         removeOnFail: { count: 1000 },

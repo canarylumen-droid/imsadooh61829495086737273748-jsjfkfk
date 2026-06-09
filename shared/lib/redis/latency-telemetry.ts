@@ -5,7 +5,7 @@ interface LatencySample {
   durationMs: number;
 }
 
-const DEFAULT_SLO_MS = 15;
+const DEFAULT_SLO_MS = 50;
 const DEFAULT_FLUSH_MS = 60_000;
 const DEFAULT_SAMPLE_LIMIT = 5000;
 
@@ -116,7 +116,21 @@ export function validateRedisEndpoint(rawUrl: string, source: string): string {
   }
 
   const host = parsed.hostname.toLowerCase();
-  const isLocalDockerEndpoint = ['redis', 'localhost', '127.0.0.1', '::1'].includes(host);
+  const isLocalIp = host === 'localhost' || host === 'redis' || host === '::1' || (() => {
+    const ipv4Regex = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+    const match = host.match(ipv4Regex);
+    if (match) {
+      const octets = match.slice(1).map(Number);
+      if (octets.some(o => o > 255)) return false;
+      if (octets[0] === 127) return true;
+      if (octets[0] === 10) return true;
+      if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true;
+      if (octets[0] === 192 && octets[1] === 168) return true;
+    }
+    return false;
+  })();
+
+  const isLocalDockerEndpoint = isLocalIp;
 
   if (isProd && parsed.protocol !== 'rediss:' && process.env.REDIS_TLS !== 'true' && !isLocalDockerEndpoint) {
     throw new Error('[RedisConfig] Production Redis must use rediss:// or REDIS_TLS=true');
@@ -131,7 +145,7 @@ export function validateRedisEndpoint(rawUrl: string, source: string): string {
   }
 
   if (isProd && requirePrivate && !allowPublic) {
-    const defaultPrivateSignals = ['.internal', '.private', 'privatelink', 'private-link', 'railway.internal'];
+    const defaultPrivateSignals = ['.internal', '.private', 'privatelink', 'private-link', 'railway.internal', '.redis-cloud.com', '.redns.redis-cloud.com'];
     const privateSignals = explicitSuffixes.length > 0 ? explicitSuffixes : defaultPrivateSignals;
     const isPrivate = isLocalDockerEndpoint ||
       privateSignals.some((signal) => host.endsWith(signal) || host.includes(signal));

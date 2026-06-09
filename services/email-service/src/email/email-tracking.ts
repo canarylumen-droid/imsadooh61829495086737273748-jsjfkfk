@@ -288,6 +288,7 @@ export async function getEmailStats(userId: string, days: number = 30, integrati
   clickRate: number;
 }> {
   try {
+    const boundedDays = Number.isFinite(days) && days > 0 ? Math.min(Math.floor(days), 3650) : 30;
     const whereClause = integrationId 
       ? sql`WHERE user_id = ${userId} AND integration_id = ${integrationId}`
       : sql`WHERE user_id = ${userId}`;
@@ -299,7 +300,7 @@ export async function getEmailStats(userId: string, days: number = 30, integrati
         COUNT(CASE WHEN click_count > 0 THEN 1 END) as clicked
       FROM email_tracking
       ${whereClause}
-      AND sent_at > NOW() - INTERVAL '${sql.raw(days.toString())} days'
+      AND sent_at > NOW() - (${boundedDays} * INTERVAL '1 day')
     `);
 
     const row = result.rows[0] as { sent: string; opened: string; clicked: string } | undefined;

@@ -16,7 +16,7 @@ import '@services/api-gateway/src/core/bootstrap.js';
 import { createLogger } from '@services/api-gateway/src/core/logger.js';
 import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-health-server.js';
 import { Worker, Job } from 'bullmq';
-import { redisConnection, hasRedis } from '@shared/lib/redis/redis.js';
+import { createFreshConnection, redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
 
@@ -80,7 +80,7 @@ async function startOrchestratorService() {
         }
       },
       {
-        connection: redisConnection as any,
+        connection: createFreshConnection() as any,
         concurrency: 20, // Brain can handle many concurrent "thinking" tasks
         removeOnComplete: { count: 1000 },
         removeOnFail: { count: 5000 },

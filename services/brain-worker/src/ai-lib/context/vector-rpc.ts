@@ -2,7 +2,7 @@ import { ragQueue } from '@shared/lib/queue.js';
 import { QueueEvents } from 'bullmq';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
-import { getSharedRedisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
+import { createFreshConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 
 let ragQueueEventsInstance: QueueEvents | null = null;
 
@@ -12,7 +12,7 @@ function getRagQueueEvents(): QueueEvents {
       throw new Error('❌ Redis is not configured for QueueEvents');
     }
     ragQueueEventsInstance = new QueueEvents('ragQueue', {
-      connection: getSharedRedisConnection(),
+      connection: createFreshConnection(),
     });
   }
   return ragQueueEventsInstance;

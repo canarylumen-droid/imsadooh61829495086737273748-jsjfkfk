@@ -30,7 +30,7 @@ export function startActiveWatchdog() {
         FROM outreach_campaigns oc
         WHERE cl.campaign_id = oc.id
           AND cl.status = 'processing' 
-          AND cl.updated_at < NOW() - INTERVAL '${STUCK_THRESHOLD_MINUTES} minutes'
+          AND cl.updated_at < NOW() - (${STUCK_THRESHOLD_MINUTES} * INTERVAL '1 minute')
         RETURNING cl.id, cl.campaign_id, oc.user_id;
       `);
 

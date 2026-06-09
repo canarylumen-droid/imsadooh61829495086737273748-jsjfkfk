@@ -15,7 +15,7 @@ import '@services/api-gateway/src/core/bootstrap.js';
 import { createLogger } from '@services/api-gateway/src/core/logger.js';
 import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-health-server.js';
 import { Worker, Job } from 'bullmq';
-import { redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
+import { createFreshConnection, redisConnection, hasRedis } from '@shared/lib/queues/redis-config.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
 import { startHeartbeat } from '@shared/lib/monitoring/health-heartbeat.js';
@@ -70,7 +70,7 @@ async function startSocialService() {
         }
       },
       {
-        connection: redisConnection as any,
+        connection: createFreshConnection() as any,
         concurrency: 5,
         removeOnComplete: { count: 200 },
         removeOnFail: { count: 500 },

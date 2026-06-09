@@ -4,8 +4,7 @@
  */
 
 import { Worker } from 'bullmq';
-import { redisConnection as redisConfig } from '@shared/lib/queues/redis-config';
-import type { Redis } from 'ioredis';
+import { createFreshConnection } from '@shared/lib/queues/redis-config';
 import { db } from '../db/warmup-db.js';
 import { eq, and } from 'drizzle-orm';
 import { warmupMailboxes, warmupThreads, warmupInteractions } from '@audnix/shared';
@@ -36,7 +35,7 @@ export function createInboundWorker(): Worker {
           console.warn(`[Warmup][Inbound] Unknown job type: ${name}`);
       }
     },
-    { connection: redisConfig as unknown as Redis, concurrency: WARMUP_CONFIG.INBOUND_CONCURRENCY }
+    { connection: createFreshConnection(), concurrency: WARMUP_CONFIG.INBOUND_CONCURRENCY }
   );
 }
 

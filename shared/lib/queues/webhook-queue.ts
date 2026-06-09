@@ -1,5 +1,5 @@
 import { Queue, QueueEvents } from 'bullmq';
-import { redisConnection } from './redis-config.js';
+import { createFreshConnection, redisConnection } from './redis-config.js';
 
 /**
  * Webhook Queue for asynchronous processing of external events (Calendly, Fathom, etc.)
@@ -25,5 +25,5 @@ export const webhookQueue = new Queue('webhook-processing', {
 });
 
 export const webhookQueueEvents = new QueueEvents('webhook-processing', {
-  connection: redisConnection as any
+  connection: createFreshConnection() as any
 });

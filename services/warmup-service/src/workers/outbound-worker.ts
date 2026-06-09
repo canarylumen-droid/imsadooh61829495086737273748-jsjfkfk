@@ -4,8 +4,7 @@
  */
 
 import { Worker } from 'bullmq';
-import { redisConnection as redisConfig } from '@shared/lib/queues/redis-config.js';
-import type { Redis } from 'ioredis';
+import { createFreshConnection } from '@shared/lib/queues/redis-config.js';
 import { db } from '../db/warmup-db.js';
 import { eq, sql } from 'drizzle-orm';
 import { warmupMailboxes, warmupThreads, warmupInteractions, integrations } from '@audnix/shared';
@@ -208,7 +207,7 @@ export function createOutboundWorker(): Worker {
 
       return { success: result.success, interactionId: interaction?.id };
     },
-    { connection: redisConfig as unknown as Redis, concurrency: WARMUP_CONFIG.OUTBOUND_CONCURRENCY }
+    { connection: createFreshConnection(), concurrency: WARMUP_CONFIG.OUTBOUND_CONCURRENCY }
   );
 }
 
