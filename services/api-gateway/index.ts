@@ -474,8 +474,13 @@ async function runMigrations() {
 
 (async () => {
   // Step 0: Validate Critical Environment Variables for Production Readiness
-  const criticalEnv = ['DATABASE_URL_POOL', 'REDIS_URL', 'GEMINI_API_KEY', 'ENCRYPTION_KEY'];
-  const missing = criticalEnv.filter(k => !process.env[k]);
+  const criticalEnv = [
+    { name: 'DATABASE_URL_POOL or DATABASE_URL', present: Boolean(process.env.DATABASE_URL_POOL || process.env.DATABASE_URL) },
+    { name: 'REDIS_URL', present: Boolean(process.env.REDIS_URL) },
+    { name: 'GEMINI_API_KEY', present: Boolean(process.env.GEMINI_API_KEY) },
+    { name: 'ENCRYPTION_KEY', present: Boolean(process.env.ENCRYPTION_KEY) },
+  ];
+  const missing = criticalEnv.filter(({ present }) => !present).map(({ name }) => name);
   if (missing.length > 0) {
     console.error(`âŒ [Advanced Infra] CRITICAL FAILURE: Missing required environment variables: ${missing.join(', ')}`);
     if (process.env.NODE_ENV === 'production') {

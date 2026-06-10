@@ -13,14 +13,20 @@ import { logRecoveryEvent } from "./events.js";
 
 const EMAIL_PROVIDERS = new Set(["custom_email", "gmail", "outlook"]);
 
+function readInt(name: string, fallback: number): number {
+  const value = Number.parseInt(process.env[name] || "", 10);
+  return Number.isFinite(value) ? value : fallback;
+}
+
 export class LeadRecoveryWorker {
   private interval: NodeJS.Timeout | null = null;
   private running = false;
   private processing = false;
+  private promptReady = false;
+  private lastMongoWarningAt = 0;
+  private readonly mongoWarningIntervalMs = readInt("LEAD_RECOVERY_MONGO_WARNING_INTERVAL_MS", 300_000);
 
   async start() {
-    await connectMongo();
-    await ensurePromptConfigFromEnv();
     this.running = true;
     console.log("[LeadRecoveryWorker] Started");
     await this.runOnce();
@@ -39,6 +45,9 @@ export class LeadRecoveryWorker {
     if (!this.running || this.processing) return;
     this.processing = true;
     try {
+      const ready = await this.ensureMongoReady();
+      if (!ready) return;
+
       const states = await LeadRecoveryState.find({
         isActive: true,
         syncRequestedAt: { $ne: null },
@@ -56,6 +65,32 @@ export class LeadRecoveryWorker {
     } finally {
       this.processing = false;
     }
+  }
+
+  private async ensureMongoReady(): Promise<boolean> {
+    try {
+      await connectMongo();
+      if (!this.promptReady) {
+        await ensurePromptConfigFromEnv();
+        this.promptReady = true;
+      }
+      return true;
+    } catch (error) {
+      this.warnMongoUnavailable(error);
+      return false;
+    }
+  }
+
+  private warnMongoUnavailable(error: unknown): void {
+    const now = Date.now();
+    if (now - this.lastMongoWarningAt < this.mongoWarningIntervalMs) return;
+
+    this.lastMongoWarningAt = now;
+    const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    console.error("[LeadRecoveryWorker] MongoDB unavailable; worker will retry", {
+      error: message,
+      retryInMs: this.mongoWarningIntervalMs,
+    });
   }
 
   private async processState(tenantId: string, mailboxId?: string) {

@@ -7,11 +7,13 @@ module.exports = {
       interpreter_args: '--import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         APP_ROLE: 'api',
         PORT: 5000,
-        API_DISABLE_SOCKET: 'true'
+        API_DISABLE_SOCKET: 'true',
+        DISABLE_STATIC_SERVE: 'true'
       },
       error_file: './logs/api-error.log',
       out_file: './logs/api-out.log',

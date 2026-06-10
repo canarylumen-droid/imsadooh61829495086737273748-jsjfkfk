@@ -167,10 +167,12 @@ export class AutonomousScalerService {
 export class RailwayQueueAutoscaler {
   private readonly pollMs = readInt('QUEUE_AUTOSCALER_POLL_MS', 15_000);
   private readonly cooldownMs = readInt('QUEUE_AUTOSCALER_COOLDOWN_MS', 180_000);
+  private readonly backlogWarningIntervalMs = readInt('QUEUE_AUTOSCALER_BACKLOG_WARNING_INTERVAL_MS', 300_000);
   private readonly targets: RailwayScaleTarget[];
   private readonly state = new Map<string, RailwayScaleState>();
   private timer: NodeJS.Timeout | null = null;
   private running = false;
+  private lastLeadRecoveryBacklogWarningAt = 0;
 
   constructor(targets = RailwayQueueAutoscaler.defaultTargets()) {
     this.targets = targets;
@@ -394,9 +396,21 @@ export class RailwayQueueAutoscaler {
         },
       });
     } catch (err) {
-      console.warn('[RailwayQueueAutoscaler] lead recovery backlog unavailable:', err);
+      this.warnLeadRecoveryBacklogUnavailable(err);
       return 0;
     }
+  }
+
+  private warnLeadRecoveryBacklogUnavailable(err: unknown): void {
+    const now = Date.now();
+    if (now - this.lastLeadRecoveryBacklogWarningAt < this.backlogWarningIntervalMs) return;
+
+    this.lastLeadRecoveryBacklogWarningAt = now;
+    const message = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    console.warn('[RailwayQueueAutoscaler] lead recovery backlog unavailable; treating backlog as 0', {
+      error: message,
+      retryInMs: this.backlogWarningIntervalMs,
+    });
   }
 
   private async dispatchScaleRequest(

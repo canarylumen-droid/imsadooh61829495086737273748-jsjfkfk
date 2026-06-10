@@ -18,6 +18,12 @@ export function log(message: string, source = "express") {
 }
 
 export function serveStatic(app: Express) {
+  // Check if static serving is disabled (for nginx setup)
+  if (process.env.DISABLE_STATIC_SERVE === 'true') {
+    console.log('[Static] Static file serving disabled - frontend served by nginx');
+    return;
+  }
+
   // Try paths in priority order: client/dist (dev/Railway fallback), dist/public (Vercel standard), and fallback
   const possiblePaths = [
     path.resolve(process.cwd(), "client", "dist"),
