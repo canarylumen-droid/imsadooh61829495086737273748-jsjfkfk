@@ -295,7 +295,7 @@ class DailyCheckpoint {
           `pre-craft-${campaignId}`,
           { type: 'campaign:pre-craft' as const, campaignId, userId },
           {
-            jobId: `pre-craft:${campaignId}:${tomorrowStart.toISOString().slice(0, 10)}`,
+            jobId: `pre-craft-${campaignId}-${tomorrowStart.toISOString().slice(0, 10)}`,
             priority: 3,
             removeOnComplete: true,
             removeOnFail: { count: 100 },

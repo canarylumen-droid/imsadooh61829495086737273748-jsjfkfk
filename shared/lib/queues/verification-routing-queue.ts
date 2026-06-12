@@ -180,7 +180,7 @@ export class VerificationRoutingManager {
         await verificationQueue.add(
           `verify:${campaignLeadId}`,
           { email: emailNorm, campaignLeadId, campaignId, userId },
-          { jobId: `verify:${campaignLeadId}`, priority: 5 }
+          { jobId: `verify-${campaignLeadId}`, priority: 5 }
         );
       } else {
         // No Redis — run inline (dev mode)
@@ -205,7 +205,7 @@ export class VerificationRoutingManager {
       await routingQueue.add(
         `reroute:${failedMailboxId}:${campaignId}`,
         { failedMailboxId, campaignId, userId },
-        { jobId: `reroute:${failedMailboxId}:${campaignId}`, priority: 0 } // P0 — highest priority
+        { jobId: `reroute-${failedMailboxId}-${campaignId}`, priority: 0 } // P0 — highest priority
       );
     } else {
       await processReroute({ failedMailboxId, campaignId, userId });
@@ -224,7 +224,7 @@ export class VerificationRoutingManager {
       await routingQueue.add(
         `route:${campaignLeadId}`,
         { campaignLeadId, email, campaignId, userId, verificationStatus },
-        { jobId: `route:${campaignLeadId}`, priority: 3 }
+        { jobId: `route-${campaignLeadId}`, priority: 3 }
       );
     } else {
       await processRouting({ campaignLeadId, email, campaignId, userId, verificationStatus });

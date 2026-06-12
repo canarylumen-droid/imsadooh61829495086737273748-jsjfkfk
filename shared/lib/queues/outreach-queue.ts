@@ -20,7 +20,7 @@ export const outreachQueue = createQueue<OutreachJobData>('outreach-engine');
 export async function enqueueHighPriorityOutreach(data: OutreachJobData) {
   return await outreachQueue.add('high-priority-send', data, {
     priority: 1, // Lower number = higher priority in BullMQ
-    jobId: `high-prio:${data.userId}:${data.leadId ?? 'batch'}:${data.campaignId ?? 'direct'}`
+    jobId: `high-prio-${data.userId}-${data.leadId ?? 'batch'}-${data.campaignId ?? 'direct'}`
   });
 }
 
@@ -31,7 +31,7 @@ export async function enqueueStandardOutreach(data: OutreachJobData, delayMs: nu
   return await outreachQueue.add('standard-send', data, {
     delay: delayMs,
     priority: 10,
-    jobId: `std:${data.userId}:${data.leadId ?? 'batch'}:${data.campaignId ?? 'direct'}`
+    jobId: `std-${data.userId}-${data.leadId ?? 'batch'}-${data.campaignId ?? 'direct'}`
   });
 }
 
@@ -41,7 +41,7 @@ export async function enqueueStandardOutreach(data: OutreachJobData, delayMs: nu
 export async function enqueuePriorityReply(data: OutreachJobData) {
   return await outreachQueue.add('priority-reply', { ...data, priority: 1 }, {
     priority: 1, // BullMQ: 1 is highest priority
-    jobId: `reply:${data.leadId}:${data.campaignId ?? 'direct'}`
+    jobId: `reply-${data.leadId}-${data.campaignId ?? 'direct'}`
   });
 }
 

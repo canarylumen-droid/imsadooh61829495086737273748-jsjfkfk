@@ -624,6 +624,7 @@ export default function DashboardHome() {
               bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
               dns={stats?.health?.dns}
               isLoading={statsLoading}
+              hasIntegrations={isSmtpConnected}
             />
 
             <ReputationTrendChart data={stats?.reputationTrend || []} />

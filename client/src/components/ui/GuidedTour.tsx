@@ -175,7 +175,9 @@ export function GuidedTour({ isOpen, onComplete, onSkip }: GuidedTourProps) {
   };
 
   const getPopoverStyle = () => {
-    if (!targetRect || step.position === 'center') {
+    // Force center alignment on mobile devices to prevent clipping or off-screen rendering
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+    if (isMobile || !targetRect || step.position === 'center') {
       return {
         top: '50%',
         left: '50%',
@@ -223,7 +225,8 @@ export function GuidedTour({ isOpen, onComplete, onSkip }: GuidedTourProps) {
   if (!isOpen) return null;
 
   const popoverStyle = getPopoverStyle();
-  const isCentered = !targetRect || step.position === 'center';
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const isCentered = isMobile || !targetRect || step.position === 'center';
 
   return createPortal(
     <AnimatePresence mode="wait">
@@ -261,12 +264,12 @@ export function GuidedTour({ isOpen, onComplete, onSkip }: GuidedTourProps) {
         {/* Popover Card */}
         <motion.div
           key={currentStep}
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
+          initial={isMobile ? { opacity: 0, y: 20 } : { opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          exit={isMobile ? { opacity: 0, y: 20 } : { opacity: 0, scale: 0.95, y: 10 }}
+          transition={isMobile ? { duration: 0.2 } : { type: "spring", stiffness: 300, damping: 30 }}
           className={cn(
-            "fixed pointer-events-auto w-full max-w-[380px] p-6 glass-card rounded-2xl border border-white/10 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.6)] bg-[#0A0A0A]/95 backdrop-blur-xl",
+            "fixed pointer-events-auto w-full max-w-[340px] md:max-w-[380px] p-5 md:p-6 glass-card rounded-2xl border border-white/10 shadow-[0_20px_60px_-10px_rgba(0,0,0,0.6)] bg-[#0A0A0A]/95 backdrop-blur-xl",
             isCentered ? "" : "transition-all duration-300 ease-out"
           )}
           style={popoverStyle}

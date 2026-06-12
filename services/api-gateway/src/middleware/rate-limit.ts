@@ -65,8 +65,8 @@ export const apiLimiter = rateLimit(
   createRateLimiterOptions(
     {
       windowMs: 15 * 60 * 1000,
-      max: 100,
-      message: { error: 'Too many requests from this IP, please try again later' },
+      max: 1000, // Increased from 100 to 1000 to prevent lockout
+      message: { error: 'Too many requests, please try again later' },
       standardHeaders: true,
       legacyHeaders: false
     },
@@ -78,7 +78,7 @@ export const authLimiter = rateLimit(
   createRateLimiterOptions(
     {
       windowMs: 15 * 60 * 1000,
-      max: 20, // Increased from 5 to 20 to prevent lockouts
+      max: 100, // Increased from 20 to 100 to prevent lockout
       message: { error: 'Too many authentication attempts, please try again later' },
       standardHeaders: true,
       legacyHeaders: false,

@@ -252,7 +252,6 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         { label: "Import Leads", icon: Upload, path: "/dashboard/lead-import" },
         { label: "Objections", icon: Shield, path: "/dashboard/objections" },
         { label: "Custom Knowledge", icon: BookMarked, path: "/dashboard/custom-knowledge" },
-        { label: "AI Sandbox", icon: Terminal, path: "/dashboard/sandbox" },
       ],
     },
     {

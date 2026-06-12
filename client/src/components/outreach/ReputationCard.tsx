@@ -34,6 +34,7 @@ interface ReputationCardProps {
     ptr: boolean;
   };
   isLoading?: boolean;
+  hasIntegrations?: boolean;
 }
 
 export const ReputationCard: React.FC<ReputationCardProps> = ({ 
@@ -41,7 +42,8 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
   status, 
   bounces, 
   dns,
-  isLoading 
+  isLoading,
+  hasIntegrations = true
 }) => {
   const getStatusColor = (s: string) => {
     switch (s) {
@@ -66,8 +68,43 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
   };
 
   const isPending = score === null;
-  const effectiveStatus = isPending ? 'initializing' : status;
-  const displayScore = isPending ? 0 : score;
+  const effectiveStatus = !hasIntegrations ? 'critical' : (isPending ? 'initializing' : status);
+  const displayScore = !hasIntegrations ? 0 : (isPending ? 0 : score);
+
+  if (!hasIntegrations) {
+    return (
+      <Card className="border-border/50 rounded-2xl bg-card/40 backdrop-blur-xl relative overflow-hidden group h-full">
+        <div className="absolute top-0 right-0 w-32 h-32 blur-[60px] opacity-10 rounded-full bg-rose-500" />
+        
+        <CardHeader className="pb-3 border-b border-border/10 flex flex-row items-center justify-between">
+          <CardTitle className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-500 flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4" />
+            Domain Reputation Engine
+          </CardTitle>
+          <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest border-0 text-rose-400 bg-rose-500/10 border-rose-500/20">
+            Offline
+          </Badge>
+        </CardHeader>
+
+        <CardContent className="pt-6 space-y-6 flex flex-col justify-center items-center text-center py-10">
+          <div className="p-4 rounded-full bg-rose-500/10 border border-rose-500/25 mb-2">
+            <ShieldAlert className="w-8 h-8 text-rose-400 animate-pulse" />
+          </div>
+          <div className="space-y-2 max-w-sm">
+            <h3 className="text-lg font-black tracking-tight text-foreground">No Mailbox Connected</h3>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Connect a custom SMTP, Google Workspace, or Outlook channel in your Integrations dashboard to begin domain verification and outbound tracking.
+            </p>
+          </div>
+          <a href="/dashboard/integrations" className="mt-4">
+            <Badge className="bg-primary text-black font-black uppercase text-[10px] tracking-wider px-4 py-2 hover:bg-primary/80 transition-all cursor-pointer">
+              Connect Channels
+            </Badge>
+          </a>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="border-border/50 rounded-2xl bg-card/40 backdrop-blur-xl relative overflow-hidden group h-full">

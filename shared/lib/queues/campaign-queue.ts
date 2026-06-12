@@ -238,7 +238,7 @@ export class CampaignQueueManager {
     }
 
     // Schedule a daily PRE-CRAFT job to generate AI copies for the next 24 hours
-    const preCraftKey = `pre-craft_${campaign.id}`;
+    const preCraftKey = `pre-craft-${campaign.id}`;
     if (campaignQueue) {
       await campaignQueue.add(preCraftKey, {
         type: 'campaign:pre-craft',
@@ -246,7 +246,7 @@ export class CampaignQueueManager {
         userId: campaign.userId
       }, {
         repeat: { pattern: '0 1 * * *' }, // Run daily at 1 AM UTC
-        jobId: preCraftKey.replace(/:/g, '-'),
+        jobId: preCraftKey,
         removeOnComplete: true,
         removeOnFail: { count: 1000 },
       });
@@ -448,7 +448,7 @@ export class CampaignQueueManager {
     delayMs: number
   ): Promise<void> {
     if (campaignQueue) {
-      const jobId = `followup:${campaignId}:${campaignLeadId}:step${stepIndex}`;
+      const jobId = `followup-${campaignId}-${campaignLeadId}-step${stepIndex}`;
       // Write PG source-of-truth BEFORE Redis — if Redis crashes mid-add, the Watchdog can recover
       await logJobPending(jobId, 'campaign:follow-up', campaignId, userId, integrationId, campaignLeadId, stepIndex, { type: 'campaign:follow-up', campaignId, userId, campaignLeadId, integrationId, stepIndex }, delayMs).catch(() => {});
       await campaignQueue.add(jobId, {
@@ -514,7 +514,7 @@ export class CampaignQueueManager {
 
     if (campaignQueue) {
       const bucket = Math.floor(Date.now() / (5 * 60 * 1000)); // 5-min dedup window: collapses rapid re-triggers, allows new replies later
-      const jobId = `autoreply:${campaignId}:${campaignLeadId}:${bucket}`;
+      const jobId = `autoreply-${campaignId}-${campaignLeadId}-${bucket}`;
       const jobData = {
         type: 'campaign:auto-reply' as const,
         campaignId,
@@ -1231,7 +1231,7 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
         await campaignQueue.add(
           `stats-${campaignId}`,
           { type: 'campaign:update-stats', campaignId, userId },
-          { jobId: `stats:${campaignId}:${bucket}`, delay: 3000, priority: 3, removeOnComplete: true, removeOnFail: { count: 1000 } }
+          { jobId: `stats-${campaignId}-${bucket}`, delay: 3000, priority: 3, removeOnComplete: true, removeOnFail: { count: 1000 } }
         ).catch(() => {});
       } else {
         await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
@@ -1313,7 +1313,7 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   if (!db) return;
 
   const { campaignId, userId, campaignLeadId, integrationId, stepIndex } = data;
-  const followupJobId = `followup:${campaignId}:${campaignLeadId}:step${stepIndex}`;
+  const followupJobId = `followup-${campaignId}-${campaignLeadId}-step${stepIndex}`;
 
   // PG idempotency: skip if already sent — prevents duplicate send when the Watchdog re-queues this job
   if (db) {
@@ -1519,7 +1519,7 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
   if (!db) return;
 
   const { campaignId, userId, campaignLeadId, integrationId, leadId } = data;
-  const autoreplyJobId = data._jobId || `autoreply:${campaignId}:${campaignLeadId}:unknown`;
+  const autoreplyJobId = data._jobId || `autoreply-${campaignId}-${campaignLeadId}-unknown`;
   markJobProcessing(autoreplyJobId).catch(() => {});
 
   // 2. Fetch campaign and verify status
@@ -2683,10 +2683,4 @@ if (campaignWorker) {
 } else {
   console.warn('⚠️ BullMQ Campaign Queue Worker disabled (No Redis) — using setInterval fallback');
 }
-
-
-
-
-
-
 

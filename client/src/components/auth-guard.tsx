@@ -52,6 +52,12 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
         localStorage.setItem('onboarding_completed', 'true');
       }
 
+      // If user is logged in, but hits "/" redirect immediately to /dashboard
+      if (currentPath === "/") {
+        setLocation("/dashboard");
+        return;
+      }
+
       if (!serverOnboardingCompleted && 
           currentPath !== "/onboarding" && 
           !currentPath.startsWith("/auth") &&
@@ -71,7 +77,6 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
     }
   }, [user, isLoading, error, adminOnly, setLocation]);
 
-  // Show loading while checking auth
   // Show loading while checking auth
   // IF we have a local flag that onboarding is done, don't show the full page loader 
   // unless there's an actual error or we ABSOLUTELY need to block.

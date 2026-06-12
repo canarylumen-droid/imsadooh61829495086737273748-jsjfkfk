@@ -37,7 +37,8 @@ import {
   ArrowRight,
   Search,
   ChevronLeft,
-  ChevronRight as ChevronRightIcon
+  ChevronRight as ChevronRightIcon,
+  CalendarDays,
 } from "lucide-react";
 import { SiGoogle, SiShopify, SiHubspot, SiSlack } from "react-icons/si";
 import {
@@ -233,7 +234,7 @@ const integrationCards: Array<{
     id: "calendly",
     name: "Calendly",
     description: "AI-led appointment scheduling. Automatically book meetings with interested leads.",
-    icon: RefreshCw,
+    icon: CalendarDays,
     color: "text-blue-600",
     bg: "bg-blue-600/10",
   }
@@ -1008,6 +1009,7 @@ export default function IntegrationsPage() {
                       </div>
                     </div>
                     <div className="space-y-1.5 md:col-span-2">
+                        <Label className="text-xs font-semibold text-muted-foreground ml-1">Display Name</Label>
                         <Input
                           placeholder="John Doe"
                           value={customEmailConfig.fromName}
@@ -1566,8 +1568,8 @@ export default function IntegrationsPage() {
             {/* Social and SaaS Integrations */}
             <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {isLoading ? (
-                // Skeleton loading for integration cards
-                Array.from({ length: 4 }).map((_, i) => (
+                // Skeleton loading for integration cards — count matches integrationCards.length
+                Array.from({ length: integrationCards.length }).map((_, i) => (
                   <Card key={i} className="rounded-2xl border border-border/50 bg-muted/10 p-6 animate-pulse">
                     <div className="flex justify-between items-start mb-6">
                       <div className="h-14 w-14 rounded-xl bg-muted/20" />
@@ -1697,11 +1699,5 @@ export default function IntegrationsPage() {
         </TabsContent>
       </Tabs >
     </PageWrapper>
-  );
-}
-
-function SwitchIcon({ connected }: { connected: boolean }) {
-  return (
-    <div className={`w-3 h-3 rounded-full ${connected ? 'bg-emerald-500' : 'bg-muted-foreground/30'}`} />
   );
 }
