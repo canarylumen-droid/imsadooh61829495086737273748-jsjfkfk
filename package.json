@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx --import ./instrument.ts server/index.ts",
+    "test:connections": "tsx test-connections.ts",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc -p tsconfig.json",

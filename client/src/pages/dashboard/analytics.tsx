@@ -132,7 +132,7 @@ export default function AnalyticsPage() {
     return (
         <PageWrapper>
             {/* Summary Row */}
-            <ResponsiveGrid className="xl:grid-cols-6 lg:grid-cols-3 gap-6">
+            <ResponsiveGrid className="grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-6">
                 {hasData ? (
                     <>
                         <StatCard
@@ -621,32 +621,32 @@ function StatCard({ label, value, icon: Icon, trend, isUp, color, index }: any) 
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
         >
-            <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-2xl group relative">
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">{label}</CardTitle>
-                    <div className={cn("p-2 rounded-xl bg-muted/50 transition-colors group-hover:bg-primary/10")}>
-                        <Icon className={cn("h-4 w-4", color)} />
+            <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-2xl group relative p-3 sm:p-5">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 sm:pb-2 p-0">
+                    <CardTitle className="text-[9px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 truncate pr-2 w-full">{label}</CardTitle>
+                    <div className={cn("p-1 sm:p-2 rounded-xl bg-muted/50 transition-colors group-hover:bg-primary/10 shrink-0")}>
+                        <Icon className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4", color)} />
                     </div>
                 </CardHeader>
-                <CardContent className="pt-2">
-                    <div className="flex items-baseline justify-between gap-1 w-full">
-                        <div className="text-3xl font-bold tracking-tight truncate">{value}</div>
+                <CardContent className="pt-2 p-0">
+                    <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-1 w-full">
+                        <div className="text-lg sm:text-3xl font-bold tracking-tight truncate">{value}</div>
                         {trend && trend !== "—" && (
                             <div className={cn(
-                                "flex items-center gap-1 px-2 py-0.5 rounded-full shrink-0",
+                                "flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 w-fit mt-0.5 sm:mt-0",
                                 isUp ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
                             )}>
-                                {isUp ? <ArrowUpRight className="w-3 h-3" /> : <TrendingUp className="w-3 h-3 rotate-180" />}
-                                <span className="text-[10px] font-semibold">{trend}</span>
+                                {isUp ? <ArrowUpRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> : <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 rotate-180" />}
+                                <span className="text-[8px] sm:text-[10px] font-semibold">{trend}</span>
                             </div>
                         )}
                         {trend === "—" && (
-                            <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
-                                <span className="text-[10px] font-semibold">STABLE</span>
+                            <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0 w-fit mt-0.5 sm:mt-0">
+                                <span className="text-[8px] sm:text-[10px] font-semibold">STABLE</span>
                             </div>
                         )}
                     </div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-4">
+                    <p className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-2 sm:mt-4">
                       {trend && trend !== "—" ? (isUp ? "Improving" : "Declining") : "No prior data"}
                     </p>
 

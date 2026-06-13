@@ -221,7 +221,7 @@ export default function AIAnalyticsPage() {
       ) : (
         <div className="space-y-6 mt-8 animate-in fade-in duration-700">
           {/* Top Stat Cards */}
-          <ResponsiveGrid className="md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <ResponsiveGrid className="grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
             <StatCard
               title="Total Leads"
               value={analytics?.summary?.totalLeads || 0}
@@ -429,14 +429,14 @@ export default function AIAnalyticsPage() {
 
 function StatCard({ title, value, icon: Icon, color, subtext, progress, circle }: any) {
   return (
-    <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-2xl group relative">
-      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60">{title}</CardTitle>
-        <Icon className={cn("h-4 w-4 transition-colors", color)} />
+    <Card className="overflow-hidden border-border/40 hover:border-primary/20 transition-all bg-card/40 backdrop-blur-xl rounded-2xl group relative p-3 sm:p-5">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 sm:pb-2 p-0">
+        <CardTitle className="text-[9px] sm:text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/60 truncate pr-2 w-full">{title}</CardTitle>
+        <Icon className={cn("h-3.5 w-3.5 sm:h-4 sm:w-4 transition-colors shrink-0", color)} />
       </CardHeader>
-      <CardContent className="flex flex-col items-center text-center pt-2">
+      <CardContent className="flex flex-col items-center text-center pt-2 p-0">
         {circle && progress !== undefined ? (
-          <div className="relative h-24 w-24 mb-4 flex items-center justify-center">
+          <div className="relative h-16 w-16 sm:h-24 sm:w-24 mb-2 sm:mb-4 flex items-center justify-center">
             <svg className="h-full w-full rotate-[-90deg]" viewBox="0 0 36 36">
               <path className="text-muted/10" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" strokeWidth="2.5" />
               <motion.path
@@ -452,21 +452,21 @@ function StatCard({ title, value, icon: Icon, color, subtext, progress, circle }
               />
             </svg>
             <div className="absolute flex flex-col items-center">
-              <span className="text-2xl font-bold tracking-tighter">{value}</span>
+              <span className="text-sm sm:text-2xl font-bold tracking-tighter">{value}</span>
             </div>
           </div>
         ) : (
-          <div className="text-3xl font-bold tracking-tighter mb-4">{value}</div>
+          <div className="text-lg sm:text-3xl font-bold tracking-tighter mb-2 sm:mb-4">{value}</div>
         )}
 
         {!circle && progress !== undefined && (
-          <div className="w-full mb-4">
-            <div className="h-1.5 w-full bg-muted/40 rounded-full overflow-hidden">
+          <div className="w-full mb-2 sm:mb-4">
+            <div className="h-1 w-full bg-muted/40 rounded-full overflow-hidden">
               <div className={`h-full ${color.replace('text-', 'bg-')}`} style={{ width: `${progress}%` }} />
             </div>
           </div>
         )}
-        <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/40">{subtext}</p>
+        <p className="text-[8px] sm:text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/40">{subtext}</p>
 
         {/* Apple-style background glow */}
         <div className={cn("absolute -bottom-10 -right-10 w-32 h-32 blur-[80px] opacity-10 rounded-full", color.replace('text-', 'bg-'))} />

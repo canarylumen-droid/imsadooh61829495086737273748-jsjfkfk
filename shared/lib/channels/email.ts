@@ -293,7 +293,7 @@ async function sendCustomSMTP(
 
       // Re-acquire each iteration — pool may have been evicted by ENETUNREACH handler
       let transporter = smtpPools.get(cacheKey);
-      if (!transporter || (currentForcedPort && (transporter as any).options?.port !== currentForcedPort)) {
+      if (!transporter || (currentForcedPort && parseInt(String((transporter as any).options?.port)) !== parseInt(String(currentForcedPort)))) {
         smtpLog.info('SMTP re-creating connection pool', { cacheKey, attempt: attempt + 1, port: currentForcedPort });
         transporter = createTransporterPool(currentForcedPort, currentForcedSecure);
         smtpPools.set(cacheKey, transporter);
@@ -360,10 +360,10 @@ async function sendCustomSMTP(
           const basePort = parseInt(String(config.smtp_port)) || 587;
           const cycle = PORT_CYCLE[basePort] || [587, 465, 2525];
           
-          const currentIdx = currentForcedPort ? cycle.indexOf(currentForcedPort) : 0;
+          const currentIdx = currentForcedPort ? cycle.indexOf(parseInt(String(currentForcedPort))) : 0;
           if (currentIdx < cycle.length - 1) {
             currentForcedPort = cycle[currentIdx + 1];
-            currentForcedSecure = currentForcedPort === 465;
+            currentForcedSecure = parseInt(String(currentForcedPort)) === 465;
             console.info(`[CustomSMTP] 🛡️ Timeout detected. Attempting automatic failover to Port ${currentForcedPort} for next retry...`);
           }
         }

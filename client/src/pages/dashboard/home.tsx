@@ -500,7 +500,7 @@ export default function DashboardHome() {
         )}
 
         {/* KPI Grid */}
-        <ResponsiveGrid className="grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        <ResponsiveGrid className="grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
           {kpis.map((kpi, index) => {
             const Icon = kpi.icon;
             const TrendIcon = kpi.trend === "up" ? ArrowUp : kpi.trend === "down" ? ArrowDown : Minus;
@@ -512,43 +512,39 @@ export default function DashboardHome() {
                 transition={{ delay: index * 0.1, duration: 0.5, ease: "easeOut" }}
               >
                 <Card className={cn(
-                  "relative transition-all duration-300 border-border/40 rounded-lg overflow-hidden group bg-card/40 backdrop-blur-xl hover:border-primary/30 h-full",
+                  "relative transition-all duration-300 border-border/40 rounded-lg overflow-hidden group bg-card/40 backdrop-blur-xl hover:border-primary/30 h-full p-2 sm:p-4",
                   kpi.glow
                 )}>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 truncate pr-2">{kpi.label}</CardTitle>
-                    <div className={cn("p-1.5 rounded-lg transition-colors bg-muted/5", kpi.color)}>
-                      <Icon className="h-4 w-4" />
+                  <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-1 sm:space-y-0 pb-1.5 sm:pb-2 p-0">
+                    <CardTitle className="text-[8px] sm:text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 truncate pr-2 w-full">{kpi.label}</CardTitle>
+                    <div className={cn("p-1 sm:p-1.5 rounded-lg transition-colors bg-muted/5 shrink-0 hidden sm:block", kpi.color)}>
+                      <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </div>
                   </CardHeader>
-                  <CardContent className="flex flex-col h-[calc(100%-52px)]">
-                    <div className="text-2xl font-extrabold mb-2 truncate">
+                  <CardContent className="flex flex-col h-[calc(100%-40px)] p-0 mt-1 sm:mt-0">
+                    <div className="text-base sm:text-2xl font-extrabold mb-1 sm:mb-2 truncate">
                       {kpi.prefix || ''}{kpi.value}{kpi.suffix || ''}
                     </div>
                     {kpi.percentage !== "—" && (
-                      <div className="flex items-center gap-2 flex-wrap min-h-[20px]">
-                        <span className={`text-[9px] md:text-[10px] font-bold flex items-center px-1.5 md:px-2 py-0.5 rounded-full shrink-0 ${kpi.trend === "up" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
-                           <TrendIcon className="h-2.5 w-2.5 md:h-3 md:w-3 mr-0.5" />
+                      <div className="flex items-center gap-1.5 flex-wrap min-h-[16px]">
+                        <span className={`text-[8px] sm:text-[10px] font-bold flex items-center px-1 py-0.5 rounded-full shrink-0 ${kpi.trend === "up" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
+                           <TrendIcon className="h-2 w-2 sm:h-2.5 sm:w-2.5 mr-0.5" />
                           {kpi.percentage}
                         </span>
-                        <span className="text-[8px] md:text-[9px] font-bold text-muted-foreground/30 uppercase tracking-widest truncate">Growth</span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between mt-auto pt-4 opacity-0 group-hover:opacity-100 transition-all duration-300">
+                    <div className="flex items-center justify-between mt-auto pt-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-[9px] font-bold uppercase tracking-widest p-0 px-2 rounded-lg hover:bg-primary/5 text-primary truncate max-w-[110px]"
+                        className="h-6 text-[8px] font-bold uppercase tracking-widest p-0 px-1.5 rounded-lg hover:bg-primary/5 text-primary truncate max-w-[80px] sm:max-w-[110px]"
                         onClick={(e) => {
                           e.stopPropagation();
                           window.location.href = '/api/bulk/export';
                         }}
                       >
-                        <Download className="h-3 w-3 mr-1.5 shrink-0" /> Export
+                        <Download className="h-2.5 w-2.5 mr-1 shrink-0" /> Export
                       </Button>
-                      <div className="h-8 w-8 rounded-full bg-primary/5 flex items-center justify-center text-primary group-hover:bg-primary/10 transition-colors shrink-0 ml-2">
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </div>
                     </div>
 
                     <div className={cn(

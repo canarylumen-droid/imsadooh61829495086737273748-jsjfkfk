@@ -1780,18 +1780,18 @@ export default function InboxPage() {
                     <div className="flex gap-2 md:gap-3 items-end max-w-5xl mx-auto w-full">
                       <div className="flex-1 relative group bg-white/50 dark:bg-black/20 rounded-2xl border border-border/40 focus-within:border-amber-500/50 focus-within:ring-4 focus-within:ring-amber-500/10 transition-all">
                         {/* Tab Headers */}
-                        <div className="flex items-center gap-4 px-4 py-2 border-b border-border/30 bg-muted/20 rounded-t-2xl">
+                        <div className="flex flex-wrap items-center gap-2 px-4 py-2 border-b border-border/30 bg-muted/20 rounded-t-2xl justify-between">
                           <button onClick={() => setActiveReplyTab('text')} className={cn("text-[10px] font-bold tracking-wider uppercase transition-colors flex items-center gap-1", activeReplyTab === 'text' ? "text-primary" : "text-muted-foreground hover:text-foreground")}>
                             <MessageSquare className="w-3 h-3" /> Text
                           </button>
                           
-                          <div className="ml-auto flex items-center gap-2 overflow-x-auto max-w-[50%] scrollbar-hide pr-2">
+                          <div className="flex items-center gap-1.5 overflow-x-auto max-w-full scrollbar-hide pr-1 py-0.5">
                              <Tags className="w-3 h-3 text-muted-foreground shrink-0" />
                              {allTags.slice(0, 5).map(tag => (
                                <button
                                  key={tag.value}
                                  onClick={() => insertTag(tag.value)}
-                                 className="text-[8px] font-black uppercase tracking-tighter px-2 py-1 rounded-full bg-primary/5 hover:bg-primary/15 border border-primary/10 text-primary transition-all shrink-0"
+                                 className="text-[8px] font-black uppercase tracking-tighter px-2 py-0.5 rounded-full bg-primary/5 hover:bg-primary/15 border border-primary/10 text-primary transition-all shrink-0"
                                >
                                  {tag.label}
                                </button>
@@ -1829,39 +1829,39 @@ export default function InboxPage() {
                             }
                           }}
                           placeholder="Compose a response..."
-                          className="w-full bg-muted/30 border border-border/50 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary/50 min-h-[56px] max-h-40 resize-none transition-all overflow-y-auto"
+                          className="w-full bg-muted/30 border-none rounded-b-2xl p-4 pr-24 text-sm focus:ring-0 min-h-[56px] max-h-40 resize-none transition-all overflow-y-auto"
                         />
-                        <div className="absolute right-3 bottom-0 mb-3 flex gap-2">
+                        <div className="absolute right-3 bottom-2 flex gap-1.5 z-10">
                           <Button
                             size="icon"
                             variant="ghost"
                             onClick={handleMagicPencil}
                             disabled={!replyMessage || isPolishing}
                             className={cn(
-                              "h-8 w-8 rounded-lg transition-all",
+                              "h-7 w-7 rounded-lg transition-all",
                               isPolishing ? "animate-pulse bg-primary/10" : "hover:bg-primary/10 text-primary"
                             )}
                             title="AI Magic Pencil: Polish & Rewrite"
                           >
-                            {isPolishing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                            {isPolishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
                           </Button>
                           <Button
                             size="icon"
                             onClick={handleAiReply}
                             disabled={isGenerating}
-                            className="h-10 w-10 rounded-2xl bg-gradient-to-br from-[#FFD700] via-[#FDB931] to-[#D4AF37] text-black shadow-xl shadow-amber-500/30 hover:shadow-amber-500/50 hover:scale-110 active:scale-90 transition-all border border-amber-400/50 group/ai"
+                            className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#FFD700] via-[#FDB931] to-[#D4AF37] text-black shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all border border-amber-400/50 group/ai"
                             title="Generate AI Reply"
                           >
-                            {isGenerating ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5 fill-black/20 group-hover/ai:animate-spin-slow" />}
+                            {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 fill-black/20" />}
                           </Button>
                         </div>
                       </div>
                       <Button
                         onClick={submitReply}
                         disabled={!replyMessage.trim() || sendMutation.isPending}
-                        className="rounded-2xl h-14 w-14 p-0 shadow-xl shadow-primary/20 shrink-0 transition-transform active:scale-95"
+                        className="rounded-2xl h-12 w-12 p-0 shadow-xl shadow-primary/20 shrink-0 transition-transform active:scale-95"
                       >
-                        {sendMutation.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
+                        {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                       </Button>
                     </div>
                     <div className="max-w-5xl mx-auto mt-2 px-1">

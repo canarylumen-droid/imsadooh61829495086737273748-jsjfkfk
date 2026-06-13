@@ -693,7 +693,7 @@ class ImapIdleManager {
                 user: config.smtp_user || integration.accountType || '',
                 host: imapHost,
                 port: imapPort,
-                tls: imapPort === 993,
+                tls: parseInt(String(imapPort)) === 993,
                 // Force IPv4 for cloud environment stability
                 family: 4,
                 lookup: (hostname: string, options: any, callback: any) => {
@@ -1335,7 +1335,7 @@ class ImapIdleManager {
                 password: config.smtp_pass!,
                 host: imapHost,
                 port: imapPort,
-                tls: imapPort === 993,
+                tls: parseInt(String(imapPort)) === 993,
                 tlsOptions: { rejectUnauthorized: false }
             });
 
@@ -1445,7 +1445,7 @@ class ImapIdleManager {
                         password: config.smtp_pass!,
                         host: imapHost,
                         port: imapPort,
-                        tls: imapPort === 993,
+                        tls: parseInt(String(imapPort)) === 993,
                         // Force IPv4 and use global DNS lock for reliability
                         family: 4,
                         lookup: (hostname: string, options: any, callback: any) => {

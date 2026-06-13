@@ -25,7 +25,7 @@ import {
   campaignJobLogs,
   jobAttempts,
 } from '@audnix/shared';
-import { eq, and, or, sql, lte, isNull, ne, asc, gt, desc } from 'drizzle-orm';
+import { eq, and, or, sql, lte, isNull, isNotNull, ne, asc, gt, desc } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from '../channels/email.js';
 import { adjustCopyIfNecessary } from "../ai/copy-adjuster.js";
@@ -282,6 +282,29 @@ export class CampaignQueueManager {
       if (job.key.includes(campaignId)) {
         await campaignQueue.removeRepeatableByKey(job.key);
       }
+    }
+
+    // Clear delayed send-batch jobs for this campaign to prevent duplicates on resume
+    const PAGE = 200;
+    let offset = 0;
+    while (true) {
+      const page = await campaignQueue.getDelayed(offset, offset + PAGE - 1);
+      if (page.length === 0) break;
+      let removed = 0;
+      for (const job of page) {
+        const matchesCampaign = (job.data as any)?.campaignId === campaignId;
+        const isSendBatch = job.name?.startsWith('send-batch_') || (job.data as any)?.type === 'campaign:send-batch';
+        if (matchesCampaign && isSendBatch) {
+          try {
+            await job.remove();
+            removed++;
+          } catch (err) {
+            console.warn(`[CampaignQueue] Could not remove paused send-batch job ${job.id}:`, err);
+          }
+        }
+      }
+      offset += PAGE - removed;
+      if (page.length < PAGE) break;
     }
   }
 
@@ -1097,7 +1120,10 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
           or(
             eq(campaignLeads.status, 'pending'),
             eq(campaignLeads.status, 'queued'),
-            eq(campaignLeads.status, 'sent')  // 'sent' = initial email delivered, follow-ups pending
+            and(
+              eq(campaignLeads.status, 'sent'),
+              isNotNull(campaignLeads.nextActionAt)
+            )
           )
         ))
         .limit(1);

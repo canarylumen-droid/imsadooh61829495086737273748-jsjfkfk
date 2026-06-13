@@ -371,7 +371,7 @@ export default function IntegrationsPage() {
   };
 
   // Memoized reputation values to avoid repeated function calls and non-null assertions
-  const reputationStr = stats?.domainHealth !== undefined ? stats.domainHealth.toFixed(2) : null;
+  const reputationStr = stats?.domainHealth !== undefined && stats.domainHealth !== null ? stats.domainHealth.toFixed(2) : null;
   const reputationNum = reputationStr !== null ? parseFloat(reputationStr) : null;
 
   useEffect(() => {
@@ -708,12 +708,8 @@ export default function IntegrationsPage() {
         isOpen={isDisconnectDialogOpen}
         onOpenChange={setIsDisconnectDialogOpen}
         onConfirm={() => {
-          if (disconnectProvider === 'instagram') {
-            disconnectProviderMutation.mutate({ provider: 'instagram', integrationId: disconnectIntegrationId || undefined });
-          } else if (disconnectProvider === 'gmail') {
-            disconnectProviderMutation.mutate({ provider: 'gmail', integrationId: disconnectIntegrationId || undefined });
-          } else if (disconnectProvider === 'outlook') {
-            disconnectProviderMutation.mutate({ provider: 'outlook', integrationId: disconnectIntegrationId || undefined });
+          if (disconnectProvider === 'instagram' || disconnectProvider === 'gmail' || disconnectProvider === 'outlook' || disconnectProvider === 'calendly') {
+            disconnectProviderMutation.mutate({ provider: disconnectProvider, integrationId: disconnectIntegrationId || undefined });
           } else if (disconnectProvider) {
             // It's a custom email integration ID
             disconnectCustomEmailMutation.mutate(disconnectProvider);
@@ -1247,31 +1243,31 @@ export default function IntegrationsPage() {
                       </div>
                     )}
                     {pagedMailboxes.map((mailbox) => (
-                      <div key={mailbox.id} className="flex flex-col md:flex-row md:items-center justify-between gap-6 p-6 rounded-2xl bg-muted/20 border border-border/40 hover:border-primary/30 transition-all group">
-                        <div className="flex items-center gap-4">
+                      <div key={mailbox.id} className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-6 rounded-2xl bg-muted/20 border border-border/40 hover:border-primary/30 transition-all group">
+                        <div className="flex items-center gap-3 sm:gap-4">
                           <div className={cn(
-                            "h-12 w-12 rounded-xl flex items-center justify-center border transition-all duration-300",
+                            "h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center border transition-all duration-300 shrink-0",
                             !mailbox.connected ? "bg-muted/10 border-dashed border-muted grayscale" :
                             mailbox.provider === 'gmail' ? "bg-red-500/10 border-red-500/20 text-red-500" :
                             mailbox.provider === 'outlook' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
                             "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
                           )}>
-                            {mailbox.provider === 'gmail' ? <SiGoogle className="h-6 w-6" /> :
-                             mailbox.provider === 'outlook' ? <Mail className="h-6 w-6" /> :
-                             <CheckCircle2 className="h-6 w-6" />}
+                            {mailbox.provider === 'gmail' ? <SiGoogle className="h-5 sm:h-6 w-5 sm:w-6" /> :
+                             mailbox.provider === 'outlook' ? <Mail className="h-5 sm:h-6 w-5 sm:w-6" /> :
+                             <CheckCircle2 className="h-5 sm:h-6 w-5 sm:w-6" />}
                           </div>
-                          <div className="space-y-0.5">
-                            <div className="flex items-center gap-2">
-                              <h4 className={cn("text-sm font-bold transition-colors", !mailbox.connected ? "text-muted-foreground" : "text-foreground")}>
+                          <div className="space-y-0.5 min-w-0">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <h4 className={cn("text-xs sm:text-sm font-bold transition-colors truncate max-w-[150px] sm:max-w-xs", !mailbox.connected ? "text-muted-foreground" : "text-foreground")}>
                                 {mailbox.email}
                               </h4>
                               {mailbox.connected ? (
-                                <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[8px] font-black uppercase tracking-widest px-1.5 py-0">Active</Badge>
+                                <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Active</Badge>
                               ) : (
-                                <Badge variant="outline" className="text-muted-foreground border-muted text-[8px] font-black uppercase tracking-widest px-1.5 py-0">Disconnected</Badge>
+                                <Badge variant="outline" className="text-muted-foreground border-muted text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Disconnected</Badge>
                               )}
                             </div>
-                            <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                            <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest truncate">
                               {mailbox.provider === 'gmail' ? (mailbox.email?.endsWith('@gmail.com') ? "Personal Google Account" : "Google Workspace") :
                                mailbox.provider === 'outlook' ? "Outlook / Office 365" :
                                "Custom SMTP Account"}
@@ -1279,41 +1275,39 @@ export default function IntegrationsPage() {
                           </div>
                         </div>
 
-                        <div className="flex flex-wrap items-center gap-2 mt-4 md:mt-0 transition-opacity">
+                        <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mt-2 lg:mt-0">
                           {mailbox.connected && (
-                            <div className="flex gap-4 px-4 py-2 bg-background/50 rounded-xl border border-border/50 mr-4">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reputation</span>
+                            <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto">
+                              <div className="flex flex-col justify-center">
+                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reputation</span>
                                 <span className={cn(
-                                  "text-sm font-black",
+                                  "text-xs sm:text-sm font-black",
                                   mailbox.reputationScore === null || mailbox.reputationScore === undefined ? "text-sky-500" :
                                   mailbox.reputationScore >= 80 ? "text-emerald-500" :
                                   mailbox.reputationScore >= 50 ? "text-amber-500" : "text-destructive"
                                 )}>
                                   {mailbox.reputationScore !== undefined && mailbox.reputationScore !== null 
                                     ? `${mailbox.reputationScore}/100` 
-                                    : "Initializing..."}
+                                    : "Init..."}
                                 </span>
                               </div>
-                              <div className="w-px bg-border/50" />
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bounce Rate</span>
+                              <div className="flex flex-col justify-center border-l border-border/40 pl-2">
+                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bounce</span>
                                 <span className={cn(
-                                  "text-sm font-black",
+                                  "text-xs sm:text-sm font-black",
                                   mailbox.bounceRate === null || mailbox.bounceRate === undefined ? "text-sky-500" :
                                   ((mailbox.bounceRate ?? 0) * 100) < 2 ? "text-emerald-500" :
                                   ((mailbox.bounceRate ?? 0) * 100) < 5 ? "text-amber-500" : "text-destructive"
                                 )}>
                                   {mailbox.bounceRate !== undefined && mailbox.bounceRate !== null
-                                    ? `${((mailbox.bounceRate ?? 0) * 100).toFixed(2)}%`
-                                    : "Initializing..."}
+                                    ? `${((mailbox.bounceRate ?? 0) * 100).toFixed(1)}%`
+                                    : "Init..."}
                                 </span>
                               </div>
-                              <div className="w-px bg-border/50" />
-                              <div className="flex flex-col gap-1">
-                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Daily Limit</span>
-                                <span className="text-sm font-black text-primary">
-                                  {mailbox.dailyLimit || (mailbox.provider === 'custom_email' ? 250 : 50)}/day
+                              <div className="flex flex-col justify-center border-l border-border/40 pl-2 min-w-[70px]">
+                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Limit</span>
+                                <span className="text-xs sm:text-sm font-black text-primary">
+                                  {mailbox.dailyLimit || (mailbox.provider === 'custom_email' ? 250 : 50)}/d
                                 </span>
                                 <Slider
                                   value={[mailbox.dailyLimit || (mailbox.provider === 'custom_email' ? 250 : 50)]}
@@ -1324,25 +1318,27 @@ export default function IntegrationsPage() {
                                     } catch (e) { console.error('Failed to update daily limit', e); }
                                   }}
                                   min={10} max={mailbox.provider === 'custom_email' ? 500 : 60} step={5}
-                                  className="w-24 py-1"
+                                  className="w-16 sm:w-20 py-0.5 mt-0.5"
                                 />
                               </div>
                             </div>
                           )}
 
-                          {mailbox.connected && (
-                            <Button variant="outline" size="sm" className="h-8 rounded-lg text-[10px] px-3 w-full sm:w-auto" onClick={() => setIsTestEmailOpen(true)}>
-                              <Mail className="h-3 w-3 mr-1.5" /> Test Connection
+                          <div className="flex gap-2 w-full sm:w-auto">
+                            {mailbox.connected && (
+                              <Button variant="outline" size="sm" className="h-8 rounded-lg text-[9px] sm:text-[10px] px-2.5 flex-1 sm:flex-initial" onClick={() => setIsTestEmailOpen(true)}>
+                                <Mail className="h-3 w-3 mr-1" /> Test
+                              </Button>
+                            )}
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 rounded-lg text-[9px] sm:text-[10px] px-2.5 font-bold text-destructive hover:bg-destructive/10 flex-1 sm:flex-initial" 
+                              onClick={() => confirmDisconnect(mailbox.provider, mailbox.id)}
+                            >
+                              <Unplug className="h-3 w-3 mr-1" /> {mailbox.connected ? "Disconnect" : "Remove"}
                             </Button>
-                          )}
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-8 rounded-lg text-[10px] px-3 font-bold text-destructive hover:bg-destructive/10 w-full sm:w-auto" 
-                            onClick={() => confirmDisconnect(mailbox.provider, mailbox.id)}
-                          >
-                            <Unplug className="h-3 w-3 mr-1.5" /> {mailbox.connected ? "Disconnect" : "Remove Record"}
-                          </Button>
+                          </div>
                         </div>
                       </div>
                     ))}

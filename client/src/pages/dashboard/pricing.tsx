@@ -91,7 +91,7 @@ export default function PricingPage() {
         </div>
 
         {/* Pricing Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start max-w-6xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-start max-w-6xl mx-auto">
           {pricingTiers.filter(tier => isPaidUser ? tier.id !== 'trial' : true).map((tier, index) => {
             const isPopular = tier.id === 'pro';
             const isCurrentPlan = currentPlan === tier.id;
@@ -104,7 +104,7 @@ export default function PricingPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
                 className={`
-                  relative w-full p-8 rounded-2xl border flex flex-col h-full transition-all duration-500 group
+                  relative w-full p-5 sm:p-8 rounded-2xl border flex flex-col h-full transition-all duration-500 group
                   ${isCurrentPlan
                     ? "bg-primary/[0.05] border-primary/50 shadow-[0_0_50px_rgba(var(--primary),0.15)] z-10 scale-[1.02]"
                     : isPopular

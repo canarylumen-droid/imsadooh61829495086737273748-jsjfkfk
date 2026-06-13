@@ -248,55 +248,54 @@ export default function DealsPage() {
       </div>
 
       {/* Stats Grid */}
-      <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Revenue</CardTitle>
-            <DollarSign className="h-4 w-4 text-emerald-500" />
+      <ResponsiveGrid className="grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 sm:pb-2 p-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Total Revenue</CardTitle>
+            <DollarSign className="h-3.5 w-3.5 text-emerald-500 shrink-0 hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${totalValue > 0 ? totalValue.toLocaleString() : "0"}</div>
-            <p className="text-xs text-muted-foreground mt-1">Lifetime value</p>
+          <CardContent className="p-0 pt-1.5">
+            <div className="text-base sm:text-2xl font-bold">${totalValue > 0 ? totalValue.toLocaleString() : "0"}</div>
+            <p className="text-[10px] text-muted-foreground mt-0.5 sm:mt-1">Lifetime value</p>
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">This Week</CardTitle>
-            <TrendingUp className="h-4 w-4 text-primary" />
+        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 sm:pb-2 p-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">This Week</CardTitle>
+            <TrendingUp className="h-3.5 w-3.5 text-primary shrink-0 hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${weekRevenue > 0 ? weekRevenue.toLocaleString() : "0"}</div>
-            <div className="flex items-center gap-1 mt-1">
-              <span className={`text-xs font-medium ${weekGrowth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+          <CardContent className="p-0 pt-1.5">
+            <div className="text-base sm:text-2xl font-bold">${weekRevenue > 0 ? weekRevenue.toLocaleString() : "0"}</div>
+            <div className="flex items-center gap-1 mt-0.5 sm:mt-1">
+              <span className={`text-[10px] font-medium ${weekGrowth >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                 {weekGrowth > 0 ? '+' : ''}{weekGrowth}%
               </span>
-              <span className="text-xs text-muted-foreground">vs last week</span>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Deals</CardTitle>
-            <Package className="h-4 w-4 text-purple-500" />
+        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 sm:pb-2 p-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Active Deals</CardTitle>
+            <Package className="h-3.5 w-3.5 text-purple-500 shrink-0 hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{pendingDeals.length}</div>
-            <p className="text-xs text-muted-foreground mt-1">In pipeline</p>
+          <CardContent className="p-0 pt-1.5">
+            <div className="text-base sm:text-2xl font-bold">{pendingDeals.length}</div>
+            <p className="text-[10px] text-muted-foreground mt-0.5 sm:mt-1">In pipeline</p>
           </CardContent>
         </Card>
 
-        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Win Rate</CardTitle>
-            <BarChart3 className="h-4 w-4 text-orange-500" />
+        <Card className="border-border/60 shadow-sm hover:shadow-md transition-shadow p-3 sm:p-4">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1.5 sm:pb-2 p-0">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Win Rate</CardTitle>
+            <BarChart3 className="h-3.5 w-3.5 text-orange-500 shrink-0 hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-0 pt-1.5">
+            <div className="text-base sm:text-2xl font-bold">
               {deals.length > 0 ? Math.round((convertedDeals.length / deals.length) * 100) : "0"}%
             </div>
-            <p className="text-xs text-muted-foreground mt-1">Conversion avg</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5 sm:mt-1">Conversion avg</p>
           </CardContent>
         </Card>
       </ResponsiveGrid>

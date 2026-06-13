@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
 import { LeadRecoveryProvider, useLeadRecoveryStore, type RecoveredLead } from "@/stores/leadRecoveryStore";
 
 function intentTone(intent: RecoveredLead["intent"]) {
@@ -50,84 +51,67 @@ function LeadRecoveryContent() {
         </div>
       </div>
 
-      {!store.hasAvailableMailbox && !store.isActive && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
-          <div className="mb-1 flex items-center gap-2 font-bold text-amber-300">
-            <AlertTriangle className="h-4 w-4" />
-            Mailboxes are currently busy
-          </div>
-          Lead Recovery sync is read-only and can still scan history. Recovery sending should wait until campaign mailboxes are free.
-          {store.availableAt && <span className="ml-1">Estimated availability: {new Date(store.availableAt).toLocaleString()}.</span>}
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
+        <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground">Recoverable Leads</p>
+          <p className="mt-1 text-2xl sm:text-3xl font-black">{store.leads.length}</p>
         </div>
-      )}
-
-      {!store.promptConfigured && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
-          <div className="mb-1 flex items-center gap-2 font-bold text-red-300">
-            <AlertTriangle className="h-4 w-4" />
-            Recovery prompt is not configured
-          </div>
-          Add `LEAD_RECOVERY_SYSTEM_PROMPT` and `LEAD_RECOVERY_USER_PROMPT_TEMPLATE`, or save a Mongo prompt config named `email-lead-recovery`.
+        <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4">
+          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground">Synced Mailboxes</p>
+          <p className="mt-1 text-2xl sm:text-3xl font-black">{store.mailboxDetails.filter((mailbox) => mailbox.lastSyncAt).length}</p>
         </div>
-      )}
-
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg border border-border/40 bg-card/70 p-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recoverable Leads</p>
-          <p className="mt-2 text-3xl font-black">{store.leads.length}</p>
-        </div>
-        <div className="rounded-lg border border-border/40 bg-card/70 p-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Synced Mailboxes</p>
-          <p className="mt-2 text-3xl font-black">{store.mailboxDetails.filter((mailbox) => mailbox.lastSyncAt).length}</p>
-        </div>
-        <div className="rounded-lg border border-border/40 bg-card/70 p-4">
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Audit Events</p>
-          <p className="mt-2 text-3xl font-black">{store.events.length}</p>
+        <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4 col-span-2 md:col-span-1">
+          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest text-muted-foreground">Audit Events</p>
+          <p className="mt-1 text-2xl sm:text-3xl font-black">{store.events.length}</p>
         </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="rounded-lg border border-border/40 bg-card/70">
-          <div className="flex items-center justify-between border-b border-border/30 p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/30 p-4 gap-3">
             <div>
-              <h2 className="font-black">Recoverable Leads</h2>
-              <p className="text-xs text-muted-foreground">Stored in MongoDB per tenant, mailbox, and lead conversation.</p>
+              <h2 className="font-black text-sm sm:text-base">Recoverable Leads</h2>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Stored in MongoDB per tenant, mailbox, and lead conversation.</p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={store.loadAll} disabled={store.loading}>
-                <RefreshCw className="mr-2 h-4 w-4" />
+            <div className="flex gap-2 w-full sm:w-auto">
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial text-xs" onClick={store.loadAll} disabled={store.loading}>
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                 Refresh
               </Button>
-              <Button size="sm" onClick={() => store.syncNow()} disabled={store.loading || store.mailboxDetails.length === 0}>
-                <DownloadCloud className="mr-2 h-4 w-4" />
+              <Button size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => store.syncNow()} disabled={store.loading || store.mailboxDetails.length === 0}>
+                <DownloadCloud className="mr-1.5 h-3.5 w-3.5" />
                 {syncingMailboxes > 0 ? `Syncing ${syncingMailboxes}` : "Sync 90 days"}
               </Button>
             </div>
           </div>
           <div className="divide-y divide-border/30">
             {store.leads.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">
+              <div className="p-8 text-center text-xs sm:text-sm text-muted-foreground">
                 No recovered leads yet. Activate Lead Recovery, then click Sync 90 days to scan connected mailboxes.
               </div>
             ) : store.leads.map((lead) => (
-              <div key={lead._id} className="grid gap-4 p-4 md:grid-cols-[1fr_160px_160px_auto] md:items-center">
-                <div className="min-w-0">
-                  <p className="truncate font-bold">{lead.email}</p>
-                  <p className="truncate text-sm text-muted-foreground">{lead.subject || "No subject"}</p>
-                  <p className="truncate text-xs text-muted-foreground">
+              <div key={lead._id} className="grid gap-3 p-3 sm:p-4 grid-cols-2 md:grid-cols-[1fr_120px_120px_auto] md:items-center">
+                <div className="min-w-0 col-span-2 md:col-span-1">
+                  <p className="truncate font-bold text-xs sm:text-sm">{lead.email}</p>
+                  <p className="truncate text-xs text-muted-foreground">{lead.subject || "No subject"}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">
                     Source: {lead.sourceMailboxSnapshot?.accountType || lead.sourceMailboxSnapshot?.provider || lead.mailboxId || "mailbox"}
                   </p>
                   {!!lead.brainstormedObjections?.length && (
-                    <div className="mt-2 flex items-center gap-2 text-xs text-primary">
-                      <Brain className="h-3.5 w-3.5" />
+                    <div className="mt-1.5 flex items-center gap-1.5 text-[10px] sm:text-xs text-primary">
+                      <Brain className="h-3 w-3 shrink-0" />
                       {lead.brainstormedObjections.length} objection{lead.brainstormedObjections.length === 1 ? "" : "s"} found
                     </div>
                   )}
                 </div>
-                <Badge variant="outline" className={intentTone(lead.intent)}>{lead.intent}</Badge>
-                <Badge variant="outline" className="capitalize">{lead.deliverabilityStatus}</Badge>
-                <Button size="sm" onClick={() => store.recoverLead(lead._id)}>
-                  <Sparkles className="mr-2 h-4 w-4" />
+                <div className="flex items-center">
+                  <Badge variant="outline" className={cn("text-[9px] sm:text-xs", intentTone(lead.intent))}>{lead.intent}</Badge>
+                </div>
+                <div className="flex items-center">
+                  <Badge variant="outline" className="text-[9px] sm:text-xs capitalize">{lead.deliverabilityStatus}</Badge>
+                </div>
+                <Button size="sm" className="col-span-2 md:col-span-1 text-xs py-1.5 h-8 mt-1 md:mt-0" onClick={() => store.recoverLead(lead._id)}>
+                  <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                   Recover
                 </Button>
               </div>

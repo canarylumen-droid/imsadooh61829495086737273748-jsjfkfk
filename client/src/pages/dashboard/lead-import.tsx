@@ -386,21 +386,21 @@ export default function LeadImportPage() {
 
       {leadStats && (
         <Card className="border-border/40 shadow-sm bg-card">
-          <CardContent className="p-4 flex items-center justify-between gap-4">
+          <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Pipeline Capacity</p>
-              <p className="text-lg font-bold tabular-nums">
-                {leadStats.total.toLocaleString()} <span className="text-muted-foreground text-sm font-medium">/ {leadStats.planLimit.toLocaleString()}</span>
+              <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Pipeline Capacity</p>
+              <p className="text-base sm:text-lg font-bold tabular-nums">
+                {leadStats.total.toLocaleString()} <span className="text-muted-foreground text-xs sm:text-sm font-medium">/ {leadStats.planLimit.toLocaleString()}</span>
               </p>
             </div>
-            <div className="flex-1 max-w-xs">
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
+            <div className="flex-1 w-full sm:max-w-xs">
+              <div className="h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all"
                   style={{ width: `${Math.min(100, (leadStats.total / leadStats.planLimit) * 100)}%` }}
                 />
               </div>
-              <p className="text-[10px] text-muted-foreground text-right mt-1">
+              <p className="text-[9px] sm:text-[10px] text-muted-foreground text-right mt-1">
                 {Math.round((leadStats.total / leadStats.planLimit) * 100)}% used
               </p>
             </div>
@@ -409,27 +409,27 @@ export default function LeadImportPage() {
       )}
 
       <Card className="border-border/40 shadow-2xl relative overflow-hidden group bg-card">
-        <CardHeader className="p-8 pb-0 text-center relative z-10">
-          <div className="inline-flex items-center justify-center p-4 rounded-3xl bg-primary/10 mb-6">
-            <Sparkles className="h-8 w-8 text-primary" />
+        <CardHeader className="p-4 sm:p-8 pb-0 text-center relative z-10">
+          <div className="inline-flex items-center justify-center p-3 sm:p-4 rounded-3xl bg-primary/10 mb-4 sm:mb-6">
+            <Sparkles className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
           </div>
-          <CardTitle className="text-2xl font-bold tracking-tight mb-2 text-foreground">
+          <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight mb-2 text-foreground">
             Lead Intelligence Sync
           </CardTitle>
-          <CardDescription className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
+          <CardDescription className="text-[9px] sm:text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
             UPLOAD CSV, EXCEL, OR PDF FOR CAMPAIGN ANALYSIS
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="p-8 space-y-10 relative z-10">
+        <CardContent className="p-4 sm:p-8 space-y-6 sm:space-y-10 relative z-10">
           <div className="flex justify-center">
-            <div className="bg-muted/10 p-1.5 rounded-2xl flex gap-1 border border-border/10">
+            <div className="bg-muted/10 p-1 rounded-2xl flex gap-1 border border-border/10">
               <Button
                 variant={!manualPasteText.trim() ? "default" : "ghost"}
                 size="sm"
                 onClick={() => setManualPasteText("")}
                 className={cn(
-                  "rounded-xl text-[10px] font-bold h-10 px-6 transition-all",
+                  "rounded-xl text-[9px] sm:text-[10px] font-bold h-8 sm:h-10 px-4 sm:px-6 transition-all",
                   !manualPasteText.trim() ? "bg-primary shadow-lg text-primary-foreground" : "hover:bg-primary/10 text-muted-foreground"
                 )}
               >
@@ -440,7 +440,7 @@ export default function LeadImportPage() {
                 size="sm"
                 onClick={() => setManualPasteText(" ")} // Trigger manual mode
                 className={cn(
-                  "rounded-xl text-[10px] font-bold h-10 px-6 transition-all",
+                  "rounded-xl text-[9px] sm:text-[10px] font-bold h-8 sm:h-10 px-4 sm:px-6 transition-all",
                   manualPasteText.trim() ? "bg-primary shadow-lg text-primary-foreground" : "hover:bg-primary/10 text-muted-foreground"
                 )}
               >
@@ -448,23 +448,25 @@ export default function LeadImportPage() {
               </Button>
             </div>
           </div>
-          <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl border border-border/50">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3 sm:p-4 bg-muted/30 rounded-xl border border-border/50 gap-3">
             <div className="space-y-1">
-              <Label className="text-sm font-bold flex items-center gap-2">
+              <Label className="text-xs sm:text-sm font-bold flex items-center gap-2">
                 Enable AI Agent?
-                <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-primary/20 text-primary uppercase tracking-widest">Recommended</Badge>
+                <Badge variant="outline" className="text-[8px] sm:text-[9px] px-1 py-0 h-3.5 sm:h-4 border-primary/20 text-primary uppercase tracking-widest">Recommended</Badge>
               </Label>
-              <p className="text-xs text-muted-foreground">Automatically qualify and engage leads immediately after import.</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Automatically qualify and engage leads immediately after import.</p>
             </div>
-            <Switch
-              checked={enableAi}
-              onCheckedChange={setEnableAi}
-            />
+            <div className="flex justify-start sm:justify-end">
+              <Switch
+                checked={enableAi}
+                onCheckedChange={setEnableAi}
+              />
+            </div>
           </div>
 
           <div
             className={cn(
-              "border-2 border-dashed rounded-2xl p-10 text-center transition-all cursor-pointer group/upload relative overflow-hidden",
+              "border-2 border-dashed rounded-2xl p-6 sm:p-10 text-center transition-all cursor-pointer group/upload relative overflow-hidden",
               isDragging ? "bg-primary/20 border-primary scale-[1.02] shadow-[0_0_40px_rgba(0,180,255,0.3)]" : "border-border/40 hover:bg-primary/5 hover:border-primary/20",
               importing && "pointer-events-none opacity-50"
             )}
@@ -474,8 +476,8 @@ export default function LeadImportPage() {
           >
             {isDragging && (
               <div className="absolute inset-0 bg-primary/10 backdrop-blur-[2px] z-20 flex items-center justify-center animate-in fade-in duration-200">
-                <div className="bg-primary/20 p-8 rounded-full animate-bounce">
-                  <Upload className="h-12 w-12 text-primary" />
+                <div className="bg-primary/20 p-6 sm:p-8 rounded-full animate-bounce">
+                  <Upload className="h-10 w-10 sm:h-12 sm:w-12 text-primary" />
                 </div>
               </div>
             )}
@@ -488,24 +490,24 @@ export default function LeadImportPage() {
               id="file-upload"
             />
             <label htmlFor="file-upload" className="cursor-pointer relative z-10 block w-full h-full">
-              <div className="mb-6 flex justify-center">
+              <div className="mb-4 sm:mb-6 flex justify-center">
                 {file ? (
                   <div className="animate-in zoom-in duration-300">
                     {file.name.toLowerCase().endsWith('.pdf') ? <PdfIcon /> : <CsvIcon />}
                   </div>
                 ) : (
                   <div className={cn(
-                    "p-5 rounded-2xl transition-all transform group-hover/upload:scale-110",
+                    "p-4 sm:p-5 rounded-2xl transition-all transform group-hover/upload:scale-110",
                     isDragging ? "bg-primary/20 scale-110" : "bg-primary/5 group-hover/upload:bg-primary/10"
                   )}>
-                    <Upload className="h-10 w-10 text-primary" />
+                    <Upload className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
                   </div>
                 )}
               </div>
-              <p className="text-xl font-bold tracking-tight mb-2">
+              <p className="text-lg sm:text-xl font-bold tracking-tight mb-2">
                 {file ? file.name : (isDragging ? 'Drop file to upload' : 'Select Data Source')}
               </p>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40">
+              <p className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/40">
                 DRAG & DROP OR BROWSE • CSV, EXCEL, PDF
               </p>
             </label>
@@ -516,44 +518,44 @@ export default function LeadImportPage() {
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
-                className="flex items-center gap-4 p-4 bg-muted/50 border border-border rounded-xl"
+                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-muted/50 border border-border rounded-xl"
               >
-                <div className="w-10 h-10 flex items-center justify-center">
+                <div className="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center shrink-0">
                   {file?.name.toLowerCase().endsWith('.pdf') ? <PdfIcon /> : <CsvIcon />}
                 </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-sm">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-xs sm:text-sm truncate">
                     {file?.name}
                   </p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">
                     {importResults.imported} entries imported • {importResults.skipped} duplicates
                   </p>
                 </div>
-                <CheckCircle2 className="h-5 w-5 text-primary" />
+                <CheckCircle2 className="h-5 w-5 text-primary shrink-0 self-end sm:self-center" />
               </motion.div>
 
-              <div className="p-4 rounded-xl bg-primary/5 border border-primary/20">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                  <h3 className="text-sm font-bold uppercase tracking-wider">Recently Uploaded</h3>
+              <div className="p-3 sm:p-4 rounded-xl bg-primary/5 border border-primary/20">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3 sm:mb-4">
+                  <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider">Recently Uploaded</h3>
                   <div className="flex flex-wrap gap-2">
                     {importResults.leads && importResults.leads.length > 0 && (
                       <>
-                        <Button variant="outline" size="sm" onClick={() => setMLeadsOpen(true)} className="text-[10px] font-bold border-primary/20 hover:bg-primary/10">VIEW LEADS</Button>
+                        <Button variant="outline" size="sm" onClick={() => setMLeadsOpen(true)} className="text-[8px] sm:text-[10px] font-bold border-primary/20 hover:bg-primary/10 h-8">VIEW LEADS</Button>
                         <Button
                           size="sm"
                           onClick={() => setIsOutreachModalOpen(true)}
-                          className="text-[10px] font-bold bg-primary hover:bg-primary/90 gap-1"
+                          className="text-[8px] sm:text-[10px] font-bold bg-primary hover:bg-primary/90 gap-1 h-8"
                         >
                           <Send className="h-3 w-3" />
                           START OUTREACH
                         </Button>
                       </>
                     )}
-                    <Button variant="ghost" size="sm" onClick={() => setLocation('/dashboard/prospecting')} className="text-[10px] font-bold">PIPELINE</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setLocation('/dashboard/prospecting')} className="text-[8px] sm:text-[10px] font-bold h-8">PIPELINE</Button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Your leads have been successfully synchronized to the pipeline.</p>
+                <div className="space-y-1 sm:space-y-2">
+                  <p className="text-[10px] sm:text-xs text-muted-foreground">Your leads have been successfully synchronized to the pipeline.</p>
                 </div>
               </div>
             </div>
@@ -561,8 +563,8 @@ export default function LeadImportPage() {
 
           {importing && progress > 0 && (
             <div className="space-y-3">
-              <Progress value={progress} className="h-1.5" />
-              <p className="text-xs font-medium text-center text-muted-foreground">
+              <Progress value={progress} className="h-1 sm:h-1.5" />
+              <p className="text-[10px] sm:text-xs font-medium text-center text-muted-foreground">
                 {progress < 30 ? 'Uploading file...' : progress < 70 ? 'Processing engagement data...' : 'Finalizing leads...'}
               </p>
             </div>
@@ -573,14 +575,14 @@ export default function LeadImportPage() {
               onClick={handleOpenPreview}
               variant="outline"
               disabled={importing}
-              className="px-6 rounded-xl text-xs font-semibold uppercase tracking-wider border-border/40 hover:bg-muted/30 h-12 w-full sm:w-auto"
+              className="px-4 sm:px-6 rounded-xl text-xs font-semibold uppercase tracking-wider border-border/40 hover:bg-muted/30 h-10 sm:h-12 w-full sm:w-auto text-[10px] sm:text-xs"
             >
               Preview Outreach
             </Button>
             <Button
               onClick={manualPasteText.trim() ? handleManualImport : handleImport}
               disabled={(manualPasteText.trim() ? false : !file) || importing}
-              className="flex-1 h-12 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg shadow-primary/10 bg-primary hover:bg-primary/90 transition-all min-w-0"
+              className="flex-1 h-10 sm:h-12 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg shadow-primary/10 bg-primary hover:bg-primary/90 transition-all min-w-0 text-[10px] sm:text-xs"
             >
               {importing ? (
                 <>
@@ -614,17 +616,17 @@ export default function LeadImportPage() {
             onClose={() => setIsOutreachModalOpen(false)}
             initialLeads={importResults?.leads || []}
             onSuccess={() => {
-              toast({ title: "Outreach Started", description: "Emails will be sent according to your settings." });
+               toast({ title: "Outreach Started", description: "Emails will be sent according to your settings." });
             }}
           />
 
           {importResults && (importResults.filtered ?? 0) > 0 && (
-            <div className="p-4 rounded-xl bg-orange-400/5 border border-orange-400/10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Sparkles className="h-4 w-4 text-orange-400" />
-                <span className="text-xs font-semibold text-orange-400/80 uppercase tracking-wider">Intelligence Filter Active</span>
+            <div className="p-3 sm:p-4 rounded-xl bg-orange-400/5 border border-orange-400/10 flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <Sparkles className="h-3.5 w-3.5 text-orange-400" />
+                <span className="text-[10px] sm:text-xs font-semibold text-orange-400/80 uppercase tracking-wider">Intelligence Filter Active</span>
               </div>
-              <span className="text-xs font-bold text-orange-400">{importResults.filtered} Leads Blocked</span>
+              <span className="text-[10px] sm:text-xs font-bold text-orange-400">{importResults.filtered} Leads Blocked</span>
             </div>
           )}
 
@@ -633,18 +635,18 @@ export default function LeadImportPage() {
         </CardContent>
       </Card>
 
-      <ResponsiveGrid className="md:grid-cols-3 lg:grid-cols-3 gap-6">
+      <ResponsiveGrid className="grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {[
           { label: 'CSV', desc: 'Standard contact export', icon: <CsvIcon /> },
           { label: 'Excel', desc: 'SaaS & CRM exports', icon: <CsvIcon /> },
           { label: 'PDF', desc: 'Reports and brand lists', icon: <PdfIcon /> },
-        ].map((type) => (
-          <Card key={type.label} className="p-6 border-border/50 shadow-sm flex flex-col items-center text-center">
-            <div className="mb-4">
+        ].map((type, idx) => (
+          <Card key={type.label} className={cn("p-4 sm:p-6 border-border/50 shadow-sm flex flex-col items-center text-center", idx === 2 && "col-span-2 md:col-span-1")}>
+            <div className="mb-2 sm:mb-4">
               {type.icon}
             </div>
-            <div className="font-bold text-lg mb-1">{type.label}</div>
-            <p className="text-xs text-muted-foreground">{type.desc}</p>
+            <div className="font-bold text-base sm:text-lg mb-1">{type.label}</div>
+            <p className="text-[10px] sm:text-xs text-muted-foreground">{type.desc}</p>
           </Card>
         ))}
       </ResponsiveGrid>

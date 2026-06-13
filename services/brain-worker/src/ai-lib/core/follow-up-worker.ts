@@ -293,8 +293,13 @@ export class FollowUpWorker {
       const reserved = await storage.reserveLeadForAction(job.leadId, 'follow_up');
       if (!reserved) {
         console.log(`[FollowUpWorker] Lead ${job.leadId} is currently locked by another process. Skipping.`);
-        // Mark job as pending again so it can be picked up later
-        await db.update(followUpQueue).set({ status: 'pending' }).where(eq(followUpQueue.id, job.id));
+        // Mark job as pending again and delay it by 5 minutes to avoid a tight retry loop
+        await db.update(followUpQueue)
+          .set({ 
+            status: 'pending',
+            scheduledAt: new Date(Date.now() + 5 * 60 * 1000)
+          })
+          .where(eq(followUpQueue.id, job.id));
         return;
       }
 
@@ -354,7 +359,13 @@ export class FollowUpWorker {
       if (integration) {
         if (integration.aiAutonomousMode === false) {
            console.log(`[FOLLOW_UP] Integration Autonomous Mode is OFF for ${job.channel}. Reverting job to pending.`);
-           await db.update(followUpQueue).set({ status: 'pending' }).where(eq(followUpQueue.id, job.id));
+           // Advance scheduledAt by 1 hour to avoid infinite DB retry loop
+           await db.update(followUpQueue)
+             .set({ 
+               status: 'pending',
+               scheduledAt: new Date(Date.now() + 60 * 60 * 1000)
+             })
+             .where(eq(followUpQueue.id, job.id));
            return;
         }
 

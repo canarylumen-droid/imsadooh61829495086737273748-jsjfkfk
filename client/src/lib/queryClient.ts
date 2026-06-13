@@ -23,6 +23,23 @@ function getBaseUrl() {
   return '';
 }
 
+let cachedCsrfToken: string | null = null;
+
+async function getCsrfToken(): Promise<string> {
+  if (cachedCsrfToken) return cachedCsrfToken;
+  try {
+    const res = await fetch("/api/csrf-token", { credentials: "include" });
+    if (res.ok) {
+      const data = await res.json();
+      cachedCsrfToken = data.csrfToken;
+      return cachedCsrfToken || "";
+    }
+  } catch (e) {
+    console.error("Failed to fetch CSRF token:", e);
+  }
+  return "";
+}
+
 export async function apiRequest(
   method: string,
   url: string,
@@ -31,9 +48,22 @@ export async function apiRequest(
   const baseUrl = getBaseUrl();
   const finalUrl = url.startsWith('/') ? `${baseUrl}${url}` : `${baseUrl}/${url}`;
 
+  const headers: Record<string, string> = {};
+  if (data) {
+    headers["Content-Type"] = "application/json";
+  }
+
+  const isMutating = ["POST", "PUT", "DELETE", "PATCH"].includes(method.toUpperCase());
+  if (isMutating) {
+    const token = await getCsrfToken();
+    if (token) {
+      headers["X-CSRF-Token"] = token;
+    }
+  }
+
   const res = await fetch(finalUrl, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
