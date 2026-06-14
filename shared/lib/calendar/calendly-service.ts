@@ -138,6 +138,39 @@ export class CalendlyService {
     }
   }
 
+  /**
+   * Fetch scheduled events (for free plan polling/manual sync)
+   * This works on free plan - no webhooks required
+   */
+  async listScheduledEvents(userId: string, minStartTime?: Date, maxStartTime?: Date): Promise<any[]> {
+    const token = await this.getValidToken(userId);
+    if (!token) return [];
+
+    try {
+      const userResponse = await fetch('https://api.calendly.com/users/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const userData: any = await userResponse.json();
+      const userUri = userData.resource?.uri;
+
+      let url = `https://api.calendly.com/scheduled_events?user=${userUri}&status=active`;
+      if (minStartTime) url += `&min_start_time=${minStartTime.toISOString()}`;
+      if (maxStartTime) url += `&max_start_time=${maxStartTime.toISOString()}`;
+
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (!response.ok) return [];
+
+      const data: any = await response.json();
+      return data.collection || [];
+    } catch (err) {
+      console.error('[Calendly] Failed to fetch scheduled events:', err);
+      return [];
+    }
+  }
+
   private async getPreferredEventType(token: string, searchName?: string): Promise<any> {
     try {
       const userResponse = await fetch('https://api.calendly.com/users/me', {

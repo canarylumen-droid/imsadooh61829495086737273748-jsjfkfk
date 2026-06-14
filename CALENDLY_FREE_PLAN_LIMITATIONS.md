@@ -28,10 +28,18 @@ Without webhooks, the following features won't work automatically:
 
 ## Workarounds for Free Plan
 
-### Option 1: Manual Sync
-- Users can manually sync Calendly events via the dashboard
-- AI can still include Calendly links in messages
-- Lead status can be updated manually after meetings
+### Option 1: Manual Sync (Implemented)
+- ✅ Users can manually sync Calendly events via the dashboard using the `/api/calendar/sync-calendly` endpoint
+- ✅ AI can still include Calendly links in messages
+- ✅ Dashboard will show synced events after manual sync
+- ✅ Lead status can be updated manually after meetings
+
+**How to use manual sync:**
+1. Connect your Calendly account via OAuth
+2. When prospects book meetings via your Calendly link
+3. Click "Sync Calendly" in the calendar dashboard
+4. Events will be fetched from Calendly API and synced to Audnix AI
+5. Dashboard will update with the synced events
 
 ### Option 2: Polling (Not Implemented)
 - Could implement periodic polling of Calendly API to check for new bookings
