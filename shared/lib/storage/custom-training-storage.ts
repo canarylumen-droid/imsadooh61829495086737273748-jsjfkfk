@@ -28,19 +28,10 @@ export type CustomKnowledge = z.infer<typeof CustomKnowledgeSchema>;
 // Helper for tenant isolated paths in S3 or local storage fallback
 const BUCKET = 'custom-training';
 
-function getS3Path(userId: string, filename: string): string {
-  const bucketName = process.env.S3_BUCKET_NAME;
-  if (bucketName) {
-    return `s3://${bucketName}/${BUCKET}/${userId}/${filename}`;
-  }
-  // cascading fallback to local/Redis
-  return `${BUCKET}/${userId}/${filename}`;
-}
-
 export async function getCustomObjections(userId: string): Promise<CustomObjection[]> {
   try {
-    const path = getS3Path(userId, 'objections.json');
-    const buffer = await advancedStorage.download(path);
+    const filename = `${userId}/objections.json`;
+    const buffer = await advancedStorage.download(`${BUCKET}/${filename}`);
     if (!buffer) return [];
     const data = JSON.parse(buffer.toString('utf8'));
     if (!Array.isArray(data)) return [];
@@ -60,8 +51,8 @@ export async function saveCustomObjections(userId: string, objections: CustomObj
 
 export async function getCustomKnowledge(userId: string): Promise<CustomKnowledge> {
   try {
-    const path = getS3Path(userId, 'knowledge.json');
-    const buffer = await advancedStorage.download(path);
+    const filename = `${userId}/knowledge.json`;
+    const buffer = await advancedStorage.download(`${BUCKET}/${filename}`);
     if (!buffer) {
       return CustomKnowledgeSchema.parse({});
     }

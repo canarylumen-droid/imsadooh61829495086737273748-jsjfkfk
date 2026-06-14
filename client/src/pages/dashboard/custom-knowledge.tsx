@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,7 @@ interface CustomKnowledge {
 
 export default function CustomKnowledgePage() {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Query custom knowledge from S3
   const { data: knowledge, isLoading } = useQuery<CustomKnowledge>({
@@ -68,13 +69,15 @@ export default function CustomKnowledgePage() {
       return response.json();
     },
     onSuccess: (data) => {
+      // Invalidate the query so the frontend refetches fresh data
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-training/knowledge"] });
       // Update local state with the saved data
-      if (data?.knowledge) {
-        setBusinessName(data.knowledge.businessName || "");
-        setBrandVoice(data.knowledge.brandVoice || "");
-        setCoreOffer(data.knowledge.coreOffer || "");
-        setCustomInstructions(data.knowledge.customInstructions || "");
-        setFaqs(data.knowledge.faqs || []);
+      if (data) {
+        setBusinessName(data.businessName || "");
+        setBrandVoice(data.brandVoice || "");
+        setCoreOffer(data.coreOffer || "");
+        setCustomInstructions(data.customInstructions || "");
+        setFaqs(data.faqs || []);
       }
       toast({
         title: "Knowledge base saved",

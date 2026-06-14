@@ -181,12 +181,12 @@ export default function ObjectionsLibraryPage() {
   });
 
   // Custom objections queries
-  const { data: customTrainingResponse, isLoading: isLoadingCustom } = useQuery<CustomObjection[] | { objections: CustomObjection[] }>({
+  const { data: customTrainingResponse, isLoading: isLoadingCustom } = useQuery<CustomObjection[]>({
     queryKey: ["/api/custom-training/objections"],
   });
   const customObjections = Array.isArray(customTrainingResponse)
     ? customTrainingResponse
-    : customTrainingResponse?.objections || [];
+    : [];
 
   const updateCustomObjections = useMutation({
     mutationFn: async (newObjections: CustomObjection[]) => {

@@ -24,7 +24,7 @@ router.get('/objections', requireAuth, async (req: Request, res: Response): Prom
     }
 
     const objections = await getCustomObjections(userId);
-    res.json({ objections, total: objections.length });
+    res.json(objections);
   } catch (err) {
     console.error('[CustomTrainingRoutes] Failed to fetch custom objections:', err);
     res.status(500).json({ error: 'Failed to fetch custom objections' });
@@ -75,7 +75,7 @@ router.get('/knowledge', requireAuth, async (req: Request, res: Response): Promi
     }
 
     const knowledge = await getCustomKnowledge(userId);
-    res.json({ knowledge });
+    res.json(knowledge);
   } catch (err) {
     console.error('[CustomTrainingRoutes] Failed to fetch custom knowledge:', err);
     res.status(500).json({ error: 'Failed to fetch custom knowledge' });
