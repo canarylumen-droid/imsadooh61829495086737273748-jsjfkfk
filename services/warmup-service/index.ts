@@ -91,8 +91,41 @@ export async function startWarmupService() {
 }
 
 if (process.env.UNIFIED_MODE !== 'true') {
-  startWarmupService().catch((err) => {
-    console.error('[Warmup Service] Fatal startup error:', err);
-    process.exit(1);
-  });
+  (async () => {
+    const MAX_ATTEMPTS = 5;
+    const BASE_DELAY_MS = 10_000; // 10s
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        await startWarmupService();
+        return; // success — stay alive
+      } catch (err: any) {
+        const isAuthError = err?.message?.includes('password authentication') ||
+          err?.cause?.message?.includes('password authentication');
+        const isDbDown = err?.message?.includes('ECONNREFUSED') ||
+          err?.message?.includes('Could not connect') ||
+          err?.cause?.message?.includes('ECONNREFUSED');
+
+        if (isAuthError) {
+          // Auth errors are config bugs — no point retrying, fail fast with clear message
+          console.error(
+            '[Warmup Service] ❌ DATABASE AUTH FAILURE — check DATABASE_URL password encoding in .env.',
+            err?.cause?.message || err?.message
+          );
+          process.exit(1);
+        }
+
+        const delayMs = Math.min(BASE_DELAY_MS * Math.pow(2, attempt - 1), 120_000);
+        console.error(
+          `[Warmup Service] Startup error (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${delayMs / 1000}s:`,
+          err?.message || err
+        );
+        if (attempt === MAX_ATTEMPTS) {
+          console.error('[Warmup Service] Max retries exceeded. Exiting.');
+          process.exit(1);
+        }
+        await new Promise(r => setTimeout(r, delayMs));
+        started = false; // allow re-entry
+      }
+    }
+  })();
 }
