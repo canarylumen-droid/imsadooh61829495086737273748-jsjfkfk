@@ -48,7 +48,7 @@ class AdvancedStorageService {
         credentials: { accessKeyId, secretAccessKey },
         ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
       });
-      console.log(`[AdvancedStorage] ☁️  S3 ready (bucket: ${bucket}${endpoint ? ', custom endpoint' : ''})`);
+      console.log(`[AdvancedStorage] ☁️  S3 ready (bucket: ${bucket}, region: ${region}${endpoint ? ', custom endpoint' : ''})`);
     } else {
       if (!(global as any).__s3_warned) {
         console.log('[AdvancedStorage] S3 not configured — using Redis/local fallback.');

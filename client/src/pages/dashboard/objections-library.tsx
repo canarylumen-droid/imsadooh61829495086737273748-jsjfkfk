@@ -196,6 +196,8 @@ export default function ObjectionsLibraryPage() {
       return response.json();
     },
     onSuccess: () => {
+      // Invalidate the query so the frontend refetches fresh data with the correct
+      // { objections: [...] } shape from the API — avoids stale/mismatched cache.
       queryClient.invalidateQueries({ queryKey: ["/api/custom-training/objections"] });
       toast({
         title: "Objection rules saved",

@@ -39,6 +39,7 @@ import {
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
   CalendarDays,
+  Info,
 } from "lucide-react";
 import { SiGoogle, SiShopify, SiHubspot, SiSlack } from "react-icons/si";
 import {
@@ -219,6 +220,7 @@ const integrationCards: Array<{
   color: string;
   bg: string;
   badge?: string;
+  freePlanNote?: string;
 }> = [
   {
     do: "social",
@@ -237,6 +239,7 @@ const integrationCards: Array<{
     icon: CalendarDays,
     color: "text-blue-600",
     bg: "bg-blue-600/10",
+    freePlanNote: "OAuth & scheduling links work on the free plan. Real-time booking webhooks require Calendly Standard ($12/mo).",
   }
 ];
 
@@ -1628,6 +1631,14 @@ export default function IntegrationsPage() {
                         >
                           {card.badge ? "Locked" : (isConnected ? "Connect Another" : "Connect Account")}
                         </Button>
+                        {card.freePlanNote && (
+                          <div className="flex items-start gap-1.5 px-1 mt-1">
+                            <Info className="h-3 w-3 text-muted-foreground/60 mt-0.5 shrink-0" />
+                            <p className="text-[10px] text-muted-foreground/70 leading-tight">
+                              {card.freePlanNote}
+                            </p>
+                          </div>
+                        )}
                       </CardFooter>
                     </Card>
                   );

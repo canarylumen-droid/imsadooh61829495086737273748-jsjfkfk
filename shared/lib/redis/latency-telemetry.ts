@@ -5,7 +5,7 @@ interface LatencySample {
   durationMs: number;
 }
 
-const DEFAULT_SLO_MS = 50;
+const DEFAULT_SLO_MS = 100;
 const DEFAULT_FLUSH_MS = 60_000;
 const DEFAULT_SAMPLE_LIMIT = 5000;
 

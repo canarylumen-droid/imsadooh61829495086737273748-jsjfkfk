@@ -104,11 +104,14 @@ export async function runJobWatchdog(): Promise<void> {
       const isFollowUp  = jobLog.jobType === 'campaign:follow-up';
       const isSendBatch = jobLog.jobType === 'campaign:send-batch';
 
+      // Sanitize job ID: BullMQ doesn't allow colons in custom job IDs
+      const sanitizedJobId = jobLog.jobBullmqId.replace(/:/g, '-');
+
       await campaignQueue.add(
-        jobLog.jobBullmqId,
+        sanitizedJobId,
         jobData,
         {
-          jobId:           jobLog.jobBullmqId,
+          jobId:           sanitizedJobId,
           delay:           isSendBatch ? 5000 : 0,
           priority:        isFollowUp ? 1 : 2,
           attempts:        3,

@@ -67,7 +67,15 @@ export default function CustomKnowledgePage() {
       const response = await apiRequest("POST", "/api/custom-training/knowledge", updatedData);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Update local state with the saved data
+      if (data?.knowledge) {
+        setBusinessName(data.knowledge.businessName || "");
+        setBrandVoice(data.knowledge.brandVoice || "");
+        setCoreOffer(data.knowledge.coreOffer || "");
+        setCustomInstructions(data.knowledge.customInstructions || "");
+        setFaqs(data.knowledge.faqs || []);
+      }
       toast({
         title: "Knowledge base saved",
         description: "Your brand and business context have been successfully trained into the AI.",

@@ -42,7 +42,17 @@ router.post('/objections', requireAuth, async (req: Request, res: Response): Pro
 
     const body = Array.isArray(req.body) ? req.body : req.body?.objections;
     const parsed = z.array(CustomObjectionSchema).parse(body);
+    
+    // Save and verify the save worked
     await saveCustomObjections(userId, parsed);
+    
+    // Verify by reading back
+    const verified = await getCustomObjections(userId);
+    if (verified.length !== parsed.length) {
+      console.error('[CustomTrainingRoutes] Save verification failed - expected', parsed.length, 'got', verified.length);
+      res.status(500).json({ error: 'Failed to verify saved objections. Storage may be unavailable.' });
+      return;
+    }
 
     res.json({ success: true, message: 'Custom objections saved successfully', objections: parsed });
   } catch (err) {
@@ -84,6 +94,14 @@ router.post('/knowledge', requireAuth, async (req: Request, res: Response): Prom
     // Validate the incoming body against CustomKnowledgeSchema
     const parsed = CustomKnowledgeSchema.parse(req.body);
     await saveCustomKnowledge(userId, parsed);
+
+    // Verify by reading back
+    const verified = await getCustomKnowledge(userId);
+    if (JSON.stringify(verified) !== JSON.stringify(parsed)) {
+      console.error('[CustomTrainingRoutes] Knowledge save verification failed');
+      res.status(500).json({ error: 'Failed to verify saved knowledge. Storage may be unavailable.' });
+      return;
+    }
 
     res.json({ success: true, message: 'Custom knowledge base saved successfully', knowledge: parsed });
   } catch (err) {

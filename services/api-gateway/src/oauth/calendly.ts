@@ -357,7 +357,12 @@ export async function registerCalendlyWebhook(userId: string, accessToken: strin
       }
     } else {
       const error = await response.text();
-      console.warn(`⚠️ Failed to register Calendly webhook: ${error}`);
+      // Check if it's a permission error (requires Standard plan)
+      if (error.includes('Permission Denied') || error.includes('upgrade your Calendly account')) {
+        console.warn(`⚠️ Calendly webhook registration requires Standard plan or higher. Webhook features will be limited. Error: ${error}`);
+      } else {
+        console.warn(`⚠️ Failed to register Calendly webhook: ${error}`);
+      }
     }
   } catch (error: any) {
     console.warn('⚠️ Calendly webhook registration warning:', error.message);

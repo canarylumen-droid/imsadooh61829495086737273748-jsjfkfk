@@ -249,10 +249,3 @@ class InstagramSyncWorker {
 }
 
 export const instagramSyncWorker = new InstagramSyncWorker();
-
-
-
-
-
-
-
