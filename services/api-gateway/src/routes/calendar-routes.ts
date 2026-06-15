@@ -15,6 +15,14 @@ import type { ChannelType } from '@shared/types.js';
 
 const router = Router();
 
+// Start automatic Calendly sync for free plan users (polls every 10 minutes)
+import('@shared/lib/calendar/calendly-sync-worker.js').then(({ startAutomaticCalendlySync }) => {
+  startAutomaticCalendlySync();
+  console.log('✅ [Calendly] Automatic sync started (polls every 10 minutes)');
+}).catch(err => {
+  console.error('⚠️ Failed to start Calendly automatic sync:', err);
+});
+
 /**
  * Get calendar settings for user
  */
@@ -144,73 +152,6 @@ router.get('/ai-logs', requireAuth, async (req: Request, res: Response): Promise
   } catch (error: any) {
     console.error('Error getting AI logs:', error.message);
     res.status(500).json({ error: 'Failed to get logs' });
-  }
-});
-
-/**
- * Sync Calendly events (for free plan users without webhooks)
- * This manually fetches events from Calendly API and syncs them to the database
- */
-router.post('/sync-calendly', requireAuth, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = getCurrentUserId(req)!;
-    const { calendlyService } = await import('@shared/lib/calendar/calendly-service.js');
-    const { calendarEvents, leads } = await import('@audnix/shared');
-
-    // Fetch events from Calendly API (last 30 days)
-    const minStartTime = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const maxStartTime = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    const events = await calendlyService.listScheduledEvents(userId, minStartTime, maxStartTime);
-
-    let syncedCount = 0;
-    for (const event of events) {
-      const { uri, start_time, end_time, name, location, status } = event;
-      const invitee = event.event_invitees?.[0];
-
-      if (!invitee) continue;
-
-      // Check if already exists
-      const existing = await db
-        .select()
-        .from(calendarEvents)
-        .where(eq(calendarEvents.externalId, uri))
-        .limit(1);
-
-      if (existing.length === 0) {
-        // Find lead by email
-        const [lead] = await db
-          .select()
-          .from(leads)
-          .where(eq(leads.email, invitee.email))
-          .limit(1);
-
-        await db.insert(calendarEvents).values({
-          userId,
-          leadId: lead?.id || null,
-          provider: 'calendly',
-          externalId: uri,
-          title: name || 'Meeting',
-          startTime: new Date(start_time),
-          endTime: new Date(end_time),
-          meetingUrl: location?.location || null,
-          attendeeEmail: invitee.email,
-          attendeeName: `${invitee.name || ''}`.trim(),
-          status: status === 'active' ? 'scheduled' : status,
-          isAiBooked: false
-        });
-        syncedCount++;
-      }
-    }
-
-    res.json({ 
-      success: true, 
-      message: `Synced ${syncedCount} new events from Calendly`,
-      totalEvents: events.length,
-      newEvents: syncedCount
-    });
-  } catch (error: any) {
-    console.error('Error syncing Calendly events:', error.message);
-    res.status(500).json({ error: 'Failed to sync Calendly events' });
   }
 });
 
