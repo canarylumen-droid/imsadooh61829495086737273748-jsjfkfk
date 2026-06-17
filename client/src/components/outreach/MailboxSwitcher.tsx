@@ -120,7 +120,7 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
                                 <div className="flex items-center gap-3 min-w-0">
                                     <div className={cn(
                                         "h-2 w-2 rounded-full shrink-0",
-                                        mailbox.connected ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]" : "bg-muted"
+                                        mailbox.connected ? "bg-emerald-500" : "bg-muted"
                                     )} />
                                     <span className="truncate text-foreground/90 font-black">
                                         {mailbox.accountType || mailbox.email || (mailbox.provider === 'custom_email' ? 'Custom Email' : mailbox.provider)}

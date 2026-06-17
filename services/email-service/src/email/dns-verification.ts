@@ -2,14 +2,17 @@ import dns from 'dns';
 import { promisify } from 'util';
 
 // Hardened: Force use of primary high-reliability DNS resolvers to bypass local/ISP caching
-dns.setServers(['1.1.1.1', '8.8.8.8', '208.67.222.222']);
+// Using multiple resolvers for redundancy and to prevent single-point failures
+dns.setServers(['1.1.1.1', '1.0.0.1', '8.8.8.8', '8.8.4.4', '208.67.222.222', '208.67.220.220']);
 
 const resolveTxt = promisify(dns.resolveTxt);
 const resolveMx = promisify(dns.resolveMx);
 
-// Neural DNS Cache Node
+// Neural DNS Cache Node with Debouncing
 const dnsResolutionCache = new Map<string, { result: any; expires: number }>();
 const CACHE_TTL = 300000; // 5 minutes node retention
+const DNS_DEBOUNCE_MS = 1000; // 1 second debounce for rapid successive queries
+const pendingQueries = new Map<string, Promise<any>>();
 
 function getCachedResult<T>(key: string): T | null {
   const cached = dnsResolutionCache.get(key);
@@ -91,7 +94,7 @@ async function checkSpf(domain: string): Promise<DnsVerificationResult['spf']> {
 
   try {
     const records = await resolveTxt(domain);
-    const spfRecords = records.flat().filter(r => r.startsWith('v=spf1'));
+    const spfRecords = records.flat().filter(r => r.toLowerCase().startsWith('v=spf1'));
 
     if (spfRecords.length === 0) {
       return {
@@ -314,6 +317,24 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
   };
 }
 
+async function debouncedDnsQuery<T>(key: string, queryFn: () => Promise<T>): Promise<T> {
+  // Check if there's already a pending query for this key
+  const existing = pendingQueries.get(key);
+  if (existing) {
+    return existing as Promise<T>;
+  }
+
+  // Create new query promise
+  const promise = queryFn()
+    .finally(() => {
+      // Remove from pending queries after completion
+      setTimeout(() => pendingQueries.delete(key), DNS_DEBOUNCE_MS);
+    });
+
+  pendingQueries.set(key, promise);
+  return promise;
+}
+
 export async function verifyDomainDns(domain: string, dkimSelector?: string, force = false): Promise<DnsVerificationResult> {
   let cleanDomain = domain.toLowerCase().trim();
   try {
@@ -328,13 +349,14 @@ export async function verifyDomainDns(domain: string, dkimSelector?: string, for
   const cached = getCachedResult<DnsVerificationResult>(cacheKey);
   if (cached && !force) return cached;
 
+  // Use debounced queries to prevent DNS flooding
   const [spf, dkim, dmarc, mx, blacklist, ptr] = await Promise.all([
-    checkSpf(cleanDomain),
-    checkDkim(cleanDomain, dkimSelector),
-    checkDmarc(cleanDomain),
-    checkMx(cleanDomain),
-    checkBlacklist(cleanDomain),
-    checkPtr(cleanDomain),
+    debouncedDnsQuery(`spf:${cacheKey}`, () => checkSpf(cleanDomain)),
+    debouncedDnsQuery(`dkim:${cacheKey}`, () => checkDkim(cleanDomain, dkimSelector)),
+    debouncedDnsQuery(`dmarc:${cacheKey}`, () => checkDmarc(cleanDomain)),
+    debouncedDnsQuery(`mx:${cacheKey}`, () => checkMx(cleanDomain)),
+    debouncedDnsQuery(`blacklist:${cacheKey}`, () => checkBlacklist(cleanDomain)),
+    debouncedDnsQuery(`ptr:${cacheKey}`, () => checkPtr(cleanDomain)),
   ]);
 
   const result: DnsVerificationResult = {

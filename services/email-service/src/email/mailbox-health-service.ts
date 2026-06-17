@@ -18,6 +18,7 @@ import { db } from '@shared/lib/db/db.js';
 import { integrations, notifications, users, bounceTracker, outreachCampaigns, campaignLeads, auditTrail } from '@audnix/shared';
 import { eq, and, ne, sql, lte, isNull, or, gt, inArray, count as drizzleCount } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
+import { sseService } from '@services/api-gateway/src/web-sockets/sse.js';
 import { decrypt, encryptJSON, decryptToJSON } from '@shared/lib/crypto/encryption.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { getPlanCapabilities } from "@shared/plan-utils.js";
@@ -50,11 +51,11 @@ class MailboxHealthService {
   private readonly SPAM_BOUNCE_THRESHOLD = 0.02; // 2% bounce rate = Google Warning
   private readonly SPAM_BOUNCE_CRITICAL = 0.05; // 5% bounce rate = Google Block / Pause
   private readonly MIN_SENDS_FOR_RATE_CALC = 10; // Minimum sends to calculate percentage
-  private readonly MAX_FAILURES_BEFORE_REMOVE = 3;
+  private readonly MAX_FAILURES_BEFORE_REMOVE = 5; // Increased from 3 to reduce false positives
   private readonly failureBurstTracking = new Map<string, number[]>();
-  private readonly TOXIC_BURST_THRESHOLD = 3; // 3 failures
+  private readonly TOXIC_BURST_THRESHOLD = 5; // Increased from 3 to 5 failures
   private readonly TOXIC_BURST_WINDOW_MS = 10 * 60 * 1000; // 10 minutes
-  private readonly TOXIC_PAUSE_DURATION_MS = 60 * 60 * 1000; // 1 hour
+  private readonly TOXIC_PAUSE_DURATION_MS = 30 * 60 * 1000; // Reduced from 1 hour to 30 minutes
 
   /**
    * Start the health monitoring service
@@ -927,6 +928,23 @@ class MailboxHealthService {
           message: `Your mailbox ${integration.provider} is experiencing a high bounce rate (${(bounceRate * 100).toFixed(1)}%). We recommend reviewing your lead list quality. Outreach continues autonomously.`,
           metadata: { integrationId, bounceRate, activityType: 'spam_risk_advisory' }
         });
+
+        // Broadcast real-time update via SSE with priority
+        sseService.broadcast({
+          type: 'mailbox_health',
+          userId: integration.userId,
+          integrationId,
+          data: {
+            spf: { valid: true },
+            dkim: { valid: true },
+            dmarc: { valid: true },
+            bounceRate: currentSpamPct,
+            spamRate: 0,
+            deliverabilityScore: 100 - currentSpamPct,
+            timestamp: new Date().toISOString(),
+          },
+          timestamp: new Date().toISOString(),
+        }, { priority: 'high', requireAck: false });
       }
       return false; // Changed to false because we didn't pause
     }
@@ -966,6 +984,21 @@ class MailboxHealthService {
     if (!result.spf.found) missing.push('SPF');
     if (!result.dkim.found) missing.push('DKIM');
     if (!result.dmarc.found) missing.push('DMARC');
+
+    // Broadcast real-time DNS verification update via SSE with priority
+    sseService.broadcast({
+      type: 'dns_verification',
+      userId: integration.userId,
+      domain,
+      data: {
+        spf: { valid: result.spf.valid, record: result.spf.record },
+        dkim: { valid: result.dkim.valid, record: result.dkim.record },
+        dmarc: { valid: result.dmarc.valid, record: result.dmarc.record },
+        overallScore: result.overallScore,
+        timestamp: new Date().toISOString(),
+      },
+      timestamp: new Date().toISOString(),
+    }, { priority: 'normal', requireAck: false });
 
     return {
       valid: result.spf.valid && result.dmarc.valid, // Keep valid check as SPF + DMARC for connectivity

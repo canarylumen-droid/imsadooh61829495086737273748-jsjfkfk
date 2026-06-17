@@ -56,6 +56,7 @@ import { registerAnalyticsRoutes } from "./analytics-routes.js";
 import revenueWebhook from "../webhooks/revenue-webhook.js";
 import unsubscribeRoutes from "./unsubscribe-routes.js";
 import fblWebhookRoutes from "./fbl-webhook.js";
+import { sseRouter } from "./sse-routes";
 
 export async function registerRoutes(app: Express): Promise<http.Server> {
   // 1. Static Assets & Public Manifests (Served before auth/rate limiting for common assets)
@@ -168,6 +169,7 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/cron", (await import("./cron-routes.js")).default);
   app.use("/api/health", healthRoutes);
   app.use("/api/unsubscribe", unsubscribeRoutes);
+  app.use("/api/sse", sseRouter); // Server-Sent Events for real-time updates
   registerAnalyticsRoutes(app); // Phase 14: KPI & Conversion Analytics
 
   // Create HTTP server

@@ -801,21 +801,21 @@ export default function IntegrationsPage() {
         <TabsContent value="connected" className="space-y-12">
           {/* Custom SMTP Integration Section */}
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
                   <Mail className="h-5 w-5" />
                 </div>
-                <h2 className="text-xl font-bold tracking-tight text-foreground">Custom Email Domain</h2>
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight text-foreground">Custom Email Domain</h2>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
                 <Badge variant="outline" className={cn(
-                  "rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-widest border-border/50 bg-muted/20",
+                  "rounded-full px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-widest border-border/50 bg-muted/20",
                   getActivePlanId(userData) === 'enterprise' ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5" : "text-muted-foreground"
                 )}>
-                  {connectedMailboxesCount} / {limit === -1 ? 'Unlimited' : limit} Integrations
+                  {connectedMailboxesCount} / {limit === -1 ? '∞' : limit}
                 </Badge>
-                <Badge variant="outline" className="rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-widest border-primary/20 bg-primary/5 text-primary">
+                <Badge variant="outline" className="rounded-full px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest border-primary/20 bg-primary/5 text-primary">
                   Advanced
                 </Badge>
               </div>
@@ -1268,6 +1268,29 @@ export default function IntegrationsPage() {
                                 <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Active</Badge>
                               ) : (
                                 <Badge variant="outline" className="text-muted-foreground border-muted text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Disconnected</Badge>
+                              )}
+                              {/* Real-time DNS Health Micro-badges */}
+                              {mailbox.connected && stats?.health?.dns && (
+                                <>
+                                  <Badge className={cn(
+                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
+                                    stats.health.dns.spf ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                                  )}>
+                                    SPF
+                                  </Badge>
+                                  <Badge className={cn(
+                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
+                                    stats.health.dns.dkim ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                                  )}>
+                                    DKIM
+                                  </Badge>
+                                  <Badge className={cn(
+                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
+                                    stats.health.dns.dmarc ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                                  )}>
+                                    DMARC
+                                  </Badge>
+                                </>
                               )}
                             </div>
                             <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest truncate">

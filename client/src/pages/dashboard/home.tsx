@@ -325,7 +325,7 @@ export default function DashboardHome() {
     return change > 0 ? `+${formatted}%` : `${formatted}%`;
   };
 
-  const kpis = [
+  const summaryMetrics = [
     {
       label: "TOTAL SENT",
       value: stats?.totalMessages || 0,
@@ -499,64 +499,44 @@ export default function DashboardHome() {
           </motion.div>
         )}
 
-        {/* KPI Grid */}
-        <ResponsiveGrid className="grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2 sm:gap-3">
-          {kpis.map((kpi, index) => {
-            const Icon = kpi.icon;
-            const TrendIcon = kpi.trend === "up" ? ArrowUp : kpi.trend === "down" ? ArrowDown : Minus;
+        {/* Premium Minimalist 5-Column Horizontal Summary */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="grid grid-cols-5 gap-3"
+        >
+          {summaryMetrics.map((metric: any, index: number) => {
+            const Icon = metric.icon;
             return (
               <motion.div
-                key={kpi.label}
-                initial={{ opacity: 0, y: 15 }}
+                key={metric.label}
+                initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1, duration: 0.5, ease: "easeOut" }}
+                transition={{ delay: index * 0.05, duration: 0.3, ease: "easeOut" }}
+                className={cn(
+                  "relative overflow-hidden rounded-lg border border-border/40 bg-card/40 backdrop-blur-sm p-4 transition-all hover:border-primary/30",
+                  metric.bgColor
+                )}
               >
-                <Card className={cn(
-                  "relative transition-all duration-300 border-border/40 rounded-lg overflow-hidden group bg-card/40 backdrop-blur-xl hover:border-primary/30 h-full p-2 sm:p-4",
-                  kpi.glow
-                )}>
-                  <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-1 sm:space-y-0 pb-1.5 sm:pb-2 p-0">
-                    <CardTitle className="text-[8px] sm:text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground/50 truncate pr-2 w-full">{kpi.label}</CardTitle>
-                    <div className={cn("p-1 sm:p-1.5 rounded-lg transition-colors bg-muted/5 shrink-0 hidden sm:block", kpi.color)}>
-                      <Icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex flex-col h-[calc(100%-40px)] p-0 mt-1 sm:mt-0">
-                    <div className="text-base sm:text-2xl font-extrabold mb-1 sm:mb-2 truncate">
-                      {kpi.prefix || ''}{kpi.value}{kpi.suffix || ''}
-                    </div>
-                    {kpi.percentage !== "—" && (
-                      <div className="flex items-center gap-1.5 flex-wrap min-h-[16px]">
-                        <span className={`text-[8px] sm:text-[10px] font-bold flex items-center px-1 py-0.5 rounded-full shrink-0 ${kpi.trend === "up" ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"}`}>
-                           <TrendIcon className="h-2 w-2 sm:h-2.5 sm:w-2.5 mr-0.5" />
-                          {kpi.percentage}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between mt-auto pt-2 opacity-0 group-hover:opacity-100 transition-all duration-300">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-6 text-[8px] font-bold uppercase tracking-widest p-0 px-1.5 rounded-lg hover:bg-primary/5 text-primary truncate max-w-[80px] sm:max-w-[110px]"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          window.location.href = '/api/bulk/export';
-                        }}
-                      >
-                        <Download className="h-2.5 w-2.5 mr-1 shrink-0" /> Export
-                      </Button>
-                    </div>
-
-                    <div className={cn(
-                      "absolute -bottom-16 -right-16 w-32 h-32 blur-[80px] opacity-10 group-hover:opacity-20 transition-opacity rounded-full",
-                      kpi.color.replace('text-', 'bg-')
-                    )} />
-                  </CardContent>
-                </Card>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className={cn("p-1.5 rounded-md", metric.bgColor, metric.borderColor)}>
+                    <Icon className={cn("h-3.5 w-3.5", metric.color)} />
+                  </div>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {metric.label}
+                  </span>
+                </div>
+                <div className="text-xl font-bold text-foreground">
+                  {metric.value}
+                  <span className="text-sm font-medium text-muted-foreground/60 ml-1">
+                    {metric.suffix}
+                  </span>
+                </div>
               </motion.div>
             );
           })}
-        </ResponsiveGrid>
+        </motion.div>
 
         {/* Main Content Split */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

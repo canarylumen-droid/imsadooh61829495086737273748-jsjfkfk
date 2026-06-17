@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles } from "lucide-react";
+import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +56,7 @@ export default function SettingsPage() {
   const voiceInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState("profile");
   const [hasChanges, setHasChanges] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const { data: user, isLoading } = useQuery<UserProfile | null>({ queryKey: ["/api/user/profile"] });
   const { data: smtpData } = useQuery<any[]>({ queryKey: ["/api/smtp/settings"] });
@@ -208,6 +209,13 @@ export default function SettingsPage() {
     setHasChanges(true);
   };
 
+  const handleCopyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    toast({ title: "Copied to clipboard", description: `${fieldName} has been copied.` });
+    setTimeout(() => setCopiedField(null), 2000);
+  };
+
   if (isLoading || !user) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>;
 
   return (
@@ -239,6 +247,9 @@ export default function SettingsPage() {
           <TabsTrigger value="profile" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Profile</TabsTrigger>
           <TabsTrigger value="brand" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Intelligence Memory</TabsTrigger>
           <TabsTrigger value="ai" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Automation</TabsTrigger>
+          <TabsTrigger value="dns" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap flex items-center gap-2">
+            <ShieldCheck className="h-3 w-3" /> DNS Setup
+          </TabsTrigger>
           <TabsTrigger value="voice" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap flex items-center gap-2">
             <Mic className="h-3 w-3" /> Voice AI
             {!canAccessVoiceNotes && <Lock className="h-3 w-3 opacity-60" />}
@@ -429,6 +440,84 @@ export default function SettingsPage() {
 
         <TabsContent value="brand" className="space-y-6">
           <BrandKnowledgeBase embedded={true} />
+        </TabsContent>
+
+        <TabsContent value="dns" className="space-y-6">
+          <Card className="border-border/50 shadow-sm rounded-2xl">
+            <CardHeader>
+              <CardTitle className="text-xl">DNS Configuration</CardTitle>
+              <CardDescription>Add these TXT records to your DNS provider to ensure optimal email deliverability.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                      <h4 className="font-bold text-sm">SPF Record</h4>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-3 text-xs font-medium"
+                      onClick={() => handleCopyToClipboard('v=spf1 include:_spf.google.com ~all', 'SPF Record')}
+                    >
+                      {copiedField === 'SPF Record' ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+                      {copiedField === 'SPF Record' ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                  <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">
+                    v=spf1 include:_spf.google.com ~all
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Add this as a TXT record for your domain to authorize Gmail to send emails on your behalf.</p>
+                </div>
+
+                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-blue-500" />
+                      <h4 className="font-bold text-sm">DKIM Record</h4>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-3 text-xs font-medium"
+                      onClick={() => handleCopyToClipboard('v=DKIM1; k=rsa; p=YOUR_PUBLIC_KEY', 'DKIM Record')}
+                    >
+                      {copiedField === 'DKIM Record' ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+                      {copiedField === 'DKIM Record' ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                  <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">
+                    v=DKIM1; k=rsa; p=YOUR_PUBLIC_KEY
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Add this as a TXT record for selector._domainkey.yourdomain.com. Replace YOUR_PUBLIC_KEY with your actual DKIM key from Gmail.</p>
+                </div>
+
+                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-purple-500" />
+                      <h4 className="font-bold text-sm">DMARC Record</h4>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-3 text-xs font-medium"
+                      onClick={() => handleCopyToClipboard('v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com', 'DMARC Record')}
+                    >
+                      {copiedField === 'DMARC Record' ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+                      {copiedField === 'DMARC Record' ? 'Copied' : 'Copy'}
+                    </Button>
+                  </div>
+                  <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">
+                    v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Add this as a TXT record for _dmarc.yourdomain.com to enable DMARC policy reporting.</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="ai" className="space-y-6">
