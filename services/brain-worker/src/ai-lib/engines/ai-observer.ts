@@ -145,9 +145,9 @@ Return ONLY the strategy text.`;
       await db.insert(aiActionLogs).values({
         userId: lead.userId,
         leadId: lead.id,
-        actionType: 'observation',
+        actionType: 'follow_up',
         decision: 'wait',
-        metadata: { strategy, originalStatus: lead.status },
+        metadata: { strategy, originalStatus: lead.status, observation: true },
         createdAt: new Date()
       });
 

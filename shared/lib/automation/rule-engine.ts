@@ -141,10 +141,18 @@ export class AutomationRuleEngine {
   private static async executeRuleActions(rule: any, lead: any, eventData: any) {
     const actions = rule.allowedActions as string[];
     
+    const actionTypeMap: Record<string, string> = {
+      follow_up: 'follow_up',
+      objection_handler: 'objection_handled',
+      meeting_booking: 'calendar_booking',
+      re_engagement: 'follow_up',
+    };
+    const actionType = actionTypeMap[rule.ruleType] || 'follow_up';
+
     await db.insert(aiActionLogs).values({
       userId: rule.userId,
       leadId: lead.id,
-      actionType: rule.ruleType,
+      actionType: actionType as any,
       decision: rule.requireHumanApproval ? 'wait' : 'act',
       intentScore: eventData.intentScore,
       confidence: eventData.confidence,
