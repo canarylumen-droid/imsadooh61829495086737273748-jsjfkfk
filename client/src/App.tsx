@@ -24,6 +24,9 @@ const AgenciesPage = lazy(() => import("./pages/solutions/Agencies"));
 const FoundersPage = lazy(() => import("./pages/solutions/Founders"));
 const CreatorsPage = lazy(() => import("./pages/solutions/Creators"));
 const ComparePage = lazy(() => import("./pages/compare"));
+const PricingLandingPage = lazy(() => import("./pages/pricing"));
+const LeadRecoveryLanding = lazy(() => import("./pages/lead-recovery-landing"));
+const ObjectionHandlingLanding = lazy(() => import("./pages/objection-handling-landing"));
 const NicheVaultPage = lazy(() => import("./pages/resources/niche-vault"));
 const PlaybooksPage = lazy(() => import("./pages/resources/outreach-playbooks"));
 const ApiDocsPage = lazy(() => import("./pages/resources/api-docs"));
@@ -84,6 +87,15 @@ function Router() {
       <Route path="/data-deletion" component={DataDeletion} />
       <Route path="/compare">
         {() => <Suspense fallback={<LoadingFallback />}><ComparePage /></Suspense>}
+      </Route>
+      <Route path="/pricing">
+        {() => <Suspense fallback={<LoadingFallback />}><PricingLandingPage /></Suspense>}
+      </Route>
+      <Route path="/lead-recovery">
+        {() => <Suspense fallback={<LoadingFallback />}><LeadRecoveryLanding /></Suspense>}
+      </Route>
+      <Route path="/objection-handling">
+        {() => <Suspense fallback={<LoadingFallback />}><ObjectionHandlingLanding /></Suspense>}
       </Route>
       <Route path="/resources/niche-vault">
         {() => <Suspense fallback={<LoadingFallback />}><NicheVaultPage /></Suspense>}

@@ -116,6 +116,7 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
         connected: true,
         lastSync: new Date(),
         healthStatus: 'connected' as const,
+        dailyLimit: 50,
       });
     } else {
       console.log(`[Google Redirect] Creating new Gmail integration for: ${emailAddress}`);
@@ -127,6 +128,7 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
         connected: true,
         lastSync: new Date(),
         healthStatus: 'connected' as const,
+        dailyLimit: 50,
       });
     }
 

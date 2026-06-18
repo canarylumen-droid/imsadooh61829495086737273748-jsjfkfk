@@ -20,8 +20,9 @@ router.get("/", requireAuth, async (req, res) => {
         const offset = parseInt(req.query.offset as string) || 0;
         const dateFrom = req.query.dateFrom ? new Date(req.query.dateFrom as string) : undefined;
         const dateTo = req.query.dateTo ? new Date(req.query.dateTo as string) : undefined;
+        const integrationId = req.query.integrationId as string | undefined;
 
-        const notificationList = await storage.getNotifications(userId, { limit, offset, dateFrom, dateTo });
+        const notificationList = await storage.getNotifications(userId, { limit, offset, dateFrom, dateTo, integrationId });
         const unreadCount = await storage.getUnreadNotificationCount(userId);
 
         res.json({

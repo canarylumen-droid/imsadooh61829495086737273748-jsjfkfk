@@ -19,16 +19,12 @@ const faqData = [
         a: "The Closer Engine uses a proprietary database of 110+ objection handling scripts. It analyzes lead responses for intent, selects the best rebuttal, and manages the entire sales conversation until a call is booked or a deal is closed."
     },
     {
-        q: "Does Audnix AI support Instagram automation?",
-        a: "Yes, Audnix AI is an official Meta Business partner integration, supporting fully autonomous Instagram DM automation, comment replies, and story engagement."
-    },
-    {
         q: "What industries can use Audnix AI?",
         a: "Audnix is designed for Digital Agencies, SaaS companies, Coaching & Consulting businesses, E-commerce, and Personal Brands looking to scale their sales operations without hiring more SDRs."
     },
     {
         q: "How do I setup my AI Sales Rep?",
-        a: "Setup takes less than 5 minutes. Connect your channel (Instagram, Email, etc.), define your offer, and let the AI start hunting for leads immediately."
+        a: "Setup takes less than 5 minutes. Connect your email inbox (Gmail, Outlook, or custom SMTP), define your offer, and let the AI start hunting for leads immediately."
     },
     {
         q: "Is my data secure with Audnix AI?",
@@ -56,7 +52,7 @@ const keywordMesh = [
     "best automation tool in nigeria", "ai sales software africa", "lagos startups ai", "nigerian tech innovation", "saas for sales in africa", "abuja tech companies", "scaling businesses in nigeria with ai", "african ai entrepreneurs",
     // Functional & High Intent
     "ai sdr automation", "ai bdr agent", "objection handling ai scripts", "high ticket sales closer", "predictive sales timing", "revenue recovery ai", "client acquisition bot", "automated outreach engine", "linkedin automation 2026",
-    "instagram dm automation ai", "email deliverability hacks 2026", "raw text sales emails", "cold email ai bot", "appointment setting ai", "calendar booking automation", "crm integration ai", "lead qualification intelligence",
+    "email deliverability hacks 2026", "raw text sales emails", "cold email ai bot", "appointment setting ai", "calendar booking automation", "crm integration ai", "lead qualification intelligence",
     // Industry Specific
     "ai for coaching business", "sales agency automation", "saas growth hacking tools", "ecommerce conversions ai", "real estate lead gen ai", "financial services sales bot", "consulting automation ai", "digital marketing agencies ai",
     // Authority & Trust
@@ -81,7 +77,7 @@ const questionMesh = [
     "How to scale a sales agency in 2026?", "Revenue recovery with ai sales bots?", "Autonomous sdr vs human sdr?", "Predictive timing in sales automation?",
     "What is the best automation tool in Africa?", "Top 10 ai startups in Nigeria?", "How Nleanya Treasure built Audnix AI?", "What is Uchendu Fortune's role at Audnix?",
     "How to set up Audnix AI in 5 minutes?", "Does Audnix AI have a mobile app?", "Secure data handling in ai sales?", "Military grade encryption for sales bots?",
-    "Can ai write raw text emails?", "Deliverability hacks for ai outreach?", "Instagram DM limits for ai sales?", "Meta partner status of Audnix AI?",
+    "Can ai write raw text emails?", "Deliverability hacks for ai outreach?", "Meta partner status of Audnix AI?",
     "Who are the founders of the leading AI sales platform?", "How to automate B2B lead generation?", "Best AI BDR for SaaS?", "Audnix AI enterprise features?",
     "White label ai sales platform?", "How to become an Audnix partner?", "Latest updates in Audnix AI 2026?", "Global expansion with ai agents?"
     // Logically repeated/varied to reach high density required for 1000+ questions

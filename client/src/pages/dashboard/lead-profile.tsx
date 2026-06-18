@@ -29,6 +29,7 @@ import { motion } from "framer-motion";
 import { LeadProcessModal } from "@/components/dashboard/LeadProcessModal";
 import { useState } from "react";
 import { format } from "date-fns";
+import { PageWrapper } from "@/components/ui/page-wrapper";
 
 const statusStyles = {
   new: "bg-primary/20 text-primary border-primary/20",
@@ -77,7 +78,7 @@ export default function LeadProfilePage() {
   const messages = messagesData?.messages || [];
 
   return (
-    <div className="h-full flex flex-col animate-in fade-in duration-700">
+    <PageWrapper className="h-full flex flex-col">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-border/20">
         <div className="flex items-center gap-4">
@@ -369,6 +370,6 @@ export default function LeadProfilePage() {
         lead={lead}
         messages={messages}
       />
-    </div>
+    </PageWrapper>
   );
 }

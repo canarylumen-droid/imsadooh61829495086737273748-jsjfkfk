@@ -179,7 +179,7 @@ export class GmailOAuth {
   /**
    * Get valid access token, refreshing if needed
    */
-  async getValidToken(userId: string, emailAddress?: string): Promise<string | null> {
+  async getValidToken(userId: string, emailAddress?: string, forceRefreshIfExpiringSoon?: boolean): Promise<string | null> {
     const tokenData = await storage.getOAuthAccount(userId, 'google', emailAddress);
 
     if (!tokenData) return null;
@@ -187,8 +187,10 @@ export class GmailOAuth {
     const expiresAt = tokenData.expiresAt ? new Date(tokenData.expiresAt) : new Date(0);
     const now = new Date();
 
-    // Refresh if expired or expiring within 5 minutes
-    if (expiresAt <= new Date(now.getTime() + 5 * 60 * 1000)) {
+    // Refresh if expired or expiring within buffer window.
+    // Normal check: 5 min window. forceRefreshIfExpiringSoon: 10 min window (used by IMAP at connect time).
+    const tokenExpiryBufferMs = forceRefreshIfExpiringSoon ? 10 * 60 * 1000 : 5 * 60 * 1000;
+    if (expiresAt <= new Date(now.getTime() + tokenExpiryBufferMs)) {
       if (!tokenData.refreshToken) return null;
 
       const lockKey = `oauth:gmail:${userId}:${emailAddress || 'default'}`;

@@ -21,18 +21,18 @@ export function PricingSection() {
             <ShieldCheck className="w-4 h-4" />
             Strategic Investment
           </motion.div>
-          <motion.h2
-            initial={{ opacity: 0, y: 30 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight text-foreground mb-4"
-          >
-            Invest in your <br />
-            <span className="text-primary italic">next level of scale.</span>
-          </motion.h2>
-          <p className="text-muted-foreground font-medium text-base max-w-2xl mx-auto leading-relaxed">
-            Stop trading time for leads. Choose a plan that prioritizes your <span className="text-foreground">freedom and ROI</span> above all else.
-          </p>
+            <motion.h2
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              className="text-3xl md:text-4xl lg:text-5xl font-bold leading-tight text-foreground mb-4"
+            >
+              Start Closing Deals in <br />
+              <span className="text-primary italic">Under 5 Minutes.</span>
+            </motion.h2>
+            <p className="text-muted-foreground font-medium text-base max-w-2xl mx-auto leading-relaxed">
+              No setup fees. No contracts. Connect your inbox and deploy your first AI agent today.
+            </p>
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -89,7 +89,7 @@ export function PricingSection() {
                         }`}
                     >
                       <span className="relative z-10 flex items-center justify-center gap-3">
-                        {isPopular ? "Get Started with Pro" : "Select Growth Plan"}
+                        {isPopular ? "Start Free Trial" : "Get Started"}
                         <Zap className={`w-4 h-4 ${isPopular ? "fill-current" : ""}`} />
                       </span>
                     </Button>

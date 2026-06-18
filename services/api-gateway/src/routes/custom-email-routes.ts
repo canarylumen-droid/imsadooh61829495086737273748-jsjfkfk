@@ -305,6 +305,7 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
         encryptedMeta,
         connected: true,
         accountType: email,
+        dailyLimit: 50, // Part 7: Set default so frontend never gets null
       });
     } catch (dbError: unknown) {
       const msg = dbError instanceof Error ? dbError.message : 'Database error';
@@ -503,6 +504,7 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
           encryptedMeta,
           connected: true,
           accountType: email,
+          dailyLimit: 50, // Part 7: Set default so frontend never gets null
         });
         existingEmails.add(email);
         imported.push({ id: integration.id, email });
@@ -853,7 +855,8 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
         lastSync: i.lastSync,
         reputationScore: (i as any).reputationScore ?? null,
         bounceRate: calculatedBounceRate,
-        dailyLimit: (i as any).dailyLimit ?? null,
+        // Part 7: Normalize null → 50 so the frontend always gets a number
+        dailyLimit: (i as any).dailyLimit ?? 50,
       };
     });
 

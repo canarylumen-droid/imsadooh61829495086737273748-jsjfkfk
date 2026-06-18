@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   TrendingUp,
   Mail,
-  Instagram,
   Calendar,
   UserCheck,
   Sparkles as SparklesIcon,
@@ -50,7 +49,7 @@ const AIEngineMockup = () => {
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="relative w-full aspect-[4/3] rounded-[2rem] border border-border/10 bg-card/40 backdrop-blur-3xl overflow-hidden shadow-2xl p-6 md:p-8 flex flex-col gap-6 group/mockup"
+      className="relative w-full aspect-[4/5] sm:aspect-[4/4] md:aspect-[4/3] rounded-[2rem] border border-border/10 bg-card/40 backdrop-blur-3xl overflow-hidden shadow-2xl p-4 sm:p-6 md:p-8 flex flex-col gap-4 sm:gap-6 group/mockup"
     >
       <div className="flex items-center justify-between border-b border-border/5 pb-4">
         <div className="flex items-center gap-3">
@@ -152,7 +151,7 @@ export function HeroSection() {
   return (
     <section
       ref={containerRef}
-      className="relative min-h-[80vh] lg:min-h-[90vh] flex items-center pt-20 pb-12 px-4 overflow-hidden"
+      className="relative min-h-[60vh] md:min-h-[70vh] lg:min-h-[90vh] flex items-center pt-20 pb-12 px-4 overflow-hidden"
     >
       <div className="absolute inset-0 bg-background/95 dark:bg-black/80 pointer-events-none" />
       <GridPattern />
@@ -165,8 +164,8 @@ export function HeroSection() {
 
       <motion.div className="absolute inset-0 z-[1] pointer-events-none" style={{ background: mouseGlow }} />
 
-      <div className="max-w-7xl mx-auto relative z-20 w-full">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          <div className="max-w-7xl mx-auto relative z-20 w-full px-0 sm:px-4">
+          <div className="grid lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-16 items-center">
           <div className="flex flex-col items-center lg:items-start text-center lg:text-left space-y-8">
             
             {/* Status Chip */}
@@ -181,7 +180,7 @@ export function HeroSection() {
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
                 </span>
                 <span className="text-[10px] uppercase tracking-[0.4em] text-primary font-black group-hover:tracking-[0.5em] transition-all duration-500">
-                  System Online: 14,203 Agents
+                  14,203 Active Agents · 98% Delivery Rate
                 </span>
               </div>
             </motion.div>
@@ -192,11 +191,11 @@ export function HeroSection() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ delay: 0.2, duration: 1, ease: [0.16, 1, 0.3, 1] }}
-                className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black tracking-tighter leading-[0.9] mb-4 text-foreground break-words sm:break-normal"
+                className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-black tracking-tighter leading-[0.9] mb-4 text-foreground break-words"
               >
-                AUDNIX AI<br />
+                Stop Losing Leads.<br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-500 via-primary to-blue-600 uppercase drop-shadow-[0_0_30px_rgba(var(--primary),0.3)]">
-                  SALES CLOSER.
+                  AI Closes While You Sleep.
                 </span>
               </motion.h1>
 
@@ -204,9 +203,9 @@ export function HeroSection() {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.4, duration: 1 }}
-                className="text-base md:text-lg lg:text-xl text-muted-foreground font-medium tracking-tight max-w-3xl lg:mx-0 mx-auto leading-relaxed"
+                className="text-sm sm:text-base md:text-lg lg:text-xl text-muted-foreground font-medium tracking-tight max-w-3xl lg:mx-0 mx-auto leading-relaxed"
               >
-                Scale your sales pipeline with <span className="text-foreground">Autonomous Agents</span> that master your brand voice, handle complex objections, and secure meetings 24/7.
+                Deploy <span className="text-foreground">autonomous sales agents</span> that prospect, qualify, handle objections, and book meetings on autopilot. No more hiring SDRs or burning out on DMs.
               </motion.p>
             </div>
 
@@ -215,7 +214,7 @@ export function HeroSection() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6, duration: 1 }}
-              className="flex flex-col sm:flex-row gap-6 items-center w-full lg:justify-start justify-center"
+              className="flex flex-col sm:flex-row gap-3 sm:gap-6 items-center w-full lg:justify-start justify-center"
             >
               <Link href="/auth">
                 <Magnetic>
@@ -224,9 +223,9 @@ export function HeroSection() {
                     onMouseEnter={() => setIsHovered(true)}
                     onMouseLeave={() => setIsHovered(false)}
                     size="lg"
-                    className="h-14 md:h-16 px-8 md:px-12 rounded-[1rem] md:rounded-[1.5rem] bg-cyan-500 text-black font-black text-base md:text-lg hover:bg-cyan-400 transition-all shadow-[0_20px_40px_-10px_rgba(6,182,212,0.3)] group uppercase tracking-widest w-full sm:w-auto"
+                    className="h-12 sm:h-14 md:h-16 px-6 sm:px-8 md:px-12 rounded-[1rem] md:rounded-[1.5rem] bg-cyan-500 text-black font-black text-sm sm:text-base md:text-lg hover:bg-cyan-400 transition-all shadow-[0_20px_40px_-10px_rgba(6,182,212,0.3)] group uppercase tracking-widest w-full sm:w-auto"
                   >
-                    Deploy Agents
+                    Start Free Trial
                     <ArrowRight className={`ml-3 w-5 h-5 md:w-6 h-6 transition-transform duration-500 ${isHovered ? "translate-x-3" : ""}`} />
                   </Button>
                 </Magnetic>
@@ -238,7 +237,7 @@ export function HeroSection() {
                     variant="outline"
                     className="h-14 md:h-16 px-6 md:px-10 rounded-[1rem] md:rounded-[1.5rem] border-primary/20 bg-primary/5 hover:bg-primary/10 text-foreground font-black text-sm md:text-lg backdrop-blur-md transition-all uppercase tracking-widest w-full sm:w-auto"
                   >
-                    View Logic Hub
+                    Watch Demo
                   </Button>
                 </Magnetic>
               </Link>
@@ -259,7 +258,7 @@ export function HeroSection() {
         </div>
 
         {/* Trusted By Ribbon */}
-        <div className="mt-32 border-y border-border/10 bg-muted/5 backdrop-blur-sm w-screen relative left-1/2 -translate-x-1/2 py-10 overflow-hidden group">
+        <div className="mt-16 sm:mt-32 border-y border-border/10 bg-muted/5 backdrop-blur-sm w-screen relative left-1/2 -translate-x-1/2 py-6 sm:py-10 overflow-hidden group">
           <div className="absolute inset-0 bg-primary/5 blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-1000" />
 
           <div className="flex items-center gap-16 md:gap-24 animate-marquee whitespace-nowrap">

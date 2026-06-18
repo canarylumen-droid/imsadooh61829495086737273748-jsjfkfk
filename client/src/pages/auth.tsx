@@ -277,7 +277,12 @@ export default function AuthPage() {
 
   useEffect(() => {
     if (user) {
-      setLocation("/dashboard");
+      const lastActive = localStorage.getItem('auth_last_active');
+      if (lastActive && Date.now() - Number(lastActive) < 3600000) {
+        setLocation("/dashboard");
+      } else {
+        localStorage.removeItem('auth_last_active');
+      }
     }
   }, [user, setLocation]);
 
@@ -419,12 +424,16 @@ export default function AuthPage() {
 
         setLoading(false);
 
+        localStorage.setItem('auth_last_active', Date.now().toString());
+
         // Skip onboarding - go straight to dashboard
         setTimeout(() => {
           window.location.href = '/dashboard';
         }, 500);
         return;
       }
+
+      localStorage.setItem('auth_last_active', Date.now().toString());
 
       toast({
         title: "Welcome back!",
@@ -433,7 +442,7 @@ export default function AuthPage() {
 
       // Direct redirect after successful login
       setTimeout(() => {
-        window.location.href = '/dashboard';
+        setLocation('/dashboard');
       }, 500);
     } catch (error: any) {
       console.error("Login error:", error);
@@ -600,13 +609,17 @@ export default function AuthPage() {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
+        localStorage.setItem('auth_last_active', Date.now().toString());
+
         toast({
           title: "Account Created",
           description: "Welcome to Audnix AI!",
         });
 
         // Final login to establish session
-        window.location.href = '/dashboard';
+        setTimeout(() => {
+          setLocation('/dashboard');
+        }, 500);
       } else {
         toast({
           title: "Setup Failed",

@@ -2,7 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { useState, useEffect } from "react";
-import { Sparkles as SparklesIcon, ChevronDown, Shield, FileText, LayoutGrid, Zap, Brain } from "lucide-react";
+import { Sparkles as SparklesIcon, ChevronDown, Shield, FileText, LayoutGrid, Zap, Brain, X, RefreshCw } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import { Magnetic } from "@/components/ui/Magnetic";
 
@@ -49,7 +49,7 @@ export function Navigation() {
   const navLinks = [
     { name: "How it works", href: "/#how-it-works" },
     { name: "ROI Calculator", href: "/#calc" },
-    { name: "Pricing", href: "/#pricing" },
+    { name: "Pricing", href: "/pricing" },
   ];
 
   return (
@@ -189,6 +189,24 @@ export function Navigation() {
                           <span className="text-xs font-black uppercase tracking-wider text-white/60">Terms of Service</span>
                         </div>
                       </Link>
+                      <Link href="/pricing">
+                        <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                          <Zap className="w-5 h-5 text-primary" />
+                          <span className="text-xs font-black uppercase tracking-wider text-white/60">Pricing</span>
+                        </div>
+                      </Link>
+                      <Link href="/lead-recovery">
+                        <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                          <RefreshCw className="w-5 h-5 text-primary" />
+                          <span className="text-xs font-black uppercase tracking-wider text-white/60">Lead Recovery</span>
+                        </div>
+                      </Link>
+                      <Link href="/objection-handling">
+                        <div className="flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-white/5 transition-all border border-transparent hover:border-white/5">
+                          <Brain className="w-5 h-5 text-primary" />
+                          <span className="text-xs font-black uppercase tracking-wider text-white/60">Objection Handling</span>
+                        </div>
+                      </Link>
                     </div>
                   </motion.div>
                 )}
@@ -237,125 +255,78 @@ export function Navigation() {
 
       <AnimatePresence>
         {mobileMenuOpen && (
-          <div className="fixed inset-0 z-[110] lg:hidden">
+          <div className="fixed inset-0 z-[110] lg:hidden flex items-end sm:items-center justify-center">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
               onClick={() => setMobileMenuOpen(false)}
             />
             <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="absolute right-0 top-0 bottom-0 w-[85%] sm:w-[320px] glass-premium border-l border-primary/20 p-6 flex flex-col shadow-2xl overflow-y-auto"
+              initial={{ y: "100%", opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: "100%", opacity: 0 }}
+              transition={{ type: "spring", damping: 30, stiffness: 300 }}
+              className="relative w-[95%] max-w-sm max-h-[85vh] glass-premium rounded-2xl p-5 flex flex-col shadow-2xl overflow-y-auto mx-auto"
             >
-              <div className="flex items-center justify-between mb-6">
-                <span className="text-lg font-bold tracking-tight uppercase text-foreground">Audnix<span className="text-primary">.AI</span></span>
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    onClick={() => setMobileMenuOpen(false)} 
-                    className="rounded-xl hover:bg-primary/10 text-primary hover:text-primary-foreground"
-                  >
-                    <ChevronDown className="w-6 h-6 rotate-90" />
-                  </Button>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-base font-bold tracking-tight text-foreground">Audnix<span className="text-primary">.AI</span></span>
+                <Button variant="ghost" size="icon" onClick={() => setMobileMenuOpen(false)} className="rounded-xl h-8 w-8">
+                  <X className="w-4 h-4" />
+                </Button>
               </div>
 
-              <div className="flex flex-col gap-6">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-foreground/40 mb-2">Navigation</p>
+              <div className="space-y-1">
                 {navLinks.map((link) => (
-                  <div
-                    key={link.name}
-                    className="relative group w-full"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setTimeout(() => {
-                        if (link.href?.includes("#")) {
-                          const [path, hash] = link.href.split("#");
-                          if (window.location.pathname === path || path === "/" || window.location.pathname === "/") {
-                            const el = document.getElementById(hash);
-                            if (el) {
-                              el.scrollIntoView({ behavior: 'smooth' });
-                            }
-                          } else {
-                            window.location.href = link.href;
-                          }
-                        } else {
-                          window.location.href = link.href;
-                        }
-                      }, 300);
-                    }}
-                  >
-                    <div className="flex items-center justify-between py-3 border-b border-primary/5 group-active:bg-primary/5 px-2 rounded-xl transition-all cursor-pointer w-full h-full min-h-[50px]">
-                      <span className="text-sm font-semibold tracking-tight text-foreground group-hover:text-primary transition-colors">
-                        {link.name}
-                      </span>
-                      <ChevronDown className="w-5 h-5 -rotate-90 text-primary/40 group-hover:text-primary transition-colors" />
+                  <div key={link.name} onClick={() => { setMobileMenuOpen(false); window.location.href = link.href; }}
+                    className="flex items-center justify-between py-2.5 px-3 rounded-xl hover:bg-white/5 transition-all cursor-pointer">
+                    <span className="text-sm font-medium text-foreground/80">{link.name}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-3 pt-3 border-t border-white/5">
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-foreground/30 mb-2 px-1">Solutions</p>
+                <div className="space-y-0.5">
+                  {SOLUTIONS.map((sol) => (
+                    <div key={sol.name} onClick={() => { setMobileMenuOpen(false); window.location.href = sol.href; }}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-all cursor-pointer">
+                      <sol.icon className="w-4 h-4 text-primary shrink-0" />
+                      <span className="text-sm font-medium text-foreground/70">{sol.name}</span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
-              <div className="mt-6 flex flex-col gap-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-foreground/40 mb-2">Solutions</p>
-                {SOLUTIONS.map((sol) => (
-                  <div
-                    key={sol.name}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 border border-transparent transition-all cursor-pointer"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setTimeout(() => {
-                        window.location.href = sol.href;
-                      }, 300);
-                    }}
-                  >
-                    <sol.icon className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold text-foreground/80">{sol.name}</span>
-                  </div>
-                ))}
+              <div className="mt-3 pt-3 border-t border-white/5">
+                <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-foreground/30 mb-2 px-1">Resources</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {[
+                    { name: "Niche Vault", href: "/resources/niche-vault" },
+                    { name: "Playbooks", href: "/resources/outreach-playbooks" },
+                    { name: "API Docs", href: "/resources/api-docs" },
+                    { name: "Pricing", href: "/pricing" },
+                    { name: "Lead Recovery", href: "/lead-recovery" },
+                    { name: "Objection Handling", href: "/objection-handling" },
+                  ].map((item) => (
+                    <div key={item.name} onClick={() => { setMobileMenuOpen(false); window.location.href = item.href; }}
+                      className="px-3 py-2 rounded-xl hover:bg-white/5 transition-all cursor-pointer text-center">
+                      <span className="text-xs font-medium text-foreground/60">{item.name}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className="mt-6 flex flex-col gap-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-foreground/40 mb-2">Resources</p>
-                {[
-                  { name: "Niche Vault", href: "/resources/niche-vault", icon: LayoutGrid },
-                  { name: "Outreach Playbooks", href: "/resources/outreach-playbooks", icon: Zap },
-                  { name: "Engineering Docs", href: "/resources/api-docs", icon: Brain },
-                  { name: "Terms of Service", href: "/terms-of-service", icon: FileText },
-                  { name: "Privacy Policy", href: "/privacy-policy", icon: Shield },
-                ].map((item) => (
-                  <div
-                    key={item.name}
-                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 border border-transparent transition-all cursor-pointer"
-                    onClick={() => {
-                      setMobileMenuOpen(false);
-                      setTimeout(() => {
-                        window.location.href = item.href;
-                      }, 300);
-                    }}
-                  >
-                    <item.icon className="w-4 h-4 text-primary" />
-                    <span className="text-sm font-semibold text-foreground/80">{item.name}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-auto flex flex-col gap-4 pt-10">
-                <Button
-                  className="w-full h-12 rounded-xl text-xs font-bold uppercase tracking-widest bg-primary text-black cursor-pointer"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    setTimeout(() => {
-                      window.location.href = '/auth';
-                    }, 300);
-                  }}
-                >
+              <div className="mt-4 flex gap-2">
+                <Button className="flex-1 h-10 rounded-xl text-xs font-bold uppercase tracking-widest bg-primary text-black"
+                  onClick={() => { setMobileMenuOpen(false); window.location.href = '/auth'; }}>
                   Get Started
                 </Button>
-                <p className="text-[9px] font-bold text-foreground/20 uppercase tracking-[0.4em] text-center">v4.0.0 Stable</p>
+                <Button variant="outline" className="flex-1 h-10 rounded-xl text-xs font-bold uppercase tracking-widest"
+                  onClick={() => { setMobileMenuOpen(false); window.location.href = '/auth'; }}>
+                  Log In
+                </Button>
               </div>
             </motion.div>
           </div>

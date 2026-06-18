@@ -46,7 +46,7 @@ interface HealthCheckResult {
 
 class MailboxHealthService {
   private checkInterval: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 2 * 60 * 1000; // Every 2 minutes
+  private readonly CHECK_INTERVAL_MS = 5 * 60 * 1000; // Part 9: Increased from 2m to 5m to reduce OAuth token refresh collisions
   private isChecking = false;
   private readonly SPAM_BOUNCE_THRESHOLD = 0.02; // 2% bounce rate = Google Warning
   private readonly SPAM_BOUNCE_CRITICAL = 0.05; // 5% bounce rate = Google Block / Pause
@@ -63,7 +63,7 @@ class MailboxHealthService {
   async start(): Promise<void> {
     if (this.checkInterval) return;
 
-    console.log('🏥 Mailbox Health Monitoring Service started (2m interval)');
+    console.log('🏥 Mailbox Health Monitoring Service started (5m interval)');
     
     const { workerHealthMonitor } = await import('@shared/lib/monitoring/worker-health.js');
     workerHealthMonitor.registerWorker('MailboxHealth');
@@ -245,7 +245,10 @@ class MailboxHealthService {
   isTransientNetworkError(errorMessage: string): boolean {
     if (!errorMessage) return false;
     const patterns = [
-      'ETIMEDOUT', 'ECONNRESET', 'socket hang up', 'ENOTFOUND', 'ENETUNREACH', 'EHOSTUNREACH', 'timeout', 'unknown', 'greeting'
+      'ETIMEDOUT', 'ECONNRESET', 'socket hang up', 'ENOTFOUND', 'ENETUNREACH', 'EHOSTUNREACH',
+      'timeout', 'unknown', 'greeting',
+      // OAuth token refresh can fail transiently due to network blips — never count as fatal auth failure
+      'token refresh failed', 'oauth token refresh'
     ];
     return patterns.some(p => errorMessage.toLowerCase().includes(p.toLowerCase()));
   }
@@ -381,7 +384,9 @@ class MailboxHealthService {
     const token = await gmailOAuth.getValidToken(integration.userId, integration.accountType);
     
     if (!token) {
-      throw new Error('Gmail connection lost: Could not refresh access token. Please reconnect.');
+      // Use a message that will NOT match isMailboxError() — this is transient, not a fatal auth error.
+      // It gets caught by isTransientNetworkError('token refresh failed').
+      throw new Error('Gmail OAuth token refresh failed — please reconnect if this persists.');
     }
 
     // Secondary verify with Google API
@@ -402,7 +407,8 @@ class MailboxHealthService {
     const token = await outlookOAuth.getValidToken(integration.userId);
     
     if (!token) {
-      throw new Error('Outlook connection lost: Could not refresh access token. Please reconnect.');
+      // Use a message that will NOT match isMailboxError() — transient refresh blip.
+      throw new Error('Outlook OAuth token refresh failed — please reconnect if this persists.');
     }
 
     const response = await fetch('https://graph.microsoft.com/v1.0/me', {

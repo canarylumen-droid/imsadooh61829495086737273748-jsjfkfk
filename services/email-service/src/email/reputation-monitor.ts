@@ -237,6 +237,14 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     }
   }
 
+  // Enforce 10% warmup cap: warmup must not exceed 10% of total daily capacity
+  const effectiveDailyLimit = mailbox.dailyLimit || 50;
+  const maxWarmupPct = Math.max(3, Math.ceil(effectiveDailyLimit * 0.1));
+  if (newWarmupLimit > maxWarmupPct) {
+    console.log(`📊 [Reputation Monitor] Mailbox ${mailbox.id} warmup capped at 10% of daily limit: ${newWarmupLimit} → ${maxWarmupPct}`);
+    newWarmupLimit = maxWarmupPct;
+  }
+
   // Enforce 50-email safety ceiling: initial + warmup ≤ 50
   if (newInitialLimit + newWarmupLimit > 50) {
     const overflow = (newInitialLimit + newWarmupLimit) - 50;

@@ -68,23 +68,29 @@ export default function Landing() {
     return () => ctx.revert();
   }, []);
   
-  // 3. User Redirection
+  // 3. User Redirection — only auto-redirect if active within last hour
   useEffect(() => {
     if (!userLoading && user) {
-      console.log("🚀 Authenticated user detected on landing - redirecting to dashboard");
-      setLocation("/dashboard");
+      const lastActive = localStorage.getItem('auth_last_active');
+      if (lastActive && Date.now() - Number(lastActive) < 3600000) {
+        console.log("🚀 Authenticated user detected on landing - redirecting to dashboard");
+        setLocation("/dashboard");
+      }
     }
   }, [user, userLoading, setLocation]);
 
   if (!userLoading && user) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground text-sm font-medium">Entering Dashboard...</p>
+    const lastActive = localStorage.getItem('auth_last_active');
+    if (lastActive && Date.now() - Number(lastActive) < 3600000) {
+      return (
+        <div className="min-h-screen bg-background flex items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+            <p className="text-muted-foreground text-sm font-medium">Entering Dashboard...</p>
+          </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
 
   return (
@@ -151,10 +157,10 @@ export default function Landing() {
           >
             <h1 className="text-3xl md:text-4xl lg:text-5xl font-black leading-tight mb-5">
               <span className="bg-gradient-to-r from-foreground to-foreground/50 bg-clip-text text-transparent">AI ENGINE</span><br />
-              <span className="text-primary italic">FOR REELS.</span>
+              <span className="text-primary italic">FOR YOUR PIPELINE.</span>
             </h1>
             <p className="text-base md:text-lg text-muted-foreground font-medium mb-8 max-w-2xl mx-auto leading-relaxed">
-              Audnix transforms your Instagram engagement into a deterministic revenue stream using advanced intent analysis and automated outbound logic.
+               Audnix transforms your email outreach into a deterministic revenue stream using advanced AI agents that prospect, handle objections, book meetings, and close deals on autopilot.
             </p>
             <Link href="/auth">
               <Button
@@ -270,10 +276,10 @@ export default function Landing() {
         <div className="absolute top-0 left-0 w-[500px] h-[500px] bg-primary/5 blur-[150px] rounded-full -z-10" />
 
         <div className="max-w-7xl mx-auto px-4 py-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 mb-10">
-            <div className="col-span-2 space-y-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6 mb-8 sm:mb-10">
+            <div className="col-span-2 sm:col-span-3 md:col-span-2 space-y-4 sm:space-y-6">
               <Logo className="h-8 w-8" textClassName="text-2xl font-black" />
-              <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">
+              <p className="text-xs sm:text-sm text-muted-foreground leading-relaxed max-w-xs">
                 The world's most advanced autonomous outbound sales infrastructure. High-performance agents, human-level intelligence, infinite scale.
               </p>
             </div>

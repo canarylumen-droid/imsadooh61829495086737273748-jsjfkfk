@@ -427,11 +427,12 @@ export default function InboxPage() {
   };
 
   const hasAnyChannel = useMemo(() => {
+    if (channelsLoading) return undefined;
     if (!channelStatus?.channels) return false;
     return channelStatus.channels.email?.connected || channelStatus.channels.instagram?.connected;
-  }, [channelStatus]);
+  }, [channelStatus, channelsLoading]);
 
-  const showDisconnectedAlert = !channelsLoading && !leadsLoading && !hasAnyChannel && allLeads.length > 0;
+  const showDisconnectedAlert = !channelsLoading && !leadsLoading && hasAnyChannel === false && allLeads.length > 0;
   const isSyncing = leadsFetching || channelsLoading;
 
   const activeLead = useMemo(() =>
@@ -980,7 +981,7 @@ export default function InboxPage() {
       <div className="flex w-full h-full max-w-[1600px] mx-auto bg-card border-0 md:border md:rounded-3xl overflow-hidden shadow-2xl">
         {/* Lead List Pane */}
         <div className={cn(
-          "w-full md:w-80 lg:w-[350px] border-r flex flex-col transition-all shrink-0 h-[100dvh] md:h-full bg-background",
+          "w-full sm:w-72 md:w-80 lg:w-[350px] border-r flex flex-col transition-all shrink-0 h-[100dvh] md:h-full bg-background",
           leadId && "hidden md:flex"
         )}>
           <div className="p-4 border-b space-y-4 shrink-0">
@@ -1144,7 +1145,7 @@ export default function InboxPage() {
             ) : filteredLeads.length === 0 && !leadsFetching ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
                 {/* Only show "Connect Sources" if loading is DONE and ABSOLUTELY no channels are connected AND no leads exist */}
-                {!channelsLoading && !hasAnyChannel && allLeads.length === 0 ? (
+                {!channelsLoading && hasAnyChannel === false && allLeads.length === 0 ? (
                   <div className="max-w-xs">
                     <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-8 mx-auto relative group">
                       <div className="absolute inset-0 bg-primary/20 blur-xl md:blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />

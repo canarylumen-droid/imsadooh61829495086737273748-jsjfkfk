@@ -264,7 +264,7 @@ export class OutlookOAuth {
   /**
    * Get valid access token (refresh if needed)
    */
-  async getValidToken(userId: string): Promise<string | null> {
+  async getValidToken(userId: string, forceRefreshIfExpiringSoon?: boolean): Promise<string | null> {
     const tokenData = await storage.getOAuthAccount(userId, 'outlook');
 
     if (!tokenData) {
@@ -276,8 +276,10 @@ export class OutlookOAuth {
     const expiresAt = tokenData.expiresAt ? new Date(tokenData.expiresAt) : new Date(0);
     const now = new Date();
 
-    // Refresh if expired or about to expire (5 minutes buffer)
-    if (expiresAt <= new Date(now.getTime() + 5 * 60 * 1000)) {
+    // Refresh if expired or about to expire.
+    // Normal check: 5 min buffer. forceRefreshIfExpiringSoon: 10 min buffer (used by IMAP at connect time).
+    const tokenExpiryBufferMs = forceRefreshIfExpiringSoon ? 10 * 60 * 1000 : 5 * 60 * 1000;
+    if (expiresAt <= new Date(now.getTime() + tokenExpiryBufferMs)) {
       if (!tokenData.refreshToken) {
         // No refresh token available, user needs to re-authenticate
         return null;

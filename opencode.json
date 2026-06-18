@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "deepseek/deepseek-v4-flash",
+  "autoshare": false,
+  "provider": {
+    "zai": {
+      "options": {
+        "baseURL": "https://api.z.ai/api/coding/paas/v4"
+      }
+    }
+  }
+}

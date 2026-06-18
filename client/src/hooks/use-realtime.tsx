@@ -348,6 +348,8 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/integrations'] });
       queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/channels/all'] });
+      // Refresh inbox leads when a mailbox is connected/disconnected
+      queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
     });
 
     socketInstance.on('insights_updated', (payload: any) => {

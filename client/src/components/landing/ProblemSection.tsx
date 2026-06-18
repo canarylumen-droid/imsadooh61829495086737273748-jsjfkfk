@@ -12,7 +12,7 @@ const PAIN_POINTS = [
     {
         icon: Clock,
         title: "Operational Burnout",
-        desc: "You didn't start an agency to spend 20+ hours a week refreshing Gmail and Instagram DMs. Manual outreach forces you to work IN your business instead of ON it, capping your growth ceiling.",
+        desc: "You didn't start a business to spend 20+ hours a week manually following up on leads and refreshing your inbox. Manual outreach forces you to work IN your business instead of ON it, capping your growth ceiling.",
         impact: "20+ Hours Lost/Week"
     },
     {

@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { AlertTriangle, Brain, CheckCircle2, Clock, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud } from "lucide-react";
+import { PageWrapper } from "@/components/ui/page-wrapper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -211,7 +212,9 @@ function LeadRecoveryContent() {
 export default function LeadRecoveryPage() {
   return (
     <LeadRecoveryProvider>
-      <LeadRecoveryContent />
+      <PageWrapper>
+        <LeadRecoveryContent />
+      </PageWrapper>
     </LeadRecoveryProvider>
   );
 }

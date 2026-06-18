@@ -14,26 +14,29 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
         return localStorage.getItem('selected_mailbox_id') || undefined;
     });
 
-    // Phase 12: Add self-healing validation for stale mailbox IDs
-    const { data: status, isLoading } = useQuery<{
+    // Phase 12: Self-healing validation for stale mailbox IDs.
+    // Only runs when query has fully settled with a real non-empty list.
+    const { data: status, isLoading, isError } = useQuery<{
         integrations: Array<{ id: string; connected: boolean }>;
     }>({
         queryKey: ["/api/custom-email/status"],
         refetchOnWindowFocus: false,
         staleTime: 60000, // 1 minute
+        retry: 2,
     });
 
     useEffect(() => {
-        // If we have a selected ID but it's not in the current integrations list, reset it.
-        // This ensures unassigned leads (Inventory) become visible in All Chats.
-        if (status?.integrations && selectedMailboxId) {
-            const exists = status.integrations.some((i: any) => i.id === selectedMailboxId);
-            if (!exists) {
-                console.log(`[MailboxProvider] 🔄 Resetting stale mailbox ID: ${selectedMailboxId} (not found in integrations)`);
-                setSelectedMailboxId(undefined);
-            }
+        // Guard: never reset on loading, error, or empty response (could be a transient blip).
+        if (isLoading || isError) return;
+        if (!status?.integrations || status.integrations.length === 0) return;
+        if (!selectedMailboxId) return;
+
+        const exists = status.integrations.some((i: any) => i.id === selectedMailboxId);
+        if (!exists) {
+            console.log(`[MailboxProvider] 🔄 Resetting stale mailbox ID: ${selectedMailboxId} (confirmed absent from ${status.integrations.length} integrations)`);
+            setSelectedMailboxId(undefined);
         }
-    }, [status, selectedMailboxId]);
+    }, [status, isLoading, isError, selectedMailboxId]);
 
     const setSelectedMailboxId = (id: string | undefined) => {
         setSelectedMailboxIdState(id);

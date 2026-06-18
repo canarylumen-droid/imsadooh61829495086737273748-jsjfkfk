@@ -399,11 +399,17 @@ export default function IntegrationsPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
         queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+        // Part 5: Invalidate channel status so inbox doesn't show "Connect Sources" after OAuth
+        queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
+        // Refresh inbox so it shows the newly connected mailbox's leads immediately
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
 
         // Robust re-fetch with slight delay to ensure backend propagation
         setTimeout(() => {
           queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-        }, 1000);
+          queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        }, 1500);
       }
       
       // Clean up URL
@@ -1332,18 +1338,19 @@ export default function IntegrationsPage() {
                               </div>
                               <div className="flex flex-col justify-center border-l border-border/40 pl-2 min-w-[70px]">
                                 <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Limit</span>
-                                <span className="text-xs sm:text-sm font-black text-primary">
-                                  {mailbox.dailyLimit || (mailbox.provider === 'custom_email' ? 250 : 50)}/d
+                                 <span className="text-xs sm:text-sm font-black text-primary">
+                                  {/* Part 6: Normalize default to 50 for all providers */}
+                                  {mailbox.dailyLimit || 50}/d
                                 </span>
                                 <Slider
-                                  value={[mailbox.dailyLimit || (mailbox.provider === 'custom_email' ? 250 : 50)]}
+                                  value={[mailbox.dailyLimit || 50]}
                                   onValueChange={async (v) => {
                                     try {
                                       await apiRequest('PATCH', `/api/integrations/${mailbox.id}/daily-limit`, { dailyLimit: v[0] });
                                       queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
                                     } catch (e) { console.error('Failed to update daily limit', e); }
                                   }}
-                                  min={10} max={mailbox.provider === 'custom_email' ? 500 : 60} step={5}
+                                  min={10} max={500} step={5}
                                   className="w-16 sm:w-20 py-0.5 mt-0.5"
                                 />
                               </div>

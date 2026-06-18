@@ -38,7 +38,7 @@ const PRESET_ANSWERS: Record<string, string> = {
     "scale": "Super Memory scales by deploying multiple autonomous agents across Email and Instagram, handling thousands of conversations with zero human latency.",
     "support": "Our technical support team is available 24/7 via the 'Support' link in your dashboard.",
     "how it works": "Super Memory syncs with your brand's communication style, analyzes leads autonomously, handles objections, and books meetings directly into your calendar.",
-    "integrations": "Currently, we offer deep integrations with Gmail, Outlook, and Instagram.",
+    "integrations": "Currently, we offer deep integrations with Gmail, Outlook, and custom SMTP.",
     "security": "We use enterprise-grade encryption to ensure every interaction is brand-safe and secure.",
     "leads": "You can import leads via CSV or sync directly from your CRM.",
     "onboarding": "Onboarding takes less than 60 seconds. Simply sync your brand profile and activate the engine.",

@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Users, MessageSquare, Tag, Archive } from "lucide-react";
+import { PageWrapper } from "@/components/ui/page-wrapper";
 
 export default function BulkActionsPage() {
   const [selectedLeads, setSelectedLeads] = useState<number[]>([]);
 
   return (
-    <div className="p-6 space-y-6">
+    <PageWrapper>
       <div>
         <h1 className="text-3xl font-bold">Bulk Actions</h1>
         <p className="text-muted-foreground">Manage multiple leads at once</p>
@@ -44,6 +45,6 @@ export default function BulkActionsPage() {
           <span className="text-xs text-muted-foreground">Move to archive</span>
         </Button>
       </div>
-    </div>
+    </PageWrapper>
   );
 }

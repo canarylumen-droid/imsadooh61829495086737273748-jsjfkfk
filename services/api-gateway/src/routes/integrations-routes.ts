@@ -37,7 +37,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       accountType: integration.accountType,
       lastSync: integration.lastSync,
       createdAt: integration.createdAt,
-      dailyLimit: (integration as any).dailyLimit ?? null,
+      dailyLimit: (integration as any).dailyLimit ?? 50,
       gracefulDailyLimit: (integration as any).gracefulDailyLimit ?? null,
       reputationScore: (integration as any).reputationScore ?? null,
       healthLevel: (integration as any).healthLevel ?? null,

@@ -86,20 +86,20 @@ export function SolutionPageTemplate({
 
             <main>
                 {/* Hero Section */}
-                <section className="pt-40 pb-24 px-6 relative overflow-hidden">
+                <section className="pt-24 sm:pt-40 pb-16 sm:pb-24 px-4 sm:px-6 relative overflow-hidden">
                     <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1200px] h-[600px] bg-primary/5 blur-[150px] rounded-full pointer-events-none -z-10" />
 
-                    <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-20 items-center">
+                    <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-8 sm:gap-12 lg:gap-20 items-start lg:items-center">
                         <motion.div
                             initial={{ opacity: 0, x: -30 }}
                             animate={{ opacity: 1, x: 0 }}
-                            className="space-y-8"
+                            className="space-y-6 sm:space-y-8"
                         >
-                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-secondary/50 border border-border text-primary text-[10px] font-bold uppercase tracking-[0.3em]">
+                            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full bg-secondary/50 border border-border text-primary text-[10px] font-bold uppercase tracking-[0.3em]">
                                 <Target className="w-3 h-3" />
                                 {subtitle}
                             </div>
-                            <h1 className="text-5xl md:text-8xl font-black tracking-tighter leading-[0.95] uppercase">
+                            <h1 className="text-3xl sm:text-5xl md:text-7xl lg:text-8xl font-black tracking-tighter leading-[0.95] uppercase">
                                 {title.split(' ').map((word, i) => (
                                     <span key={i} className={i === title.split(' ').length - 1 ? "text-primary block" : "inline"}>{word} </span>
                                 ))}
@@ -132,17 +132,17 @@ export function SolutionPageTemplate({
                             </div>
                         </motion.div>
 
-                        <div className="grid grid-cols-2 gap-6">
+                        <div className="grid grid-cols-2 gap-3 sm:gap-6">
                             {metrics.map((metric, i) => (
                                 <motion.div
                                     key={i}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.2 + (i * 0.1) }}
-                                    className="p-8 rounded-[2rem] bg-[#0d1117] border border-white/5 hover:border-primary/20 transition-colors group"
+                                    className="p-4 sm:p-6 md:p-8 rounded-[1.5rem] sm:rounded-[2rem] bg-[#0d1117] border border-white/5 hover:border-primary/20 transition-colors group"
                                 >
-                                    <p className="text-white/20 text-[10px] font-black uppercase tracking-widest mb-2">{metric.label}</p>
-                                    <p className="text-4xl md:text-5xl font-black text-white tracking-tighter mb-2 group-hover:text-primary transition-colors">{metric.value}</p>
+                                    <p className="text-white/20 text-[10px] font-black uppercase tracking-widest mb-1 sm:mb-2">{metric.label}</p>
+                                    <p className="text-2xl sm:text-4xl md:text-5xl font-black text-white tracking-tighter mb-1 sm:mb-2 group-hover:text-primary transition-colors">{metric.value}</p>
                                     <p className="text-primary text-[10px] font-black uppercase tracking-widest">{metric.sub}</p>
                                 </motion.div>
                             ))}
@@ -151,47 +151,47 @@ export function SolutionPageTemplate({
                 </section>
 
                 {/* Problem Agitation Section */}
-                <section className="py-20 px-6 bg-[#030303] border-y border-white/5">
-                    <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-12 items-start">
-                        <div className="space-y-6 sticky top-32">
-                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-[0.4em] shadow-[0_0_20px_rgba(239,68,68,0.2)] border border-red-500/20">
+                <section className="py-12 sm:py-20 px-4 sm:px-6 bg-[#030303] border-y border-white/5">
+                    <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-8 sm:gap-12 items-start">
+                        <div className="space-y-4 sm:space-y-6 lg:sticky lg:top-32">
+                            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full bg-red-500/10 text-red-500 text-[9px] font-black uppercase tracking-[0.4em] shadow-[0_0_20px_rgba(239,68,68,0.2)] border border-red-500/20">
                                 <AlertTriangle className="w-3 h-3" />
                                 THREAT LEVEL: CRITICAL
                             </div>
-                            <h2 className="text-4xl md:text-7xl font-black tracking-tighter text-white leading-[0.85] uppercase">{problemTitle}</h2>
+                            <h2 className="text-3xl sm:text-4xl md:text-7xl font-black tracking-tighter text-white leading-[0.85] uppercase">{problemTitle}</h2>
                             <p className="text-primary text-[10px] font-black uppercase tracking-[0.3em] opacity-80">
                                 Current infrastructure inefficiency detected
                             </p>
                         </div>
 
-                        <div className="pl-10 border-l-2 border-primary/20">
+                        <div className="pl-4 sm:pl-10 border-l-2 border-primary/20">
                             <ScrollHighlightText
                                 text={problemText}
-                                className="text-lg md:text-2xl text-white/70 font-bold leading-[1.3] whitespace-pre-line text-left tracking-tight"
+                                className="text-base sm:text-lg md:text-2xl text-white/70 font-bold leading-[1.3] whitespace-pre-line text-left tracking-tight"
                             />
                         </div>
                     </div>
                 </section>
 
                 {/* Features Breakdown */}
-                <section className="py-32 px-6 bg-black">
-                    <div className="max-w-7xl mx-auto space-y-20">
-                        <div className="text-center space-y-6 max-w-3xl mx-auto mb-20">
-                            <h2 className="text-3xl md:text-6xl font-black tracking-tighter text-white uppercase">Engineered for <span className="text-primary">Dominance.</span></h2>
-                            <p className="text-white/40 text-xl font-medium max-w-2xl mx-auto leading-relaxed">
+                <section className="py-16 sm:py-32 px-4 sm:px-6 bg-black">
+                    <div className="max-w-7xl mx-auto space-y-12 sm:space-y-20">
+                        <div className="text-center space-y-4 sm:space-y-6 max-w-3xl mx-auto mb-8 sm:mb-20">
+                            <h2 className="text-2xl sm:text-3xl md:text-6xl font-black tracking-tighter text-white uppercase">Engineered for <span className="text-primary">Dominance.</span></h2>
+                            <p className="text-white/40 text-base sm:text-xl font-medium max-w-2xl mx-auto leading-relaxed">
                                 Standard outreach is dead. Autonomous intelligence is the only path forward for modern growth engines.
                             </p>
                         </div>
 
-                        <div className="grid md:grid-cols-3 gap-8">
+                        <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-8">
                             {features.map((feature, i) => (
-                                <div key={i} className="p-10 rounded-[2.5rem] bg-[#0d1117] border border-white/5 hover:border-primary/30 transition-all duration-500 space-y-8 group hover:-translate-y-2">
-                                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white group-hover:scale-110 group-hover:bg-primary group-hover:text-black transition-all duration-500">
-                                        <feature.icon className="w-8 h-8" />
+                                <div key={i} className="p-6 sm:p-10 rounded-[1.5rem] sm:rounded-[2.5rem] bg-[#0d1117] border border-white/5 hover:border-primary/30 transition-all duration-500 space-y-4 sm:space-y-8 group hover:-translate-y-2">
+                                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white group-hover:scale-110 group-hover:bg-primary group-hover:text-black transition-all duration-500">
+                                        <feature.icon className="w-6 h-6 sm:w-8 sm:h-8" />
                                     </div>
-                                    <div className="space-y-4">
-                                        <h3 className="text-2xl font-black tracking-tight text-white uppercase">{feature.title}</h3>
-                                        <p className="text-white/40 text-base font-medium leading-relaxed">
+                                    <div className="space-y-3 sm:space-y-4">
+                                        <h3 className="text-lg sm:text-2xl font-black tracking-tight text-white uppercase">{feature.title}</h3>
+                                        <p className="text-white/40 text-sm sm:text-base font-medium leading-relaxed">
                                             {feature.desc}
                                         </p>
                                     </div>
@@ -202,13 +202,13 @@ export function SolutionPageTemplate({
                 </section>
 
                 {/* Deep Dive Section */}
-                <section className="py-20 px-6 border-t border-white/5 bg-[#030303]">
-                    <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-16 items-start">
-                        <div className="space-y-8 pl-10 border-l-2 border-primary/20">
-                            <h2 className="text-4xl md:text-6xl font-black tracking-tighter text-white uppercase leading-[0.9]">{deepDiveTitle}</h2>
+                <section className="py-12 sm:py-20 px-4 sm:px-6 border-t border-white/5 bg-[#030303]">
+                    <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-8 sm:gap-16 items-start">
+                        <div className="space-y-6 sm:space-y-8 pl-4 sm:pl-10 border-l-2 border-primary/20">
+                            <h2 className="text-3xl sm:text-4xl md:text-6xl font-black tracking-tighter text-white uppercase leading-[0.9]">{deepDiveTitle}</h2>
                             <ScrollHighlightText
                                 text={deepDiveText}
-                                className="text-lg md:text-xl text-white/70 leading-[1.4] whitespace-pre-line font-bold text-left tracking-tight"
+                                className="text-base sm:text-lg md:text-xl text-white/70 leading-[1.4] whitespace-pre-line font-bold text-left tracking-tight"
                             />
                             <Link href="/auth">
                                 <Button variant="ghost" className="rounded-full px-0 font-black uppercase tracking-widest text-[10px] text-primary hover:text-white hover:bg-transparent transition-colors group">
@@ -313,8 +313,8 @@ export function SolutionPageTemplate({
                 </section>
 
                 {/* FAQ Section */}
-                <section className="py-12 px-6 bg-muted/10 border-y border-white/5">
-                    <div className="max-w-3xl mx-auto space-y-8">
+                <section className="py-8 sm:py-12 px-4 sm:px-6 bg-muted/10 border-y border-white/5">
+                    <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8">
                         <div className="text-center space-y-1">
                             <h2 className="text-xl md:text-2xl font-black tracking-tight text-white uppercase">Technical FAQs</h2>
                             <p className="text-white/40 text-[10px] font-bold uppercase tracking-widest">Implementation details</p>

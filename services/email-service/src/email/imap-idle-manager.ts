@@ -226,7 +226,7 @@ class ImapIdleManager {
                     }
 
                     for (const imap of folderMap.values()) {
-                        try { imap.end(); } catch (e) {}
+                        try { imap.end(); } catch (e) { console.debug('[IMAP] Error ending connection in syncConnections:', (e as Error)?.message); }
                     }
                     this.connections.delete(integrationId);
                     this.folders.delete(integrationId);
@@ -291,7 +291,7 @@ class ImapIdleManager {
             const runCommand = () => {
                 commandFn((err, result) => {
                     if (wasIdling && imap.state === 'authenticated') {
-                        try { (imap as any).idle(); } catch (e) {}
+                        try { (imap as any).idle(); } catch (e) { console.debug('[IMAP] Error restarting idle in executeImapCommand:', (e as Error)?.message); }
                     }
                     if (err) return reject(err);
                     resolve(result);
@@ -504,17 +504,19 @@ class ImapIdleManager {
                 authTimeout: 45000,
                 keepalive: {
                     interval: 15000,
-                    idleInterval: 60000, 
+                    idleInterval: 30000, // Part 1: Reduced from 60s to 30s — detect stale connections faster before token expires
                     forceNoop: true
                 }
             };
 
             // Handle OAuth providers with XOAUTH2
             if (integration.provider === 'gmail' || integration.provider === 'outlook') {
-                const token = integration.provider === 'gmail' 
-                    ? await gmailOAuth.getValidToken(integration.userId, integration.accountType || undefined)
-                    : await outlookOAuth.getValidToken(integration.userId);
-                
+                // Part 1: Force-refresh the token if it expires within 10 minutes so we always
+                // start the IMAP session with a token good for ≥50 minutes.
+                const token = integration.provider === 'gmail'
+                    ? await gmailOAuth.getValidToken(integration.userId, integration.accountType || undefined, true /* forceRefreshIfExpiringSoon */)
+                    : await outlookOAuth.getValidToken(integration.userId, true /* forceRefreshIfExpiringSoon */);
+
                 if (token) {
                     imapOptions.xoauth2 = Buffer.from(
                         `user=${imapOptions.user}\x01auth=Bearer ${token}\x01\x01`
@@ -591,15 +593,20 @@ class ImapIdleManager {
                     const errorStr = (err.code || err.message || '').toLowerCase();
                     const isAuthError = fatalErrors.some(code => errorStr.includes(code.toLowerCase()));
                     const isTimeout = errorStr.includes('timed out') || errorStr.includes('etimedout');
+                    // OAuth providers retry with token refresh — not a permanent failure
+                    const isOAuth = integration.provider === 'gmail' || integration.provider === 'outlook';
 
                     const integrationLatest = await storage.getIntegrationById(integrationId);
                     if (integrationLatest) {
                         // Phase 23: Production Safety. Link to Health Service to manage failure counts and "failed" state.
                         await mailboxHealthService.handleMailboxFailure(integrationLatest, err.message || 'IMAP Connection Error');
 
-                        // Verify if the health service actually marked it as failed (Strike 3)
+                        // Re-fetch to see if health service changed the status
                         const updated = await storage.getIntegrationById(integrationId);
-                        if (updated && updated.healthStatus === 'failed' && isAuthError) {
+
+                        // Only forceDisconnect non-OAuth providers with confirmed permanent auth failure.
+                        // Gmail/Outlook get a reconnect+token-refresh instead.
+                        if (updated && updated.healthStatus === 'failed' && isAuthError && !isOAuth) {
                             console.warn(`🛑 Strike 3 for integration ${integrationId} (Auth Error). Killing connection permanently.`);
                             wsSync.notifyIntegrationError(integration.userId, {
                                 integrationId,
@@ -618,7 +625,7 @@ class ImapIdleManager {
                             type: updated?.healthStatus === 'failed' ? 'mailbox_failure' : 'mailbox_warning',
                             title: updated?.healthStatus === 'failed' ? 'Connection Failed' : 'Connection Warning',
                             message: err.message || 'IMAP Connection Error',
-                            critical: updated?.healthStatus === 'failed'
+                            critical: (updated?.healthStatus === 'failed') && !isOAuth
                         });
 
                         if (isTimeout) {
@@ -627,15 +634,17 @@ class ImapIdleManager {
                     }
 
                     if (isAuthError) {
-                        console.warn(`🛑 Authentication issue for integration ${integrationId}. Retrying with long backoff (10m)...`);
-                        try { imap.destroy(); } catch (e) {}
+                        // OAuth: stale token — back off 5m so gmailOAuth.getValidToken() can refresh on next attempt
+                        // custom_email: likely wrong password — back off 10m
+                        const backoffMs = isOAuth ? 5 * 60 * 1000 : 10 * 60 * 1000;
+                        console.warn(`🔄 Auth issue for integration ${integrationId} (${isOAuth ? 'OAuth stale token — will refresh' : 'credentials error'}). Retry in ${backoffMs / 60000}m...`);
+                        try { imap.destroy(); } catch (e) { console.debug('[IMAP] Error destroying on auth error:', (e as Error)?.message); }
                         this.cleanupIntegration(integrationId);
-                        
-                        this.backoffDelays.set(integrationId, 10 * 60 * 1000); 
+                        this.backoffDelays.set(integrationId, backoffMs); 
                         this.reconnect(integrationId, integration);
                     } else {
                         console.warn(`⏳ Transient IMAP error for ${integrationId} (${err.code || 'unknown'}). Triggering reconnect...`);
-                        try { imap.destroy(); } catch (e) {}
+                        try { imap.destroy(); } catch (e) { console.debug('[IMAP] Error destroying on transient error:', (e as Error)?.message); }
                         this.reconnect(integrationId, integration); 
                     }
                 } catch (fatalErr) {
@@ -707,15 +716,17 @@ class ImapIdleManager {
                 tlsOptions: { rejectUnauthorized: false },
                 keepalive: {
                     interval: 15000, // NOOP interval
-                    idleInterval: 60000, // IDLE restart interval
+                    idleInterval: 30000, // Part 1: Reduced from 60s to 30s for faster stale detection
                     forceNoop: true
                 }
             };
 
             if (isOAuthProvider) {
+                // Part 2: Force-refresh the token on each persistent connection setup so
+                // the IMAP session always starts with a token good for ≥50 minutes.
                 const token = integration.provider === 'gmail'
-                    ? await gmailOAuth.getValidToken(integration.userId, integration.accountType || undefined)
-                    : await outlookOAuth.getValidToken(integration.userId);
+                    ? await gmailOAuth.getValidToken(integration.userId, integration.accountType || undefined, true /* forceRefreshIfExpiringSoon */)
+                    : await outlookOAuth.getValidToken(integration.userId, true /* forceRefreshIfExpiringSoon */);
 
                 if (!token) {
                     console.warn(`[IMAP Persistent] Could not get OAuth token for ${integration.provider} integration ${integrationId}. Aborting persistent listener.`);
@@ -747,7 +758,7 @@ class ImapIdleManager {
                     clearTimeout(restarts.get(folderName)!);
                     restarts.delete(folderName);
                 }
-                try { imap.destroy(); } catch (e) {}
+                try { imap.destroy(); } catch (e) { console.debug('[IMAP] Error destroying in persistent listener cleanup:', (e as Error)?.message); }
             };
 
             imap.once('ready', () => {
@@ -869,11 +880,28 @@ class ImapIdleManager {
             imap.once('error', (err: any) => {
                 workerHealthMonitor.recordError('IMAP IDLE', err.message);
                 console.error(`[IMAP Persistent] Error on ${folderName} for ${integrationId}:`, err.message);
-                this.reconnect(integrationId, integration); // This will eventually re-setup all connections
+                // Part 8: OAuth providers get a reconnect+token-refresh; only non-OAuth gets permanent disconnect
+                const isOAuth = integration.provider === 'gmail' || integration.provider === 'outlook';
+                const fatalErrors = ['AUTHENTICATIONFAILED', 'Not authenticated', 'Invalid credentials', 'Login failed'];
+                const isAuthError = fatalErrors.some(code => (err.code || err.message || '').toLowerCase().includes(code.toLowerCase()));
+                if (isAuthError && !isOAuth) {
+                    // Non-OAuth with confirmed bad credentials — don't reconnect infinitely
+                    console.warn(`[IMAP Persistent] ❌ Permanent auth failure on ${folderName} for ${integrationId}. Not reconnecting.`);
+                    cleanup();
+                } else {
+                    this.reconnect(integrationId, integration);
+                }
             });
 
             imap.once('end', () => {
                 workerHealthMonitor.recordError('IMAP IDLE', 'Connection ended unexpectedly');
+                // Part 2+8: Auto-reconnect on unexpected end for OAuth listeners so a fresh token is used
+                const isOAuth = integration.provider === 'gmail' || integration.provider === 'outlook';
+                if (isOAuth && this.connections.get(integrationId)?.get(folderName) === imap) {
+                    console.log(`[IMAP Persistent] 🔄 OAuth connection ended for ${integrationId}:${folderName}. Scheduling reconnect with fresh token...`);
+                    cleanup();
+                    setTimeout(() => this.reconnect(integrationId, integration), 2000);
+                }
             });
 
             imap.once('close', (hadError: boolean) => {
@@ -1207,8 +1235,8 @@ class ImapIdleManager {
             for (const imap of folderMap.values()) {
                 try { 
                     if ((imap as any)._idleWaiter) (imap as any).stopIdle();
-                    try { imap.destroy(); } catch (e) {} 
-                } catch (e) {}
+                    try { imap.destroy(); } catch (e) { console.debug('[IMAP] Error destroying in forceRecycleConnection:', (e as Error)?.message); } 
+                } catch (e) { console.debug('[IMAP] Error in forceRecycleConnection cleanup:', (e as Error)?.message); }
             }
         }
         this.connections.delete(integrationId);
