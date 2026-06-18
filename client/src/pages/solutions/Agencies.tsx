@@ -6,7 +6,7 @@ export default function AgenciesPage() {
         <SolutionPageTemplate
             title="Scale Without Headcount."
             subtitle="For Growth-Focused Agencies"
-            description="Stop hiring expensive VAs to do manual outreach. Audnix deploys autonomous prospecting and closing agents for every client in your roster, syncing leads instantly to your CRM."
+            description="Stop hiring expensive VAs to do manual outreach. Audnix deploys autonomous AI sales agents that handle lead generation, outreach automation, and closing for every client in your roster. The best AI sales agent platform for agencies scaling B2B lead generation."
             metrics={[
                 { label: "Margin / Client", value: "+40%", sub: "Net Profit Increase" },
                 { label: "Manual Labor", value: "-95h", sub: "Hours Saved / Month" },
@@ -16,12 +16,12 @@ export default function AgenciesPage() {
             features={[
                 {
                     title: "Infinite Prospecting Engine",
-                    desc: "Don't just wait for leads. Our engine scrapes targeted prospects from LinkedIn, Instagram, and Google Maps tailored to your client's niche.",
+                    desc: "Don't just wait for leads. Our AI lead generation engine scrapes targeted prospects from LinkedIn and Google Maps tailored to your client's niche. Full outreach automation built in.",
                     icon: ScanSearch
                 },
                 {
                     title: "White-Label AI Cloning",
-                    desc: "Train a unique AI agent for each client that perfectly mimics their tone, handles their specific objections, and books meetings in their name.",
+                    desc: "Train a unique AI sales agent for each client that perfectly mimics their tone, handles objections, and books meetings. Each client gets their own AI BDR and SDR.",
                     icon: Bot
                 },
                 {
@@ -44,9 +44,9 @@ Every new client means hiring more SDRs or VAs. SDRs are expensive ($3k-$5k/mo) 
 
 Your payroll swells, but your margins shrink. When a hire makes a mistake or ghosts a lead, your client churns. You're left with a bloated payroll and a shrinking pipeline.
 
-Audnix breaks this cycle. 
+Audnix breaks this cycle with AI sales agents that handle lead generation and outreach automation. 
 
-By deploying autonomous AI agents, you decouple revenue from headcount. One manager can now oversee 50+ client bots that never sleep, never forget a script, and never have a 'bad day'.`}
+By deploying autonomous AI agents for B2B lead generation, you decouple revenue from headcount. One manager can oversee 50+ client AI sales reps that never sleep, never forget an objection handling script, and never have a 'bad day'.`}
             deepDiveTitle="Multi-Tenant AI Operations"
             deepDiveText={`Audnix was built for agencies first. Our central dashboard allows you to toggle between 50+ client sub-accounts in seconds.
             

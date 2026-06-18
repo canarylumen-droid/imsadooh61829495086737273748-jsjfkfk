@@ -169,9 +169,19 @@ export const landingContent = {
     title: "Why Teams Switch from Instantly, Smartlead & ManyChat",
     subtitle: "Most outreach tools just send emails faster. Audnix replaces the entire sales development process.",
     points: [
-      "Instantly focuses on deliverability — Audnix focuses on closing. We handle objection handling, intent detection, and autonomous booking that Instantly doesn't offer.",
-      "Smartlead helps you scale inboxes — Audnix replaces your SDRs entirely. It prospects, qualifies, and closes without human oversight.",
-      "ManyChat requires manual flow building — Audnix learns from your brand automatically and adapts its sales strategy in real-time based on lead behavior."
+      "Instantly focuses on deliverability — Audnix focuses on closing. As the best AI sales agent platform, we handle objection handling, intent detection, and autonomous booking that Instantly doesn't offer.",
+      "Smartlead helps you scale inboxes — Audnix is an AI BDR that replaces your SDRs entirely. It prospects, qualifies leads, and closes without human oversight.",
+      "ManyChat requires manual flow building — Audnix is an AI sales rep that learns from your brand automatically and adapts outreach automation in real-time based on lead behavior."
+    ]
+  },
+
+  leadGenSection: {
+    title: "AI Lead Generation & Outreach Automation",
+    subtitle: "Stop manually prospecting. Audnix combines AI lead generation, cold email outreach, and autonomous closing into one platform.",
+    bullets: [
+      "AI-powered lead generation that finds and verifies prospects automatically",
+      "Outreach automation with predictive timing and human-like delays",
+      "Autonomous AI SDR and AI BDR that qualify leads before they reach your calendar"
     ]
   }
 };

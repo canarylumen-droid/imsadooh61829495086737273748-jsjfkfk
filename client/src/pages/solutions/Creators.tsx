@@ -1,12 +1,12 @@
 import { SolutionPageTemplate } from "./SolutionPageTemplate";
-import { Sparkles, Zap, Globe, MessageSquare, Wallet, Instagram } from "lucide-react";
+import { Sparkles, Zap, Globe, MessageSquare, Wallet, MessageCircle } from "lucide-react";
 
 export default function CreatorsPage() {
     return (
         <SolutionPageTemplate
             title="Monetize Every DM."
             subtitle="For Creators & Personal Brands"
-            description="Your DMs are a goldmine, but you can't reply to everyone. Audnix turns your inbox into a 24/7 sales machine that engages fans, qualifies buyers, and sells your products while you create content."
+            description="Your DMs are a goldmine, but you can't reply to everyone. Audnix is the AI sales agent that turns your inbox into a 24/7 sales machine that engages fans, qualifies leads, and sells your products. Full lead generation and outreach automation built for creators."
             metrics={[
                 { label: "DM Reply Rate", value: "100%", sub: "No Fan Left Behind" },
                 { label: "Sales Conversion", value: "18%", sub: "From Cold DM" },
@@ -17,7 +17,7 @@ export default function CreatorsPage() {
                 {
                     title: "Smart DM Funnels",
                     desc: "Automatically detect buying intent in DMs. If a fan asks about your course or coaching, Audnix guides them to the checkout page instantly.",
-                    icon: Instagram
+                    icon: MessageCircle
                 },
                 {
                     title: "Persona Verification",

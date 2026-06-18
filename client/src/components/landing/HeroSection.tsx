@@ -205,7 +205,7 @@ export function HeroSection() {
                 transition={{ delay: 0.4, duration: 1 }}
                 className="text-sm sm:text-base md:text-lg lg:text-xl text-muted-foreground font-medium tracking-tight max-w-3xl lg:mx-0 mx-auto leading-relaxed"
               >
-                 Deploy <span className="text-foreground">autonomous sales agents</span> that prospect, qualify, handle objections, and book meetings on autopilot. No more hiring SDRs or burning out on manual follow-ups.
+                 Deploy the only <span className="text-foreground">AI sales agent</span> platform that prospects, qualifies leads, handles objections, and books meetings on autopilot. Stop hiring SDRs and start closing with autonomous outreach automation.
               </motion.p>
             </div>
 
