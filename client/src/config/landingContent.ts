@@ -163,5 +163,15 @@ export const landingContent = {
     title: "Stop letting prospects vanish.",
     subtitle: "Hire the system that never forgets and never follows up too late.",
     cta: "Start Free – 500 Leads Included"
+  },
+
+  competitorAlt: {
+    title: "Why Teams Switch from Instantly, Smartlead & ManyChat",
+    subtitle: "Most outreach tools just send emails faster. Audnix replaces the entire sales development process.",
+    points: [
+      "Instantly focuses on deliverability — Audnix focuses on closing. We handle objection handling, intent detection, and autonomous booking that Instantly doesn't offer.",
+      "Smartlead helps you scale inboxes — Audnix replaces your SDRs entirely. It prospects, qualifies, and closes without human oversight.",
+      "ManyChat requires manual flow building — Audnix learns from your brand automatically and adapts its sales strategy in real-time based on lead behavior."
+    ]
   }
 };

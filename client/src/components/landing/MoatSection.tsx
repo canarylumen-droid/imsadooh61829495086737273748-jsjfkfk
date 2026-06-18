@@ -69,7 +69,7 @@ export function MoatSection() {
                                     { icon: Activity, t: "110+ Objection Handling", d: "Handles price, timing, and partner objections automatically." },
                                     { icon: Clock, t: "Predictive Follow-up Timing", d: "Sends messages when leads are statistically most active." },
                                     { icon: AlertOctagon, t: "Drop-off & Churn Detection", d: "Identifies fading interest and triggers re-engagement loops." },
-                                    { icon: Smartphone, t: "Voice Cloning & Notes", d: "Sends authentic voice DMs that sound exactly like you/brand." }
+                                    { icon: Smartphone, t: "Voice Cloning & Notes", d: "Sends authentic voice messages that sound exactly like you/brand." }
                                 ].map((item, i) => (
                                     <motion.li
                                         key={i}

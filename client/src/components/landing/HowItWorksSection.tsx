@@ -23,7 +23,7 @@ const STEPS = [
     {
         id: "03",
         title: "Sentiment Engagement",
-        desc: "Audnix deploys a 'Warm Handshake' via DM or Email. It uses human-like delays and predictive timing to ensure your message lands exactly when the lead is most active.",
+        desc: "Audnix deploys a 'Warm Handshake' via Email. It uses human-like delays and predictive timing to ensure your message lands exactly when the lead is most active.",
         icon: MousePointer2,
         color: "text-purple-500",
         bg: "bg-purple-500/10"

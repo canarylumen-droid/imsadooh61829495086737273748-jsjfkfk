@@ -6,7 +6,7 @@ const PAIN_POINTS = [
     {
         icon: Ghost,
         title: "Response Latency",
-        desc: "Creators lose 70% of potential deals because they can't reply instantly. When a brand or high-ticket lead DMs you, waiting hours to respond means they've already moved to the next creator. Speed is the only currency that matters.",
+        desc: "Businesses lose 70% of potential deals because they can't reply instantly. When a high-ticket lead reaches out, waiting hours to respond means they've already moved to a faster competitor. Speed is the only currency that matters.",
         impact: "Lower Conversion"
     },
     {

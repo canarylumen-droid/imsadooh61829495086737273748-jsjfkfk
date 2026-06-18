@@ -16,7 +16,7 @@ export function ProspectionVideo() {
         "> Initializing Audnix System Core v4.0.0...",
         "> Logic: Identify high-pain triggers in Agency sector",
         "> Scanning LinkedIn for \"Founder\", \"CEO\", \"Owner\"...",
-        "> Crossing reference with LinkedIn/IG bio sentiment...",
+        "> Crossing reference with LinkedIn bio sentiment...",
         "> Deep-scanning Website Technology (Missing FB Pixel, Broken Forms)...",
         "> PAIN DETECTED: 2,042 entities bleeding lead-gen ROI",
         "> Starting 12-point Email Verification Process...",
@@ -74,7 +74,7 @@ export function ProspectionVideo() {
                                 <div className="flex-1 p-5 rounded-2xl rounded-tl-none bg-primary/10 border border-primary/20">
                                     <p className="text-sm font-bold text-primary leading-relaxed">
                                         {step === 0 && "Neutralizing parameters. Scanning for revenue loss indicators..."}
-                                        {step === 1 && "Ingesting 15,000+ candidate profiles from LinkedIn & IG..."}
+                                        {step === 1 && "Ingesting 15,000+ candidate profiles from LinkedIn..."}
                                         {step === 2 && "Analyzing bio sentiment and website conversion gaps..."}
                                         {step === 3 && "Verifying deliverability for top 2,000 matches..."}
                                         {step === 4 && "2,042 high-pain leads ready for outreach. Initializing vault export."}

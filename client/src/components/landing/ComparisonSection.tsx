@@ -17,8 +17,8 @@ const COMPARISON_DATA = [
         icon: Zap
     },
     {
-        feature: "IG Intelligence",
-        audnix: "Visual Post Scan + Bio Analysis",
+        feature: "Cross-Platform Intel",
+        audnix: "Multi-Source Profile Analysis",
         wrappers: "Text-Only Keyword Matching",
         humans: "Manual Scrolling (Slow)",
         icon: Server

@@ -35,7 +35,7 @@ const PRESET_ANSWERS: Record<string, string> = {
     "default": "I am the Super Memory Assistant. I'm here to help you automate your outreach and scale your business with autonomous intelligence. How can I assist you today?",
     "pricing": "Super Memory offers flexible tiers starting from our Base Layer for individuals to Enterprise Solutions. You can view full details in the 'Pricing' section.",
     "demo": "You can initialize a live demo by selecting 'Book a Demo' or by signing up for a free trial to explore the interface directly.",
-    "scale": "Super Memory scales by deploying multiple autonomous agents across Email and Instagram, handling thousands of conversations with zero human latency.",
+    "scale": "Super Memory scales by deploying multiple autonomous agents across Email, handling thousands of conversations with zero human latency.",
     "support": "Our technical support team is available 24/7 via the 'Support' link in your dashboard.",
     "how it works": "Super Memory syncs with your brand's communication style, analyzes leads autonomously, handles objections, and books meetings directly into your calendar.",
     "integrations": "Currently, we offer deep integrations with Gmail, Outlook, and custom SMTP.",

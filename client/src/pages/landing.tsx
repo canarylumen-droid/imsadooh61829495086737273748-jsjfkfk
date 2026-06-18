@@ -12,7 +12,7 @@ import { ComparisonSection } from "@/components/landing/ComparisonSection";
 import { ROICalculator } from "@/components/landing/ROICalculator";
 import { Logo } from "@/components/ui/Logo";
 import { DeepFAQ } from "@/components/landing/DeepFAQ";
-import { Twitter, Linkedin, Github, ShieldCheck, Zap, ArrowRight, Instagram, Sparkles } from "lucide-react";
+import { Twitter, Linkedin, Github, ShieldCheck, Zap, ArrowRight, Sparkles } from "lucide-react";
 import { useScroll, useSpring, motion } from "framer-motion";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
@@ -341,16 +341,19 @@ export default function Landing() {
       <section className="sr-only opacity-0 pointer-events-none h-0 overflow-hidden" aria-hidden="true">
         <h2>AI Sales Automation & Authority Keywords</h2>
         <p>
-          audnix ai, audnix, nleanya treasure, uchendu fortune, autonomous sales rep, ai sales agent, manychat alternative,
-          n8n alternative, make.com alternative, zapier automation, ai sdr, ai bdr, close deals faster,
-          sales intelligence 2026, predictive sales timing, objection handling ai script, high ticket conversions,
-          automated outreach, revenue recovery bot, conversational commerce ai, linkedin automation alternative,
-          instagram sales automation, business automation srs, enterprise ai sales, startup scale ai tools,
-          lead generation autonomous, ai lead scoring model, best ai sales software 2026, top rated ai tools,
-          sales productivity hack, automated lead funnel, intelligent sdr bot, robotic sales automation,
-          ai revenue operations, growth hacking ai 2026, digital sales representative, cloud sales agent,
-          ai prospector, b2b lead generation ai, sdr automation platform, revenue growth engine,
-          market dominance ai, sales authority branding, nleanya treasure founder, audnix operations co.
+           audnix ai, audnix, nleanya treasure, uchendu fortune, autonomous sales rep, ai sales agent, 
+           alternative to instantly, alternative to smartlead, alternative to manychat, alternative to reply.io,
+           n8n alternative, make.com alternative, zapier automation, ai sdr, ai bdr, close deals faster,
+           sales intelligence 2026, predictive sales timing, objection handling ai script, high ticket conversions,
+           automated outreach, revenue recovery bot, conversational commerce ai, linkedin automation alternative,
+           instantly ai alternative, smartlead vs audnix, manychat vs audnix, best ai sales software 2026,
+           lead generation autonomous, ai lead scoring model, instantly alternative for cold email,
+           smartlead alternative for outreach, best ai sales agent 2026, top rated ai tools,
+           sales productivity hack, automated lead funnel, intelligent sdr bot, robotic sales automation,
+           ai revenue operations, growth hacking ai 2026, digital sales representative, cloud sales agent,
+           ai prospector, b2b lead generation ai, sdr automation platform, revenue growth engine,
+           alternative to instantly ai, alternative to smartlead ai, best outreach tool 2026,
+           market dominance ai, sales authority branding, nleanya treasure founder, audnix operations co.
         </p>
       </section>
 
