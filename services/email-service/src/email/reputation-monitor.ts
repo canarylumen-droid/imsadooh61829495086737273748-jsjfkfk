@@ -306,6 +306,11 @@ export async function checkReputationForAllMailboxes() {
   }
 }
 
+export async function resetAllProviderCounters(): Promise<void> {
+  const { resetProviderDailyCounters } = await import('./provider-reputation.js');
+  await resetProviderDailyCounters();
+}
+
 
 
 

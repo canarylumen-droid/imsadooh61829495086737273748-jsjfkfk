@@ -1,22 +1,18 @@
-/**
- * Pool Health Monitor
- * Evaluates pool health every 5 minutes and flips mailboxes between active/paused.
- */
-
 import { db } from '../db/warmup-db.js';
-import { eq, and, sql, isNull } from 'drizzle-orm';
-import { warmupMailboxes, warmupPoolState, organizations } from '@audnix/shared';
+import { eq, and, sql, isNull, inArray, not } from 'drizzle-orm';
+import { warmupMailboxes, warmupPoolState, warmupDomainClusters } from '@audnix/shared';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
+import { domainClusterEngine } from './domain-cluster.js';
+import { anchorEngine } from './anchor-engine.js';
+import { seedFleetManager } from './seed-fleet-manager.js';
 import type { PoolType } from '../types/warmup-types.js';
 
 export class PoolHealthMonitor {
   async evaluate(): Promise<void> {
     console.log('[Warmup][PoolHealth] Evaluating pool health...');
 
-    // 1. Global pool
     await this.evaluateGlobalPool();
 
-    // 2. Per-organization enterprise pools
     const orgs = await db
       .selectDistinct({ organizationId: warmupMailboxes.organizationId })
       .from(warmupMailboxes)
@@ -27,6 +23,10 @@ export class PoolHealthMonitor {
         await this.evaluateEnterprisePool(org.organizationId);
       }
     }
+
+    await this.evaluateDomainClusters();
+
+    await seedFleetManager.rotateExhaustedSeeds();
 
     console.log('[Warmup][PoolHealth] Evaluation complete.');
   }
@@ -57,6 +57,63 @@ export class PoolHealthMonitor {
     } else {
       await this.pauseMailboxes(organizationId, 'enterprise', 'single_mailbox_enterprise');
     }
+  }
+
+  private async evaluateDomainClusters(): Promise<void> {
+    const clusters = await db.select().from(warmupDomainClusters);
+
+    for (const cluster of clusters) {
+      const anchorCount = await this.countActiveAnchors(cluster.registeredDomain, cluster.organizationId);
+      const seedCount = await this.countActiveSeeds(cluster.registeredDomain, cluster.organizationId);
+      const totalAnchors = anchorCount + seedCount;
+      const hasHealthAnchors = totalAnchors >= WARMUP_CONFIG.ANCHORS_PER_DOMAIN;
+
+      if (hasHealthAnchors && !cluster.isHealthy) {
+        await anchorEngine.rebalanceDomain(cluster.registeredDomain, cluster.organizationId);
+      }
+
+      if (!hasHealthAnchors && cluster.isHealthy) {
+        await db
+          .update(warmupDomainClusters)
+          .set({ isHealthy: false })
+          .where(
+            and(
+              eq(warmupDomainClusters.id, cluster.id),
+              not(eq(warmupDomainClusters.mode, 'platform_seed'))
+            )
+          );
+      }
+    }
+  }
+
+  private async countActiveAnchors(domain: string, orgId: string | null): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(warmupMailboxes)
+      .where(
+        and(
+          eq(warmupMailboxes.registeredDomain, domain),
+          eq(warmupMailboxes.anchorRole, 'anchor'),
+          eq(warmupMailboxes.status, 'active'),
+          orgId ? eq(warmupMailboxes.organizationId, orgId) : isNull(warmupMailboxes.organizationId)
+        )
+      );
+    return result[0]?.count ?? 0;
+  }
+
+  private async countActiveSeeds(domain: string, orgId: string | null): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(warmupMailboxes)
+      .where(
+        and(
+          eq(warmupMailboxes.registeredDomain, domain),
+          eq(warmupMailboxes.anchorRole, 'seed'),
+          eq(warmupMailboxes.status, 'active'),
+          orgId ? eq(warmupMailboxes.organizationId, orgId) : isNull(warmupMailboxes.organizationId)
+        )
+      );
+    return result[0]?.count ?? 0;
   }
 
   private async getActiveCount(poolType: PoolType, orgId: string | null): Promise<number> {
@@ -133,10 +190,6 @@ export class PoolHealthMonitor {
   }
 
   private async activatePausedMailboxes(orgId: string | null, poolType: PoolType): Promise<void> {
-    // [CRITICAL] Only reactivate mailboxes paused for POOL reasons.
-    // Never reactivate mailboxes paused for operational reasons (daily limits,
-    // IMAP/SMTP errors, empty_pool_defensive) — those must be resolved by
-    // their respective handlers (midnight reset, error recovery, etc.).
     const result = await db
       .update(warmupMailboxes)
       .set({ status: 'active', pauseReason: null })

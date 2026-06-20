@@ -329,6 +329,16 @@ export const integrations = pgTable("integrations", {
   warmupLimit: integer("warmup_limit").notNull().default(5),
   throttleUntil: timestamp("throttle_until"),
   originalDailyLimit: integer("original_daily_limit"),
+  providerLimits: jsonb("provider_limits").$type<Record<string, {
+    initialOutreachLimit: number;
+    warmupLimit: number;
+    reputationScore: number;
+    healthLevel: string;
+    dailySentCount: number;
+    dailyBounceCount: number;
+    dailySpamCount: number;
+    lastAdjustmentAt: string;
+  }>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => ({
@@ -1712,22 +1722,28 @@ export type InsertJobAttempt = typeof jobAttempts.$inferInsert;
 // ========== P2P WARMUP SERVICE (Ghost Layer) ==========
 export const warmupMailboxes = pgTable("warmup_mailboxes", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  integrationId: uuid("integration_id").notNull().references(() => integrations.id, { onDelete: "cascade" }),
-  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  integrationId: uuid("integration_id").references(() => integrations.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
   organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
   email: text("email").notNull(),
   provider: text("provider", { enum: ["gmail", "outlook", "custom_email"] }).notNull(),
   status: text("status", { enum: ["active", "paused", "unenrolled", "error"] }).notNull().default("paused"),
   pauseReason: text("pause_reason"),
   poolType: text("pool_type", { enum: ["enterprise", "global"] }).notNull().default("global"),
+  registeredDomain: text("registered_domain"),
+  anchorRole: text("anchor_role", { enum: ["anchor", "member", "seed"] }).notNull().default("member"),
+  anchorMailboxId: uuid("anchor_mailbox_id"),
   dailySentCount: integer("daily_sent_count").notNull().default(0),
   dailyReceivedCount: integer("daily_received_count").notNull().default(0),
+  dailyLimit: integer("daily_limit"),
   lastResetAt: timestamp("last_reset_at").notNull().defaultNow(),
   hiddenFolderPath: text("hidden_folder_path"),
   hiddenFolderCreatedAt: timestamp("hidden_folder_created_at"),
   activeThreadIds: jsonb("active_thread_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   metadata: jsonb("metadata").$type<{
-    smtpHost?: string; smtpPort?: number; imapHost?: string; imapPort?: number;
+    smtpHost?: string; smtpPort?: number; smtpUser?: string; smtpPass?: string;
+    imapHost?: string; imapPort?: number; imapUser?: string; imapPass?: string;
+    oauthUserId?: string; seedAccountId?: string; source?: string;
     lastError?: string; lastErrorAt?: string;
   }>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -1737,7 +1753,9 @@ export const warmupMailboxes = pgTable("warmup_mailboxes", {
   wmPoolTypeIdx: index("wm_pool_type_idx").on(table.poolType),
   wmOrgIdx: index("wm_org_idx").on(table.organizationId),
   wmProviderIdx: index("wm_provider_idx").on(table.provider),
-  wmIntegrationIdx: uniqueIndex("wm_integration_idx").on(table.integrationId),
+  wmDomainIdx: index("wm_domain_idx").on(table.registeredDomain),
+  wmAnchorRoleIdx: index("wm_anchor_role_idx").on(table.anchorRole),
+  wmIntegrationIdx: index("wm_integration_idx").on(table.integrationId),
 }));
 
 export const warmupThreads = pgTable("warmup_threads", {
@@ -1803,6 +1821,50 @@ export const warmupPoolState = pgTable("warmup_pool_state", {
   wpsPoolTypeOrgIdx: uniqueIndex("wps_pool_type_org_idx").on(table.poolType, table.organizationId),
 }));
 
+export const warmupDomainClusters = pgTable("warmup_domain_clusters", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  registeredDomain: text("registered_domain").notNull(),
+  organizationId: uuid("organization_id").references(() => organizations.id, { onDelete: "cascade" }),
+  anchorMailboxIds: jsonb("anchor_mailbox_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  seedMailboxIds: jsonb("seed_mailbox_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  memberMailboxIds: jsonb("member_mailbox_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  mode: text("mode", { enum: ["user_provided", "platform_seed", "internal_only"] }).notNull().default("internal_only"),
+  totalMailboxes: integer("total_mailboxes").notNull().default(0),
+  anchorCount: integer("anchor_count").notNull().default(0),
+  isHealthy: boolean("is_healthy").notNull().default(false),
+  lastActivityAt: timestamp("last_activity_at"),
+  metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  wdcDomainOrgIdx: uniqueIndex("wdc_domain_org_idx").on(table.registeredDomain, table.organizationId),
+  wdcModeIdx: index("wdc_mode_idx").on(table.mode),
+  wdcHealthIdx: index("wdc_health_idx").on(table.isHealthy),
+}));
+
+export const warmupSeedAccounts = pgTable("warmup_seed_accounts", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  provider: text("provider", { enum: ["gmail", "outlook"] }).notNull(),
+  status: text("status", { enum: ["active", "cooling", "exhausted", "error", "retired"] }).notNull().default("active"),
+  dailySentCount: integer("daily_sent_count").notNull().default(0),
+  dailyLimit: integer("daily_limit").notNull().default(400),
+  partnerCount: integer("partner_count").notNull().default(0),
+  maxPartners: integer("max_partners").notNull().default(10),
+  lastResetAt: timestamp("last_reset_at").notNull().defaultNow(),
+  metadata: jsonb("metadata").$type<{
+    smtpHost?: string; smtpPort?: number; smtpUser?: string; smtpPass?: string;
+    imapHost?: string; imapPort?: number; imapUser?: string; imapPass?: string;
+    oauthUserId?: string; lastError?: string; source?: string;
+  }>().notNull().default(sql`'{}'::jsonb`),
+  assignedDomainClusterIds: jsonb("assigned_domain_cluster_ids").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  wsaProviderIdx: index("wsa_provider_idx").on(table.provider),
+  wsaStatusIdx: index("wsa_status_idx").on(table.status),
+}));
+
 export type WarmupMailbox = typeof warmupMailboxes.$inferSelect;
 export type InsertWarmupMailbox = typeof warmupMailboxes.$inferInsert;
 export type WarmupThread = typeof warmupThreads.$inferSelect;
@@ -1810,4 +1872,8 @@ export type InsertWarmupThread = typeof warmupThreads.$inferInsert;
 export type WarmupInteraction = typeof warmupInteractions.$inferSelect;
 export type InsertWarmupInteraction = typeof warmupInteractions.$inferInsert;
 export type WarmupPoolState = typeof warmupPoolState.$inferSelect;
+export type WarmupDomainCluster = typeof warmupDomainClusters.$inferSelect;
+export type InsertWarmupDomainCluster = typeof warmupDomainClusters.$inferInsert;
+export type WarmupSeedAccount = typeof warmupSeedAccounts.$inferSelect;
+export type InsertWarmupSeedAccount = typeof warmupSeedAccounts.$inferInsert;
 export type InsertWarmupPoolState = typeof warmupPoolState.$inferInsert;

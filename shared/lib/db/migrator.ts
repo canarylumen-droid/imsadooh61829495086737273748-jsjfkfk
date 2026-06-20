@@ -535,6 +535,91 @@ export async function runDatabaseMigrations() {
                     CREATE UNIQUE INDEX wps_pool_type_org_idx ON warmup_pool_state(pool_type, organization_id);
                 END IF;
 
+                -- Domain clustering: add columns to warmup_mailboxes
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_mailboxes') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_mailboxes' AND column_name='registered_domain') THEN
+                        ALTER TABLE warmup_mailboxes ADD COLUMN registered_domain TEXT;
+                        CREATE INDEX IF NOT EXISTS wm_domain_idx ON warmup_mailboxes(registered_domain);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_mailboxes' AND column_name='anchor_role') THEN
+                        ALTER TABLE warmup_mailboxes ADD COLUMN anchor_role TEXT NOT NULL DEFAULT 'member'
+                            CHECK (anchor_role IN ('anchor', 'member', 'seed'));
+                        CREATE INDEX IF NOT EXISTS wm_anchor_role_idx ON warmup_mailboxes(anchor_role);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_mailboxes' AND column_name='anchor_mailbox_id') THEN
+                        ALTER TABLE warmup_mailboxes ADD COLUMN anchor_mailbox_id UUID REFERENCES warmup_mailboxes(id) ON DELETE SET NULL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_mailboxes' AND column_name='daily_limit') THEN
+                        ALTER TABLE warmup_mailboxes ADD COLUMN daily_limit INTEGER;
+                    END IF;
+                    -- Make integration_id nullable for seed mailboxes (seeds have no user integration)
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_mailboxes' AND column_name='integration_id' AND is_nullable = 'NO') THEN
+                        ALTER TABLE warmup_mailboxes ALTER COLUMN integration_id DROP NOT NULL;
+                    END IF;
+                    -- Make user_id text to accept 'system' for seeds
+                    IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_mailboxes' AND column_name='user_id' AND data_type = 'uuid') THEN
+                        ALTER TABLE warmup_mailboxes ALTER COLUMN user_id TYPE TEXT;
+                    END IF;
+                    -- Drop unique index on integration_id (seeds have null)
+                    IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'wm_integration_idx') THEN
+                        DROP INDEX IF EXISTS wm_integration_idx;
+                        CREATE INDEX IF NOT EXISTS wm_integration_idx ON warmup_mailboxes(integration_id);
+                    END IF;
+                END IF;
+
+                -- Domain clusters table
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_domain_clusters') THEN
+                    CREATE TABLE warmup_domain_clusters (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        registered_domain TEXT NOT NULL,
+                        organization_id UUID REFERENCES organizations(id) ON DELETE CASCADE,
+                        anchor_mailbox_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        seed_mailbox_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        member_mailbox_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        mode TEXT NOT NULL DEFAULT 'internal_only'
+                            CHECK (mode IN ('user_provided', 'platform_seed', 'internal_only')),
+                        total_mailboxes INTEGER NOT NULL DEFAULT 0,
+                        anchor_count INTEGER NOT NULL DEFAULT 0,
+                        is_healthy BOOLEAN NOT NULL DEFAULT false,
+                        last_activity_at TIMESTAMP,
+                        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                    CREATE UNIQUE INDEX wdc_domain_org_idx ON warmup_domain_clusters(registered_domain, organization_id);
+                    CREATE INDEX wdc_mode_idx ON warmup_domain_clusters(mode);
+                    CREATE INDEX wdc_health_idx ON warmup_domain_clusters(is_healthy);
+                END IF;
+
+                -- Seed accounts table
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_seed_accounts') THEN
+                    CREATE TABLE warmup_seed_accounts (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        email TEXT NOT NULL UNIQUE,
+                        provider TEXT NOT NULL CHECK (provider IN ('gmail', 'outlook')),
+                        status TEXT NOT NULL DEFAULT 'active'
+                            CHECK (status IN ('active', 'cooling', 'exhausted', 'error', 'retired')),
+                        daily_sent_count INTEGER NOT NULL DEFAULT 0,
+                        daily_limit INTEGER NOT NULL DEFAULT 400,
+                        partner_count INTEGER NOT NULL DEFAULT 0,
+                        max_partners INTEGER NOT NULL DEFAULT 10,
+                        last_reset_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                        assigned_domain_cluster_ids JSONB NOT NULL DEFAULT '[]'::jsonb,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
+                    CREATE INDEX wsa_provider_idx ON warmup_seed_accounts(provider);
+                    CREATE INDEX wsa_status_idx ON warmup_seed_accounts(status);
+                END IF;
+
+                -- Per-provider campaign limits
+                IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='integrations' AND column_name='initial_outreach_limit') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='integrations' AND column_name='provider_limits') THEN
+                        ALTER TABLE integrations ADD COLUMN provider_limits JSONB NOT NULL DEFAULT '{}'::jsonb;
+                    END IF;
+                END IF;
+
                 -- KPI Isolation: is_warmup flag on messages and campaign_emails
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='messages') THEN
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='messages' AND column_name='is_warmup') THEN

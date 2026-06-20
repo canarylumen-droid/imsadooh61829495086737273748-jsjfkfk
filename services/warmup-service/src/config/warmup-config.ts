@@ -1,8 +1,3 @@
-/**
- * Warmup Service Configuration
- * All values are ENV-driven with sensible defaults.
- */
-
 export const WARMUP_CONFIG = {
   // Pool health thresholds
   GLOBAL_POOL_MINIMUM: parseInt(process.env.WARMUP_GLOBAL_MINIMUM || '5', 10),
@@ -32,11 +27,11 @@ export const WARMUP_CONFIG = {
   IMAP_TIMEOUT_MS: parseInt(process.env.WARMUP_IMAP_TIMEOUT_MS || '15000', 10),
 
   // Scheduler intervals (ms)
-  ENROLLMENT_SCAN_INTERVAL_MS: 5 * 60 * 1000,      // 5 min
-  POOL_HEALTH_INTERVAL_MS: 5 * 60 * 1000,           // 5 min
-  SPAM_RESCUE_INTERVAL_MS: 30 * 60 * 1000,          // 30 min
-  THREAD_SCHEDULER_INTERVAL_MS: 60 * 1000,          // 1 min
-  INBOX_SWEEP_INTERVAL_MS: 2 * 60 * 1000,           // 2 min
+  ENROLLMENT_SCAN_INTERVAL_MS: 5 * 60 * 1000,
+  POOL_HEALTH_INTERVAL_MS: 5 * 60 * 1000,
+  SPAM_RESCUE_INTERVAL_MS: 30 * 60 * 1000,
+  THREAD_SCHEDULER_INTERVAL_MS: 60 * 1000,
+  INBOX_SWEEP_INTERVAL_MS: 2 * 60 * 1000,
 
   // BullMQ
   OUTBOUND_QUEUE_NAME: 'warmup-outbound',
@@ -51,4 +46,36 @@ export const WARMUP_CONFIG = {
   // Retry / backoff
   MAX_SEND_ATTEMPTS: 3,
   MAX_IMAP_ATTEMPTS: 3,
+
+  // Domain clustering
+  DOMAIN_CLUSTER_SCAN_INTERVAL_MS: parseInt(process.env.WARMUP_DOMAIN_SCAN_INTERVAL || '300000', 10),
+  ANCHOR_REBALANCE_INTERVAL_MS: parseInt(process.env.WARMUP_ANCHOR_REBALANCE_INTERVAL || '600000', 10),
+
+  // Anchor / seed thresholds
+  ANCHORS_PER_DOMAIN: parseInt(process.env.WARMUP_ANCHORS_PER_DOMAIN || '2', 10),
+  MAX_MEMBERS_PER_ANCHOR: parseInt(process.env.WARMUP_MAX_MEMBERS_PER_ANCHOR || '50', 10),
+  SEED_MAX_PARTNERS: parseInt(process.env.WARMUP_SEED_MAX_PARTNERS || '10', 10),
+  SEED_DAILY_LIMIT: parseInt(process.env.WARMUP_SEED_DAILY_LIMIT || '400', 10),
+  SEED_COOLDOWN_AFTER_EXHAUSTED_MS: 4 * 60 * 60 * 1000,
+
+  // Pairing weights
+  PAIRING_BASE_SCORE: 100,
+  PAIRING_CROSS_PROVIDER_BONUS: 200,
+  PAIRING_DIFFERENT_DOMAIN_BONUS: 80,
+  PAIRING_VOLUME_BALANCE_BONUS: 30,
+  PAIRING_THREAD_LIGHT_BONUS: 20,
+  PAIRING_THREAD_HEAVY_PENALTY: -30,
+  PAIRING_ORG_DIVERSITY_BONUS: 10,
+  PAIRING_STALENESS_PENALTY_PER_HOUR: -5,
+  PAIRING_MAX_STALENESS_PENALTY: -50,
+  PAIRING_ANCHOR_PAIRING_BOOST: 100,
+
+  // Platform seed provisioning
+  PLATFORM_SEED_ENABLED: process.env.WARMUP_PLATFORM_SEEDS === 'true',
+  SEED_PROVISIONING_STRATEGY: process.env.WARMUP_SEED_STRATEGY || 'least_loaded',
+
+  // Warmup isolation — these markers are injected into warmup-only records
+  // to guarantee they are NEVER picked up by campaign/outreach queries.
+  WARMUP_SYSTEM_USER_ID: 'system',
+  WARMUP_SOURCE_MARKER: 'warmup_seed',
 } as const;

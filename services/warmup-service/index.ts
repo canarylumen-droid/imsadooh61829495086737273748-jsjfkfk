@@ -7,6 +7,7 @@ import { createOutboundWorker } from './src/workers/outbound-worker.js';
 import { createInboundWorker } from './src/workers/inbound-worker.js';
 import { warmupScheduler } from './src/workers/scheduler-worker.js';
 import { imapStealth } from './src/lib/imap-stealth.js';
+import { provisionSeedsOnStartup } from './src/init/seeds.js';
 
 // Health check server (lazy-import so unified-mode doesn't crash if api-gateway isn't built)
 async function startHealthServer() {
@@ -80,6 +81,9 @@ export async function startWarmupService() {
   inboundWorker.on('completed', (job) => {
     console.log(`[Warmup][Inbound] Job ${job.id} completed`);
   });
+
+  // Provision platform seeds from env
+  await provisionSeedsOnStartup();
 
   // Start 24/7 scheduler
   await warmupScheduler.start();

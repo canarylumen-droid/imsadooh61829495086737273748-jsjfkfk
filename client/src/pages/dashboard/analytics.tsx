@@ -380,7 +380,7 @@ export default function AnalyticsPage() {
                 </Card>
 
                 {/* Real-time Activity Feed */}
-                <Card className="bg-card border-border/40 rounded-2xl p-8 flex flex-col relative overflow-hidden">
+                <Card className="bg-card border-border/40 rounded-2xl p-4 sm:p-8 flex flex-col relative overflow-hidden">
                     <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 mb-8 flex items-center gap-2">
                         <Activity className="w-4 h-4 text-primary" /> Live Interaction Stream
                     </h3>
@@ -494,7 +494,7 @@ export default function AnalyticsPage() {
                 </Card>
 
                 {/* Audit Purpose Info */}
-                <Card className="bg-card border-border/40 rounded-2xl p-8 flex flex-col justify-center">
+                <Card className="bg-card border-border/40 rounded-2xl p-4 sm:p-8 flex flex-col justify-center">
                     <div className="flex items-center gap-4 mb-6">
                         <div className="p-3 rounded-xl bg-primary/10 text-primary">
                             <Sparkles className="w-6 h-6" />
@@ -533,10 +533,10 @@ export default function AnalyticsPage() {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-border/20">
-                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">Metric</th>
-                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Current Period</th>
-                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Previous Period</th>
-                                    <th className="px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Inertia</th>
+                                    <th className="px-3 sm:px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">Metric</th>
+                                    <th className="px-3 sm:px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Current Period</th>
+                                    <th className="px-3 sm:px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Previous Period</th>
+                                    <th className="px-3 sm:px-8 py-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 text-right">Inertia</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border/10">
@@ -554,9 +554,9 @@ export default function AnalyticsPage() {
 
                                     return (
                                         <tr key={idx} className="hover:bg-muted/20 transition-colors group">
-                                            <td className="px-8 py-5 text-sm font-semibold text-foreground/80 group-hover:text-primary transition-colors">{row.label}</td>
-                                            <td className="px-8 py-5 text-sm font-semibold text-right">{row.current !== undefined ? row.current : (row.currentVal || 0)}</td>
-                                            <td className="px-8 py-5 text-sm font-semibold text-right opacity-45">{row.previous !== undefined ? row.previous : (row.previousVal || 0)}</td>
+                                            <td className="px-3 sm:px-8 py-5 text-sm font-semibold text-foreground/80 group-hover:text-primary transition-colors">{row.label}</td>
+                                            <td className="px-3 sm:px-8 py-5 text-sm font-semibold text-right">{row.current !== undefined ? row.current : (row.currentVal || 0)}</td>
+                                            <td className="px-3 sm:px-8 py-5 text-sm font-semibold text-right opacity-45">{row.previous !== undefined ? row.previous : (row.previousVal || 0)}</td>
                                             <td className="px-8 py-5 text-right">
                                                 <div className={cn(
                                                     "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold uppercase tracking-wider",

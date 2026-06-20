@@ -341,8 +341,21 @@ export default function IntegrationsPage() {
   const [mailboxPage, setMailboxPage] = useState(0);
   const MAILBOXES_PER_PAGE = 25;
 
-  const { data: integrationsData, isLoading } = useQuery<IntegrationsResponse>({
-    queryKey: ["/api/integrations"],
+  const [integrationPage, setIntegrationPage] = useState(1);
+  const [integrationSearch, setIntegrationSearch] = useState("");
+
+  const queryKey = useMemo(() => {
+    const params = new URLSearchParams();
+    if (integrationSearch) params.set("search", integrationSearch);
+    params.set("page", String(integrationPage));
+    params.set("limit", "25");
+    return ["/api/integrations", params.toString()];
+  }, [integrationSearch, integrationPage]);
+
+  const { data: integrationsData, isLoading } = useQuery<{
+    integrations: Array<any>; total: number; page: number; pages: number;
+  }>({
+    queryKey,
     placeholderData: (prev: any) => prev,
     staleTime: 30_000,
   });
@@ -439,9 +452,17 @@ export default function IntegrationsPage() {
     };
   }, [queryClient, socket]);
 
-  const integrations = useMemo(() =>
-    Array.isArray(integrationsData) ? integrationsData : (integrationsData as any)?.integrations ?? []
-  , [integrationsData]);
+  const integrations = useMemo(() => {
+    if (!integrationsData) return [];
+    if (Array.isArray(integrationsData)) return integrationsData;
+    return (integrationsData as any)?.integrations ?? [];
+  }, [integrationsData]);
+  const totalIntegrations = useMemo(() =>
+    (integrationsData as any)?.total ?? integrations.length, [integrationsData, integrations.length]
+  );
+  const totalIntegrationPages = useMemo(() =>
+    (integrationsData as any)?.pages ?? 1, [integrationsData]
+  );
   const allMailboxes = useMemo(() => customEmailStatus?.integrations || [], [customEmailStatus]);
   const hasMailboxesConnected = allMailboxes.length > 0;
 
@@ -1252,32 +1273,32 @@ export default function IntegrationsPage() {
                       </div>
                     )}
                     {pagedMailboxes.map((mailbox) => (
-                      <div key={mailbox.id} className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 sm:p-6 rounded-2xl bg-muted/20 border border-border/40 hover:border-primary/30 transition-all group">
+                      <div key={mailbox.id} className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3 sm:p-6 rounded-xl sm:rounded-2xl bg-muted/20 border border-border/40 hover:border-primary/30 transition-all group">
                         <div className="flex items-center gap-3 sm:gap-4">
                           <div className={cn(
-                            "h-10 w-10 sm:h-12 sm:w-12 rounded-xl flex items-center justify-center border transition-all duration-300 shrink-0",
+                            "h-8 w-8 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center border transition-all duration-300 shrink-0",
                             !mailbox.connected ? "bg-muted/10 border-dashed border-muted grayscale" :
                             mailbox.provider === 'gmail' ? "bg-red-500/10 border-red-500/20 text-red-500" :
                             mailbox.provider === 'outlook' ? "bg-blue-500/10 border-blue-500/20 text-blue-500" :
                             "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
                           )}>
-                            {mailbox.provider === 'gmail' ? <SiGoogle className="h-5 sm:h-6 w-5 sm:w-6" /> :
-                             mailbox.provider === 'outlook' ? <Mail className="h-5 sm:h-6 w-5 sm:w-6" /> :
-                             <CheckCircle2 className="h-5 sm:h-6 w-5 sm:w-6" />}
+                            {mailbox.provider === 'gmail' ? <SiGoogle className="h-4 sm:h-6 w-4 sm:w-6" /> :
+                             mailbox.provider === 'outlook' ? <Mail className="h-4 sm:h-6 w-4 sm:w-6" /> :
+                             <CheckCircle2 className="h-4 sm:h-6 w-4 sm:w-6" />}
                           </div>
                           <div className="space-y-0.5 min-w-0">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <h4 className={cn("text-xs sm:text-sm font-bold transition-colors truncate max-w-[150px] sm:max-w-xs", !mailbox.connected ? "text-muted-foreground" : "text-foreground")}>
+                              <h4 className={cn("text-xs sm:text-sm font-bold transition-colors truncate max-w-[120px] sm:max-w-xs", !mailbox.connected ? "text-muted-foreground" : "text-foreground")}>
                                 {mailbox.email}
                               </h4>
                               {mailbox.connected ? (
-                                <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Active</Badge>
+                                <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Active</Badge>
                               ) : (
-                                <Badge variant="outline" className="text-muted-foreground border-muted text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Disconnected</Badge>
+                                <Badge variant="outline" className="text-muted-foreground border-muted text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Disconnected</Badge>
                               )}
-                              {/* Real-time DNS Health Micro-badges */}
+                              {/* DNS badges — hidden on mobile to save space */}
                               {mailbox.connected && stats?.health?.dns && (
-                                <>
+                                <span className="hidden sm:inline-flex gap-1.5">
                                   <Badge className={cn(
                                     "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
                                     stats.health.dns.spf ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
@@ -1296,7 +1317,7 @@ export default function IntegrationsPage() {
                                   )}>
                                     DMARC
                                   </Badge>
-                                </>
+                                </span>
                               )}
                             </div>
                             <p className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest truncate">
@@ -1309,7 +1330,7 @@ export default function IntegrationsPage() {
 
                         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mt-2 lg:mt-0">
                           {mailbox.connected && (
-                            <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto">
+                            <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto max-sm:hidden">
                               <div className="flex flex-col justify-center">
                                 <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reputation</span>
                                 <span className={cn(

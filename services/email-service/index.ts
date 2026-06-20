@@ -9,6 +9,9 @@ import { startHeartbeat, HealthMonitor } from '@shared/lib/monitoring/health-hea
 import { WorkerDiscoveryRegistry, MailboxReassignmentWatchdog } from '@shared/lib/monitoring/index.js';
 import { startMemoryWatchdog } from '@shared/lib/monitoring/memory-watchdog.js';
 import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
+import { db } from '@shared/lib/db/db.js';
+import { integrations } from '@audnix/shared';
+import { sql } from 'drizzle-orm';
 
 const log = createLogger('EMAIL-SYNC');
 
@@ -156,6 +159,31 @@ async function startEmailService() {
   }));
   const healthMonitor = new HealthMonitor();
   healthMonitor.startMonitoring();
+
+  // ── Per-Provider Reputation Recalculation (every 6 hours) ──────────────
+  const { recalculateProviderReputation, resetProviderDailyCounters } = await import('./src/email/provider-reputation.js');
+  const PROVIDER_REPUTATION_INTERVAL = parseInt(process.env.PROVIDER_REPUTATION_INTERVAL_MS || '21600000', 10);
+  setInterval(async () => {
+    try {
+      const activeIntegrations = await db.select({ id: integrations.id }).from(integrations)
+        .where(sql`provider IN ('gmail', 'outlook', 'custom_email') AND connected = true`);
+      for (const int of activeIntegrations) {
+        await recalculateProviderReputation(int.id);
+      }
+      log.info(`[ProviderReputation] Recalculated ${activeIntegrations.length} integrations`);
+    } catch (err: any) {
+      log.error('[ProviderReputation] Recalculation error', { error: err.message });
+    }
+  }, PROVIDER_REPUTATION_INTERVAL);
+
+  // ── Provider Daily Counter Reset (every hour check for midnight crossing) ─
+  setInterval(async () => {
+    try {
+      await resetProviderDailyCounters();
+    } catch (err: any) {
+      log.warn('[ProviderReputation] Reset error', { error: err.message });
+    }
+  }, 3600000);
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────
   const shutdown = async (signal: string) => {

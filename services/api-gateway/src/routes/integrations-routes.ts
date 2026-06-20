@@ -19,8 +19,11 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
 
     let integrations = await storage.getIntegrations(userId);
 
-    // Server-side filtering — reduces payload for campaign wizard (500 mailboxes → only email ones)
-    const { provider, connected } = req.query as { provider?: string; connected?: string };
+    const { provider, connected, page, limit, search } = req.query as {
+      provider?: string; connected?: string;
+      page?: string; limit?: string; search?: string;
+    };
+
     if (provider) {
       const providers = provider.split(',').map(p => p.trim());
       integrations = integrations.filter(i => providers.includes(i.provider));
@@ -29,8 +32,23 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       const wantConnected = connected !== 'false';
       integrations = integrations.filter(i => i.connected === wantConnected);
     }
+    if (search) {
+      const q = search.toLowerCase();
+      integrations = integrations.filter(i =>
+        (i.accountType && i.accountType.toLowerCase().includes(q)) ||
+        i.provider.toLowerCase().includes(q) ||
+        i.id.toLowerCase().includes(q)
+      );
+    }
 
-    const safeIntegrations = integrations.map(integration => ({
+    const total = integrations.length;
+
+    const pageNum = page ? Math.max(1, parseInt(page)) : 1;
+    const limitNum = limit ? Math.max(1, Math.min(100, parseInt(limit))) : total;
+    const start = (pageNum - 1) * limitNum;
+    const paged = integrations.slice(start, start + limitNum);
+
+    const safeIntegrations = paged.map(integration => ({
       id: integration.id,
       provider: integration.provider,
       connected: integration.connected,
@@ -44,7 +62,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
       warmupStatus: (integration as any).warmupStatus ?? null,
     }));
 
-    res.json(safeIntegrations);
+    res.json({ integrations: safeIntegrations, total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) });
   } catch (error) {
     console.error('Error fetching integrations:', error);
     res.status(500).json({ error: 'Failed to fetch integrations' });

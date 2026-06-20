@@ -15,6 +15,7 @@ import { llmCopywriter } from '../lib/llm-copywriter.js';
 import { smtpSender } from '../lib/smtp-sender.js';
 import { imapStealth } from '../lib/imap-stealth.js';
 import { warmupInboundQueue } from '../queues/warmup-queues.js';
+import { seedFleetManager } from '../engine/seed-fleet-manager.js';
 
 export function createOutboundWorker(): Worker {
   return new Worker(
@@ -44,13 +45,18 @@ export function createOutboundWorker(): Worker {
 
       if (!sender[0] || !recipient[0]) return;
 
-      // Daily cap check against dynamic warmup limit from integrations
-      const [integrationRow] = await db
-        .select({ warmupLimit: integrations.warmupLimit })
-        .from(integrations)
-        .where(eq(integrations.id, sender[0].integrationId))
-        .limit(1);
-      const dynamicLimit = integrationRow?.warmupLimit ?? 5;
+      // Daily cap check — seeds use their own dailyLimit, others use integration warmupLimit
+      let dynamicLimit = WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      if (sender[0].anchorRole === 'seed') {
+        dynamicLimit = sender[0].dailyLimit ?? WARMUP_CONFIG.SEED_DAILY_LIMIT;
+      } else if (sender[0].integrationId) {
+        const [integrationRow] = await db
+          .select({ warmupLimit: integrations.warmupLimit })
+          .from(integrations)
+          .where(eq(integrations.id, sender[0].integrationId))
+          .limit(1);
+        dynamicLimit = integrationRow?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      }
 
       if (sender[0].dailySentCount >= dynamicLimit) {
         await db
@@ -176,6 +182,11 @@ export function createOutboundWorker(): Worker {
           })
           .where(eq(warmupMailboxes.id, sender[0].id));
 
+        if (sender[0].anchorRole === 'seed') {
+          seedFleetManager.incrementSeedSentCount(sender[0].id).catch(() => {});
+          resetSeedFailureCount(sender[0].id);
+        }
+
         // Queue inbound expect-reply
         const replyDelay =
           Math.floor(
@@ -205,10 +216,50 @@ export function createOutboundWorker(): Worker {
         });
       }
 
+      if (!result.success && sender[0].anchorRole === 'seed') {
+        const isRateLimit = result.error?.toLowerCase().includes('rate limit')
+          || result.error?.toLowerCase().includes('too many')
+          || result.error?.toLowerCase().includes('try again later');
+
+        if (isRateLimit) {
+          const cooldownMin = 5 + Math.floor(Math.random() * 10);
+          console.warn(`[Warmup][Outbound] Seed ${sender[0].email} rate-limited — cooling for ${cooldownMin}m`);
+          await db
+            .update(warmupMailboxes)
+            .set({
+              status: 'paused',
+              pauseReason: 'daily_limit_reached',
+              metadata: sql`jsonb_set(${warmupMailboxes.metadata}, '{seedFailCount}', '0'::jsonb)`,
+            })
+            .where(eq(warmupMailboxes.id, sender[0].id));
+        } else {
+          const failCount = (sender[0].metadata as any)?.seedFailCount || 0;
+          const newFailCount = failCount + 1;
+          await db
+            .update(warmupMailboxes)
+            .set({
+              metadata: sql`jsonb_set(${warmupMailboxes.metadata}, '{seedFailCount}', ${newFailCount}::text::jsonb)`,
+            })
+            .where(eq(warmupMailboxes.id, sender[0].id));
+
+          if (newFailCount >= 3) {
+            console.warn(`[Warmup][Outbound] Seed ${sender[0].email} failed ${newFailCount}x — triggering seed replacement`);
+            seedFleetManager.handleSeedFailure(sender[0].id).catch(() => {});
+          }
+        }
+      }
+
       return { success: result.success, interactionId: interaction?.id };
     },
     { connection: createFreshConnection(), concurrency: WARMUP_CONFIG.OUTBOUND_CONCURRENCY }
   );
+}
+
+function resetSeedFailureCount(mailboxId: string): void {
+  db.update(warmupMailboxes)
+    .set({ metadata: sql`jsonb_set(${warmupMailboxes.metadata}, '{seedFailCount}', '0'::jsonb)` })
+    .where(eq(warmupMailboxes.id, mailboxId))
+    .catch(() => {});
 }
 
 function getDefaultSmtpHost(provider: string): string {

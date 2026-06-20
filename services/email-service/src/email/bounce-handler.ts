@@ -4,6 +4,7 @@ import { eq, and, sql } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { mailboxHealthService } from './mailbox-health-service.js';
+import { recordProviderOutcome } from './provider-reputation.js';
 
 /**
  * Bounce Handling System
@@ -80,6 +81,14 @@ class BounceHandler {
           recordedAt: new Date().toISOString()
         }
       });
+
+      // Track per-provider outcome (reduces this provider's send budget)
+      if (integrationId) {
+        const outcome = event.bounceType === 'spam' ? 'spam' : 'bounced';
+        recordProviderOutcome(integrationId, event.email, outcome).catch((err: any) => {
+          console.warn(`[BounceHandler] Failed to record provider outcome: ${err.message}`);
+        });
+      }
 
       // Handle based on bounce type
       switch (event.bounceType) {

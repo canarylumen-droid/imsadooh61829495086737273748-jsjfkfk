@@ -310,6 +310,10 @@ export class ImapStealth {
         return '[Gmail]/Sent Mail';
       case 'outlook':
         return 'Sent Items';
+      case 'yahoo':
+        return 'Sent';
+      case 'aol':
+        return 'Sent';
       default:
         return 'Sent';
     }
@@ -321,6 +325,10 @@ export class ImapStealth {
         return '[Gmail]/Spam';
       case 'outlook':
         return 'Junk Email';
+      case 'yahoo':
+        return 'Spam';
+      case 'aol':
+        return 'Spam';
       default:
         return 'Spam';
     }

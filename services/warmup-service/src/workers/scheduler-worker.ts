@@ -9,6 +9,9 @@ import { warmupMailboxes, warmupThreads, integrations } from '@audnix/shared';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 import { enrollmentEngine } from '../engine/enrollment-engine.js';
 import { poolHealthMonitor } from '../engine/pool-health-monitor.js';
+import { domainClusterEngine } from '../engine/domain-cluster.js';
+import { anchorEngine } from '../engine/anchor-engine.js';
+import { seedFleetManager } from '../engine/seed-fleet-manager.js';
 import { pairingEngine } from '../lib/pairing-engine.js';
 import { threadManager } from '../lib/thread-manager.js';
 import { warmupInboundQueue } from '../queues/warmup-queues.js';
@@ -33,6 +36,22 @@ export class WarmupScheduler {
       setInterval(
         () => poolHealthMonitor.evaluate(),
         WARMUP_CONFIG.POOL_HEALTH_INTERVAL_MS
+      )
+    );
+
+    // Every 5 min: domain cluster scan
+    this.intervals.push(
+      setInterval(
+        () => domainClusterEngine.scanAndCluster(),
+        WARMUP_CONFIG.DOMAIN_CLUSTER_SCAN_INTERVAL_MS
+      )
+    );
+
+    // Every 10 min: anchor rebalancing
+    this.intervals.push(
+      setInterval(
+        () => anchorEngine.rebalanceAll(),
+        WARMUP_CONFIG.ANCHOR_REBALANCE_INTERVAL_MS
       )
     );
 
@@ -66,6 +85,8 @@ export class WarmupScheduler {
 
     // Run one-off initial scans
     enrollmentEngine.scan();
+    domainClusterEngine.scanAndCluster();
+    anchorEngine.rebalanceAll();
     poolHealthMonitor.evaluate();
   }
 
@@ -87,23 +108,49 @@ export class WarmupScheduler {
   }
 
   private async scheduleNewThreads() {
-    const activeMailboxes = await db
-      .select()
-      .from(warmupMailboxes)
-      .where(eq(warmupMailboxes.status, 'active'));
+    const BATCH_SIZE = 100;
+    let offset = 0;
 
-    if (activeMailboxes.length === 0) return;
+    const integrationIds: string[] = [];
+    const allMailboxes: Array<typeof warmupMailboxes.$inferSelect> = [];
 
-    // Batch-fetch dynamic warmup limits from integrations (Phase 3: dynamic 5-10/day)
-    const integrationIds = activeMailboxes.map(mb => mb.integrationId);
-    const limits = await db
-      .select({ id: integrations.id, warmupLimit: integrations.warmupLimit })
-      .from(integrations)
-      .where(inArray(integrations.id, integrationIds));
-    const limitMap = new Map(limits.map(l => [l.id, l.warmupLimit ?? 5]));
+    while (true) {
+      const batch = await db
+        .select()
+        .from(warmupMailboxes)
+        .where(eq(warmupMailboxes.status, 'active'))
+        .limit(BATCH_SIZE)
+        .offset(offset);
 
-    for (const mb of activeMailboxes) {
-      const dynamicLimit = limitMap.get(mb.integrationId) ?? 5;
+      if (batch.length === 0) break;
+      allMailboxes.push(...batch);
+      for (const mb of batch) {
+        if (mb.integrationId) integrationIds.push(mb.integrationId);
+      }
+      offset += BATCH_SIZE;
+
+      if (allMailboxes.length >= 1000) {
+        console.log(`[Warmup][Scheduler] Found ${allMailboxes.length}+ active mailboxes — processing in batches of ${BATCH_SIZE}`);
+      }
+    }
+
+    if (allMailboxes.length === 0) return;
+
+    const uniqueIds = [...new Set(integrationIds)];
+    const limits = uniqueIds.length > 0
+      ? await db
+          .select({ id: integrations.id, warmupLimit: integrations.warmupLimit })
+          .from(integrations)
+          .where(inArray(integrations.id, uniqueIds))
+      : [];
+    const limitMap = new Map(limits.map(l => [l.id, l.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT]));
+
+    for (const mb of allMailboxes) {
+      const isSeed = mb.anchorRole === 'seed';
+      let dynamicLimit = mb.dailyLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      if (!isSeed && mb.integrationId) {
+        dynamicLimit = mb.dailyLimit ?? limitMap.get(mb.integrationId) ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      }
 
       // Check if mailbox has too many active threads
       const activeThreadCount = (mb.activeThreadIds || []).length;
@@ -161,8 +208,7 @@ export class WarmupScheduler {
 
       if (!recipient[0] || recipient[0].status !== 'active') continue;
 
-      // Validate recipient hasn't hit its dynamic limits either
-      const recipientLimit = limitMap.get(recipient[0].integrationId) ?? 5;
+      const recipientLimit = recipient[0].dailyLimit ?? limitMap.get(recipient[0].integrationId ?? '') ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
       if (
         recipient[0].dailySentCount >= recipientLimit ||
         recipient[0].dailyReceivedCount >= recipientLimit
@@ -229,10 +275,6 @@ export class WarmupScheduler {
   private async resetDailyCounters() {
     console.log('[Warmup][Scheduler] Resetting daily counters...');
 
-    // [CRITICAL] Reset counters for ALL mailboxes, not just active ones.
-    // Mailboxes paused for daily_limit_reached must have their counters
-    // zeroed BEFORE they are resumed, otherwise they immediately hit the
-    // limit again on the next scheduler tick.
     await db
       .update(warmupMailboxes)
       .set({
@@ -241,7 +283,6 @@ export class WarmupScheduler {
         lastResetAt: new Date(),
       });
 
-    // Resume mailboxes paused for daily_limit_reached or daily_received_limit_reached
     const resumed = await db
       .update(warmupMailboxes)
       .set({ status: 'active', pauseReason: null })
@@ -251,10 +292,10 @@ export class WarmupScheduler {
       .returning();
 
     if (resumed.length > 0) {
-      console.log(
-        `[Warmup][Scheduler] Resumed ${resumed.length} mailbox(es) from daily limits`
-      );
+      console.log(`[Warmup][Scheduler] Resumed ${resumed.length} mailbox(es) from daily limits`);
     }
+
+    await seedFleetManager.resetSeedDailyCounters();
 
     // Mark very old stalled threads as error (cleanup)
     // Also catch threads that were never interacted with (lastInteractionAt IS NULL)

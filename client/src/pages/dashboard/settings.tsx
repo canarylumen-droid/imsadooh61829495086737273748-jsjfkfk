@@ -259,7 +259,7 @@ export default function SettingsPage() {
         <TabsContent value="profile" className="space-y-6">
           <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-8">
             <Card className="border-border/50 shadow-sm rounded-2xl">
-              <CardContent className="flex flex-col items-center p-8">
+              <CardContent className="flex flex-col items-center p-4 sm:p-8">
                 <div className="relative group mb-6">
                   <Avatar className="h-32 w-32 border-2 border-border shadow-md">
                     <AvatarImage src={user.avatar} className="object-cover" />

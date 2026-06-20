@@ -1,9 +1,3 @@
-/**
- * Enrollment Engine
- * Auto-enrolls email integrations into the warmup pool.
- * New mailboxes start as PAUSED — pool health monitor flips them to ACTIVE.
- */
-
 import { db } from '../db/warmup-db.js';
 import { eq, and, not, inArray, isNull } from 'drizzle-orm';
 import {
@@ -14,8 +8,11 @@ import {
   userOutreachSettings,
   warmupMailboxes,
 } from '@audnix/shared';
-import type { PoolType } from '../types/warmup-types.js';
+import type { PoolType, AnchorRole } from '../types/warmup-types.js';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
+import { domainClusterEngine } from './domain-cluster.js';
+import { anchorEngine } from './anchor-engine.js';
+import { WARMUP_CONFIG } from '../config/warmup-config.js';
 
 const ALLOWED_PROVIDERS = ['gmail', 'outlook', 'custom_email'] as const;
 const BLOCKED_HEALTH = ['suspended', 'revoked', 'error'] as const;
@@ -36,17 +33,75 @@ export class EnrollmentEngine {
       }
     }
 
-    // Cleanup mailboxes whose integrations were disconnected
     await this.cleanupDisconnected();
 
     if (enrolled > 0) {
       console.log(`[Warmup][Enrollment] Enrolled ${enrolled} new mailbox(es).`);
+
+      await domainClusterEngine.scanAndCluster();
+
+      const unclustered = await db
+        .select({ registeredDomain: warmupMailboxes.registeredDomain, organizationId: warmupMailboxes.organizationId })
+        .from(warmupMailboxes)
+        .where(isNull(warmupMailboxes.anchorRole));
+
+      const domains = new Set<string>();
+      for (const mb of unclustered) {
+        if (mb.registeredDomain) {
+          const key = `${mb.registeredDomain}::${mb.organizationId || 'null'}`;
+          if (!domains.has(key)) {
+            domains.add(key);
+            await this.autoAssignAnchorRoles(mb.registeredDomain, mb.organizationId);
+          }
+        }
+      }
+
+      for (const domainKey of domains) {
+        const [domain, orgIdStr] = domainKey.split('::');
+        const orgId = orgIdStr === 'null' ? null : orgIdStr;
+        await anchorEngine.rebalanceDomain(domain, orgId);
+      }
     }
     return enrolled;
   }
 
+  private async autoAssignAnchorRoles(domain: string, orgId: string | null): Promise<void> {
+    const gmailOutlook = await db
+      .select()
+      .from(warmupMailboxes)
+      .where(
+        and(
+          eq(warmupMailboxes.registeredDomain, domain),
+          orgId ? eq(warmupMailboxes.organizationId, orgId) : isNull(warmupMailboxes.organizationId),
+          eq(warmupMailboxes.status, 'paused'),
+          inArray(warmupMailboxes.provider, ['gmail', 'outlook']),
+          isNull(warmupMailboxes.anchorRole)
+        )
+      )
+      .orderBy(warmupMailboxes.createdAt)
+      .limit(WARMUP_CONFIG.ANCHORS_PER_DOMAIN);
+
+    for (const mb of gmailOutlook) {
+      await db
+        .update(warmupMailboxes)
+        .set({ anchorRole: 'anchor' })
+        .where(eq(warmupMailboxes.id, mb.id));
+      console.log(`[Warmup][Enrollment] Auto-promoted ${mb.email} to anchor for domain ${domain}`);
+    }
+
+    await db
+      .update(warmupMailboxes)
+      .set({ anchorRole: 'member' })
+      .where(
+        and(
+          eq(warmupMailboxes.registeredDomain, domain),
+          orgId ? eq(warmupMailboxes.organizationId, orgId) : isNull(warmupMailboxes.organizationId),
+          isNull(warmupMailboxes.anchorRole)
+        )
+      );
+  }
+
   private async findEligibleIntegrations() {
-    // Find all email integrations that are connected and healthy
     const candidates = await db
       .select({
         integration: integrations,
@@ -62,7 +117,6 @@ export class EnrollmentEngine {
         )
       );
 
-    // Filter out already-enrolled + trial-plan check
     const alreadyEnrolled = await db
       .select({ integrationId: warmupMailboxes.integrationId })
       .from(warmupMailboxes);
@@ -82,7 +136,6 @@ export class EnrollmentEngine {
     for (const row of candidates) {
       if (enrolledIds.has(row.integration.id)) continue;
 
-      // Check plan: trial users excluded unless warmup explicitly enabled
       const isTrial = row.user.plan === 'trial' && row.user.subscriptionTier === 'free';
       if (isTrial) {
         const settings = await db
@@ -94,7 +147,6 @@ export class EnrollmentEngine {
         if (!warmupEnabled) continue;
       }
 
-      // Resolve organization
       let orgId: string | null = null;
       const team = await db
         .select()
@@ -103,7 +155,6 @@ export class EnrollmentEngine {
         .limit(1);
       if (team[0]) orgId = team[0].organizationId;
       else {
-        // Check if user owns an org
         const org = await db
           .select()
           .from(organizations)
@@ -137,7 +188,6 @@ export class EnrollmentEngine {
     subscriptionTier: string | null;
     encryptedMeta: string | null;
   }) {
-    // Decrypt integration credentials into metadata
     let metadata: any = {};
     if (candidate.encryptedMeta) {
       try {
@@ -156,6 +206,8 @@ export class EnrollmentEngine {
       metadata.accountType ||
       candidate.email;
 
+    const registeredDomain = domainClusterEngine.extractRegisteredDomain(mailboxEmail);
+
     await db.insert(warmupMailboxes).values({
       integrationId: candidate.integrationId,
       userId: candidate.userId,
@@ -165,13 +217,15 @@ export class EnrollmentEngine {
       status: 'paused',
       pauseReason: poolType === 'enterprise' ? 'single_mailbox_enterprise' : 'empty_global_pool',
       poolType,
+      registeredDomain,
+      anchorRole: 'member',
       dailySentCount: 0,
       dailyReceivedCount: 0,
       metadata,
     });
 
     console.log(
-      `[Warmup][Enrollment] Enrolled ${candidate.email} → pool=${poolType}, status=paused`
+      `[Warmup][Enrollment] Enrolled ${mailboxEmail} → domain=${registeredDomain}, pool=${poolType}`
     );
   }
 
@@ -184,8 +238,6 @@ export class EnrollmentEngine {
       candidate.plan === 'enterprise' || candidate.subscriptionTier === 'enterprise';
     if (!isEnterprise || !candidate.organizationId) return 'global';
 
-    // Enterprise org mailboxes must never leak into the shared global warmup pool.
-    // Pool health activation can still keep them paused until the org has enough peers.
     return 'enterprise';
   }
 
@@ -211,10 +263,9 @@ export class EnrollmentEngine {
           .set({ status: 'unenrolled', pauseReason: 'integration_disconnected' })
           .where(eq(warmupMailboxes.id, row.mbId));
       }
-      console.log(`[Warmup][Enrollment] Cleaned up ${orphaned.length} orphaned mailbox(es) (integration disconnected).`);
+      console.log(`[Warmup][Enrollment] Cleaned up ${orphaned.length} orphaned mailbox(es).`);
     }
 
-    // Also pause mailboxes whose integration is explicitly disconnected
     const disconnected = await db
       .select({
         mbId: warmupMailboxes.id,

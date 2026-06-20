@@ -34,6 +34,8 @@ import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { decryptToJSON } from '@shared/lib/crypto/encryption.js';
 import { mailboxHealthService } from '@services/email-service/src/email/mailbox-health-service.js';
 import { warmupService } from '@services/outreach-worker/src/outreach-lib/warmup-service.js';
+import { canSendToProvider, recordProviderOutcome } from '@services/email-service/src/email/provider-reputation.js';
+import { shouldYieldInitialSends } from '@services/email-service/src/email/mailbox-coordinator.js';
 import { getLeadProfile, isWithinLeadPreferredWindow, getOptimalSendProbability } from '../calendar/lead-timezone-intelligence.js';
 
 // ─── Job Type Definitions ─────────────────────────────────────────────────────
@@ -974,8 +976,14 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
   }
 
   if (initialSentToday >= effectiveLimit) {
-    // Reschedule in 1 hour so the mailbox resumes when the initial outreach limit resets (new day)
     await rescheduleSendBatch(data, 60 * 60 * 1000);
+    return;
+  }
+
+  const mailboxStatus = shouldYieldInitialSends(integrationId);
+  if (mailboxStatus.yield) {
+    console.log(`[CampaignWorker] ⏸️ Yielding initial sends for ${integrationId.slice(-8)} — ${mailboxStatus.reason}`);
+    await rescheduleSendBatch(data, 5 * 60 * 1000);
     return;
   }
 
@@ -1244,7 +1252,22 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
         if (lead.channel === 'instagram') {
           await deliverCampaignInstagram(userId, campaign, lead, leadEntry, integrationId);
         } else {
+          const providerCheck = await canSendToProvider(
+            integrationId, lead.email,
+            false,
+            currentIntegration ? { providerLimits: (currentIntegration as any).providerLimits, initialOutreachLimit: (currentIntegration as any).initialOutreachLimit } : undefined
+          );
+          if (!providerCheck.allowed) {
+            console.log(`[CampaignWorker] ⏸️ ${providerCheck.reason} — skipping ${lead.email}, other providers unaffected`);
+            await withDbRetry(() => db.update(campaignLeads)
+              .set({ nextActionAt: new Date(Date.now() + 3600000), status: 'queued' })
+              .where(eq(campaignLeads.id, leadEntry.id)));
+            continue;
+          }
           await deliverCampaignEmail(userId, campaign, lead, leadEntry, integrationId);
+          recordProviderOutcome(integrationId, lead.email, 'sent').catch((err: any) => {
+            console.warn(`[CampaignWorker] ⚠️ Failed to record provider outcome: ${err.message}`);
+          });
         }
       }
 
@@ -1461,7 +1484,12 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
   const maxMultiplier = maxMultipliers[integrationId] || config.maxDailyMultiplier || (isSmtp ? 10 : 7);
   const hardCeiling = config.totalDailyLimit || (effectiveHardLimit * maxMultiplier) || defaultCeiling;
 
-  // REMOVED — Follow-ups are NEVER throttled by daily limits
+  // Follow-ups share the daily limit with initial sends (total cap applies)
+  if (sentToday >= hardCeiling) {
+    console.log(`[CampaignWorker] ⏸️ Follow-up deferred — total daily cap hit (${sentToday}/${hardCeiling}) for ${lead.email}`);
+    await campaignQueueManager.scheduleFollowUp(campaignId, userId, campaignLeadId, integrationId, stepIndex, 3600000);
+    return;
+  }
 
   // 6. Deliver the follow-up email
   try {
@@ -1560,6 +1588,7 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     .where(eq(campaignLeads.id, campaignLeadId));
   if (!leadEntry) return;
 
+  // Auto-replies NEVER check daily limits — they are responses to incoming messages
   // Get the auto-reply body from campaign template
   let body = (campaign.template as any)?.autoReply?.body || (campaign.template as any)?.autoReplyBody || "Thanks for your reply! We'll get back to you soon.";
   let subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject || 'Re: ';
