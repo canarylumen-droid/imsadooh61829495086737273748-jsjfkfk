@@ -82,8 +82,13 @@ export async function startWarmupService() {
     console.log(`[Warmup][Inbound] Job ${job.id} completed`);
   });
 
-  // Provision platform seeds from env
-  await provisionSeedsOnStartup();
+  // Provision platform seeds from env (retries 3x internally, falls back gracefully)
+  try {
+    await provisionSeedsOnStartup();
+  } catch (err: any) {
+    console.error('[Warmup Service] Unexpected error in seed provisioning:', err.message);
+    console.warn('[Warmup Service] Continuing without platform seeds.');
+  }
 
   // Start 24/7 scheduler
   await warmupScheduler.start();
