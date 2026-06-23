@@ -263,6 +263,7 @@ export default function DashboardHome() {
 
   const { data: integrations } = useQuery<any[]>({
     queryKey: ["/api/integrations"],
+    select: (data: any) => data.integrations || [],
   });
 
   const activities = activityData?.activities || [];

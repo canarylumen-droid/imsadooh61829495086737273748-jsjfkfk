@@ -84,6 +84,7 @@ export function RecentConversations() {
 
   const { data: integrations } = useQuery<any[]>({
     queryKey: ["/api/integrations"],
+    select: (data: any) => data.integrations || [],
   });
 
   const isAnyChannelConnected = integrations?.some(i => i.connected) ?? false;
