@@ -1,6 +1,6 @@
 import { db } from '@shared/lib/db/db.js';
 import { users, integrations, calendarEvents, leads } from '@audnix/shared';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { calendlyService } from './calendly-service.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 
@@ -77,11 +77,27 @@ async function syncCalendlyEventsForUser(userId: string): Promise<number> {
 
     if (existing.length === 0) {
       // Find lead by email
-      const [lead] = await db
+      let [lead] = await db
         .select()
         .from(leads)
         .where(and(eq(leads.userId, userId), eq(leads.email, invitee.email)))
         .limit(1);
+
+      // Fallback: match by name if email didn't match (e.g. personal email used)
+      if (!lead && invitee.name) {
+        [lead] = await db
+          .select()
+          .from(leads)
+          .where(and(
+            eq(leads.userId, userId),
+            sql`LOWER(${leads.name}) = LOWER(${invitee.name})`
+          ))
+          .limit(1);
+
+        if (lead) {
+          console.log(`[Calendly Sync] Matched lead by name "${invitee.name}" for user ${userId}`);
+        }
+      }
 
       const [booking] = await db.insert(calendarEvents).values({
         userId,

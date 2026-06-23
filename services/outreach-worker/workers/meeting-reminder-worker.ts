@@ -1,6 +1,6 @@
 import { db } from '@shared/lib/db/db.js';
 import { calendarEvents, users, leads, aiActionLogs, leadTimezoneProfiles } from '@audnix/shared';
-import { eq, and, or, gt, lt, isNull } from 'drizzle-orm';
+import { eq, and, or, gt, lt, isNull, not, sql } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from "@shared/lib/channels/email.js";
 import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
@@ -111,6 +111,9 @@ export class MeetingReminderWorker {
           console.error(`[MeetingReminder] Error processing booking ${booking.id}:`, bookingError);
         }
       }
+
+      // Check 3-hour booking reminders
+      await this.checkAndSendBookingReminders();
 
       workerHealthMonitor.recordSuccess('meeting-reminder-worker');
     } catch (error: any) {
@@ -332,6 +335,148 @@ Output requirements:
     } catch (err) {
       console.error(`[MeetingReminder] Error processing Fathom post-meeting summary:`, err);
       return false;
+    }
+  }
+
+  private async checkAndSendBookingReminders(): Promise<void> {
+    const now = new Date();
+    const threeHoursAgo = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+    const sixHoursAgo = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+
+    try {
+      // Two groups:
+      //   A – Lead replied with booking intent → timer based on intent time
+      //   B – Lead got a booking link but never replied → timer based on link sent time
+      const candidates = await db.select().from(leads).where(
+        and(
+          or(
+            // Group A: booking intent detected 3-6 hours ago
+            and(
+              sql`leads.metadata->>'bookingIntentDetectedAt' IS NOT NULL`,
+              sql`(leads.metadata->>'bookingIntentDetectedAt')::timestamp <= ${threeHoursAgo.toISOString()}::timestamp`,
+              sql`(leads.metadata->>'bookingIntentDetectedAt')::timestamp >= ${sixHoursAgo.toISOString()}::timestamp`,
+            ),
+            // Group B: link sent 3-6 hours ago, no intent reply
+            and(
+              sql`leads.metadata->>'bookingIntentDetectedAt' IS NULL`,
+              sql`leads.metadata->>'bookingLinkSentAt' IS NOT NULL`,
+              sql`(leads.metadata->>'bookingLinkSentAt')::timestamp <= ${threeHoursAgo.toISOString()}::timestamp`,
+              sql`(leads.metadata->>'bookingLinkSentAt')::timestamp >= ${sixHoursAgo.toISOString()}::timestamp`,
+            )
+          ),
+          sql`leads.metadata->>'bookingReminderSentAt' IS NULL`,
+          not(eq(leads.status, 'booked'))
+        )
+      );
+
+      for (const lead of candidates) {
+        try {
+          // Safety check: verify no meeting exists in calendarEvents (handles 10-min sync gap)
+          const existingEvent = await db.select()
+            .from(calendarEvents)
+            .where(and(
+              eq(calendarEvents.leadId, lead.id),
+              eq(calendarEvents.userId, lead.userId),
+              or(
+                eq(calendarEvents.status, 'scheduled'),
+                eq(calendarEvents.status, 'completed')
+              )
+            ))
+            .limit(1);
+
+          if (existingEvent.length > 0) {
+            const meta = { ...(lead.metadata as Record<string, any> || {}) };
+            meta.bookingReminderStatus = 'booked';
+            meta.bookingReminderSentAt = new Date().toISOString();
+            await db.update(leads)
+              .set({ metadata: meta, updatedAt: new Date() })
+              .where(eq(leads.id, lead.id));
+            continue;
+          }
+
+          const user = await storage.getUserById(lead.userId);
+          if (!user) continue;
+          if ((user.config as any)?.autonomousMode === false) continue;
+
+          const recipientEmail = lead.replyEmail || lead.email;
+          if (!recipientEmail) continue;
+
+          const calendarLink = user.calendarLink || lead.calendlyLink || 'our calendar';
+          const recipientName = lead.name || 'there';
+
+          const leadMeta = (lead.metadata as Record<string, any>) || {};
+          const hasIntent = !!leadMeta.bookingIntentDetectedAt;
+
+          console.log(`[BookingReminder] Sending 3-hour booking reminder to ${recipientEmail} for lead ${lead.id} (intent: ${hasIntent})`);
+
+          // Build conversation context for AI-generated reminder
+          const history = await storage.getMessagesByLeadId(lead.id);
+          const historyStr = history.slice(-5).map(m =>
+            `${m.direction === 'inbound' ? 'Lead' : 'AI'}: ${m.body}`
+          ).join('\n');
+
+          const { text } = await generateReply(
+            `You are a high-performing AI sales assistant writing a brief, warm check-in email.
+Rules:
+- 1-2 sentences maximum
+- No emojis, no fluff
+- Warm, human tone — not robotic
+- Include the calendar link naturally
+- Do NOT mention timezones or specific times
+- Output only the final message. No explanations.`,
+            hasIntent
+              ? `Write a brief check-in email.
+
+Context:
+- Lead name: ${recipientName}
+- They recently expressed interest in booking a call but haven't scheduled yet
+- Your business: ${user.company || user.businessName || 'Our Team'}
+- Calendar link: ${calendarLink}
+- Recent conversation:
+${historyStr || 'None'}
+
+Instructions:
+- Friendly nudge, no pressure
+- Reference their interest naturally
+- Keep it 1-2 sentences`
+              : `Write a brief check-in email.
+
+Context:
+- Lead name: ${recipientName}
+- I sent them my calendar link earlier but they haven't booked yet
+- Your business: ${user.company || user.businessName || 'Our Team'}
+- Calendar link: ${calendarLink}
+- Recent conversation:
+${historyStr || 'None'}
+
+Instructions:
+- Friendly check-in, no pressure
+- Do NOT pretend they expressed interest — they may have just been busy
+- Keep it 1-2 sentences`
+          );
+
+          await sendEmail(
+            lead.userId,
+            recipientEmail,
+            text,
+            'Quick check-in',
+            { isHtml: true, leadId: lead.id }
+          );
+
+          const updatedMeta = { ...(lead.metadata as Record<string, any> || {}) };
+          updatedMeta.bookingReminderSentAt = new Date().toISOString();
+          updatedMeta.bookingReminderStatus = 'sent';
+          await db.update(leads)
+            .set({ metadata: updatedMeta, updatedAt: new Date() })
+            .where(eq(leads.id, lead.id));
+
+          console.log(`[BookingReminder] Reminder sent to ${recipientEmail}`);
+        } catch (leadErr) {
+          console.error(`[BookingReminder] Error processing lead ${lead.id}:`, leadErr);
+        }
+      }
+    } catch (error) {
+      console.error('[BookingReminder] Error checking booking reminders:', error);
     }
   }
 

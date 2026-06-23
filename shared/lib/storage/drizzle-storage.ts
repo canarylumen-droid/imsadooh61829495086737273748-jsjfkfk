@@ -955,13 +955,51 @@ export class DrizzleStorage implements IStorage {
       .returning();
 
     if (result[0]) {
+      const bodyText = message.body.toLowerCase();
+      const hasBookingLink = bodyText.includes('calendly.com') ||
+                            message.metadata?.intent === 'booking' ||
+                            message.metadata?.isMeetingInvite === true;
+
+      const [lead] = await db.select().from(leads).where(eq(leads.id, message.leadId)).limit(1);
+      const currentMetadata = (lead?.metadata as Record<string, any>) || {};
+      const newMetadata = { ...currentMetadata };
+
+      if (message.direction === 'outbound' && hasBookingLink) {
+        newMetadata.bookingLinkSentAt = new Date().toISOString();
+        newMetadata.bookingReminderSentAt = null;
+        newMetadata.bookingReminderStatus = 'pending';
+        console.log(`[BookingReminder] Registered booking link sent to lead ${message.leadId} at ${newMetadata.bookingLinkSentAt}`);
+      }
+
+      // Detect booking intent in inbound replies (e.g. "yes let's book", "I'm in")
+      if (message.direction === 'inbound') {
+        const BOOKING_INTENT_PATTERNS = [
+          /\blet'?s\b.*\b(book|schedule|meet|talk|hop|find|set)\b/i,
+          /\bi'?d (like|love) to\b.*\b(book|schedule|talk|meet|hop)\b/i,
+          /\byes\b.*\b(let'?s|book|schedule|meet|call)\b/i,
+          /\bsounds good\b/i,
+          /\blet'?s do (it|this)\b/i,
+          /\bi'?m (ready|in|interested)\b/i,
+          /\bsign me up\b/i,
+          /\bschedule\b.*\b(call|meeting|time|demo)\b/i,
+        ];
+        const hasBookingIntent = BOOKING_INTENT_PATTERNS.some(p => p.test(message.body));
+        if (hasBookingIntent) {
+          newMetadata.bookingIntentDetectedAt = new Date().toISOString();
+          newMetadata.bookingReminderSentAt = null;
+          newMetadata.bookingReminderStatus = 'intent_detected';
+          console.log(`[BookingReminder] Booking intent detected for lead ${message.leadId}`);
+        }
+      }
+
       // Update lead's lastMessageAt
       await db.update(leads)
         .set({
           lastMessageAt: new Date(),
           updatedAt: new Date(),
           snippet: message.body.substring(0, 150).replace(/\n/g, ' '),
-          status: message.direction === 'inbound' ? 'replied' : undefined
+          status: message.direction === 'inbound' ? 'replied' : undefined,
+          metadata: newMetadata
         })
         .where(eq(leads.id, message.leadId));
 

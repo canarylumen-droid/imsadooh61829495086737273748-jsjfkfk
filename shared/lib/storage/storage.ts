@@ -686,10 +686,54 @@ export class MemStorage implements IStorage {
       updatedAt: now,
     };
     this.messages.set(id, newMessage);
-    
+
+    // Track booking link sent in lead metadata
+    const bodyText = message.body.toLowerCase();
+    const hasBookingLink = bodyText.includes('calendly.com') ||
+                          (message.metadata as any)?.intent === 'booking' ||
+                          (message.metadata as any)?.isMeetingInvite === true;
+
+    if (message.direction === 'outbound' && hasBookingLink) {
+      const lead = this.leads.get(message.leadId);
+      if (lead) {
+        const leadMeta = { ...(lead.metadata as Record<string, any> || {}) };
+        leadMeta.bookingLinkSentAt = new Date().toISOString();
+        leadMeta.bookingReminderSentAt = null;
+        leadMeta.bookingReminderStatus = 'pending';
+        this.leads.set(message.leadId, { ...lead, metadata: leadMeta });
+        console.log(`[BookingReminder] Registered booking link sent to lead ${message.leadId} at ${leadMeta.bookingLinkSentAt}`);
+      }
+    }
+
+    // Detect booking intent in inbound replies
+    if (message.direction === 'inbound') {
+      const BOOKING_INTENT_PATTERNS = [
+        /\blet'?s\b.*\b(book|schedule|meet|talk|hop|find|set)\b/i,
+        /\bi'?d (like|love) to\b.*\b(book|schedule|talk|meet|hop)\b/i,
+        /\byes\b.*\b(let'?s|book|schedule|meet|call)\b/i,
+        /\bsounds good\b/i,
+        /\blet'?s do (it|this)\b/i,
+        /\bi'?m (ready|in|interested)\b/i,
+        /\bsign me up\b/i,
+        /\bschedule\b.*\b(call|meeting|time|demo)\b/i,
+      ];
+      const hasBookingIntent = BOOKING_INTENT_PATTERNS.some(p => p.test(message.body));
+      if (hasBookingIntent) {
+        const lead = this.leads.get(message.leadId);
+        if (lead) {
+          const leadMeta = { ...(lead.metadata as Record<string, any> || {}) };
+          leadMeta.bookingIntentDetectedAt = new Date().toISOString();
+          leadMeta.bookingReminderSentAt = null;
+          leadMeta.bookingReminderStatus = 'intent_detected';
+          this.leads.set(message.leadId, { ...lead, metadata: leadMeta });
+          console.log(`[BookingReminder] Booking intent detected for lead ${message.leadId}`);
+        }
+      }
+    }
+
     // Trigger WebSocket sync
     wsSync.notifyMessagesUpdated(message.userId, { event: 'INSERT', message: newMessage });
-    
+
     return newMessage;
   }
   async updateMessage(id: string, updates: Partial<Message>): Promise<Message | undefined> {
