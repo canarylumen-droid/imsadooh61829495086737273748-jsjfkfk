@@ -93,6 +93,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   // Fetch only email mailboxes (not calendar/instagram) — reduces payload from 500-item full list
   const { data: integrations = [] } = useQuery<any[]>({
     queryKey: ['/api/integrations', { provider: 'custom_email,gmail,outlook', connected: 'true' }],
+    select: (data: any) => data.integrations || [],
     staleTime: 30_000,
   });
 

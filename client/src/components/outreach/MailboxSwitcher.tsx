@@ -33,6 +33,7 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
     const [, setLocation] = useLocation();
     const { data: integrations, isLoading } = useQuery<any[]>({
         queryKey: ["/api/integrations"],
+        select: (data: any) => data.integrations || [],
     });
 
     const [mailboxSearch, setMailboxSearch] = useState("");
