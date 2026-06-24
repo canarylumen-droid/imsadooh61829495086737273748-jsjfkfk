@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-const CERTS = ["GDPR_READY", "CCPA_READY", "EMAIL_AUTH", "ENCRYPTION", "SOC_2_IN_PROGRESS"];
+const CERTS = ["EMAIL_AUTH", "ENCRYPTION", "ACCESS_CTRL", "DATA_ISOLATION", "AUDIT_LOG"];
 
 const FEATURES = [
   {
@@ -19,7 +19,7 @@ const FEATURES = [
     id: "03",
     tag: "COMPLIANCE",
     title: "EMAIL COMPLIANCE",
-    desc: "GDPR-ready. CCPA compliance. CAN-SPAM adherence. Unsubscribe links auto-added. Bounce handling. Reputation protection.",
+    desc: "Built-in unsubscribe links. Automatic bounce handling. Sender reputation monitoring. CAN-SPAM friendly practices.",
   },
   {
     id: "04",

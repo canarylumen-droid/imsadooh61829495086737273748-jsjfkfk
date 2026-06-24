@@ -239,7 +239,7 @@ export function PricingSection() {
         </div>
 
         <p className="py-5 text-center font-mono text-[10px] text-[#6a9aaa]">
-          ALL PLANS INCLUDE E2E ENCRYPTION · SOC 2 COMPLIANCE · 99.97% UPTIME SLA
+          CANCEL ANYTIME · NO LONG-TERM CONTRACTS · 3-DAY FREE TRIAL
         </p>
       </div>
     </section>

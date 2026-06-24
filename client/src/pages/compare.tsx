@@ -144,11 +144,11 @@ And when n8n goes down? Your leads aren't waiting. They're moving to your compet
                 type: "comparison",
                 items: [
                     { feature: "Hosting", manychat: "Self-Managed", audnix: "Fully Managed Cloud" },
-                    { feature: "Uptime SLA", manychat: "You're Responsible", audnix: "99.9% Guaranteed" },
+                    { feature: "Reliability", manychat: "You're Responsible", audnix: "Enterprise-Grade" },
                     { feature: "AI Integration", manychat: "Manual (OpenAI Node)", audnix: "Native Brain Engine" },
                     { feature: "Sales Features", manychat: "Build from Scratch", audnix: "Out-of-the-Box" },
                     { feature: "Support", manychat: "Community Forums", audnix: "24/7 Priority Support" },
-                    { feature: "Security", manychat: "Your Responsibility", audnix: "SOC 2 Type II Ready" },
+                    { feature: "Security", manychat: "Your Responsibility", audnix: "Enterprise-Grade Encryption" },
                 ]
             },
             {

@@ -279,7 +279,7 @@ export default function PricingPage() {
           </div>
 
           <p className="py-5 text-center font-mono text-[10px] text-[#3a3a3a]">
-            ALL PLANS INCLUDE E2E ENCRYPTION · SOC 2 COMPLIANCE · 99.97% UPTIME SLA
+            CANCEL ANYTIME · NO LONG-TERM CONTRACTS · 3-DAY FREE TRIAL
           </p>
         </div>
       </section>

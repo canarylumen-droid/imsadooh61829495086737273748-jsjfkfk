@@ -36,7 +36,7 @@ export function Navigation() {
         {/* Main nav */}
         <div className="px-6 lg:px-12 h-14 flex items-center justify-between">
           {/* Logo */}
-          <a href="#" className="flex items-center gap-3 group">
+          <a href="/" className="flex items-center gap-3 group">
             <img src="/logo.svg" alt="AUDNIX" className="h-7 w-auto" />
             <span className="font-display text-2xl tracking-[0.15em] text-[#f2ede6]">AUDNIX</span>
 

@@ -215,7 +215,7 @@ export default function FoundersPage() {
               { q: 'Will emails end up in spam folder?', a: 'No. We use industry best practices: proper SPF/DKIM, natural sending patterns, and warmup sequences. 98%+ inbox placement rate guaranteed.' },
               { q: 'How quickly do I see results?', a: 'First responses in 2-3 days. Full campaign takes 1-2 weeks. Typical 18% response rate within 30 days. ROI usually positive by week 2.' },
               { q: 'Can I write my own emails?', a: 'Yes. Full control. Use templates or write custom emails. AI personalizes based on company data. You set tone, messaging, and CTAs.' },
-              { q: 'What if a prospect isn\'t interested?', a: 'Prospects can reply and opt out anytime. We manage unsubscribe compliance automatically. Respects all email laws.' },
+              { q: 'What if a prospect isn\'t interested?', a: 'Prospects can reply and opt out anytime. We handle unsubscribes automatically and respect all opt-out requests.' },
               { q: 'Can I track results?', a: 'Real-time analytics: opens, clicks, replies. See which messaging converts best. Test subject lines and optimize campaigns on the fly.' }
             ].map((faq, i) => (
               <div key={i} className="transition-all duration-500">
