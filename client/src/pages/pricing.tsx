@@ -407,7 +407,7 @@ export default function PricingPage() {
         <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="max-w-2xl mx-auto">
           <h2 className="font-display text-5xl lg:text-6xl mb-4">Start Building Revenue Today</h2>
           <p className="text-[#5a5a5a] mb-8">All plans include a 3-day free trial. No credit card required. Cancel anytime.</p>
-          <a href="/get-started" className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-8 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
+          <a href="/signup" className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-8 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
             START FREE TRIAL
             <ChevronRight className="w-4 h-4" />
           </a>

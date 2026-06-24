@@ -173,6 +173,8 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
     "Reports": true
   });
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+
+  useEffect(() => { setMobileMenuOpen(false); }, [location]);
   const [showPushPrompt, setShowPushPrompt] = useState(true);
 
   // Optimistic UI for AI Toggle

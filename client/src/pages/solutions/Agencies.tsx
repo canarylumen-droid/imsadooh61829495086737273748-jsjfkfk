@@ -69,7 +69,7 @@ export default function AgenciesPage() {
           >
             <ElectricBorder>
               <a
-                href="/get-started"
+                href="/signup"
                 className="group inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 py-4 hover:bg-[#42a5f5] transition-colors font-semibold rounded"
               >
                 START FREE TRIAL
@@ -365,7 +365,7 @@ export default function AgenciesPage() {
             Join agencies making $50K-$500K annually with Audnix.
           </p>
           <a
-            href="/get-started"
+            href="/signup"
             className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-8 py-4 hover:bg-[#42a5f5] transition-colors font-semibold"
           >
             GET STARTED FREE

@@ -48,7 +48,7 @@ export default function CreatorsPage() {
           </motion.p>
 
           <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="/get-started" className="group inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
+            <a href="/signup" className="group inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
               START FREE TRIAL <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </a>
             <a href="#" className="group inline-flex items-center gap-3 border border-[#1e1e1e] text-[#f2ede6] font-mono text-sm tracking-widest px-6 py-4 hover:border-[#2196f3]/40 transition-colors">
@@ -208,7 +208,7 @@ export default function CreatorsPage() {
         <motion.div initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="max-w-2xl mx-auto">
           <h2 className="font-display text-4xl md:text-5xl mb-4 md:mb-6">Scale Cold Email Today</h2>
           <p className="text-[#b0aca3] mb-8 text-sm md:text-base">Send personalized emails to 1000s of prospects. Get qualified responses automatically.</p>
-          <a href="/get-started" className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 md:px-8 py-3 md:py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
+          <a href="/signup" className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 md:px-8 py-3 md:py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
             START FREE TRIAL <ChevronRight className="w-4 h-4" />
           </a>
         </motion.div>

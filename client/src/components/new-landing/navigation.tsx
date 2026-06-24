@@ -64,7 +64,7 @@ export function Navigation() {
               LOGIN
             </a>
             <a
-              href="/get-started"
+              href="/signup"
               className="font-mono text-[11px] tracking-widest bg-[#2196f3] text-[#050505] px-5 h-9 flex items-center hover:bg-[#42a5f5] transition-colors font-semibold"
             >
               START FREE TRIAL →
@@ -116,7 +116,7 @@ export function Navigation() {
             LOGIN
           </a>
           <a
-            href="/get-started"
+            href="/signup"
             onClick={() => setOpen(false)}
             className="w-full block text-center font-mono text-sm tracking-widest bg-[#2196f3] text-[#050505] py-5 font-semibold hover:bg-[#42a5f5] transition-colors"
           >

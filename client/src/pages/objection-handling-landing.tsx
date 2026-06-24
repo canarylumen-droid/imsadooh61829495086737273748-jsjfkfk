@@ -42,7 +42,7 @@ export default function ObjectionHandlingPage() {
           </motion.p>
 
           <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 justify-center">
-            <a href="/get-started" className="group inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
+            <a href="/signup" className="group inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
               MASTER OBJECTIONS
               <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </a>
@@ -228,7 +228,7 @@ export default function ObjectionHandlingPage() {
         <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="max-w-2xl mx-auto">
           <h2 className="font-display text-5xl mb-4">Transform Objections Into Wins</h2>
           <p className="text-[#5a5a5a] mb-8">Real-time AI coaching that turns deal stalls into closed revenue.</p>
-          <a href="/get-started" className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-8 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
+          <a href="/signup" className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-8 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
             ENABLE OBJECTION HANDLING
             <ChevronRight className="w-4 h-4" />
           </a>

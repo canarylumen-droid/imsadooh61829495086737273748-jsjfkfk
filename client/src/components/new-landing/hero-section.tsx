@@ -75,7 +75,7 @@ export function HeroSection() {
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row gap-3 mt-6 w-fit">
                 <a
-                  href="/get-started"
+                  href="/signup"
                   className="group inline-flex items-center gap-8 bg-[#2196f3] text-[#050505] font-mono text-xs tracking-widest px-8 py-4 hover:bg-[#42a5f5] transition-colors font-black whitespace-nowrap"
                 >
                   START FREE TRIAL
