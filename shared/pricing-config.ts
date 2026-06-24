@@ -2,7 +2,7 @@
 export interface PricingTier {
   id: string;
   name: string;
-  price: number;
+  price: number | null;
   period: string;
   description: string;
   features: string[];
@@ -81,8 +81,8 @@ export const PRICING_TIERS: PricingTier[] = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 199.99,
-    period: 'month',
+    price: null,
+    period: 'custom',
     description: 'Custom-built automation architecture for organizations lead by data.',
     leadsLimit: -1, // Unlimited
     mailboxLimit: -1, // Unlimited
