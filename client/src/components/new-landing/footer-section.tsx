@@ -31,11 +31,8 @@ export function FooterSection() {
         <div className="border-b border-[#1e1e1e] py-12 grid lg:grid-cols-[1fr_2fr] gap-10">
           <div>
             {/* Logo */}
-            <a href="#" className="inline-flex items-center gap-3 mb-5 group">
-              <div className="w-8 h-8 border border-[#2196f3] flex items-center justify-center relative">
-                <div className="w-2.5 h-2.5 bg-[#2196f3]" />
-                <div className="absolute inset-0 bg-[#2196f3]/10 group-hover:bg-[#2196f3]/20 transition-colors" />
-              </div>
+            <a href="/" className="inline-flex items-center gap-3 mb-5 group">
+              <img src="/logo.svg" alt="AUDNIX" className="h-8 w-auto" />
               <span className="font-display text-2xl tracking-[0.12em] text-[#f2ede6]">AUDNIX.AI</span>
             </a>
             <p className="text-sm text-[#3a3a3a] leading-relaxed max-w-xs font-mono">
