@@ -22,9 +22,9 @@ export default function LandingPage() {
   const { data: user, isLoading: userLoading } = useUser();
 
   useEffect(() => {
-    document.title = "AUDNIX — Cold Email Platform";
+    document.title = "AUDNIX — AI Sales Agent | Cold Email & Lead Generation Platform";
     let meta = document.querySelector('meta[name="description"]');
-    if (meta) meta.setAttribute("content", "Scale cold email outreach with AI. Personalized campaigns, automatic follow-ups, and qualified leads. The platform for founders and sales teams.");
+    if (meta) meta.setAttribute("content", "AUDNIX is the autonomous AI sales platform for cold email outreach, lead generation, and objection handling. AI SDR that prospects, qualifies, and books meetings 24/7.");
   }, []);
 
   useEffect(() => {
@@ -62,9 +62,9 @@ export default function LandingPage() {
       <SecuritySection />
       <DevelopersSection />
       <TestimonialsSection />
-      <ROICalculator />
       <FAQSection />
       <PricingSection />
+      <ROICalculator />
       <CtaSection />
       <FooterSection />
     </main>

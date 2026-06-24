@@ -402,6 +402,8 @@ export default function PricingPage() {
         </div>
       </section>
 
+      <ROICalculator />
+
       {/* CTA Section */}
       <section className="py-20 px-6 lg:px-12 text-center border-b border-[#1e1e1e]">
         <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="max-w-2xl mx-auto">
@@ -413,8 +415,6 @@ export default function PricingPage() {
           </a>
         </motion.div>
       </section>
-
-      <ROICalculator />
 
       <FooterSection />
     </main>
