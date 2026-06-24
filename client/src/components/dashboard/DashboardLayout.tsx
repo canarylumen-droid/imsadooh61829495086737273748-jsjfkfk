@@ -164,15 +164,8 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
     replayTour: () => { }
   };
   const [location, setLocation] = useLocation();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    const saved = localStorage.getItem('sidebar_collapsed');
-    return saved ? JSON.parse(saved) : false;
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  useEffect(() => {
-    localStorage.setItem('sidebar_collapsed', JSON.stringify(sidebarCollapsed));
-  }, [sidebarCollapsed]);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     "Engagement": true,

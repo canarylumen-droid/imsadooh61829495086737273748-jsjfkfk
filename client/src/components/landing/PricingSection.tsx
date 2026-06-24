@@ -61,11 +61,9 @@ export function PricingSection() {
                     </div>
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-bold text-foreground tracking-tight">
-                        {tier.price !== null ? `$${tier.price}` : "Custom"}
+                        ${tier.price}
                       </span>
-                      <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px]">
-                        {tier.price !== null ? `/ ${tier.period}` : "Pricing"}
-                      </span>
+                      <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px]">/ {tier.period}</span>
                     </div>
                     <p className="text-muted-foreground text-xs mt-4 font-medium leading-relaxed">
                       {tier.description}

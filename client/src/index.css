@@ -723,55 +723,6 @@ html:not(.dark) .glass-premium,
   .compact-section {
     @apply py-12 md:py-16;
   }
-
-  /* ── New Page Design Utilities ────────────────── */
-  .font-display {
-    font-weight: 800;
-    font-style: italic;
-    letter-spacing: -0.02em;
-  }
-
-  .font-display-normal {
-    font-weight: 800;
-    font-style: normal;
-  }
-
-  .sys-tag {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: #2196f3;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .sys-tag::before {
-    content: "";
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: #2196f3;
-    display: inline-block;
-  }
-
-  @keyframes new-page-marquee {
-    from { transform: translateX(0); }
-    to   { transform: translateX(-50%); }
-  }
-  .marquee { animation: new-page-marquee 30s linear infinite; }
-
-  @keyframes status-pulse {
-    0%, 100% { opacity: 1; }
-    50%       { opacity: 0.3; }
-  }
-  .status-pulse { animation: status-pulse 1.5s ease-in-out infinite; }
-
-  @keyframes blue-glow {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(33,150,243,0); }
-    50%       { box-shadow: 0 0 24px 4px rgba(33,150,243,0.15); }
-  }
-  .amber-glow { animation: blue-glow 3s ease-in-out infinite; }
 }
 
 @media (max-width: 360px) {

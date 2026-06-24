@@ -500,7 +500,7 @@ export default function DashboardHome() {
           </motion.div>
         )}
 
-        {/* Metrics Summary Row */}
+        {/* Premium Minimalist 5-Column Horizontal Summary */}
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -515,27 +515,33 @@ export default function DashboardHome() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.05, duration: 0.3, ease: "easeOut" }}
-                className="relative overflow-hidden rounded-lg border border-border/40 bg-card/40 backdrop-blur-sm p-4 transition-all hover:border-primary/30"
+                className={cn(
+                  "relative overflow-hidden rounded-lg border border-border/40 bg-card/40 backdrop-blur-sm p-4 transition-all hover:border-primary/30",
+                  metric.bgColor
+                )}
               >
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="p-1.5 rounded-md bg-muted/30 border border-border/20">
+                  <div className={cn("p-1.5 rounded-md", metric.bgColor, metric.borderColor)}>
                     <Icon className={cn("h-3.5 w-3.5", metric.color)} />
                   </div>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">{metric.label}</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {metric.label}
+                  </span>
                 </div>
                 <div className="text-xl font-bold text-foreground">
                   {metric.value}
-                  <span className="text-sm font-medium text-muted-foreground/60 ml-1">{metric.suffix}</span>
+                  <span className="text-sm font-medium text-muted-foreground/60 ml-1">
+                    {metric.suffix}
+                  </span>
                 </div>
               </motion.div>
             );
           })}
         </motion.div>
 
-        {/* Main Content: 3-column professional grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Left Column: AI Insights + Campaigns */}
-          <div className="lg:col-span-2 space-y-5">
+        {/* Main Content Split */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <div className="space-y-5">
             {activities.length > 0 && insightsData?.summary && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
@@ -546,76 +552,65 @@ export default function DashboardHome() {
                 <h4 className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-primary mb-2">
                   <Brain className="h-4 w-4" /> Deep Insights
                 </h4>
-                <p className="text-sm text-foreground/80 leading-relaxed">{cleanInsightSummary}</p>
+                {cleanInsightSummary ? cleanInsightSummary : ""}
               </motion.div>
             )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              <div className="space-y-5">
-                {activeCampaign && (
-                  <CampaignHealthDashboard campaignId={activeCampaign.id} />
-                )}
-                <Card className="border-border/50">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Activity Log</CardTitle>
-                  </CardHeader>
-                  <CardContent className="max-h-[320px] overflow-y-auto">
-                    <AutonomousActionFeed logs={statsData?.aiActionLogs || []} />
-                  </CardContent>
-                </Card>
+            {activeCampaign && (
+              <div className="space-y-4">
+                <CampaignHealthDashboard campaignId={activeCampaign.id} />
               </div>
-              <div className="space-y-5">
-                <ReputationCard 
-                  score={stats?.health?.score !== undefined ? stats.health.score : null}
-                  status={(stats?.health?.status === 'warning' ? 'fair' : (stats?.health?.status || 'healthy')) as any}
-                  bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
-                  dns={stats?.health?.dns}
-                  isLoading={statsLoading}
-                  hasIntegrations={isSmtpConnected}
-                />
-                <ReputationTrendChart data={stats?.reputationTrend || []} />
-              </div>
-            </div>
-            <div className="h-[400px] border border-border/40 rounded-lg overflow-hidden">
+            )}
+            <div className="h-[480px]">
               <RecentConversations />
+            </div>
+            <div className="mt-6">
+              <AutonomousActionFeed logs={statsData?.aiActionLogs || []} />
             </div>
           </div>
 
-          {/* Right Column: Quick Actions + System Health */}
           <div className="space-y-5">
-            <Card className="border-border/50">
-              <CardHeader className="pb-3 border-b border-border/40">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Quick Actions</CardTitle>
+            <Card className="border-border/50 rounded-lg bg-muted/20">
+              <CardHeader>
+                <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
               </CardHeader>
-              <CardContent className="pt-4 space-y-2">
+              <CardContent className="space-y-3">
                 {[
-                  { label: "Import Prospects", icon: Users, path: "/dashboard/lead-import", desc: "Upload CSV or connect CRM" },
-                  { label: "Create Automation", icon: Zap, path: "/dashboard/video-automation", desc: "Set up AI outreach sequences" },
-                  { label: "Connect Channels", icon: Mail, path: "/dashboard/integrations", desc: "Gmail, Outlook, custom SMTP" },
+                  { label: "Import Prospects", icon: Users, path: "/dashboard/lead-import" },
+                  { label: "Create Automation", icon: Zap, path: "/dashboard/video-automation" },
+                  { label: "Connect Channels", icon: Mail, path: "/dashboard/integrations" },
                 ].map((action) => (
                   <Button
                     key={action.label}
                     variant="outline"
-                    className="w-full justify-between h-auto py-3 px-4 rounded-lg border-border/40 hover:bg-background transition-all group"
+                    className="w-full justify-between h-10 px-3 rounded-lg border-border/40 hover:bg-background transition-all group"
                     onClick={() => setLocation(action.path)}
                   >
-                    <div className="flex items-start gap-3 text-left">
-                      <action.icon className="h-4 w-4 mt-0.5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                      <div>
-                        <div className="text-xs font-semibold">{action.label}</div>
-                        <div className="text-[10px] text-muted-foreground/60">{action.desc}</div>
-                      </div>
-                    </div>
-                    <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-40 group-hover:translate-x-1 transition-all shrink-0" />
+                    <span className="flex items-center text-xs font-medium">
+                      <action.icon className="h-4 w-4 mr-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                      {action.label}
+                    </span>
+                    <ArrowRight className="h-4 w-4 opacity-0 group-hover:opacity-40 group-hover:translate-x-1 transition-all" />
                   </Button>
                 ))}
               </CardContent>
             </Card>
 
-            <Card className="border-border/50">
+            <ReputationCard 
+              score={stats?.health?.score !== undefined ? stats.health.score : null}
+              status={(stats?.health?.status === 'warning' ? 'fair' : (stats?.health?.status || 'healthy')) as any}
+              bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
+              dns={stats?.health?.dns}
+              isLoading={statsLoading}
+              hasIntegrations={isSmtpConnected}
+            />
+
+            <ReputationTrendChart data={stats?.reputationTrend || []} />
+
+            <Card className="border-border/50 rounded-lg">
               <CardHeader className="pb-3 border-b border-border/40">
                 <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">System Health</CardTitle>
               </CardHeader>
-              <CardContent className="pt-5 space-y-5">
+              <CardContent className="pt-6 space-y-5">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium flex items-center gap-3">
                     <div className={cn("h-2 w-2 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]",

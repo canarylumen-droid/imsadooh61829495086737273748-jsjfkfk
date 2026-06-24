@@ -130,11 +130,9 @@ export default function PricingPage() {
                   </div>
                   <div className="flex items-baseline gap-2">
                     <span className="text-4xl font-bold text-foreground tracking-tight">
-                      {tier.price !== null ? `$${tier.price}` : "Custom"}
+                      ${tier.price}
                     </span>
-                    <span className="text-muted-foreground font-semibold text-xs uppercase tracking-wider">
-                      {tier.price !== null ? `/ ${tier.period}` : "Pricing"}
-                    </span>
+                    <span className="text-muted-foreground font-semibold text-xs uppercase tracking-wider">/ {tier.period}</span>
                   </div>
                 </div>
 
