@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight, ChevronDown } from 'lucide-react';
 import { Navigation } from '@/components/new-landing/navigation';
@@ -21,6 +21,12 @@ const listItem = { initial: { opacity: 0, x: -10 }, animate: { opacity: 1, x: 0 
 
 export default function CreatorsPage() {
   const [active, setActive] = useState<number | null>(0);
+
+  useEffect(() => {
+    document.title = "AUDNIX — Cold Email Campaigns | Build Your List Fast";
+    let meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Send personalized cold emails at scale with AUDNIX AI. Automated campaigns, smart follow-ups, and 42% open rates. Get qualified leads without manual work.");
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#050505] text-[#f2ede6]">

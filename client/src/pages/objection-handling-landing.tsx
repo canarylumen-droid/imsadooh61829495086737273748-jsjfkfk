@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight, ChevronDown, Brain, Shield, Zap } from 'lucide-react';
 import ScrollStack, { ScrollStackItem } from '@/components/scroll-stack/scroll-stack';
@@ -11,6 +11,12 @@ const staggerContainer = { animate: { transition: { staggerChildren: 0.08 } } };
 
 export default function ObjectionHandlingPage() {
   const [active, setActive] = useState<number | null>(0);
+
+  useEffect(() => {
+    document.title = "AUDNIX — Objection Handling | AI Sales Coaching";
+    let meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Never lose a deal to objections. AUDNIX AI predicts buyer concerns, coaches reps in real-time, and delivers perfect responses every time.");
+  }, []);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-[#050505] text-[#f2ede6]">

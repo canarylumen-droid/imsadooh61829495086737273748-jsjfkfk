@@ -727,13 +727,14 @@ html:not(.dark) .glass-premium,
   /* New landing page design utilities */
   .font-display {
     font-family: 'Barlow Condensed', system-ui, sans-serif;
-    font-weight: 700;
+    font-weight: 800;
     font-style: italic;
+    font-synthesis: none;
     letter-spacing: -0.02em;
   }
   .font-display-normal {
     font-family: 'Barlow Condensed', system-ui, sans-serif;
-    font-weight: 700;
+    font-weight: 800;
     font-style: normal;
   }
   .sys-tag {

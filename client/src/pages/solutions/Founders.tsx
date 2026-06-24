@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight, ChevronDown } from 'lucide-react';
 import { Navigation } from '@/components/new-landing/navigation';
@@ -13,6 +13,12 @@ const listItem = { initial: { opacity: 0, x: -10 }, animate: { opacity: 1, x: 0 
 
 export default function FoundersPage() {
   const [active, setActive] = useState<number | null>(0);
+
+  useEffect(() => {
+    document.title = "AUDNIX — For Founders & Sales Teams | Cold Email AI";
+    let meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Close more deals via email with AUDNIX AI. Reach investors, partners, and customers with personalized cold email campaigns. AI writes, sends, and qualifies.");
+  }, []);
 
   return (
     <main className="min-h-screen bg-[#050505] text-[#f2ede6]">

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Check, ChevronRight, ChevronDown, TrendingUp, BarChart3, Zap } from 'lucide-react';
 import ScrollStack, { ScrollStackItem } from '@/components/scroll-stack/scroll-stack';
@@ -11,6 +11,12 @@ const staggerContainer = { animate: { transition: { staggerChildren: 0.08 } } };
 
 export default function LeadRecoveryPage() {
   const [active, setActive] = useState<number | null>(0);
+
+  useEffect(() => {
+    document.title = "AUDNIX — Lead Recovery | Resurrect Dead Leads";
+    let meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Recover 15-30% of dead leads automatically with AUDNIX. AI monitors buying signals and re-engages cold pipeline with personalized messaging.");
+  }, []);
 
   return (
     <main className="relative min-h-screen overflow-x-hidden bg-[#050505] text-[#f2ede6]">

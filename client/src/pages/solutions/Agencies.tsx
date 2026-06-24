@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronRight, Check, Zap, Layers, TrendingUp, DollarSign } from 'lucide-react';
 import ScrollStack, { ScrollStackItem } from '@/components/scroll-stack/scroll-stack';
@@ -21,6 +22,12 @@ const staggerContainer = { animate: { transition: { staggerChildren: 0.08, delay
 const listItem = { initial: { opacity: 0, x: -10 }, animate: { opacity: 1, x: 0 }, transition: { duration: 0.3 } };
 
 export default function AgenciesPage() {
+  useEffect(() => {
+    document.title = "AUDNIX — For Agencies | White-Label AI Sales Agents";
+    let meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "White-label AI sales agents for agencies. Scale from 10 to 100 clients without hiring. 70% margins, instant deployment, 24/7 closing under your brand.");
+  }, []);
+
   return (
     <main className="min-h-screen bg-[#050505] text-[#f2ede6]">
       <Navigation />

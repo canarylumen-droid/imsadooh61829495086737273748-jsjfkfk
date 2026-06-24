@@ -110,6 +110,12 @@ export default function PricingPage() {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    document.title = "AUDNIX — Pricing Plans & Transparent Pricing";
+    let meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Scale revenue with AUDNIX pricing. Transparent plans from free trial to enterprise. AI sales agents, cold email, voice intelligence, and objection handling.");
+  }, []);
+
+  useEffect(() => {
     const obs = new IntersectionObserver(
       ([e]) => { if (e.isIntersecting) setVis(true); },
       { threshold: 0.1 }

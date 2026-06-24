@@ -94,12 +94,18 @@ export function HeroSection() {
               <div className="flex items-center gap-3 mt-5">
                 <div className="flex -space-x-2">
                   {[
-                    "/avatar-1.png",
-                    "/avatar-2.png",
-                    "/avatar-3.png",
-                    "/avatar-4.png"
-                  ].map((img, i) => (
-                    <img key={i} src={img} alt={`User ${i + 1}`} className="w-7 h-7 rounded-full border-2 border-[#050505] object-cover" />
+                    { bg: "#2196f3", initials: "NT" },
+                    { bg: "#22c55e", initials: "UF" },
+                    { bg: "#a78bfa", initials: "SC" },
+                    { bg: "#f87171", initials: "AK" }
+                  ].map((avatar, i) => (
+                    <div
+                      key={i}
+                      className="w-7 h-7 rounded-full border-2 border-[#050505] flex items-center justify-center text-[6px] font-bold text-white"
+                      style={{ background: avatar.bg }}
+                    >
+                      {avatar.initials}
+                    </div>
                   ))}
                 </div>
                 <span className="font-mono text-[9px] text-[#3a3a3a] font-black">
