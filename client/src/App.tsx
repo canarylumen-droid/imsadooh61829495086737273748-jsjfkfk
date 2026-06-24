@@ -81,6 +81,9 @@ function Router() {
       <Route path="/signup">
         {() => <Suspense fallback={<LoadingFallback />}><Auth /></Suspense>}
       </Route>
+      <Route path="/get-started">
+        {() => <Suspense fallback={<LoadingFallback />}><Auth /></Suspense>}
+      </Route>
       <Route path="/onboarding" component={OnboardingPage} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />

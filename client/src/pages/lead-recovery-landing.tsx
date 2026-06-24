@@ -1,129 +1,212 @@
-import { Navigation } from "@/components/landing/Navigation";
-import { CookieConsent } from "@/components/landing/CookieConsent";
-import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
-import { Link } from "wouter";
-import { ArrowRight, RefreshCw, Brain, Target, CheckCircle, AlertTriangle, Search, MessageSquare } from "lucide-react";
-import { useEffect } from "react";
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Check, ChevronRight, ChevronDown, TrendingUp, BarChart3, Zap } from 'lucide-react';
+import ScrollStack, { ScrollStackItem } from '@/components/scroll-stack/scroll-stack';
+import Threads from '@/components/hero-effects/Threads';
+import { Navigation } from '@/components/new-landing/navigation';
+import { FooterSection } from '@/components/new-landing/footer-section';
 
-export default function LeadRecoveryLanding() {
-  useEffect(() => {
-    document.title = "AI Lead Recovery - Audnix AI | Recover Lost Deals";
-  }, []);
+const fadeInUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.5 } };
+const staggerContainer = { animate: { transition: { staggerChildren: 0.08 } } };
+
+export default function LeadRecoveryPage() {
+  const [active, setActive] = useState<number | null>(0);
 
   return (
-    <div className="min-h-screen bg-background text-foreground selection:bg-primary selection:text-black overflow-x-hidden">
+    <main className="relative min-h-screen overflow-x-hidden bg-[#050505] text-[#f2ede6]">
       <Navigation />
-      <main className="pt-32">
-        <section className="py-16 px-4 relative overflow-hidden">
-          <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
-            <div className="space-y-8">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-                className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 text-[10px] font-bold uppercase tracking-[0.2em]">
-                <RefreshCw className="w-3.5 h-3.5" /> Lead Recovery Engine
+
+      {/* Hero Section with Threads */}
+      <section className="relative min-h-screen flex items-center justify-center px-6 lg:px-12 pt-20 overflow-hidden border-b border-[#1e1e1e]">
+        <div className="absolute inset-0 z-0">
+          <Threads color={[0.13, 0.45, 0.95]} amplitude={1.2} distance={0} enableMouseInteraction={true} />
+        </div>
+        
+        <motion.div initial="initial" animate="animate" variants={staggerContainer} className="relative z-10 max-w-5xl mx-auto text-center">
+          <motion.div variants={fadeInUp}>
+            <span className="sys-tag">LEAD RECOVERY</span>
+          </motion.div>
+
+          <motion.h1 variants={fadeInUp} className="font-display text-[clamp(3rem,12vw,7rem)] leading-[0.88] tracking-tight mt-6 mb-6 font-black">
+            Resurrect <span className="text-[#2196f3] font-black">Dead</span> Leads
+          </motion.h1>
+
+          <motion.p variants={fadeInUp} className="text-base text-[#5a5a5a] leading-relaxed max-w-2xl mx-auto mb-8">
+            30% of your pipeline went cold. Audnix re-engages them automatically—at the right time, with the right message. Recover deals you thought were lost forever.
+          </motion.p>
+
+          <motion.div variants={fadeInUp} className="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="/get-started" className="group inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-6 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
+              START RECOVERY
+              <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
+            </a>
+            <a href="#" className="group inline-flex items-center gap-3 border border-[#1e1e1e] text-[#f2ede6] font-mono text-sm tracking-widest px-6 py-4 hover:border-[#2196f3]/40 transition-colors">
+              LEARN MORE
+            </a>
+          </motion.div>
+        </motion.div>
+      </section>
+
+      {/* ScrollStack Section */}
+      <ScrollStack className="h-screen bg-[#050505] border-b border-[#1e1e1e]" useWindowScroll={true} itemScale={0.04} baseScale={0.80}>
+        <ScrollStackItem itemClassName="bg-[#0e0e0e] border border-[#1e1e1e] hover:border-[#2196f3]/40 transition-colors">
+          <div className="flex items-center gap-6 h-full px-8">
+            <div className="text-5xl"><TrendingUp className="w-16 h-16 text-[#2196f3]" /></div>
+            <div>
+              <h3 className="font-display text-3xl mb-2 text-[#f2ede6]">15-30% Recovery Rate</h3>
+              <p className="text-[#5a5a5a]">Dead pipeline reopened automatically within 90 days</p>
+            </div>
+          </div>
+        </ScrollStackItem>
+
+        <ScrollStackItem itemClassName="bg-[#0e0e0e] border border-[#1e1e1e] hover:border-[#2196f3]/40 transition-colors">
+          <div className="flex items-center gap-6 h-full px-8">
+            <div className="text-5xl"><BarChart3 className="w-16 h-16 text-[#2196f3]" /></div>
+            <div>
+              <h3 className="font-display text-3xl mb-2 text-[#f2ede6]">+$100K Recovered</h3>
+              <p className="text-[#5a5a5a]">Average revenue per 1,000 dead leads recovered</p>
+            </div>
+          </div>
+        </ScrollStackItem>
+
+        <ScrollStackItem itemClassName="bg-[#0e0e0e] border border-[#1e1e1e] hover:border-[#2196f3]/40 transition-colors">
+          <div className="flex items-center gap-6 h-full px-8">
+            <div className="text-5xl"><Zap className="w-16 h-16 text-[#2196f3]" /></div>
+            <div>
+              <h3 className="font-display text-3xl mb-2 text-[#f2ede6]">24/7 Monitoring</h3>
+              <p className="text-[#5a5a5a]">Constantly watching for re-engagement opportunities</p>
+            </div>
+          </div>
+        </ScrollStackItem>
+      </ScrollStack>
+
+      {/* Problem & Solution */}
+      <section className="py-20 px-6 lg:px-12 max-w-7xl mx-auto border-b border-[#1e1e1e]">
+        <motion.div initial="initial" whileInView="animate" viewport={{ once: true }} variants={staggerContainer} className="grid md:grid-cols-2 gap-12">
+          <motion.div variants={fadeInUp} className="space-y-6">
+            <h2 className="font-display text-4xl">The Cold Pipeline Crisis</h2>
+            <p className="text-[#5a5a5a] leading-relaxed">
+              Your team closes deals. They move on. But 30% say "not now." Those leads sit in your CRM, untouched, for 6+ months. When circumstances change, they never hear from you again.
+            </p>
+            <ul className="space-y-3">
+              {['Lost opportunities', 'No automated re-engagement', 'Revenue slipping away'].map((item, i) => (
+                <li key={i} className="flex items-center gap-3 text-[#f2ede6]">
+                  <div className="w-2 h-2 bg-[#2196f3] rounded-full" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+
+          <motion.div variants={fadeInUp} className="space-y-6">
+            <h2 className="font-display text-4xl">Smart Re-engagement</h2>
+            <p className="text-[#5a5a5a] leading-relaxed">
+              Audnix watches your cold pipeline 24/7. When conditions align—new budget cycle, company growth, team changes—it automatically re-engages with fresh value and relevant messaging.
+            </p>
+            <ul className="space-y-3">
+              {['Automatic trigger detection', 'Personalized messaging', 'Multi-channel outreach'].map((item, i) => (
+                <li key={i} className="flex items-center gap-3 text-[#f2ede6]">
+                  <Check className="w-4 h-4 text-[#2196f3]" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </motion.div>
+        </motion.div>
+      </section>
+
+      {/* How It Works */}
+      <section className="py-20 px-6 lg:px-12 max-w-7xl mx-auto border-b border-[#1e1e1e]">
+        <motion.div initial="initial" whileInView="animate" viewport={{ once: true }} variants={staggerContainer} className="space-y-12">
+          <motion.h2 variants={fadeInUp} className="font-display text-5xl text-center">Recovery Process</motion.h2>
+
+          <div className="grid md:grid-cols-4 gap-6">
+            {[
+              { num: '01', title: 'Identify', desc: 'AI scans your CRM for stalled deals' },
+              { num: '02', title: 'Monitor', desc: 'Watch for buying signal changes' },
+              { num: '03', title: 'Engage', desc: 'Auto-trigger personalized outreach' },
+              { num: '04', title: 'Close', desc: 'Reopen deals with fresh context' }
+            ].map((step, idx) => (
+              <motion.div key={idx} variants={fadeInUp} className="p-6 border border-[#1e1e1e] hover:border-[#2196f3]/40 transition-colors">
+                <div className="font-display text-4xl text-[#2196f3] mb-2">{step.num}</div>
+                <h3 className="font-display text-xl mb-2 text-[#f2ede6]">{step.title}</h3>
+                <p className="text-[#5a5a5a] text-sm">{step.desc}</p>
               </motion.div>
-              <h1 className="text-4xl md:text-6xl font-black tracking-tighter leading-[0.9]">
-                Recover Deals You <span className="text-primary">Thought Were Dead.</span>
-              </h1>
-              <p className="text-lg text-muted-foreground leading-relaxed max-w-xl">
-                Audnix scans your inbox history, finds leads that went cold, analyzes why they ghosted, and generates personalized AI recovery drafts — all autonomously.
-              </p>
-              <div className="flex flex-wrap gap-4">
-                <Link href="/auth">
-                  <Button size="lg" className="h-12 px-8 rounded-xl text-sm font-black uppercase tracking-widest bg-primary text-black">
-                    Recover Lost Leads <ArrowRight className="ml-2 w-4 h-4" />
-                  </Button>
-                </Link>
-                <Link href="/pricing">
-                  <Button size="lg" variant="outline" className="h-12 px-8 rounded-xl text-sm font-black uppercase tracking-widest">
-                    View Pricing
-                  </Button>
-                </Link>
+            ))}
+          </div>
+        </motion.div>
+      </section>
+
+      {/* FAQ */}
+      <section className="relative border-b border-[#1e1e1e]">
+        <div className="max-w-4xl mx-auto px-6 lg:px-12">
+          <div className="border-b border-[#1e1e1e] py-8">
+            <span className="sys-tag mb-3 block">FREQUENTLY ASKED</span>
+            <h2 className="font-display text-6xl leading-[0.88] tracking-tight text-[#f2ede6]">
+              Lead Recovery<br />
+              <span style={{ WebkitTextStroke: '1px #3a3a3a', color: 'transparent' }}>Questions</span>
+            </h2>
+          </div>
+
+          <div className="divide-y divide-[#1e1e1e]">
+            {[
+              { q: 'How does it know when to re-engage?', a: 'AI monitors 150+ signals including funding announcements, job postings, and budget cycles to identify the perfect re-engagement moment.' },
+              { q: 'Will it spam our prospects?', a: 'Never. Respectful cadence rules apply. One strategic message when conditions align, not multiple follow-ups.' },
+              { q: 'What recovery rates should we expect?', a: 'Industry average is 12-18%. Audnix achieves 15-30% because timing is perfect and messaging addresses new objections.' },
+              { q: 'Can we customize recovery templates?', a: 'Yes. Upload your playbooks and AI personalizes them based on why each prospect went cold.' },
+              { q: 'Does it work with my CRM?', a: 'Completely. Salesforce, HubSpot, Pipedrive, and 50+ others. Integration is seamless.' }
+            ].map((faq, i) => (
+              <div key={i} className="transition-all duration-500">
+                <button
+                  onClick={() => setActive(active === i ? null : i)}
+                  className="w-full py-5 flex items-start justify-between gap-6 group hover:bg-[#0a0a0a] transition-colors"
+                >
+                  <span className="font-display text-lg lg:text-xl leading-snug tracking-tight text-[#f2ede6] text-left">
+                    {faq.q}
+                  </span>
+                  <ChevronDown
+                    className={`w-5 h-5 text-[#2196f3] flex-shrink-0 mt-0.5 transition-transform duration-300 ${
+                      active === i ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {active === i && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    className="border-t border-[#1e1e1e] pt-4 pb-4 overflow-hidden"
+                  >
+                    <p className="font-mono text-xs lg:text-sm text-[#5a5a5a] leading-relaxed max-w-3xl">
+                      {faq.a}
+                    </p>
+                  </motion.div>
+                )}
               </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: "Avg Recovery Rate", value: "34%", sub: "Of Ghosted Leads" },
-                { label: "Inbox Scan Range", value: "90", sub: "Days of History" },
-                { label: "Recovery Drafts", value: "AI", sub: "Personalized per Lead" },
-                { label: "Objection Sync", value: "Auto", sub: "To Knowledge Base" },
-              ].map((m, i) => (
-                <div key={i} className="p-6 rounded-2xl bg-card border border-border/40">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">{m.label}</p>
-                  <p className="text-3xl font-black text-foreground">{m.value}</p>
-                  <p className="text-xs text-muted-foreground">{m.sub}</p>
-                </div>
-              ))}
-            </div>
+            ))}
           </div>
-        </section>
 
-        <section className="py-16 px-4 bg-muted/30 border-y border-border/10">
-          <div className="max-w-7xl mx-auto">
-            <h2 className="text-3xl font-black text-center mb-12">How It <span className="text-primary">Works</span></h2>
-            <div className="grid md:grid-cols-3 gap-6">
-              {[
-                { icon: Search, title: "Scan Inbox History", desc: "Audnix connects to your Gmail, Outlook, or custom SMTP and reads up to 90 days of sent/received emails. No data is stored — only metadata and lead profiles." },
-                { icon: Brain, title: "Analyze & Classify", desc: "Each lead is classified by intent: Converted, Ghosted, Not Interested, or Reply Needed. The AI identifies the exact point where the conversation stalled." },
-                { icon: MessageSquare, title: "Generate Recovery Draft", desc: "Using the conversation context, objection history, and your brand voice, the AI writes a personalized re-engagement email designed to restart the conversation." },
-              ].map((s, i) => (
-                <div key={i} className="p-6 rounded-2xl bg-card border border-border/40">
-                  <s.icon className="w-10 h-10 text-primary mb-4" />
-                  <h3 className="text-lg font-bold mb-2">{s.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{s.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+          <p className="py-8 text-center font-mono text-[10px] text-[#3a3a3a]">
+            Need more help? <a href="#" className="text-[#2196f3] hover:text-[#60a5fa] transition-colors">Contact our team</a>
+          </p>
+        </div>
+      </section>
 
-        <section className="py-16 px-4">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="text-3xl font-black text-center mb-12">Key <span className="text-primary">Features</span></h2>
-            <div className="grid md:grid-cols-2 gap-4">
-              {[
-                "Scans 90 days of sent/received email history",
-                "Auto-classifies leads by engagement level",
-                "Detects hidden objections from conversation context",
-                "Generates AI-powered recovery drafts per lead",
-                "Syncs discovered objections to your knowledge base",
-                "Pre-flight check before campaign launch",
-                "Works across Gmail, Outlook, and custom SMTP",
-                "No duplicate recovery on active campaign leads"
-              ].map((f, i) => (
-                <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-card border border-border/40">
-                  <CheckCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                  <span className="text-sm text-foreground/80">{f}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
+      {/* CTA */}
+      <section className="py-20 px-6 lg:px-12 text-center border-b border-[#1e1e1e]">
+        <motion.div initial={{ opacity: 0, scale: 0.95 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ duration: 0.6 }} className="max-w-2xl mx-auto">
+          <h2 className="font-display text-5xl mb-4">Ready to Recover Lost Revenue?</h2>
+          <p className="text-[#5a5a5a] mb-8">Start with 30 days free. See how many deals you can resurrect automatically.</p>
+          <a href="/get-started" className="inline-flex items-center gap-3 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-8 py-4 hover:bg-[#60a5fa] transition-colors font-semibold">
+            ENABLE RECOVERY
+            <ChevronRight className="w-4 h-4" />
+          </a>
+        </motion.div>
+      </section>
 
-        <section className="py-16 px-4 border-t border-border/10 bg-muted/20">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <h2 className="text-3xl font-black">Don't Leave Money on the Table.</h2>
-            <p className="text-muted-foreground text-base max-w-lg mx-auto">34% of ghosted leads will re-engage with a well-timed, personalized follow-up. Start recovering yours today.</p>
-            <Link href="/auth">
-              <Button size="lg" className="h-12 px-8 rounded-xl text-sm font-black uppercase tracking-widest bg-primary text-black shadow-xl shadow-primary/30">
-                Recover Leads Now <ArrowRight className="ml-2 w-4 h-4" />
-              </Button>
-            </Link>
-          </div>
-        </section>
-      </main>
-
-      <script type="application/ld+json">
-        {JSON.stringify({
-          "@context": "https://schema.org",
-          "@type": "Product",
-          "name": "Audnix AI Lead Recovery",
-          "description": "AI-powered lead recovery engine that scans inbox history, analyzes ghosted leads, and generates personalized re-engagement drafts.",
-          "brand": { "@type": "Brand", "name": "Audnix AI" },
-          "offers": { "@type": "Offer", "price": "29", "priceCurrency": "USD", "availability": "https://schema.org/InStock" }
-        })}
-      </script>
-      <CookieConsent />
-    </div>
+      <FooterSection />
+    </main>
   );
 }
