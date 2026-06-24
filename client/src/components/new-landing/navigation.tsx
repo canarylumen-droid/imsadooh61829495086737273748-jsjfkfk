@@ -37,10 +37,7 @@ export function Navigation() {
         <div className="px-6 lg:px-12 h-14 flex items-center justify-between">
           {/* Logo */}
           <a href="#" className="flex items-center gap-3 group">
-            <div className="relative w-7 h-7 border border-[#2196f3] flex items-center justify-center">
-              <div className="w-2 h-2 bg-[#2196f3]" />
-              <div className="absolute inset-0 bg-[#2196f3]/10 group-hover:bg-[#2196f3]/20 transition-colors" />
-            </div>
+            <img src="/logo.svg" alt="AUDNIX" className="h-7 w-auto" />
             <span className="font-display text-2xl tracking-[0.15em] text-[#f2ede6]">AUDNIX</span>
 
           </a>
