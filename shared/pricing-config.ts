@@ -12,6 +12,7 @@ export interface PricingTier {
   popular?: boolean;
   paymentLink?: string;
   order: number;
+  customPrice?: boolean;
 }
 
 export const PRICING_TIERS: PricingTier[] = [
@@ -81,13 +82,14 @@ export const PRICING_TIERS: PricingTier[] = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    price: 199.99,
+    price: -1,
     period: 'month',
     description: 'Custom-built automation architecture for organizations lead by data.',
     leadsLimit: -1, // Unlimited
     mailboxLimit: -1, // Unlimited
     voiceMinutes: -1, // Unlimited
     order: 3,
+    customPrice: true,
     features: [
       'Unlimited leads / synchronization',
       'Unlimited Mailboxes & Capacity',

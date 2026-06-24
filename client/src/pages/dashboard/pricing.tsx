@@ -129,10 +129,14 @@ export default function PricingPage() {
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold text-foreground tracking-tight">
-                      ${tier.price}
-                    </span>
-                    <span className="text-muted-foreground font-semibold text-xs uppercase tracking-wider">/ {tier.period}</span>
+                    {tier.customPrice ? (
+                      <span className="text-4xl font-bold text-foreground tracking-tight">CUSTOM</span>
+                    ) : (
+                      <>
+                        <span className="text-4xl font-bold text-foreground tracking-tight">${tier.price}</span>
+                        <span className="text-muted-foreground font-semibold text-xs uppercase tracking-wider">/ {tier.period}</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
