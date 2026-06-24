@@ -61,7 +61,7 @@ const PLANS = [
     id: '04',
     name: 'ENTERPRISE',
     tagline: 'Custom scaling',
-    price: { mo: 199, yr: 159 },
+    price: { mo: null, yr: null },
     features: [
       'Unlimited leads',
       'Unlimited Mailboxes',
