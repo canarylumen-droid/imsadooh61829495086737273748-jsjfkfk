@@ -65,8 +65,12 @@ export class PairingEngine {
     const isSeed = mailbox.anchorRole === 'seed';
     const selfProvider = detectProvider(mailbox.email);
 
+    // Seeds can only pair with enterprise pool mailboxes
     const anchorCandidates = await this.getAnchorCandidates(mailbox);
-    const filtered = anchorCandidates.filter(c =>
+    const poolFiltered = anchorCandidates.filter(c =>
+      isSeed ? c.poolType === 'enterprise' : true
+    );
+    const filtered = poolFiltered.filter(c =>
       c.mailboxId !== mailbox.id &&
       (isSeed || c.anchorRole === 'anchor' || c.anchorRole === 'seed' ||
        (c.registeredDomain !== mailbox.registeredDomain))
@@ -84,31 +88,45 @@ export class PairingEngine {
       return this.pickBest(mailbox, filtered);
     }
 
-    const globalCandidates = await this.getGlobalCandidates(mailbox.id);
-    const crossProviderGlobal = globalCandidates.filter(c =>
-      c.mailboxId !== mailbox.id &&
-      isCrossProviderPair(mailbox.email, c.email)
-    );
-
-    const sameProviderDifferentDomain = globalCandidates.filter(c =>
-      c.mailboxId !== mailbox.id &&
-      !isCrossProviderPair(mailbox.email, c.email) &&
-      c.registeredDomain !== mailbox.registeredDomain
-    );
-
-    const combined = [...filtered, ...crossProviderGlobal, ...sameProviderDifferentDomain];
-
-    if (combined.length === 0) {
-      const anyGlobal = globalCandidates.filter(c => c.mailboxId !== mailbox.id);
-      if (anyGlobal.length === 0) return null;
-      console.log(
-        `[Warmup][Pairing] Anchors in same-provider pool (${selfProvider}) — ` +
-        `pairing within same provider since no cross-provider options exist`
+    // Seeds skip global pool entirely — they only talk to enterprise
+    if (!isSeed) {
+      const globalCandidates = await this.getGlobalCandidates(mailbox.id);
+      const crossProviderGlobal = globalCandidates.filter(c =>
+        c.mailboxId !== mailbox.id &&
+        isCrossProviderPair(mailbox.email, c.email)
       );
-      return this.pickBest(mailbox, anyGlobal);
+
+      const sameProviderDifferentDomain = globalCandidates.filter(c =>
+        c.mailboxId !== mailbox.id &&
+        !isCrossProviderPair(mailbox.email, c.email) &&
+        c.registeredDomain !== mailbox.registeredDomain
+      );
+
+      const combined = [...filtered, ...crossProviderGlobal, ...sameProviderDifferentDomain];
+
+      if (combined.length > 0) {
+        return this.pickBest(mailbox, combined);
+      }
+
+      const anyGlobal = globalCandidates.filter(c => c.mailboxId !== mailbox.id);
+      if (anyGlobal.length > 0) {
+        console.log(
+          `[Warmup][Pairing] Anchors in same-provider pool (${selfProvider}) — ` +
+          `pairing within same provider since no cross-provider options exist`
+        );
+        return this.pickBest(mailbox, anyGlobal);
+      }
     }
 
-    return this.pickBest(mailbox, combined);
+    // For seeds or if nothing found above, try enterprise-only candidates
+    const enterpriseCandidates = await this.getEnterpriseCandidates(mailbox.id);
+    const filteredEnterprise = enterpriseCandidates.filter(c => c.mailboxId !== mailbox.id);
+    if (filteredEnterprise.length > 0) {
+      return this.pickBest(mailbox, filteredEnterprise);
+    }
+
+    await this.pauseEmpty(mailbox.id);
+    return null;
   }
 
   private limitExpr() {
@@ -121,6 +139,7 @@ export class PairingEngine {
         id: warmupMailboxes.id,
         email: warmupMailboxes.email,
         provider: warmupMailboxes.provider,
+        poolType: warmupMailboxes.poolType,
         organizationId: warmupMailboxes.organizationId,
         registeredDomain: warmupMailboxes.registeredDomain,
         anchorRole: warmupMailboxes.anchorRole,
@@ -166,6 +185,7 @@ export class PairingEngine {
         id: warmupMailboxes.id,
         email: warmupMailboxes.email,
         provider: warmupMailboxes.provider,
+        poolType: warmupMailboxes.poolType,
         organizationId: warmupMailboxes.organizationId,
         registeredDomain: warmupMailboxes.registeredDomain,
         anchorRole: warmupMailboxes.anchorRole,
@@ -235,6 +255,7 @@ export class PairingEngine {
         id: warmupMailboxes.id,
         email: warmupMailboxes.email,
         provider: warmupMailboxes.provider,
+        poolType: warmupMailboxes.poolType,
         organizationId: warmupMailboxes.organizationId,
         registeredDomain: warmupMailboxes.registeredDomain,
         anchorRole: warmupMailboxes.anchorRole,
@@ -262,6 +283,7 @@ export class PairingEngine {
       mailboxId: r.id,
       email: r.email,
       provider: r.provider,
+      poolType: r.poolType,
       organizationId: r.organizationId,
       registeredDomain: r.registeredDomain,
       anchorRole: r.anchorRole as AnchorRole,
@@ -280,6 +302,7 @@ export class PairingEngine {
         id: warmupMailboxes.id,
         email: warmupMailboxes.email,
         provider: warmupMailboxes.provider,
+        poolType: warmupMailboxes.poolType,
         organizationId: warmupMailboxes.organizationId,
         registeredDomain: warmupMailboxes.registeredDomain,
         anchorRole: warmupMailboxes.anchorRole,
@@ -307,6 +330,7 @@ export class PairingEngine {
       mailboxId: r.id,
       email: r.email,
       provider: r.provider,
+      poolType: r.poolType,
       organizationId: r.organizationId,
       registeredDomain: r.registeredDomain,
       anchorRole: r.anchorRole as AnchorRole,
@@ -325,6 +349,7 @@ export class PairingEngine {
         id: warmupMailboxes.id,
         email: warmupMailboxes.email,
         provider: warmupMailboxes.provider,
+        poolType: warmupMailboxes.poolType,
         organizationId: warmupMailboxes.organizationId,
         registeredDomain: warmupMailboxes.registeredDomain,
         anchorRole: warmupMailboxes.anchorRole,
@@ -352,6 +377,7 @@ export class PairingEngine {
       mailboxId: r.id,
       email: r.email,
       provider: r.provider,
+      poolType: r.poolType,
       organizationId: r.organizationId,
       registeredDomain: r.registeredDomain,
       anchorRole: r.anchorRole as AnchorRole,

@@ -25,6 +25,7 @@ export interface PairingCandidate {
   mailboxId: string;
   email: string;
   provider: string;
+  poolType?: string;
   organizationId: string | null;
   registeredDomain: string | null;
   anchorRole: AnchorRole;
