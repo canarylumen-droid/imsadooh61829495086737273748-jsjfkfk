@@ -15,20 +15,28 @@ export class PairingEngine {
       return this.findPartnerForAnchor(mailbox);
     }
 
-    const candidates =
-      mailbox.poolType === 'enterprise'
-        ? await this.getEnterpriseCandidates(mailbox.id)
-        : await this.getGlobalCandidates(mailbox.id);
+    // Enterprise pool: can initiate warmup with anyone (enterprise, global, seeds)
+    if (mailbox.poolType === 'enterprise') {
+      const candidates = await this.getEnterpriseCandidates(mailbox.id);
+      if (candidates.length === 0) {
+        await this.pauseEmpty(mailbox.id);
+        return null;
+      }
+      return this.pickBest(mailbox, candidates);
+    }
 
-    if (candidates.length === 0) {
+    // Global pool: cannot initiate warmup — only enterprise or seeds can talk to them
+    await this.pauseEmpty(mailbox.id);
+    return null;
+  }
+
+  private async findPartnerForMember(mailbox: WarmupMailbox): Promise<PairingCandidate | null> {
+    // Global pool members cannot initiate warmup — only enterprise or seeds can talk to them
+    if (mailbox.poolType !== 'enterprise') {
       await this.pauseEmpty(mailbox.id);
       return null;
     }
 
-    return this.pickBest(mailbox, candidates);
-  }
-
-  private async findPartnerForMember(mailbox: WarmupMailbox): Promise<PairingCandidate | null> {
     const anchorId = mailbox.anchorMailboxId;
     if (!anchorId) {
       await this.pauseNoAnchor(mailbox.id);
@@ -48,6 +56,12 @@ export class PairingEngine {
   }
 
   private async findPartnerForAnchor(mailbox: WarmupMailbox): Promise<PairingCandidate | null> {
+    // Seeds can initiate with anyone; non-enterprise anchors cannot initiate
+    if (mailbox.anchorRole !== 'seed' && mailbox.poolType !== 'enterprise') {
+      await this.pauseEmpty(mailbox.id);
+      return null;
+    }
+
     const isSeed = mailbox.anchorRole === 'seed';
     const selfProvider = detectProvider(mailbox.email);
 
@@ -279,7 +293,7 @@ export class PairingEngine {
       .leftJoin(integrations, eq(warmupMailboxes.integrationId, integrations.id))
       .where(
         and(
-          eq(warmupMailboxes.poolType, 'enterprise'),
+          inArray(warmupMailboxes.poolType, ['enterprise', 'global'] as any),
           eq(warmupMailboxes.status, 'active'),
           not(eq(warmupMailboxes.id, excludeMailboxId)),
           sql`${warmupMailboxes.dailySentCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_SENT_LIMIT})`,
