@@ -24,6 +24,12 @@ export class PoolHealthMonitor {
       }
     }
 
+    // Also evaluate enterprise pool for users without an org
+    const enterpriseNoOrgCount = await this.getTotalCount('enterprise', null);
+    if (enterpriseNoOrgCount > 0) {
+      await this.evaluateEnterprisePool(null);
+    }
+
     await this.evaluateDomainClusters();
 
     await seedFleetManager.rotateExhaustedSeeds();
@@ -45,7 +51,7 @@ export class PoolHealthMonitor {
     }
   }
 
-  private async evaluateEnterprisePool(organizationId: string): Promise<void> {
+  private async evaluateEnterprisePool(organizationId: string | null): Promise<void> {
     const activeCount = await this.getActiveCount('enterprise', organizationId);
     const totalCount = await this.getTotalCount('enterprise', organizationId);
     const isHealthy = activeCount >= WARMUP_CONFIG.ENTERPRISE_POOL_MINIMUM;

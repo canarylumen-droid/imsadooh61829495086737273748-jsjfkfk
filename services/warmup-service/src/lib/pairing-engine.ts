@@ -16,8 +16,8 @@ export class PairingEngine {
     }
 
     const candidates =
-      mailbox.poolType === 'enterprise' && mailbox.organizationId
-        ? await this.getOrgCandidates(mailbox.organizationId, mailbox.id)
+      mailbox.poolType === 'enterprise'
+        ? await this.getEnterpriseCandidates(mailbox.id)
         : await this.getGlobalCandidates(mailbox.id);
 
     if (candidates.length === 0) {
@@ -235,6 +235,51 @@ export class PairingEngine {
       .where(
         and(
           eq(warmupMailboxes.organizationId, organizationId),
+          eq(warmupMailboxes.status, 'active'),
+          not(eq(warmupMailboxes.id, excludeMailboxId)),
+          sql`${warmupMailboxes.dailySentCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_SENT_LIMIT})`,
+          sql`${warmupMailboxes.dailyReceivedCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_RECEIVED_LIMIT})`
+        )
+      );
+
+    const threadCounts = await this.batchCountActiveThreads(rows.map((r: any) => r.id));
+
+    return rows.map((r: any) => ({
+      mailboxId: r.id,
+      email: r.email,
+      provider: r.provider,
+      organizationId: r.organizationId,
+      registeredDomain: r.registeredDomain,
+      anchorRole: r.anchorRole as AnchorRole,
+      dailySentCount: r.dailySentCount,
+      dailyReceivedCount: r.dailyReceivedCount,
+      activeThreadCount: threadCounts.get(r.id) ?? 0,
+      lastInteractionAt: r.lastInteractionAt,
+    }));
+  }
+
+  private async getEnterpriseCandidates(
+    excludeMailboxId: string
+  ): Promise<PairingCandidate[]> {
+    const rows = await db
+      .select({
+        id: warmupMailboxes.id,
+        email: warmupMailboxes.email,
+        provider: warmupMailboxes.provider,
+        organizationId: warmupMailboxes.organizationId,
+        registeredDomain: warmupMailboxes.registeredDomain,
+        anchorRole: warmupMailboxes.anchorRole,
+        dailySentCount: warmupMailboxes.dailySentCount,
+        dailyReceivedCount: warmupMailboxes.dailyReceivedCount,
+        dailyLimit: warmupMailboxes.dailyLimit,
+        warmupLimit: integrations.warmupLimit,
+        lastInteractionAt: warmupMailboxes.updatedAt,
+      })
+      .from(warmupMailboxes)
+      .leftJoin(integrations, eq(warmupMailboxes.integrationId, integrations.id))
+      .where(
+        and(
+          eq(warmupMailboxes.poolType, 'enterprise'),
           eq(warmupMailboxes.status, 'active'),
           not(eq(warmupMailboxes.id, excludeMailboxId)),
           sql`${warmupMailboxes.dailySentCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_SENT_LIMIT})`,

@@ -86,12 +86,12 @@ export function getCampaignLimits(planId: string): CampaignLimits {
     case 'enterprise':
       return { maxMailboxesPerCampaign: 1000, maxLeadsPerCampaign: 500000 };
     case 'pro':
-      return { maxMailboxesPerCampaign: 15, maxLeadsPerCampaign: 500 };
+      return { maxMailboxesPerCampaign: 30, maxLeadsPerCampaign: 7000 };
     case 'starter':
-      return { maxMailboxesPerCampaign: 5, maxLeadsPerCampaign: 200 };
+      return { maxMailboxesPerCampaign: 10, maxLeadsPerCampaign: 2500 };
     case 'trial':
     default:
-      return { maxMailboxesPerCampaign: 1, maxLeadsPerCampaign: 50 };
+      return { maxMailboxesPerCampaign: 3, maxLeadsPerCampaign: 250 };
   }
 }
 

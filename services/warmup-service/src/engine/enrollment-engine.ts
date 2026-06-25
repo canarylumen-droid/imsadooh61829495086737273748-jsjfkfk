@@ -236,7 +236,7 @@ export class EnrollmentEngine {
   }): Promise<PoolType> {
     const isEnterprise =
       candidate.plan === 'enterprise' || candidate.subscriptionTier === 'enterprise';
-    if (!isEnterprise || !candidate.organizationId) return 'global';
+    if (!isEnterprise) return 'global';
 
     return 'enterprise';
   }

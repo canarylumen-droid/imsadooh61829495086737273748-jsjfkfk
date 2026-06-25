@@ -130,7 +130,7 @@ class PaymentAutoApprovalWorker {
         }
       }
 
-      // 3. Process whitelisted users (Dynamic check from ENV)
+      // 3. Process whitelisted users (Dynamic check from ENV) - upgrades to pro
       const whitelistRaw = process.env.WHITELISTED_EMAILS || '';
       const whitelist = whitelistRaw.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
 
@@ -152,6 +152,34 @@ class PaymentAutoApprovalWorker {
             console.log(`💎 WHITELIST UPGRADE: ${user.email} -> pro plan (granted via whitelist)`);
           } catch (err: any) {
             console.error(`❌ Whitelist upgrade error for ${user.email}:`, err.message);
+          }
+        }
+      }
+
+      // 4. Process enterprise whitelisted users - upgrades to enterprise plan
+      const enterpriseWhitelistRaw = process.env.ENTERPRISE_WHITELIST_EMAILS || '';
+      const enterpriseWhitelist = enterpriseWhitelistRaw.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+
+      if (enterpriseWhitelist.length > 0) {
+        const enterpriseUsersToUpgrade = await db.select().from(users).where(
+          and(
+            inArray(users.email, enterpriseWhitelist),
+            ne(users.plan, 'enterprise')
+          )
+        );
+
+        for (const user of enterpriseUsersToUpgrade) {
+          try {
+            const updateData: any = {
+              plan: 'enterprise',
+              subscriptionTier: 'enterprise',
+              paymentStatus: 'approved',
+              paymentApprovedAt: now,
+            };
+            await storage.updateUser(user.id, updateData);
+            console.log(`🏢 ENTERPRISE UPGRADE: ${user.email} -> enterprise plan (granted via enterprise whitelist)`);
+          } catch (err: any) {
+            console.error(`❌ Enterprise whitelist upgrade error for ${user.email}:`, err.message);
           }
         }
       }
