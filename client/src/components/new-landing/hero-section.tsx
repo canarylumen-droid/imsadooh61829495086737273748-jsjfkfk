@@ -69,7 +69,7 @@ export function HeroSection() {
               className={`mt-4 transition-all duration-700 delay-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
             >
               <p className="text-sm text-[#e8e4dc] leading-relaxed max-w-md font-black">
-                Deploy the only <strong>autonomous AI sales rep</strong> that prospects, qualifies, handles <a href="/objection-handling" className="text-[#2196f3] hover:underline">objections</a>, and books meetings on autopilot. Built for high-ticket closers who never clock out. See our <a href="/pricing" className="text-[#2196f3] hover:underline">pricing</a> or explore <a href="/solutions/agencies" className="text-[#2196f3] hover:underline">agency solutions</a>.
+                Deploy the only <strong>autonomous AI sales rep</strong> that prospects, qualifies, handles <a href="/objection-handling" className="text-[#2196f3] hover:underline">objections</a>, and books meetings on autopilot. Start with our <a href="/signup" className="text-[#2196f3] hover:underline">3-day free trial</a> — no credit card needed. Built for high-ticket closers who never clock out.
               </p>
 
               {/* CTAs */}

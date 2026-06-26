@@ -30,7 +30,7 @@ const PLANS = [
       "Performance Analytics",
       "Conversion Tracking",
     ],
-    cta: "START TRIAL",
+    cta: "SUBSCRIBE",
     highlight: false,
   },
   {
@@ -48,7 +48,7 @@ const PLANS = [
       "Strategic ROI Mapping",
       "Priority Support",
     ],
-    cta: "START TRIAL",
+    cta: "SUBSCRIBE",
     highlight: true,
   },
   {
