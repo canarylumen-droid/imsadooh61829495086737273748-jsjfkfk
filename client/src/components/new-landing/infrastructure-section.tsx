@@ -51,7 +51,7 @@ export function InfrastructureSection() {
             ].map(s => (
               <div key={s.l}>
                 <div className="font-display text-3xl text-[#2196f3]">{s.v}</div>
-                <div className="font-mono text-[9px] text-[#3a3a3a] tracking-widest mt-1">{s.l}</div>
+                <div className="font-mono text-[9px] text-[#7a7a7a] tracking-widest mt-1">{s.l}</div>
               </div>
             ))}
           </div>
@@ -62,7 +62,7 @@ export function InfrastructureSection() {
           {/* Table header */}
           <div className="grid grid-cols-[1fr_120px_100px_100px_140px] border-b border-[#1e1e1e] px-6 py-3">
             {["TIME WINDOW", "TIMEZONE", "OPEN RATE", "CLICK RATE", "DELIVERY"].map(h => (
-              <span key={h} className="font-mono text-[9px] text-[#3a3a3a] tracking-widest">{h}</span>
+              <span key={h} className="font-mono text-[9px] text-[#7a7a7a] tracking-widest">{h}</span>
             ))}
           </div>
 
@@ -81,15 +81,15 @@ export function InfrastructureSection() {
                     active === i ? "bg-[#22c55e]" : "bg-[#2e2e2e]"
                   }`}
                 />
-                <span className={`font-mono text-sm ${active === i ? "text-[#f2ede6]" : "text-[#5a5a5a]"}`}>
+                <span className={`font-mono text-sm ${active === i ? "text-[#f2ede6]" : "text-[#a0a0a0]"}`}>
                   {r.city}
                 </span>
               </div>
-              <span className="font-mono text-[10px] text-[#3a3a3a] tracking-wider self-center">{r.timezone}</span>
-              <span className={`font-mono text-sm font-bold self-center ${active === i ? "text-[#22c55e]" : "text-[#5a5a5a]"}`}>
+              <span className="font-mono text-[10px] text-[#7a7a7a] tracking-wider self-center">{r.timezone}</span>
+              <span className={`font-mono text-sm font-bold self-center ${active === i ? "text-[#22c55e]" : "text-[#a0a0a0]"}`}>
                 {r.openRate}
               </span>
-              <span className="font-mono text-sm text-[#5a5a5a] self-center">{r.clickRate}</span>
+              <span className="font-mono text-sm text-[#a0a0a0] self-center">{r.clickRate}</span>
               {/* Delivery bar */}
               <div className="flex items-center gap-2 self-center">
                 <div className="flex-1 h-1 bg-[#1e1e1e]">
@@ -98,14 +98,14 @@ export function InfrastructureSection() {
                     style={{ width: `${r.delivery}%`, opacity: active === i ? 1 : 0.5 }}
                   />
                 </div>
-                <span className="font-mono text-[10px] text-[#3a3a3a] w-10 text-right">{r.delivery}%</span>
+                <span className="font-mono text-[10px] text-[#7a7a7a] w-10 text-right">{r.delivery}%</span>
               </div>
             </div>
           ))}
         </div>
 
         <div className="py-4 flex justify-end">
-          <span className="font-mono text-[10px] text-[#3a3a3a]">
+          <span className="font-mono text-[10px] text-[#7a7a7a]">
             AI OPTIMIZES SEND TIMES · REAL-TIME BASED ON RECIPIENT DATA &nbsp;· &nbsp;99.9%+ DELIVERY
           </span>
         </div>

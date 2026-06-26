@@ -103,14 +103,14 @@ export function PricingSection() {
 
           {/* Billing toggle */}
           <div className="flex items-center gap-4">
-            <span className={`font-mono text-[11px] tracking-widest transition-colors ${!annual ? "text-[#f2ede6]" : "text-[#3a3a3a]"}`}>MONTHLY</span>
+            <span className={`font-mono text-[11px] tracking-widest transition-colors ${!annual ? "text-[#f2ede6]" : "text-[#7a7a7a]"}`}>MONTHLY</span>
             <button
               onClick={() => setAnnual(!annual)}
               className="relative w-12 h-6 bg-[#1e1e1e] border border-[#2e2e2e] flex items-center"
             >
               <div className={`w-4 h-4 bg-[#2196f3] transition-transform duration-300 mx-1 ${annual ? "translate-x-5" : "translate-x-0"}`} />
             </button>
-            <span className={`font-mono text-[11px] tracking-widest transition-colors ${annual ? "text-[#f2ede6]" : "text-[#3a3a3a]"}`}>ANNUAL</span>
+            <span className={`font-mono text-[11px] tracking-widest transition-colors ${annual ? "text-[#f2ede6]" : "text-[#7a7a7a]"}`}>ANNUAL</span>
             {annual && (
               <span className="font-mono text-[9px] tracking-widest border border-[#2196f3]/40 text-[#2196f3] px-2 py-1">
                 SAVE_20%
@@ -136,7 +136,7 @@ export function PricingSection() {
 
               <div className="p-8 border-b border-[#1e1e1e]">
                 <div className="flex items-start justify-between mb-4">
-                  <span className="font-mono text-[9px] text-[#5a5a5a]">{p.id}</span>
+                  <span className="font-mono text-[9px] text-[#a0a0a0]">{p.id}</span>
                   {p.highlight && (
                     <span className="font-mono text-[9px] tracking-widest border border-[#2196f3]/40 text-[#2196f3] px-2 py-1">
                       POPULAR
@@ -171,15 +171,15 @@ export function PricingSection() {
 
               <div className="p-8">
                 <a
-                  href="#"
+                  href={p.cta === "CONTACT SALES" ? "mailto:hello@audnixai.com" : "/signup"}
                   className={`w-full flex items-center justify-between font-mono text-[11px] tracking-widest px-5 py-4 transition-colors group ${
                     p.highlight
                       ? "bg-[#2196f3] text-[#050505] hover:bg-[#fbbf24] font-semibold"
-                      : "border border-[#2e2e2e] text-[#5a5a5a] hover:border-[#2196f3]/40 hover:text-[#2196f3]"
+                      : "border border-[#2e2e2e] text-[#a0a0a0] hover:border-[#2196f3]/40 hover:text-[#2196f3]"
                   }`}
                 >
                   {p.cta}
-                  <span className="transition-transform group-hover:translate-x-1">���</span>
+                  <span className="transition-transform group-hover:translate-x-1">→</span>
                 </a>
               </div>
             </div>
@@ -197,7 +197,7 @@ export function PricingSection() {
             >
               <div className="p-8 border-b border-[#1e1e1e]">
                 <div className="flex items-start justify-between mb-4">
-                  <span className="font-mono text-[9px] text-[#5a5a5a]">{p.id}</span>
+                  <span className="font-mono text-[9px] text-[#a0a0a0]">{p.id}</span>
                 </div>
                 <h3 className="font-display text-4xl text-[#f2ede6] mb-1">{p.name}</h3>
                 <p className="font-mono text-[10px] text-[#8a8a8a] tracking-wider">{p.tagline}</p>
@@ -227,8 +227,8 @@ export function PricingSection() {
 
               <div className="p-8">
                 <a
-                  href="#"
-                  className="w-full flex items-center justify-between font-mono text-[11px] tracking-widest px-5 py-4 transition-colors border border-[#2e2e2e] text-[#5a5a5a] hover:border-[#2196f3]/40 hover:text-[#2196f3]"
+                  href={p.cta === "CONTACT SALES" ? "mailto:hello@audnixai.com" : "/signup"}
+                  className="w-full flex items-center justify-between font-mono text-[11px] tracking-widest px-5 py-4 transition-colors border border-[#2e2e2e] text-[#a0a0a0] hover:border-[#2196f3]/40 hover:text-[#2196f3]"
                 >
                   {p.cta}
                   <span className="group-hover:translate-x-1 transition-transform">→</span>

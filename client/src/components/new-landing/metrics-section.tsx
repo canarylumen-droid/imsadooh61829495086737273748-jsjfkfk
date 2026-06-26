@@ -153,7 +153,7 @@ export function MetricsSection() {
               </span>
             </h2>
           </div>
-          <div className="text-sm text-[#a8a8a8] italic max-w-sm">
+          <div className="text-sm text-[#d0d0d0] italic max-w-sm">
             "Audnix turns cold leads into closed deals—your 24/7 sales machine never takes a beat."
           </div>
         </div>

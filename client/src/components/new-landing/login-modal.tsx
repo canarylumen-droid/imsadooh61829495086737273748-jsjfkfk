@@ -67,7 +67,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
           </h2>
           <button
             onClick={onClose}
-            className="text-[#3a3a3a] hover:text-[#f2ede6] transition-colors"
+            className="text-[#7a7a7a] hover:text-[#f2ede6] transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -83,7 +83,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
           {/* Email */}
           <div className="space-y-2">
-            <label className="block font-mono text-xs tracking-widest text-[#b0aca3]">
+            <label className="block font-mono text-xs tracking-widest text-[#d0cdc5]">
               EMAIL
             </label>
             <input
@@ -98,7 +98,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
           {/* Password */}
           <div className="space-y-2">
-            <label className="block font-mono text-xs tracking-widest text-[#b0aca3]">
+            <label className="block font-mono text-xs tracking-widest text-[#d0cdc5]">
               PASSWORD
             </label>
             <input
@@ -123,7 +123,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
           {/* Divider */}
           <div className="flex items-center gap-3">
             <div className="flex-1 h-px bg-[#1e1e1e]" />
-            <span className="font-mono text-xs text-[#3a3a3a]">OR</span>
+            <span className="font-mono text-xs text-[#7a7a7a]">OR</span>
             <div className="flex-1 h-px bg-[#1e1e1e]" />
           </div>
 
@@ -135,7 +135,7 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
               setPassword('demo123');
             }}
             disabled={loading}
-            className="w-full bg-[#0a0a0a] border border-[#1e1e1e] text-[#b0aca3] py-3 font-mono text-sm tracking-widest hover:border-[#2196f3] hover:text-[#2196f3] transition-colors disabled:opacity-50"
+            className="w-full bg-[#0a0a0a] border border-[#1e1e1e] text-[#d0cdc5] py-3 font-mono text-sm tracking-widest hover:border-[#2196f3] hover:text-[#2196f3] transition-colors disabled:opacity-50"
           >
             TRY DEMO ACCOUNT
           </button>

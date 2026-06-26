@@ -81,7 +81,7 @@ export function PricingSection() {
                     ))}
                   </div>
 
-                  <Link href="/auth">
+                  <Link href="/signup">
                     <Button
                       className={`h-10 w-full rounded-lg text-xs font-black uppercase tracking-widest transition-all duration-300 active:scale-95 group relative overflow-hidden ${isPopular
                         ? "bg-primary text-black shadow-2xl shadow-primary/30 hover:brightness-110"

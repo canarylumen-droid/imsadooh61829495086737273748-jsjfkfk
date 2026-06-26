@@ -35,12 +35,12 @@ export function FooterSection() {
               <img src="/logo.svg" alt="AUDNIX" className="h-8 w-auto" />
               <span className="font-display text-2xl tracking-[0.12em] text-[#f2ede6]">AUDNIX.AI</span>
             </a>
-            <p className="text-sm text-[#3a3a3a] leading-relaxed max-w-xs font-mono">
+            <p className="text-sm text-[#7a7a7a] leading-relaxed max-w-xs font-mono">
               Your autonomous AI sales rep. Close deals while you sleep.
             </p>
             <div className="flex gap-3 mt-6">
               {["TWITTER", "LINKEDIN", "GITHUB", "DISCORD"].map(s => (
-                <a key={s} href="#" className="font-mono text-[10px] tracking-widest text-[#b0aca3] hover:text-[#2196f3] hover:bg-[#2196f3]/10 transition-all px-3 py-2 rounded border border-transparent hover:border-[#2196f3]/30">
+                <a key={s} href="#" className="font-mono text-[10px] tracking-widest text-[#d0cdc5] hover:text-[#2196f3] hover:bg-[#2196f3]/10 transition-all px-3 py-2 rounded border border-transparent hover:border-[#2196f3]/30">
                   {s} ↗
                 </a>
               ))}
@@ -55,7 +55,7 @@ export function FooterSection() {
                 <ul className="space-y-2">
                   {links.map(l => (
                     <li key={l.name}>
-                      <a href={l.href} className="font-mono text-[12px] text-[#b0aca3] hover:text-[#2196f3] hover:bg-[#2196f3]/10 transition-all px-3 py-2 rounded inline-flex items-center gap-2 font-medium">
+                      <a href={l.href} className="font-mono text-[12px] text-[#d0cdc5] hover:text-[#2196f3] hover:bg-[#2196f3]/10 transition-all px-3 py-2 rounded inline-flex items-center gap-2 font-medium">
                         {l.name}
                         {"badge" in l && l.badge && (
                           <span className="text-[9px] border border-[#2196f3]/30 text-[#2196f3] px-1.5 py-0.5 tracking-wider">

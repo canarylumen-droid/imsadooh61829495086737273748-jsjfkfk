@@ -135,20 +135,7 @@ function Router() {
           </AuthGuard>
         )}
       </Route>
-      <Route path="/dashboard">
-        {() => (
-          <AuthGuard>
-            <DashboardRoutes />
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/:rest*">
-        {() => (
-          <AuthGuard>
-            <DashboardRoutes />
-          </AuthGuard>
-        )}
-      </Route>
+      {/* Specific dashboard routes MUST come before the catch-all */}
       <Route path="/dashboard/inbox/:id?">
         {() => (
           <AuthGuard>
@@ -202,6 +189,20 @@ function Router() {
         {() => (
           <AuthGuard>
             <Suspense fallback={null}><InsightsPage /></Suspense>
+          </AuthGuard>
+        )}
+      </Route>
+      <Route path="/dashboard">
+        {() => (
+          <AuthGuard>
+            <DashboardRoutes />
+          </AuthGuard>
+        )}
+      </Route>
+      <Route path="/dashboard/:rest*">
+        {() => (
+          <AuthGuard>
+            <DashboardRoutes />
           </AuthGuard>
         )}
       </Route>

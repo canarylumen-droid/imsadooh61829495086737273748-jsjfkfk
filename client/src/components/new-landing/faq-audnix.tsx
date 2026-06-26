@@ -94,7 +94,7 @@ export function FAQSection() {
 
               {active === i && (
                 <div className="pb-6 border-t border-[#1e1e1e] pt-4 animate-in fade-in duration-200">
-                  <p className="font-mono text-sm text-[#5a5a5a] leading-relaxed max-w-2xl">
+                  <p className="font-mono text-sm text-[#a0a0a0] leading-relaxed max-w-2xl">
                     {faq.a}
                   </p>
                 </div>
@@ -105,7 +105,7 @@ export function FAQSection() {
 
         {/* Divider */}
         <div className="border-t border-[#1e1e1e] py-12 text-center">
-          <p className="font-mono text-[11px] text-[#3a3a3a] tracking-widest uppercase mb-4">
+          <p className="font-mono text-[11px] text-[#7a7a7a] tracking-widest uppercase mb-4">
             Still have questions?
           </p>
           <a

@@ -102,7 +102,7 @@ function FeatureRow({ f, index }: { f: typeof FEATURES[0]; index: number }) {
       <div className="grid grid-cols-[56px_1fr] lg:grid-cols-[56px_260px_1fr_160px] gap-0">
         {/* Number col */}
         <div className="border-r border-[#1e1e1e] p-5 flex items-start pt-6">
-          <span className="font-mono text-[10px] text-[#3a3a3a] tracking-widest">{f.id}</span>
+          <span className="font-mono text-[10px] text-[#7a7a7a] tracking-widest">{f.id}</span>
         </div>
 
         {/* Tag + Title */}
@@ -115,13 +115,13 @@ function FeatureRow({ f, index }: { f: typeof FEATURES[0]; index: number }) {
 
         {/* Description */}
         <div className="col-span-2 lg:col-span-1 border-r border-[#1e1e1e] p-6 flex items-center">
-          <p className="text-sm text-[#5a5a5a] leading-relaxed max-w-lg">{f.desc}</p>
+          <p className="text-sm text-[#a0a0a0] leading-relaxed max-w-lg">{f.desc}</p>
         </div>
 
         {/* Stat */}
         <div className="hidden lg:flex flex-col items-end justify-center p-6">
           <AnimCounter end={f.stat.end} suffix={f.stat.suffix} />
-          <div className="font-mono text-[9px] text-[#3a3a3a] tracking-widest mt-1 text-right">{f.stat.l}</div>
+          <div className="font-mono text-[9px] text-[#7a7a7a] tracking-widest mt-1 text-right">{f.stat.l}</div>
         </div>
       </div>
     </div>
@@ -157,12 +157,12 @@ export function FeaturesSection() {
               <span className="sys-tag mb-4 block">CAPABILITIES</span>
               <h2 className="font-display text-6xl lg:text-8xl text-[#f2ede6] leading-[0.88] tracking-tight">
                 WHAT AUDNIX<br />
-                <span className="text-[#3a3a3a]" style={{ WebkitTextStroke: "1px #3a3a3a", color: "transparent" }}>
+                <span className="text-[#7a7a7a]" style={{ WebkitTextStroke: "1px #3a3a3a", color: "transparent" }}>
                   CAN DO
                 </span>
               </h2>
             </div>
-            <p className="font-mono text-[10px] text-[#3a3a3a] tracking-widest max-w-[200px] text-right hidden lg:block">
+            <p className="font-mono text-[10px] text-[#7a7a7a] tracking-widest max-w-[200px] text-right hidden lg:block">
               FOUR CORE MODULES &nbsp;/ &nbsp;ENTERPRISE-GRADE &nbsp;/ &nbsp;PRODUCTION-READY
             </p>
           </div>
@@ -177,7 +177,7 @@ export function FeaturesSection() {
         <div className="grid grid-cols-[56px_1fr] border-b border-[#1e1e1e]">
           <div className="border-r border-[#1e1e1e]" />
           <div className="p-6 flex items-center justify-between">
-            <span className="font-mono text-[10px] text-[#3a3a3a]">VIEW ALL CAPABILITIES IN DOCS →</span>
+            <span className="font-mono text-[10px] text-[#7a7a7a]">VIEW ALL CAPABILITIES IN DOCS →</span>
             <a href="#" className="font-mono text-xs text-[#2196f3] hover:underline tracking-wider">EXPLORE SDK</a>
           </div>
         </div>

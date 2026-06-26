@@ -133,7 +133,8 @@
   /* Professional Agency Font Stack */
   --font-sans:
     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-mono: "JetBrains Mono", Menlo, monospace;
+  --font-display: "Barlow", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", Menlo, monospace;
   --radius: 0.5rem;
   /* 8px - more modest, professional corners */
   --shadow-2xs: 0px 1px 2px 0px hsl(220 10% 10% / 0.05);
@@ -199,7 +200,7 @@
   --secondary-foreground: 210 20% 98%;
 
   --muted: 217 33% 12%;
-  --muted-foreground: 215 20% 65%;
+  --muted-foreground: 215 20% 78%;
 
   --accent: 191 100% 12%;
   --accent-foreground: 191 100% 80%;

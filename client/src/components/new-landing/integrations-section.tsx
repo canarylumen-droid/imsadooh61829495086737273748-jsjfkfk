@@ -29,8 +29,8 @@ const ROW2 = [
 function IntChip({ name, cat }: { name: string; cat: string }) {
   return (
     <div className="shrink-0 flex items-center gap-4 border border-[#1e1e1e] px-5 py-3.5 hover:border-[#2196f3]/40 hover:bg-[#2196f3]/5 transition-all duration-200 cursor-default group">
-      <span className="font-mono text-[9px] text-[#3a3a3a] tracking-widest">{cat}</span>
-      <span className="font-display text-lg text-[#5a5a5a] group-hover:text-[#f2ede6] transition-colors">
+      <span className="font-mono text-[9px] text-[#7a7a7a] tracking-widest">{cat}</span>
+      <span className="font-display text-lg text-[#a0a0a0] group-hover:text-[#f2ede6] transition-colors">
         {name}
       </span>
     </div>
@@ -64,7 +64,7 @@ export function IntegrationsSection() {
               <span style={{ WebkitTextStroke: "1px #3a3a3a", color: "transparent" }}>FULLY CONNECTED.</span>
             </h2>
           </div>
-          <p className="font-mono text-[10px] text-[#3a3a3a] max-w-[220px] text-right hidden lg:block leading-relaxed">
+          <p className="font-mono text-[10px] text-[#7a7a7a] max-w-[220px] text-right hidden lg:block leading-relaxed">
             20+ INTEGRATIONS &nbsp;/&nbsp; EMAIL, CALENDAR, CRM, DATA, AUTOMATION
           </p>
         </div>
@@ -92,7 +92,7 @@ export function IntegrationsSection() {
       </div>
 
       <div className="max-w-[1400px] mx-auto px-6 lg:px-12 py-5 flex items-center justify-between">
-        <span className="font-mono text-[10px] text-[#3a3a3a]">CONNECT YOUR EMAIL, CALENDAR, AND CRM</span>
+        <span className="font-mono text-[10px] text-[#7a7a7a]">CONNECT YOUR EMAIL, CALENDAR, AND CRM</span>
         <a href="#" className="font-mono text-[10px] text-[#2196f3] hover:underline tracking-wider">
           VIEW ALL INTEGRATIONS →
         </a>

@@ -13,7 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check, Download } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -231,15 +238,77 @@ export default function SettingsPage() {
             Settings
           </h1>
         </div>
-        {hasChanges && (
-          <Button
-            onClick={() => saveMutation.mutate(formData)}
-            className="rounded-xl px-8 h-12 font-bold shadow-lg shadow-primary/20"
-          >
-            {saveMutation.isPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-            Save Changes
-          </Button>
-        )}
+        <div className="flex items-center gap-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="rounded-xl px-6 h-12 font-bold border-primary/30 hover:bg-primary/5">
+                <Download className="mr-2 h-4 w-4" />
+                Export Leads
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64 rounded-xl">
+              <DropdownMenuItem
+                className="font-medium text-sm cursor-pointer"
+                onClick={() => {
+                  window.open('/api/bulk/export-category?category=replied', '_blank');
+                }}
+              >
+                <span className="text-emerald-500 mr-2">●</span> Leads That Have Replied
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="font-medium text-sm cursor-pointer"
+                onClick={() => {
+                  window.open('/api/bulk/export-category?category=booked', '_blank');
+                }}
+              >
+                <span className="text-blue-500 mr-2">●</span> Leads That Have Booked Call
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="font-medium text-sm cursor-pointer"
+                onClick={() => {
+                  window.open('/api/bulk/export-category?category=no_show', '_blank');
+                }}
+              >
+                <span className="text-red-500 mr-2">●</span> Leads That Booked But Didn't Show Up
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="font-medium text-sm cursor-pointer"
+                onClick={() => {
+                  window.open('/api/bulk/export-category?category=no_reply', '_blank');
+                }}
+              >
+                <span className="text-orange-500 mr-2">●</span> Leads That Haven't Replied
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="font-medium text-sm cursor-pointer"
+                onClick={() => {
+                  window.open('/api/bulk/export-category?category=ghosted', '_blank');
+                }}
+              >
+                <span className="text-purple-500 mr-2">●</span> Positive Replies But Ghosted
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="font-medium text-sm cursor-pointer"
+                onClick={() => {
+                  window.open('/api/bulk/export-category?category=converted', '_blank');
+                }}
+              >
+                <span className="text-yellow-500 mr-2">●</span> Leads That Paid / Converted
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {hasChanges && (
+            <Button
+              onClick={() => saveMutation.mutate(formData)}
+              className="rounded-xl px-8 h-12 font-bold shadow-lg shadow-primary/20"
+            >
+              {saveMutation.isPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
+              Save Changes
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs defaultValue="profile" className="w-full" onValueChange={setActiveTab}>

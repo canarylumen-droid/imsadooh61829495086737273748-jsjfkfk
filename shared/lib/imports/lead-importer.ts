@@ -9,6 +9,8 @@ const verifier = new EmailVerifier();
 
 /**
  * Neural CSV Mapper - Maps dynamic column names to internal lead keys
+ * Enhanced to extract website, city, country, niche, review, google_maps_url,
+ * business_name, phone country code, and more.
  */
 export function mapCsvToLeadMetadata(row: Record<string, any>): Record<string, any> {
   const metadata: Record<string, any> = { ...row };
@@ -17,7 +19,17 @@ export function mapCsvToLeadMetadata(row: Record<string, any>): Record<string, a
     companySize: ['company size', 'size', 'employees', 'team size', 'headcount'],
     painPoint: ['pain point', 'challenge', 'problem', 'needs', 'pain'],
     role: ['role', 'title', 'job title', 'position'],
-    company: ['company', 'organization', 'business name', 'company name']
+    company: ['company', 'organization', 'business name', 'company name'],
+    website: ['website', 'site', 'url', 'web', 'domain', 'business website'],
+    city: ['city', 'town', 'location city', 'locality'],
+    country: ['country', 'nation', 'region country'],
+    review: ['review', 'rating', 'testimonial', 'feedback', 'review text'],
+    googleMapsUrl: ['google maps', 'maps url', 'gmap', 'google maps url', 'maps link'],
+    businessName: ['business name', 'business', 'store name', 'brand name', 'shop name'],
+    countryCode: ['country code', 'phone code', 'dial code', 'country dial'],
+    niche: ['niche', 'specialty', 'specialization', 'vertical'],
+    bio: ['bio', 'about', 'description', 'summary', 'biography'],
+    revenue: ['revenue', 'annual revenue', 'sales volume', 'turnover', 'income'],
   };
 
   for (const [key, aliases] of Object.entries(mappings)) {
@@ -33,6 +45,28 @@ export function mapCsvToLeadMetadata(row: Record<string, any>): Record<string, a
       if (metadata[key]) break;
     }
   }
+
+  // Auto-detect phone country code from phone if not explicitly provided
+  if (row.phone && !metadata.countryCode) {
+    const phone = String(row.phone).replace(/[\s\-\(\)]/g, '');
+    if (phone.startsWith('+1')) metadata.countryCode = '+1';
+    else if (phone.startsWith('+44')) metadata.countryCode = '+44';
+    else if (phone.startsWith('+234')) metadata.countryCode = '+234';
+    else if (phone.startsWith('+91')) metadata.countryCode = '+91';
+    else if (phone.startsWith('+61')) metadata.countryCode = '+61';
+    else if (phone.startsWith('+86')) metadata.countryCode = '+86';
+    else if (phone.startsWith('+49')) metadata.countryCode = '+49';
+    else if (phone.startsWith('+33')) metadata.countryCode = '+33';
+    else if (phone.startsWith('+81')) metadata.countryCode = '+81';
+    else if (phone.startsWith('+55')) metadata.countryCode = '+55';
+    else if (phone.startsWith('+7')) metadata.countryCode = '+7';
+    else if (phone.startsWith('+52')) metadata.countryCode = '+52';
+    else if (phone.startsWith('+971')) metadata.countryCode = '+971';
+    else if (phone.startsWith('+966')) metadata.countryCode = '+966';
+    else if (phone.startsWith('+82')) metadata.countryCode = '+82';
+    else if (phone.startsWith('+39')) metadata.countryCode = '+39';
+  }
+
   return metadata;
 }
 

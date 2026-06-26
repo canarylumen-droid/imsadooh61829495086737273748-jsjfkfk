@@ -223,7 +223,7 @@ export function Navigation() {
             </Button>
           </Link>
           <Magnetic>
-            <Link href="/auth">
+            <Link href="/signup">
               <Button
                 className="h-9 px-4 lg:px-6 rounded-full text-[10px] lg:text-[11px] font-bold uppercase tracking-widest shadow-md shadow-primary/20 hover:shadow-primary/40 transition-all bg-primary text-white hover:scale-[1.02]"
               >

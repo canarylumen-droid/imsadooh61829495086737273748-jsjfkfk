@@ -62,7 +62,7 @@ export function SecuritySection() {
             {CERTS.map((c, i) => (
               <span
                 key={c}
-                className={`font-mono text-[9px] tracking-widest border border-[#2e2e2e] px-3 py-2 text-[#5a5a5a] hover:border-[#2196f3]/40 hover:text-[#2196f3] transition-all duration-200 cursor-default ${
+                className={`font-mono text-[9px] tracking-widest border border-[#2e2e2e] px-3 py-2 text-[#a0a0a0] hover:border-[#2196f3]/40 hover:text-[#2196f3] transition-all duration-200 cursor-default ${
                   vis ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
                 }`}
                 style={{ transitionDelay: `${i * 50 + 200}ms` }}
@@ -184,14 +184,14 @@ export function SecuritySection() {
               <h3 className="font-display text-2xl leading-[0.9] text-[#f2ede6] mb-3 group-hover:text-[#2196f3] transition-colors">
                 {f.title}
               </h3>
-              <p className="text-sm text-[#5a5a5a] leading-relaxed">{f.desc}</p>
+              <p className="text-sm text-[#a0a0a0] leading-relaxed">{f.desc}</p>
             </div>
           ))}
         </div>
 
         {/* Bottom note */}
         <div className="py-5 flex items-center justify-between">
-          <span className="font-mono text-[10px] text-[#3a3a3a]">
+          <span className="font-mono text-[10px] text-[#7a7a7a]">
             EVERY EMAIL SENT IS LOGGED, AUDITED, AND FULLY TRANSPARENT
           </span>
           <a href="#" className="font-mono text-[10px] text-[#2196f3] hover:underline tracking-wider">

@@ -110,7 +110,7 @@ export function SolutionPageTemplate({
                             />
 
                             <div className="flex flex-wrap gap-4">
-                                <Link href="/auth">
+                                <Link href="/signup">
                                     <Button size="lg" className="h-14 px-8 rounded-full bg-primary text-black font-black uppercase tracking-widest shadow-[0_0_30px_rgba(0,210,255,0.3)] hover:scale-105 transition-all text-xs">
                                         Get Started <ArrowRight className="ml-2 w-4 h-4" />
                                     </Button>
@@ -210,7 +210,7 @@ export function SolutionPageTemplate({
                                 text={deepDiveText}
                                 className="text-base sm:text-lg md:text-xl text-white/70 leading-[1.4] whitespace-pre-line font-bold text-left tracking-tight"
                             />
-                            <Link href="/auth">
+                            <Link href="/signup">
                                 <Button variant="ghost" className="rounded-full px-0 font-black uppercase tracking-widest text-[10px] text-primary hover:text-white hover:bg-transparent transition-colors group">
                                     Get Started <ArrowRight className="ml-2 w-4 h-4 group-hover:translate-x-1 transition-transform" />
                                 </Button>

@@ -549,6 +549,115 @@ router.get('/export', requireAuth, async (req: Request, res: Response): Promise<
   }
 });
 
+/**
+ * Export leads by category
+ * GET /api/bulk/export-category?category=replied
+ * Categories: replied, booked, no_show, no_reply, ghosted, converted
+ */
+router.get('/export-category', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req)!;
+    const { category } = req.query as { category?: string };
+
+    if (!category) {
+      res.status(400).json({ error: 'category query parameter is required' });
+      return;
+    }
+
+    const validCategories = ['replied', 'booked', 'no_show', 'no_reply', 'ghosted', 'converted'];
+    if (!validCategories.includes(category)) {
+      res.status(400).json({ error: `Invalid category. Must be one of: ${validCategories.join(', ')}` });
+      return;
+    }
+
+    let leads: any[] = [];
+
+    switch (category) {
+      case 'replied':
+        leads = await storage.getLeads({ userId, status: 'replied', limit: 50000 });
+        break;
+      case 'booked':
+        leads = await storage.getLeads({ userId, status: 'booked', limit: 50000 });
+        break;
+      case 'no_show':
+        leads = await storage.getLeads({ userId, status: 'no_show', limit: 50000 });
+        break;
+      case 'no_reply':
+        // Leads that haven't replied — new/open/cold status
+        const statuses = ['new', 'open', 'cold'];
+        const allLeads = await storage.getLeads({ userId, limit: 50000 });
+        leads = allLeads.filter((l: any) => statuses.includes(l.status));
+        break;
+      case 'ghosted':
+        // Leads with positive/neutral sentiment but no reply recently
+        const ghostAll = await storage.getLeads({ userId, limit: 50000 });
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        leads = ghostAll.filter((l: any) =>
+          (l.sentiment === 'positive' || l.sentiment === 'neutral') &&
+          (!l.lastMessageAt || new Date(l.lastMessageAt) < thirtyDaysAgo) &&
+          l.status !== 'converted' && l.status !== 'booked' &&
+          l.status !== 'replied'
+        );
+        break;
+      case 'converted':
+        leads = await storage.getLeads({ userId, status: 'converted', limit: 50000 });
+        break;
+    }
+
+    if (leads.length === 0) {
+      res.status(404).json({ error: `No leads found in category: ${category}` });
+      return;
+    }
+
+    const headers = [
+      'Name', 'Email', 'Phone', 'Country Code', 'Company', 'Business Name',
+      'Website', 'Google Maps URL', 'City', 'Country', 'Niche', 'Review',
+      'Channel', 'Status', 'Sentiment', 'Score', 'Warm',
+      'Timezone', 'Tags', 'Last Message At', 'Created At'
+    ];
+
+    const rows = leads.map((l: any) => {
+      const meta = l.metadata || {};
+      return [
+        l.name || '',
+        l.email || '',
+        l.phone || '',
+        meta.countryCode || meta.country_code || '',
+        l.company || '',
+        meta.businessName || meta.business_name || '',
+        meta.website || '',
+        meta.googleMapsUrl || meta.google_maps_url || '',
+        meta.city || '',
+        meta.country || '',
+        meta.niche || '',
+        meta.review || '',
+        l.channel || '',
+        l.status || '',
+        l.sentiment || '',
+        String(l.score || 0),
+        l.warm ? 'Yes' : 'No',
+        l.timezone || '',
+        (l.tags || []).join('; '),
+        l.lastMessageAt ? new Date(l.lastMessageAt).toISOString() : '',
+        l.createdAt ? new Date(l.createdAt).toISOString() : '',
+      ];
+    });
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=audnix_${category}_${new Date().toISOString().split('T')[0]}.csv`);
+    res.status(200).send(csvContent);
+  } catch (error: unknown) {
+    console.error('Export by category error:', error);
+    res.status(500).json({ error: getErrorMessage(error) });
+  }
+});
+
 export default router;
 
 

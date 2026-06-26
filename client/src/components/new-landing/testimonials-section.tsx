@@ -81,7 +81,7 @@ export function TestimonialsSection() {
           className={`border-b border-[#1e1e1e] py-8 flex items-end justify-between transition-all duration-500 ${vis ? "opacity-100" : "opacity-0"}`}
         >
           <span className="sys-tag">FIELD REPORTS</span>
-          <span className="font-mono text-[10px] text-[#3a3a3a]">
+          <span className="font-mono text-[10px] text-[#7a7a7a]">
             {String(active + 1).padStart(2, "0")} / {String(TESTIMONIALS.length).padStart(2, "0")}
           </span>
         </div>
@@ -102,7 +102,7 @@ export function TestimonialsSection() {
                 </div>
                 <div>
                   <p className="font-mono text-[11px] text-[#f2ede6] tracking-wider">{t.author}</p>
-                  <p className="font-mono text-[10px] text-[#3a3a3a] tracking-wider">
+                  <p className="font-mono text-[10px] text-[#7a7a7a] tracking-wider">
                     {t.role} &nbsp;·&nbsp; 
                     <a href={`https://${t.website}`} target="_blank" rel="noopener noreferrer" className="text-[#2196f3] hover:underline ml-1">
                       {t.company}
@@ -121,7 +121,7 @@ export function TestimonialsSection() {
             >
               <span className="sys-tag text-[9px] mb-4 block">KEY_RESULT</span>
               <div className="font-display text-6xl text-[#2196f3]">{t.metric}</div>
-              <div className="font-mono text-[10px] text-[#3a3a3a] tracking-widest mt-2">{t.metricLabel}</div>
+              <div className="font-mono text-[10px] text-[#7a7a7a] tracking-widest mt-2">{t.metricLabel}</div>
             </div>
 
             {/* Nav dots */}
@@ -147,7 +147,7 @@ export function TestimonialsSection() {
           {[...Array(2)].map((_, ri) => (
             <span key={ri} className="inline-flex gap-16 shrink-0">
               {LOGOS.map(l => (
-                <span key={`${l}-${ri}`} className="font-mono text-[11px] tracking-[0.2em] text-[#2e2e2e] hover:text-[#5a5a5a] transition-colors cursor-default">
+                <span key={`${l}-${ri}`} className="font-mono text-[11px] tracking-[0.2em] text-[#2e2e2e] hover:text-[#a0a0a0] transition-colors cursor-default">
                   {l}
                 </span>
               ))}

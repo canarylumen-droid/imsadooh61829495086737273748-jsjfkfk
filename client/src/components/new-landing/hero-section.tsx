@@ -68,7 +68,7 @@ export function HeroSection() {
             <div
               className={`mt-4 transition-all duration-700 delay-300 ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"}`}
             >
-              <p className="text-sm text-[#c0bbb2] leading-relaxed max-w-md font-black">
+              <p className="text-sm text-[#e8e4dc] leading-relaxed max-w-md font-black">
                 Deploy the only autonomous AI sales rep that prospects, qualifies, handles objections, and books meetings on autopilot. Built for high-ticket closers who never clock out.
               </p>
 
@@ -108,7 +108,7 @@ export function HeroSection() {
                     </div>
                   ))}
                 </div>
-                <span className="font-mono text-[9px] text-[#3a3a3a] font-black">
+                <span className="font-mono text-[9px] text-[#7a7a7a] font-black">
                   5,000+ agencies · 98% delivery rate
                 </span>
               </div>

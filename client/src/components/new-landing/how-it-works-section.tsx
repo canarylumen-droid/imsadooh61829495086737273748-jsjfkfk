@@ -85,7 +85,7 @@ export function HowItWorksSection() {
               <span style={{ WebkitTextStroke: "1px #3a3a3a", color: "transparent" }}>THREE STEPS</span>
             </h2>
           </div>
-          <span className="font-mono text-[10px] text-[#3a3a3a] tracking-widest">
+          <span className="font-mono text-[10px] text-[#7a7a7a] tracking-widest">
             DEFINE &nbsp;·&nbsp; COMPOSE &nbsp;·&nbsp; DEPLOY
           </span>
         </div>
@@ -103,11 +103,11 @@ export function HowItWorksSection() {
                 }`}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <span className="font-mono text-[9px] text-[#3a3a3a] tracking-widest">{s.tag}</span>
-                  <span className="font-mono text-[10px] text-[#3a3a3a]">{s.id}</span>
+                  <span className="font-mono text-[9px] text-[#7a7a7a] tracking-widest">{s.tag}</span>
+                  <span className="font-mono text-[10px] text-[#7a7a7a]">{s.id}</span>
                 </div>
                 <h3 className={`font-display text-2xl leading-[0.9] transition-colors ${
-                  active === i ? "text-[#2196f3]" : "text-[#3a3a3a] group-hover:text-[#5a5a5a]"
+                  active === i ? "text-[#2196f3]" : "text-[#7a7a7a] group-hover:text-[#a0a0a0]"
                 }`}>
                   {s.title}
                 </h3>
@@ -130,12 +130,12 @@ export function HowItWorksSection() {
             {/* Description */}
             <div className="border-r border-[#1e1e1e] p-8 flex flex-col justify-between">
               <div>
-                <p className="text-sm text-[#5a5a5a] leading-relaxed mb-8">{step.desc}</p>
+                <p className="text-sm text-[#a0a0a0] leading-relaxed mb-8">{step.desc}</p>
                 <a href="#" className="inline-flex items-center gap-2 font-mono text-[11px] text-[#2196f3] tracking-wider hover:underline">
                   READ DOCS →
                 </a>
               </div>
-              <div className="mt-8 font-mono text-[10px] text-[#3a3a3a] border-t border-[#1e1e1e] pt-4">
+              <div className="mt-8 font-mono text-[10px] text-[#7a7a7a] border-t border-[#1e1e1e] pt-4">
                 STEP &nbsp;{step.id} &nbsp;OF &nbsp;03
               </div>
             </div>
@@ -144,7 +144,7 @@ export function HowItWorksSection() {
             <div className="bg-[#050505]">
               {/* Code header */}
               <div className="border-b border-[#1e1e1e] px-5 py-3 flex items-center justify-between">
-                <span className="font-mono text-[10px] text-[#3a3a3a]">agent-config.ts</span>
+                <span className="font-mono text-[10px] text-[#7a7a7a]">agent-config.ts</span>
                 <div className="flex items-center gap-2">
                   <span className="status-pulse w-1.5 h-1.5 rounded-full bg-[#22c55e] inline-block" />
                   <span className="font-mono text-[10px] text-[#22c55e]">READY</span>
@@ -159,10 +159,10 @@ export function HowItWorksSection() {
                       className="leading-7"
                       style={{ animation: `fade-up 0.3s ease ${li * 60}ms both` }}
                     >
-                      <span className="text-[#3a3a3a] select-none w-5 inline-block text-right mr-4">
+                      <span className="text-[#7a7a7a] select-none w-5 inline-block text-right mr-4">
                         {li + 1}
                       </span>
-                      <span className="text-[#5a5a5a]">{line}</span>
+                      <span className="text-[#a0a0a0]">{line}</span>
                     </div>
                   ))}
                 </pre>

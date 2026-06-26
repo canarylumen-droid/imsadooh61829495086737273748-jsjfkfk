@@ -109,22 +109,22 @@ export function CtaSection() {
               STARTS NOW.
             </h2>
 
-            <p className="font-mono text-sm text-[#a8a8a8] mb-12 max-w-lg mx-auto leading-relaxed">
+            <p className="font-mono text-sm text-[#d0d0d0] mb-12 max-w-lg mx-auto leading-relaxed">
               Join 14,203+ revenue teams using Audnix. Free trial includes unlimited leads for 3 days. No credit card required.
             </p>
 
             {/* CTAs */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <a
-                href="#"
+                href="/signup"
                 className="group inline-flex items-center gap-4 bg-[#2196f3] text-[#050505] font-mono text-sm tracking-widest px-8 py-5 hover:bg-[#42a5f5] transition-colors font-semibold"
               >
                 START NOW
                 <span className="transition-transform group-hover:translate-x-1">→</span>
               </a>
               <a
-                href="#"
-                className="group inline-flex items-center gap-4 border border-[#2e2e2e] text-[#5a5a5a] font-mono text-sm tracking-widest px-8 py-5 hover:border-[#2196f3]/40 hover:text-[#2196f3] transition-colors"
+                href="mailto:hello@audnixai.com"
+                className="group inline-flex items-center gap-4 border border-[#2e2e2e] text-[#a0a0a0] font-mono text-sm tracking-widest px-8 py-5 hover:border-[#2196f3]/40 hover:text-[#2196f3] transition-colors"
               >
                 TALK TO SALES
                 <span className="transition-transform group-hover:translate-x-1">→</span>
@@ -141,7 +141,7 @@ export function CtaSection() {
               ].map(s => (
                 <div key={s.l} className="text-center">
                   <div className="font-display text-2xl text-[#2196f3]">{s.v}</div>
-                  <div className="font-mono text-[9px] text-[#3a3a3a] tracking-widest">{s.l}</div>
+                  <div className="font-mono text-[9px] text-[#7a7a7a] tracking-widest">{s.l}</div>
                 </div>
               ))}
             </div>

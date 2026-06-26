@@ -1,9 +1,13 @@
 User-agent: *
 Allow: /
+Allow: /signup
+Allow: /login
 Disallow: /admin
 Disallow: /dashboard
 Disallow: /auth
 Disallow: /find-leads
+Disallow: /onboarding
+Disallow: /api/
 
 # AI Crawler Support
 User-agent: GPTBot

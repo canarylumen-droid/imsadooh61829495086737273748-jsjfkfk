@@ -48,7 +48,7 @@ export function Navigation() {
               <a
                 key={link.name}
                 href={link.href}
-                className="font-mono text-[11px] tracking-[0.18em] text-[#b0aca3] hover:text-[#2196f3] transition-colors duration-200"
+                className="font-mono text-[11px] tracking-[0.18em] text-[#d0cdc5] hover:text-[#2196f3] transition-colors duration-200"
               >
                 {link.name}
               </a>
@@ -59,7 +59,7 @@ export function Navigation() {
           <div className="hidden md:flex items-center gap-4">
             <a
               href="/login"
-              className="font-mono text-[11px] tracking-widest text-[#b0aca3] hover:text-[#2196f3] transition-colors"
+              className="font-mono text-[11px] tracking-widest text-[#d0cdc5] hover:text-[#2196f3] transition-colors"
             >
               LOGIN
             </a>
@@ -101,7 +101,7 @@ export function Navigation() {
               style={{ transitionDelay: open ? `${i * 60}ms` : "0ms" }}
             >
               {link.name}
-              <span className="font-mono text-xs text-[#3a3a3a]">
+              <span className="font-mono text-xs text-[#7a7a7a]">
                 {String(i + 1).padStart(2, "0")}
               </span>
             </a>
@@ -111,7 +111,7 @@ export function Navigation() {
           <a
             href="/login"
             onClick={() => setOpen(false)}
-            className="w-full block text-center font-mono text-sm tracking-widest bg-[#0a0a0a] border border-[#1e1e1e] text-[#b0aca3] py-5 hover:border-[#2196f3] hover:text-[#2196f3] transition-colors"
+            className="w-full block text-center font-mono text-sm tracking-widest bg-[#0a0a0a] border border-[#1e1e1e] text-[#d0cdc5] py-5 hover:border-[#2196f3] hover:text-[#2196f3] transition-colors"
           >
             LOGIN
           </a>

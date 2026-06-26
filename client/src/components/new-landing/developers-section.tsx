@@ -183,7 +183,7 @@ export function DevelopersSection() {
           {/* Left — Workflow Steps */}
           <div className="border-r border-[#1e1e1e]">
             <div className="border-b border-[#1e1e1e] p-6">
-              <p className="text-sm text-[#b0aca3] leading-relaxed max-w-md">
+              <p className="text-sm text-[#d0cdc5] leading-relaxed max-w-md">
                 4 simple steps to scale your cold email outreach. From setup to qualified leads in your inbox.
               </p>
             </div>
@@ -202,16 +202,16 @@ export function DevelopersSection() {
                 >
                   <div className="flex items-start gap-4">
                     <Icon className={`w-5 h-5 flex-shrink-0 mt-1 transition-colors ${
-                      isActive ? "text-[#2196f3]" : "text-[#5a5a5a]"
+                      isActive ? "text-[#2196f3]" : "text-[#a0a0a0]"
                     }`} />
                     <div className="flex-1">
                       <div className="flex items-center justify-between gap-4 mb-2">
                         <span className={`font-display text-lg font-bold transition-colors ${
                           isActive ? "text-[#2196f3]" : "text-[#f2ede6]"
                         }`}>{step.title}</span>
-                        <span className="font-mono text-[10px] text-[#3a3a3a]">{step.num}</span>
+                        <span className="font-mono text-[10px] text-[#7a7a7a]">{step.num}</span>
                       </div>
-                      <p className="text-sm text-[#b0aca3] leading-relaxed">{step.desc}</p>
+                      <p className="text-sm text-[#d0cdc5] leading-relaxed">{step.desc}</p>
                     </div>
                   </div>
                 </button>
@@ -222,7 +222,7 @@ export function DevelopersSection() {
               <a href="#" className="font-mono text-[11px] text-[#2196f3] tracking-wider hover:underline">
                 START FREE TRIAL →
               </a>
-              <a href="#" className="font-mono text-[11px] text-[#b0aca3] tracking-wider hover:text-[#f2ede6] transition-colors">
+              <a href="#" className="font-mono text-[11px] text-[#d0cdc5] tracking-wider hover:text-[#f2ede6] transition-colors">
                 BOOK A DEMO →
               </a>
             </div>
@@ -267,7 +267,7 @@ export function DevelopersSection() {
               {METRICS.map((m) => (
                 <div key={m.label} className="text-center">
                   <div className="font-display text-sm text-[#2196f3] font-bold">{m.label}</div>
-                  <div className="font-mono text-[9px] text-[#3a3a3a] mt-1">{m.sub}</div>
+                  <div className="font-mono text-[9px] text-[#7a7a7a] mt-1">{m.sub}</div>
                 </div>
               ))}
             </div>
