@@ -53,6 +53,7 @@ const FEATURES = [
     tag: "INTELLIGENCE",
     title: "VOICE NOTE\nINTELLIGENCE",
     desc: "Acoustic modeling extracts intent, urgency, and emotional state from voice notes. Your AI knows when someone is ready to buy, hesitant, or disqualified.",
+    link: { href: "/objection-handling", text: "objection handling engine →" },
     stat: { end: 110, suffix: "+", l: "objection scripts" },
   },
   {
@@ -60,6 +61,7 @@ const FEATURES = [
     tag: "ENGAGEMENT",
     title: "PREDICTIVE\nTIMING",
     desc: "ML-driven timing optimization. Don't just respond faster — respond at the exact moment your prospect is most likely to engage. 70% of deals go to the fastest responder.",
+    link: { href: "/pricing", text: "see growth plans →" },
     stat: { end: 70, suffix: "%", l: "faster than humans" },
   },
   {
@@ -67,6 +69,7 @@ const FEATURES = [
     tag: "ORCHESTRATION",
     title: "MULTI-CHANNEL\nSCALE",
     desc: "Email, LinkedIn, voice, SMS — one autonomous engine orchestrates all channels. Coordinates cadences, prevents contact fatigue, and adapts to channel preferences.",
+    link: { href: "/solutions/agencies", text: "agency multi-channel →" },
     stat: { end: 10, suffix: "K+", l: "leads in parallel" },
   },
   {
@@ -74,6 +77,7 @@ const FEATURES = [
     tag: "AUTOMATION",
     title: "DETERMINISTIC\nCLOSING",
     desc: "Proprietary behavioral models train on your exact closing playbook. Not templated responses — real, personalized objection handling that mirrors your top closer's logic.",
+    link: { href: "/lead-recovery", text: "recover lost leads →" },
     stat: { end: 98, suffix: "%", l: "delivery rate" },
   },
 ];
@@ -115,7 +119,14 @@ function FeatureRow({ f, index }: { f: typeof FEATURES[0]; index: number }) {
 
         {/* Description */}
         <div className="col-span-2 lg:col-span-1 border-r border-[#1e1e1e] p-6 flex items-center">
-          <p className="text-sm text-[#a0a0a0] leading-relaxed max-w-lg">{f.desc}</p>
+          <div>
+            <p className="text-sm text-[#a0a0a0] leading-relaxed max-w-lg">{f.desc}</p>
+            {(f as any).link && (
+              <a href={(f as any).link.href} className="inline-block mt-2 font-mono text-[10px] tracking-widest text-[#2196f3] hover:text-[#42a5f5] transition-colors">
+                {(f as any).link.text}
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Stat */}

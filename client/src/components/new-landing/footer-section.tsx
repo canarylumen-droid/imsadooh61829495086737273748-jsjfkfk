@@ -1,24 +1,24 @@
 const LINKS = {
   SOLUTIONS: [
-    { name: "For Agencies",    href: "/solutions/agencies" },
-    { name: "For Founders",    href: "/solutions/sales-teams" },
-    { name: "For Creators",    href: "/solutions/creators" },
+    { name: "AI Sales Rep for Agencies", href: "/solutions/agencies" },
+    { name: "Cold Email for Founders", href: "/solutions/sales-teams" },
+    { name: "Lead Gen for Creators", href: "/solutions/creators" },
   ],
   PRODUCT: [
-    { name: "Lead Recovery",   href: "/lead-recovery" },
-    { name: "Objection Handler", href: "/objection-handling" },
-    { name: "Pricing",         href: "/pricing" },
+    { name: "Lead Recovery Engine", href: "/lead-recovery" },
+    { name: "Objection Handling AI", href: "/objection-handling" },
+    { name: "Pricing & Free Trial", href: "/pricing" },
+  ],
+  RESOURCES: [
+    { name: "Niche Vault", href: "/resources/niche-vault" },
+    { name: "Outreach Playbooks", href: "/resources/outreach-playbooks" },
+    { name: "API Documentation", href: "/resources/api-docs" },
   ],
   COMPANY: [
-    { name: "Our Process",     href: "#" },
-    { name: "Engineering",     href: "#" },
-    { name: "Contact",         href: "#" },
-  ],
-  LEGAL: [
-    { name: "Data Privacy",    href: "#" },
-    { name: "Service Terms",   href: "#" },
-    { name: "DPA Agreement",   href: "#" },
-    { name: "Security",        href: "#" },
+    { name: "Sign Up Free", href: "/signup" },
+    { name: "Contact Sales", href: "mailto:hello@audnixai.com" },
+    { name: "Privacy Policy", href: "/privacy-policy" },
+    { name: "Terms of Service", href: "/terms-of-service" },
   ],
 };
 

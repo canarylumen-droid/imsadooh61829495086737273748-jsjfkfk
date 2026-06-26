@@ -652,14 +652,15 @@ export default function AuthPage() {
         className="w-full max-w-md z-10"
       >
         <div className="mb-8 text-center">
-          <motion.div
+          <motion.a
+            href="/"
             initial={{ scale: 0.8 }}
             animate={{ scale: 1 }}
-            className="inline-flex items-center justify-center p-3 rounded-2xl bg-primary/10 mb-4 border border-primary/20"
+            className="inline-flex items-center gap-3 mb-4"
           >
-            <Shield className="w-8 h-8 text-primary shadow-[0_0_15px_rgba(var(--primary),0.3)]" />
-          </motion.div>
-          <h1 className="text-3xl font-extrabold tracking-tight mb-2"> Audnix AI </h1>
+            <img src="/logo.svg" alt="Audnix AI" className="h-10 w-auto" />
+            <span className="text-2xl font-bold tracking-tight text-foreground">Audnix AI</span>
+          </motion.a>
           <p className="text-muted-foreground">
             {isLogin ? "Sign in to your account" : signupStep === 2 ? "Verify your email" : signupStep === 3 ? "Complete your profile" : "Create your account"}
           </p>

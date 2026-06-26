@@ -6,15 +6,15 @@
   --font-mono: var(--font-ibm-plex-mono), "Courier New", monospace;
   --font-display: var(--font-barlow-condensed), system-ui, sans-serif;
 
-  /* True black base */
-  --color-background: #050505;
+  /* Dashboard-inspired dark base (soft navy black) */
+  --color-background: #0a0e1a;
   --color-foreground: #f2ede6;
 
   /* Surfaces */
-  --color-card: #121212;
+  --color-card: #12182b;
   --color-card-foreground: #f2ede6;
-  --color-muted: #1a1a1a;
-  --color-muted-foreground: #a0a0a0;
+  --color-muted: #1a2040;
+  --color-muted-foreground: #a0aab8;
 
   /* Electric blue accent */
   --color-primary: #2196f3;

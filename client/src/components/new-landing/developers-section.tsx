@@ -219,10 +219,10 @@ export function DevelopersSection() {
             })}
 
             <div className="p-6 flex flex-col gap-3">
-              <a href="#" className="font-mono text-[11px] text-[#2196f3] tracking-wider hover:underline">
+              <a href="/signup" className="font-mono text-[11px] text-[#2196f3] tracking-wider hover:underline">
                 START FREE TRIAL →
               </a>
-              <a href="#" className="font-mono text-[11px] text-[#d0cdc5] tracking-wider hover:text-[#f2ede6] transition-colors">
+              <a href="mailto:hello@audnixai.com" className="font-mono text-[11px] text-[#d0cdc5] tracking-wider hover:text-[#f2ede6] transition-colors">
                 BOOK A DEMO →
               </a>
             </div>

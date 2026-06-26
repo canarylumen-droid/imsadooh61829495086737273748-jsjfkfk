@@ -93,8 +93,8 @@ export function IntegrationsSection() {
 
       <div className="max-w-[1400px] mx-auto px-6 lg:px-12 py-5 flex items-center justify-between">
         <span className="font-mono text-[10px] text-[#7a7a7a]">CONNECT YOUR EMAIL, CALENDAR, AND CRM</span>
-        <a href="#" className="font-mono text-[10px] text-[#2196f3] hover:underline tracking-wider">
-          VIEW ALL INTEGRATIONS →
+        <a href="/solutions/agencies" className="font-mono text-[10px] text-[#2196f3] hover:underline tracking-wider">
+          AGENCY SOLUTIONS →
         </a>
       </div>
     </section>

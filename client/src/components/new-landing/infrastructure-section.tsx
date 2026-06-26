@@ -104,10 +104,13 @@ export function InfrastructureSection() {
           ))}
         </div>
 
-        <div className="py-4 flex justify-end">
+        <div className="py-4 flex items-center justify-between">
           <span className="font-mono text-[10px] text-[#7a7a7a]">
             AI OPTIMIZES SEND TIMES · REAL-TIME BASED ON RECIPIENT DATA &nbsp;· &nbsp;99.9%+ DELIVERY
           </span>
+          <a href="/pricing" className="font-mono text-[10px] text-[#2196f3] hover:underline tracking-wider">
+            VIEW PRICING PLANS →
+          </a>
         </div>
       </div>
     </section>

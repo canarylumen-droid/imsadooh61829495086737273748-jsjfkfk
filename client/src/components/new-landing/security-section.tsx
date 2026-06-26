@@ -191,12 +191,18 @@ export function SecuritySection() {
 
         {/* Bottom note */}
         <div className="py-5 flex items-center justify-between">
+          <div className="flex gap-4">
+            <a href="/privacy-policy" className="font-mono text-[10px] text-[#7a7a7a] hover:text-[#2196f3] transition-colors">
+              PRIVACY POLICY
+            </a>
+            <span className="font-mono text-[10px] text-[#7a7a7a]">·</span>
+            <a href="/terms-of-service" className="font-mono text-[10px] text-[#7a7a7a] hover:text-[#2196f3] transition-colors">
+              TERMS OF SERVICE
+            </a>
+          </div>
           <span className="font-mono text-[10px] text-[#7a7a7a]">
             EVERY EMAIL SENT IS LOGGED, AUDITED, AND FULLY TRANSPARENT
           </span>
-          <a href="#" className="font-mono text-[10px] text-[#2196f3] hover:underline tracking-wider">
-            COMPLIANCE FAQ →
-          </a>
         </div>
       </div>
     </section>

@@ -131,8 +131,8 @@ export function HowItWorksSection() {
             <div className="border-r border-[#1e1e1e] p-8 flex flex-col justify-between">
               <div>
                 <p className="text-sm text-[#a0a0a0] leading-relaxed mb-8">{step.desc}</p>
-                <a href="#" className="inline-flex items-center gap-2 font-mono text-[11px] text-[#2196f3] tracking-wider hover:underline">
-                  READ DOCS →
+                <a href="/resources/api-docs" className="inline-flex items-center gap-2 font-mono text-[11px] text-[#2196f3] tracking-wider hover:underline">
+                  API DOCUMENTATION →
                 </a>
               </div>
               <div className="mt-8 font-mono text-[10px] text-[#7a7a7a] border-t border-[#1e1e1e] pt-4">
