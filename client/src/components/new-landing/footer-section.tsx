@@ -53,7 +53,7 @@ export function FooterSection() {
               <div key={section}>
                 <h3 className="font-mono text-[9px] tracking-[0.2em] text-[#2196f3] mb-5">{section}</h3>
                 <ul className="space-y-2">
-                  {links.map(l => (
+                  {links.map((l: { name: string; href: string; badge?: string }) => (
                     <li key={l.name}>
                       <a href={l.href} className="font-mono text-[12px] text-[#d0cdc5] hover:text-[#2196f3] hover:bg-[#2196f3]/10 transition-all px-3 py-2 rounded inline-flex items-center gap-2 font-medium">
                         {l.name}

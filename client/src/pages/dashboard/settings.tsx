@@ -20,7 +20,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check, Download } from "lucide-react";
+import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check, Download, Construction } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -59,7 +59,6 @@ interface UserProfile {
 export default function SettingsPage() {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pdfInputRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState("profile");
   const [hasChanges, setHasChanges] = useState(false);
@@ -157,19 +156,7 @@ export default function SettingsPage() {
     }
   });
 
-  const uploadPDFMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append('pdf', file);
-      const res = await fetch('/api/pdf/upload', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error('Upload failed');
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Intelligence Memory Synced", description: "Your brand intelligence has been updated." });
-      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
-    }
-  });
+
 
   const cloneVoiceMutation = useMutation({
     mutationFn: async (files: FileList) => {
@@ -247,51 +234,60 @@ export default function SettingsPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 rounded-xl">
-              <DropdownMenuItem
-                className="font-medium text-sm cursor-pointer"
-                onClick={() => {
-                  window.open('/api/bulk/export-category?category=replied', '_blank');
-                }}
-              >
-                <span className="text-emerald-500 mr-2">●</span> Leads That Have Replied
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="font-medium text-sm cursor-pointer"
-                onClick={() => {
-                  window.open('/api/bulk/export-category?category=booked', '_blank');
-                }}
-              >
-                <span className="text-blue-500 mr-2">●</span> Leads That Have Booked Call
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="font-medium text-sm cursor-pointer"
-                onClick={() => {
-                  window.open('/api/bulk/export-category?category=no_show', '_blank');
-                }}
-              >
-                <span className="text-red-500 mr-2">●</span> Leads That Booked But Didn't Show Up
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="font-medium text-sm cursor-pointer"
-                onClick={() => {
-                  window.open('/api/bulk/export-category?category=no_reply', '_blank');
-                }}
-              >
-                <span className="text-orange-500 mr-2">●</span> Leads That Haven't Replied
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                className="font-medium text-sm cursor-pointer"
-                onClick={() => {
-                  window.open('/api/bulk/export-category?category=ghosted', '_blank');
-                }}
-              >
-                <span className="text-purple-500 mr-2">●</span> Positive Replies But Ghosted
-              </DropdownMenuItem>
+              {([
+                ['replied', 'text-emerald-500', 'Leads That Have Replied'],
+                ['booked', 'text-blue-500', 'Leads That Have Booked Call'],
+                ['no_show', 'text-red-500', 'Leads That Booked But Didn\'t Show Up'],
+                ['no_reply', 'text-orange-500', 'Leads That Haven\'t Replied'],
+                ['ghosted', 'text-purple-500', 'Positive Replies But Ghosted'],
+              ] as const).map(([cat, color, label]) => (
+                <DropdownMenuItem
+                  key={cat}
+                  className="font-medium text-sm cursor-pointer"
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`/api/bulk/export-category?category=${cat}`, { credentials: 'include' });
+                      if (!res.ok) {
+                        toast({ title: 'No Leads', description: `No leads found in "${label}" category.`, variant: 'default' });
+                        return;
+                      }
+                      const blob = await res.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `audnix_${cat}_${Date.now()}.csv`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      toast({ title: 'Exported', description: `${label} CSV downloaded.`, variant: 'default' });
+                    } catch {
+                      toast({ title: 'Export Failed', description: 'Could not export leads. Please try again.', variant: 'destructive' });
+                    }
+                  }}
+                >
+                  <span className={`${color} mr-2`}>●</span> {label}
+                </DropdownMenuItem>
+              ))}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="font-medium text-sm cursor-pointer"
-                onClick={() => {
-                  window.open('/api/bulk/export-category?category=converted', '_blank');
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/bulk/export-category?category=converted', { credentials: 'include' });
+                    if (!res.ok) {
+                      toast({ title: 'No Leads', description: 'No leads found in "Leads That Paid / Converted" category.', variant: 'default' });
+                      return;
+                    }
+                    const blob = await res.blob();
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `audnix_converted_${Date.now()}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                    toast({ title: 'Exported', description: 'Converted leads CSV downloaded.', variant: 'default' });
+                  } catch {
+                    toast({ title: 'Export Failed', description: 'Could not export leads. Please try again.', variant: 'destructive' });
+                  }
                 }}
               >
                 <span className="text-yellow-500 mr-2">●</span> Leads That Paid / Converted
@@ -744,122 +740,16 @@ export default function SettingsPage() {
 
         <TabsContent value="voice" className="space-y-6">
           <Card className="border-border/50 shadow-sm rounded-2xl">
-            <CardHeader>
-              <CardTitle className="text-xl">Voice AI & Cloning</CardTitle>
-              <CardDescription>Configure AI-generated voice notes for highly-personalized outreach.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {!canAccessVoiceNotes && (
-                <div className="p-6 bg-primary/5 border border-primary/20 rounded-2xl flex flex-col items-center text-center gap-4 mb-4">
-                  <div className="p-3 bg-primary/10 rounded-full">
-                    <Lock className="w-6 h-6 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-lg">Pro Feature</h4>
-                    <p className="text-sm text-muted-foreground max-w-sm">
-                      Voice AI and Voice Cloning are only available on Growth and Performance plans.
-                    </p>
-                  </div>
-                  <Button variant="default" className="rounded-xl px-6" asChild>
-                    <Link href="/pricing">View Plans</Link>
-                  </Button>
-                </div>
-              )}
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-gradient-to-br from-primary/5 to-purple-500/5 rounded-2xl border border-primary/20 hover:border-primary/40 transition-all gap-4">
-                <div className="flex gap-4">
-                  <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 shrink-0">
-                    <VoiceIcon className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-base">Voice Engagement</h4>
-                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                      Automatically send personalized voice notes via Instagram DM for 10x higher response rates.
-                    </p>
-                  </div>
-                </div>
-                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
-                  <Switch
-                    checked={formData.voiceNotesEnabled && canAccessVoiceNotes}
-                    onCheckedChange={c => canAccessVoiceNotes && handleFieldChange('voiceNotesEnabled', c)}
-                    disabled={!canAccessVoiceNotes}
-                    className="data-[state=checked]:bg-primary"
-                  />
+            <CardContent className="p-12 text-center">
+              <div className="flex justify-center mb-6">
+                <div className="p-4 rounded-full bg-muted">
+                  <Construction className="w-12 h-12 text-muted-foreground" />
                 </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="md:col-span-2 border-border/50 shadow-none bg-muted/20">
-                  <CardContent className="p-6">
-                    <div className="flex justify-between items-center mb-6">
-                      <div>
-                        <h4 className="font-bold text-sm">Voice Identity (Clone)</h4>
-                        <p className="text-xs text-muted-foreground mt-1">Train the AI with your own voice for authentic engagement.</p>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => voiceInputRef.current?.click()}
-                        disabled={cloneVoiceMutation.isPending || !canAccessVoiceNotes}
-                        className="h-9 px-4 rounded-lg font-bold border-primary/20 hover:bg-primary/5 text-primary"
-                      >
-                        {cloneVoiceMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Mic className="w-4 h-4 mr-2" />}
-                        {user.metadata?.voiceCloneId ? 'Update Identity' : 'Clone Voice'}
-                      </Button>
-                      <input
-                        ref={voiceInputRef}
-                        type="file"
-                        multiple
-                        className="hidden"
-                        accept="audio/*"
-                        onChange={e => e.target.files && cloneVoiceMutation.mutate(e.target.files)}
-                      />
-                    </div>
-
-                    {user.metadata?.voiceCloneId ? (
-                      <div className="flex items-center gap-4 p-4 bg-primary/10 rounded-xl border border-primary/20 mb-2">
-                        <div className="p-2 bg-primary/20 rounded-full text-primary">
-                          <ShieldCheck className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-primary">Identity Verified</p>
-                          <p className="text-[10px] text-muted-foreground">Successfully cloned and ready for engagement.</p>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="p-6 text-center border-2 border-dashed border-border rounded-xl">
-                        <Mic className="w-8 h-8 text-muted-foreground mx-auto mb-2 opacity-20" />
-                        <p className="text-xs text-muted-foreground">Upload 1-3 voice samples (30s each) to begin.</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border/50 shadow-none bg-muted/20">
-                  <CardContent className="p-6 space-y-4">
-                    <div className="flex justify-between mb-1">
-                      <h4 className="font-bold text-[11px] uppercase tracking-wider text-muted-foreground">Monthly Capacity</h4>
-                      <span className="text-[11px] font-bold text-primary">{voiceUsage?.percentage || 0}%</span>
-                    </div>
-                    <div className="h-2 bg-muted rounded-full overflow-hidden border border-border/50">
-                      <div
-                        className="h-full bg-primary transition-all duration-500 shadow-[0_0_10px_rgba(var(--primary),0.5)]"
-                        style={{ width: `${voiceUsage?.percentage || 0}%` }}
-                      />
-                    </div>
-                    <div className="flex flex-col gap-1">
-                      <div className="flex justify-between text-[10px] font-medium">
-                        <span className="text-muted-foreground">Minutes Used</span>
-                        <span className="text-foreground">{voiceUsage?.used.toFixed(2) || 0}m</span>
-                      </div>
-                      <div className="flex justify-between text-[10px] font-medium">
-                        <span className="text-muted-foreground">Remaining</span>
-                        <span className="text-emerald-500 font-bold">{voiceUsage?.remaining.toFixed(2) || 0}m</span>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
+              <h2 className="text-2xl font-bold mb-3">Coming Soon</h2>
+              <p className="text-muted-foreground max-w-md mx-auto">
+                Voice AI & Cloning features are being upgraded and will be available soon.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

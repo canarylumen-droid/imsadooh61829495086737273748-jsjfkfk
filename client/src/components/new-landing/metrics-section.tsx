@@ -171,7 +171,7 @@ export function MetricsSection() {
               <AnimCounter 
                 end={m.end} 
                 suffix={m.suffix} 
-                prefix={m.prefix || ""} 
+                prefix={""} 
                 isVisible={vis}
                 speed={m.speed}
                 format={m.formatValue}

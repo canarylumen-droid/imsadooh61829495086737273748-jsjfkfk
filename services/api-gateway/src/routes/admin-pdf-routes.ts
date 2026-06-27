@@ -22,23 +22,48 @@ const pdf = require('pdf-parse');
 const router = Router();
 
 async function extractPdfText(buffer: Buffer): Promise<string> {
+  // Try pdf-parse first
   try {
-    // pdf-parse uses a weird export structure in some environments
-    // It's often exported as the module itself
     const pdfParser = (pdf as any).default || pdf;
-
-    // Ensure we are calling a function
-    if (typeof pdfParser !== 'function') {
-      console.error("pdf-parse is not a function:", typeof pdfParser);
-      return "";
+    if (typeof pdfParser === 'function') {
+      const data = await pdfParser(buffer);
+      if (data.text && data.text.length > 10) {
+        return data.text.replace(/\x00/g, '');
+      }
     }
-
-    const data = await pdfParser(buffer);
-    return data.text ? data.text.replace(/\x00/g, '') : "";
   } catch (error) {
-    console.error("PDF extraction error:", error);
-    return "";
+    console.warn("pdf-parse extraction failed, trying fallback:", error);
   }
+
+  // Fallback: extract raw text from buffer for PDFs that pdf-parse can't handle
+  try {
+    const raw = buffer.toString('utf8');
+    const textMatch = raw.match(/\((.*?)\)/g);
+    if (textMatch) {
+      const extracted = textMatch
+        .map(t => t.slice(1, -1))
+        .filter(t => t.length > 3 && /[a-zA-Z]/.test(t))
+        .join(' ');
+      if (extracted.length > 20) return extracted;
+    }
+  } catch { /* silent */ }
+
+  // Last resort: try pdf.js directly
+  try {
+    const pdflib = require('pdfjs-dist');
+    const doc = await pdflib.getDocument({ data: buffer }).promise;
+    let text = '';
+    for (let i = 1; i <= Math.min(doc.numPages, 10); i++) {
+      const page = await doc.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map((item: any) => item.str).join(' ') + '\n';
+    }
+    if (text.length > 10) return text;
+  } catch (pdfjsError) {
+    console.warn("pdfjs-dist fallback also failed:", pdfjsError);
+  }
+
+  return "";
 }
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -291,10 +316,10 @@ router.post(
       const pdfTextRaw = await extractPdfText(req.file.buffer);
       const pdfText: string = pdfTextRaw;
 
-      if (!pdfText || pdfText.length < 50) {
+      if (!pdfText || pdfText.length < 10) {
         res.status(400).json({
-          error: "PDF appears to be empty or too short",
-          message: "Please upload a PDF with your brand information (at least 50 characters)"
+          error: "PDF appears to be empty or unreadable",
+          message: "We couldn't extract text from this PDF. Try a text-based PDF (not scanned images). If the PDF contains text, try converting it to a different format."
         });
         return;
       }

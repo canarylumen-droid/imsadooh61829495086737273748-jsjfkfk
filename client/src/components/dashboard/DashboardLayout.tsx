@@ -253,7 +253,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
       items: [
         { label: "Import Leads", icon: Upload, path: "/dashboard/lead-import" },
         { label: "Objections", icon: Shield, path: "/dashboard/objections" },
-        { label: "Custom Knowledge", icon: BookMarked, path: "/dashboard/custom-knowledge" },
+        // { label: "Custom Knowledge", icon: BookMarked, path: "/dashboard/custom-knowledge" },
       ],
     },
     {
@@ -262,7 +262,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         { label: "Transparency Audit Log", icon: Activity, path: "/dashboard/ai-decisions" },
         { label: "Analytics", icon: BarChart3, path: "/dashboard/analytics" },
         { label: "Insights", icon: Sparkles, path: "/dashboard/insights" },
-        { label: "Video Automation", icon: Globe, path: "/dashboard/video-automation" },
+        // { label: "Video Automation", icon: Globe, path: "/dashboard/video-automation" },
       ],
     },
   ];

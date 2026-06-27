@@ -19,7 +19,7 @@ const SalesAssistant = lazy(() => import("./sales-assistant"));
 const ContentLibraryPage = lazy(() => import("./content-library"));
 const AIDecisionsPage = lazy(() => import("./ai-decisions"));
 const ObjectionsLibraryPage = lazy(() => import("./objections-library"));
-const CustomKnowledgePage = lazy(() => import("./custom-knowledge"));
+// const CustomKnowledgePage = lazy(() => import("./custom-knowledge"));
 const SandboxPage = lazy(() => import("./sandbox"));
 const ProspectingPage = lazy(() => import("./prospecting"));
 const LeadProfilePage = lazy(() => import("./lead-profile"));
@@ -53,7 +53,7 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/content-library" component={ContentLibraryPage} />
           <Route path="/dashboard/ai-decisions" component={AIDecisionsPage} />
           <Route path="/dashboard/objections" component={ObjectionsLibraryPage} />
-          <Route path="/dashboard/custom-knowledge" component={CustomKnowledgePage} />
+          {/* <Route path="/dashboard/custom-knowledge" component={CustomKnowledgePage} /> */}
           <Route path="/dashboard/sandbox" component={SandboxPage} />
           <Route path="/dashboard/prospecting" component={ProspectingPage} />
           <Route path="/dashboard/pending-payments" component={PendingPaymentsPage} />

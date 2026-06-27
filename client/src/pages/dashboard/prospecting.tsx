@@ -76,6 +76,9 @@ export default function ProspectingPage() {
         onSuccess: () => {
             setShowConsole(true);
             setLogs([{ id: 'init', text: '[System] Search system initialized. Establishing secure connections...', type: 'info', timestamp: new Date() }]);
+        },
+        onError: () => {
+            setLogs(prev => [...prev, { id: 'err', text: '[System] Search failed. The AI prospecting service is temporarily unavailable.', type: 'error', timestamp: new Date() }]);
         }
     });
 

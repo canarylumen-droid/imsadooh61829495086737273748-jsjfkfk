@@ -90,9 +90,10 @@ const Hyperspeed: React.FC<HyperspeedProps> = ({ effectOptions = DEFAULT_EFFECT_
 
     const smaaPass = new EffectPass(camera, new SMAAEffect({
       preset: SMAAPreset.MEDIUM,
+      // @ts-ignore
       searchImage: SMAAEffect.searchImageDataURL,
       areaImage: SMAAEffect.areaImageDataURL
-    }));
+    } as any));
     composer.addPass(smaaPass);
 
     const clock = new THREE.Clock();
@@ -166,6 +167,7 @@ const Hyperspeed: React.FC<HyperspeedProps> = ({ effectOptions = DEFAULT_EFFECT_
 
     // Handle resize
     function handleResize() {
+      if (!container) return;
       const newWidth = container.clientWidth || window.innerWidth;
       const newHeight = container.clientHeight || window.innerHeight;
       

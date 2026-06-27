@@ -31,22 +31,12 @@ const NicheVaultPage = lazy(() => import("./pages/resources/niche-vault"));
 const PlaybooksPage = lazy(() => import("./pages/resources/outreach-playbooks"));
 const ApiDocsPage = lazy(() => import("./pages/resources/api-docs"));
 
-import { InternetConnectionBanner } from "@/components/InternetConnectionBanner";
-const InboxPage = lazy(() => import("./pages/dashboard/inbox"));
-const CalendarPage = lazy(() => import("./pages/dashboard/calendar"));
-const AnalyticsPage = lazy(() => import("./pages/dashboard/analytics"));
-const InsightsPage = lazy(() => import("./pages/dashboard/insights"));
-const VideoAutomationPage = lazy(() => import("./pages/dashboard/video-automation"));
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ComponentShowcase } from '@/pages/dashboard/component-test';
 import { AuthGuard } from '@/components/auth-guard';
+import { InternetConnectionBanner } from "@/components/InternetConnectionBanner";
 // import { ExpertChat } from "@/components/landing/ExpertChat";
 
-
-
-const PricingPage = lazy(() => import("./pages/dashboard/pricing"));
-const SettingsPage = lazy(() => import("./pages/dashboard/settings"));
-const LeadImportPage = lazy(() => import("./pages/dashboard/lead-import"));
 const ProspectingPage = lazy(() => import("./pages/dashboard/prospecting"));
 
 
@@ -135,63 +125,7 @@ function Router() {
           </AuthGuard>
         )}
       </Route>
-      {/* Specific dashboard routes MUST come before the catch-all */}
-      <Route path="/dashboard/inbox/:id?">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><InboxPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/video-automation">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><VideoAutomationPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/lead-import">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><LeadImportPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/pricing">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><PricingPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/settings">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><SettingsPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/calendar">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><CalendarPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/analytics">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><AnalyticsPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/dashboard/insights">
-        {() => (
-          <AuthGuard>
-            <Suspense fallback={null}><InsightsPage /></Suspense>
-          </AuthGuard>
-        )}
-      </Route>
+      {/* All dashboard routes handled by DashboardRoutes with layout */}
       <Route path="/dashboard">
         {() => (
           <AuthGuard>

@@ -33,7 +33,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { LeadIntelligenceModal } from "@/components/dashboard/LeadIntelligenceModal";
-import { FathomCallLog } from "@/components/outreach/FathomCallLog";
 import { CustomContextMenu, useContextMenu } from "@/components/ui/interactive/CustomContextMenu";
 import UnifiedCampaignWizard from "@/components/outreach/UnifiedCampaignWizard";
 import { CampaignListModal } from "@/components/outreach/CampaignListModal";
@@ -72,6 +71,7 @@ import {
   Smile,
   Image as ImageIcon,
   Tags,
+  Download,
 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import {
@@ -1037,6 +1037,49 @@ export default function InboxPage() {
                 }}>
                   <RefreshCw className={cn("h-4 w-4", backendSyncing && "animate-spin text-primary")} />
                 </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-8 px-3 gap-1.5 text-xs font-medium">
+                      <Download className="h-3.5 w-3.5" />
+                      Export
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    {([
+                      ['replied', 'text-emerald-500', 'Leads That Replied'],
+                      ['booked', 'text-blue-500', 'Leads That Booked'],
+                      ['no_show', 'text-red-500', 'Booked But No Show'],
+                      ['no_reply', 'text-orange-500', 'Cold / No Reply'],
+                      ['ghosted', 'text-purple-500', 'Ghosted After Reply'],
+                      ['converted', 'text-yellow-500', 'Paid / Converted'],
+                    ] as const).map(([cat, color, label]) => (
+                      <DropdownMenuItem
+                        key={cat}
+                        className="font-medium text-sm cursor-pointer"
+                        onClick={async () => {
+                          try {
+                            const res = await fetch(`/api/bulk/export-category?category=${cat}`, { credentials: 'include' });
+                            if (!res.ok) {
+                              toast({ title: 'No Leads', description: `No leads in "${label}" category.`, variant: 'default' });
+                              return;
+                            }
+                            const blob = await res.blob();
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `leads_${cat}_${Date.now()}.csv`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          } catch {
+                            toast({ title: 'Export Failed', description: 'Could not export leads.', variant: 'destructive' });
+                          }
+                        }}
+                      >
+                        <span className={`${color} mr-2`}>●</span> {label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Button
                   variant="outline"
                   size="sm"
@@ -1571,18 +1614,7 @@ export default function InboxPage() {
                               </AccordionContent>
                             </AccordionItem>
 
-                            {/* Fathom Meetings */}
-                            <AccordionItem value="meetings" className="border-none space-y-2">
-                              <AccordionTrigger className="hover:no-underline py-0">
-                                <div className="flex items-center gap-2">
-                                  <h4 className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Recorded Meetings</h4>
-                                  <div className="h-1 w-1 rounded-full bg-primary animate-pulse" />
-                                </div>
-                              </AccordionTrigger>
-                              <AccordionContent className="pt-2">
-                                {activeLead && <FathomCallLog leadId={activeLead.id} />}
-                              </AccordionContent>
-                            </AccordionItem>
+
                           </Accordion>
                         </div>
 

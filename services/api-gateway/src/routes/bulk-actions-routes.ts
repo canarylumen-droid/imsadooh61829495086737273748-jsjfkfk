@@ -518,7 +518,11 @@ router.get('/export', requireAuth, async (req: Request, res: Response): Promise<
     const leads = await storage.getLeads({ userId, limit: 10000 });
 
     if (leads.length === 0) {
-      res.status(404).json({ error: 'No data to export' });
+      const emptyHeaders = ['ID', 'Name', 'Email', 'Phone', 'Channel', 'Status', 'Score', 'Warm', 'Created At'];
+      const emptyCsv = emptyHeaders.join(',') + '\n';
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=audnix_leads_${new Date().toISOString().split('T')[0]}.csv`);
+      res.status(200).send(emptyCsv);
       return;
     }
 
@@ -606,7 +610,11 @@ router.get('/export-category', requireAuth, async (req: Request, res: Response):
     }
 
     if (leads.length === 0) {
-      res.status(404).json({ error: `No leads found in category: ${category}` });
+      const emptyHeaders = ['Name', 'Email', 'Phone', 'Country Code', 'Company', 'Business Name', 'Website', 'Google Maps URL', 'City', 'Country', 'Niche', 'Review', 'Channel', 'Status', 'Sentiment', 'Score', 'Warm', 'Timezone', 'Tags', 'Last Message At', 'Created At'];
+      const emptyCsv = emptyHeaders.join(',') + '\n';
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename=audnix_${category}_${new Date().toISOString().split('T')[0]}.csv`);
+      res.status(200).send(emptyCsv);
       return;
     }
 

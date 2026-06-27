@@ -170,6 +170,7 @@ const Threads: React.FC<ThreadsProps> = ({
 
     const MAX_RENDER_DIM = 1920;
     function resize() {
+      if (!container) return;
       const { clientWidth, clientHeight } = container;
       const baseDpr = Math.min(window.devicePixelRatio || 1, 2);
       const longestSide = Math.max(clientWidth, clientHeight) * baseDpr;
@@ -190,6 +191,7 @@ const Threads: React.FC<ThreadsProps> = ({
     let targetMouse = [0.5, 0.5];
 
     function handleMouseMove(e: MouseEvent) {
+      if (!container) return;
       const rect = container.getBoundingClientRect();
       const x = (e.clientX - rect.left) / rect.width;
       const y = 1.0 - (e.clientY - rect.top) / rect.height;

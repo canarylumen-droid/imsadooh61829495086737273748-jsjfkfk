@@ -40,6 +40,7 @@ import {
   ChevronRight as ChevronRightIcon,
   CalendarDays,
   Info,
+  Construction,
 } from "lucide-react";
 import { SiGoogle, SiShopify, SiHubspot, SiSlack } from "react-icons/si";
 import {
@@ -230,6 +231,7 @@ const integrationCards: Array<{
     icon: Instagram,
     color: "text-pink-500",
     bg: "bg-pink-500/10",
+    badge: "Coming Soon",
   },
   {
     do: "calendar",
@@ -1680,7 +1682,7 @@ export default function IntegrationsPage() {
                           disabled={!!card.badge}
                           onClick={() => handleConnect(card.id)}
                         >
-                          {card.badge ? "Locked" : (isConnected ? "Connect Another" : "Connect Account")}
+                          {card.badge ? card.badge : (isConnected ? "Connect Another" : "Connect Account")}
                         </Button>
                         {card.freePlanNote && (
                           <div className="flex items-start gap-1.5 px-1 mt-1">
@@ -1702,56 +1704,16 @@ export default function IntegrationsPage() {
 
         <TabsContent value="voice">
           <Card className="rounded-2xl border-border/50 overflow-hidden">
-            <CardHeader className="p-8 border-b bg-muted/20">
-              <div className="flex items-center gap-4">
-                <div className="p-3 rounded-xl bg-primary/10 text-primary">
-                  <Sparkles className="h-6 w-6" />
-                </div>
-                <CardTitle className="text-xl font-semibold">AI Voice Cloning</CardTitle>
-              </div>
-              <CardDescription className="text-sm font-medium pt-2">
-                Enable your AI to send personalized voice messages to leads.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-8">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-                <div className="space-y-6">
-                  <div className="p-6 rounded-xl bg-muted/30 border border-border/50 space-y-4">
-                    <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Recording Guidelines</h4>
-                    <ul className="space-y-3">
-                      {[
-                        "Record in a quiet environment",
-                        "Speak naturally at a normal pace",
-                        "At least 1 minute of high-quality audio",
-                        "Use WAV or MP3 format"
-                      ].map((item, i) => (
-                        <li key={i} className="flex items-center gap-3 text-sm text-muted-foreground font-medium">
-                          <Check className="h-4 w-4 text-emerald-500 flex-shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-
-                <div
-                  className="group relative border-2 border-dashed border-border/50 hover:border-primary/40 transition-all rounded-2xl p-12 flex flex-col items-center justify-center text-center cursor-pointer bg-muted/20"
-                  onClick={() => voiceInputRef.current?.click()}
-                >
-                  <input
-                    ref={voiceInputRef}
-                    type="file"
-                    accept="audio/*"
-                    className="hidden"
-                    onChange={handleVoiceFileSelect}
-                  />
-                  <div className="h-16 w-16 rounded-full bg-background border border-border flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                    {isUploadingVoice ? <Loader2 className="h-6 w-6 animate-spin text-primary" /> : <Upload className="h-6 w-6 text-muted-foreground" />}
-                  </div>
-                  <h3 className="text-sm font-semibold mb-1">Click to Upload Sample</h3>
-                  <p className="text-xs text-muted-foreground">MP3, WAV, or M4A files up to 10MB</p>
+            <CardContent className="p-12 text-center">
+              <div className="flex justify-center mb-6">
+                <div className="p-4 rounded-full bg-muted">
+                  <Construction className="w-12 h-12 text-muted-foreground" />
                 </div>
               </div>
+              <h2 className="text-2xl font-bold mb-3">Coming Soon</h2>
+              <p className="text-muted-foreground max-w-md mx-auto">
+                AI Voice Cloning is being enhanced and will be available soon.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>
