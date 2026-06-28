@@ -1375,7 +1375,7 @@ export default function IntegrationsPage() {
                                   className="w-24 sm:w-28 py-1 mt-1"
                                 />
                                 <span className="text-xs font-black text-primary tabular-nums">
-                                  {localLimits[mailbox.id] ?? mailbox.dailyLimit || 50}/d
+                                  {(localLimits[mailbox.id] ?? mailbox.dailyLimit) || 50}/d
                                 </span>
                               </div>
                             </div>

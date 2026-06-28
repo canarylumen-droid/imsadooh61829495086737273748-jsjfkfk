@@ -1584,14 +1584,14 @@ export class DrizzleStorage implements IStorage {
               redis.del(`lock:imap:conn:${id}`),
               // Also clean up worker set tracking keys if they exist
               (async () => {
-                let cursor = 0;
+                let cursor = '0';
                 do {
-                  const result = await redis.scan(cursor, { match: 'imap:worker:*:integrations', count: 100 });
-                  cursor = result.cursor;
+                  const result = await redis.scan(cursor, { MATCH: 'imap:worker:*:integrations', COUNT: 100 });
+                  cursor = result.cursor as string;
                   if (result.keys.length > 0) {
                     await Promise.allSettled(result.keys.map(k => redis.sRem(k, id)));
                   }
-                } while (cursor !== 0);
+                } while (cursor !== '0');
               })()
             ]);
             console.log(`🧹 [Storage] Successfully purged Redis keys for integration ${id}`);

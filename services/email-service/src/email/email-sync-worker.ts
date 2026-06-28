@@ -341,38 +341,39 @@ class EmailSyncWorker {
   }
 
   async detectGhostedLeads(userId: string): Promise<number> {
-    try {
-      const now = new Date();
-      const threshold = this.GHOSTED_THRESHOLD_HOURS * 60 * 60 * 1000;
-      let count = 0;
-      let offset = 0;
-      const batchSize = 500;
-      let batch: Lead[];
+    const now = new Date();
+    const threshold = this.GHOSTED_THRESHOLD_HOURS * 60 * 60 * 1000;
+    let count = 0;
+    let offset = 0;
+    const batchSize = 500;
 
-      do {
-        batch = await storage.getLeads({ userId, limit: batchSize, offset }) as Lead[];
-        if (batch.length === 0) break;
+    while (true) {
+      try {
+        const batch = await storage.getLeads({ userId, limit: batchSize, offset }) as Lead[];
+        if (!batch || batch.length === 0) break;
         offset += batch.length;
 
         for (const lead of batch) {
-        if (['cold', 'not_interested', 'converted'].includes(lead.status)) continue;
+          if (['cold', 'not_interested', 'converted'].includes(lead.status)) continue;
 
-        // CHECK: Only auto-expire (move to cold) if autonomous mode is ON
-        const user = await storage.getUserById(userId);
-        if ((user?.config as any)?.autonomousMode === false) continue;
+          const user = await storage.getUserById(userId);
+          if ((user?.config as any)?.autonomousMode === false) continue;
 
-        if (lead.lastMessageAt) {
-          if (now.getTime() - new Date(lead.lastMessageAt).getTime() > threshold) {
-            await storage.updateLead(lead.id, {
-              status: 'cold',
-              metadata: { ...(lead.metadata as object), ghostedDetectedAt: now.toISOString() }
-            });
-            count++;
+          if (lead.lastMessageAt) {
+            if (now.getTime() - new Date(lead.lastMessageAt).getTime() > threshold) {
+              await storage.updateLead(lead.id, {
+                status: 'cold',
+                metadata: { ...(lead.metadata as object), ghostedDetectedAt: now.toISOString() }
+              });
+              count++;
+            }
           }
         }
-      } while (batch.length === batchSize);
-      return count;
-    } catch (e) { return 0; }
+
+        if (batch.length < batchSize) break;
+      } catch (e) { return count; }
+    }
+    return count;
   }
 
   getStatus() {

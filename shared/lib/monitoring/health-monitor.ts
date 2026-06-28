@@ -136,11 +136,9 @@ export class MailboxHealthMonitor {
       updatedAt: new Date()
     };
     
-    // If connection is genuinely BAD (fatal), disconnect it to prompt user to reconnect,
-    // rather than endlessly looping and filling logs with errors.
-    if (status === 'failed') {
-      updateData.connected = false;
-    }
+    // Keep connected=true so the integration doesn't disappear from UI.
+    // User will see a health warning and can manually reconnect.
+    updateData.connected = true;
 
     await db.update(integrations)
       .set(updateData)
