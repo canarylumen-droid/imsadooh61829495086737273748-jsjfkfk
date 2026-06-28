@@ -295,15 +295,15 @@ router.post("/intelligence-dashboard", requireAuth, async (req: Request<any, any
     const calendarLink = user?.calendarLink || (user?.metadata as any)?.defaultCtaLink;
 
     // 4. Save to DB
-    await storage.updateLead(lead.id, {
-      metadata: {
-        ...metadata,
-        intelligence: dashboard,
-        intelligenceGeneratedAt: new Date().toISOString()
-      },
-      // Determine score based on intent?
-      score: dashboard.intent.intentScore
-    });
+      await storage.updateLead(lead.id, {
+        metadata: {
+          ...metadata,
+          intelligence: dashboard,
+          intelligenceGeneratedAt: new Date().toISOString()
+        },
+        // Blend intent score with existing score rather than replacing it entirely
+        score: lead.score ? Math.round((lead.score + (dashboard.intent.intentScore || 0)) / 2) : (dashboard.intent.intentScore || 0)
+      });
 
     res.json({
       lead_id: lead.id,

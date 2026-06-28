@@ -166,7 +166,7 @@ router.post('/campaigns', requireAuth, async (req, res) => {
     }).returning();
 
     // Log campaign creation
-    await AuditTrailService.logCampaignAction(userId, campaign.id, 'campaign_started', {
+    await AuditTrailService.logCampaignAction(userId, campaign.id, 'campaign_created', {
       name,
       configuredLeads: leads?.length || 0
     });
@@ -369,9 +369,14 @@ router.post('/campaigns', requireAuth, async (req, res) => {
         .where(eq(outreachCampaigns.id, campaign.id));
     }
 
-    // Calculate metrics/safety for response — pass minimal stub to avoid serializing 20k leads
-    const metricsResult = await createOutreachCampaign(Array.from({ length: addedCount }, () => ({ id: '', email: '', name: '', company: '', data: {} })), name);
-    const safety = validateCampaignSafety(metricsResult);
+    // Calculate metrics/safety for response — skip for large campaigns to avoid OOM
+    let safety = { safe: true, warnings: [] };
+    let campaignMetrics = { segments: {}, total: addedCount };
+    if (addedCount <= 5000) {
+      const metricsResult = await createOutreachCampaign(Array.from({ length: addedCount }, () => ({ id: '', email: '', name: '', company: '', data: {} })), name);
+      safety = validateCampaignSafety(metricsResult);
+      campaignMetrics = formatCampaignMetrics(metricsResult);
+    }
 
     // Notify UI of new campaign
     wsSync.notifyCampaignsUpdated(userId);
@@ -380,7 +385,7 @@ router.post('/campaigns', requireAuth, async (req, res) => {
       ...campaign,
       addedLeads: addedCount,
       safety,
-      metrics: formatCampaignMetrics(metricsResult)
+      metrics: campaignMetrics
     });
   } catch (error: any) {
     console.error('Campaign creation error:', error);
@@ -399,25 +404,52 @@ router.post('/campaigns/:id/start', requireAuth, async (req, res) => {
 
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const [campaign] = await db.update(outreachCampaigns)
+    const [campaign] = await db.select().from(outreachCampaigns)
+      .where(and(eq(outreachCampaigns.id, id), eq(outreachCampaigns.userId, userId)));
+
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    if (campaign.status === 'completed' || campaign.status === 'aborted') {
+      return res.status(400).json({ error: `Cannot start a ${campaign.status} campaign` });
+    }
+
+    // Pre-flight validation
+    const leadCount = await db.select({ count: sql<number>`count(*)` })
+      .from(campaignLeads)
+      .where(eq(campaignLeads.campaignId, id));
+    if (!leadCount[0]?.count || leadCount[0].count === 0) {
+      return res.status(400).json({ error: 'Campaign has no leads. Add leads before starting.' });
+    }
+
+    const mailboxIds = (campaign.config as any)?.mailboxIds;
+    if (!mailboxIds || !Array.isArray(mailboxIds) || mailboxIds.length === 0) {
+      return res.status(400).json({ error: 'No mailboxes selected. Select at least one mailbox before starting.' });
+    }
+
+    // Verify mailboxes are connected
+    const integrations = await storage.getIntegrations(userId);
+    const connectedMailboxIds = mailboxIds.filter((mbId: string) =>
+      integrations.some(i => i.id === mbId && i.connected)
+    );
+    if (connectedMailboxIds.length === 0) {
+      return res.status(400).json({ error: 'Selected mailboxes are not connected. Please reconnect them in Settings.' });
+    }
+
+    const [updated] = await db.update(outreachCampaigns)
       .set({ status: 'active', updatedAt: new Date() })
       .where(and(eq(outreachCampaigns.id, id), eq(outreachCampaigns.userId, userId)))
       .returning();
 
-    if (!campaign) {
-      return res.status(404).json({ error: 'Campaign not found' });
-    }
-
     // Register BullMQ per-mailbox repeatable jobs for autonomous processing
     try {
       const { campaignQueueManager } = await import('@shared/lib/queues/campaign-queue.js');
-      await campaignQueueManager.startCampaign(campaign);
+      await campaignQueueManager.startCampaign(updated);
     } catch (queueErr) {
       console.warn('[Outreach] BullMQ campaign start failed (will use setInterval fallback):', queueErr);
     }
 
     wsSync.notifyCampaignsUpdated(userId);
-    res.json({ success: true, campaign });
+    res.json({ success: true, campaign: updated });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -504,22 +536,34 @@ router.post('/campaigns/:id/abort', requireAuth, async (req, res) => {
 
     if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
 
-    // Stop all pending follow-ups instantly and clear their integration assignments
+    // Stop all active leads instantly and clear their integration assignments
+    // Include pending, processing, queued — NOT already sent/completed/aborted
+    const activeStatuses = ['pending', 'processing', 'queued'];
     const pendingLeads = await db.select({ leadId: campaignLeads.leadId })
       .from(campaignLeads)
-      .where(and(eq(campaignLeads.campaignId, id), eq(campaignLeads.status, 'pending')));
+      .where(and(
+        eq(campaignLeads.campaignId, id),
+        inArray(campaignLeads.status, activeStatuses as any)
+      ));
 
     if (pendingLeads.length > 0) {
       const leadIds = pendingLeads.map((l: { leadId: string | null }) => l.leadId).filter(Boolean) as string[];
-      // Reset integrationId in the main leads table so they can be picked up by new campaigns/mailboxes
+      // Only clear integrationId for leads assigned to THIS campaign's mailboxes
+      const campaignMailboxIds = ((campaign.config as any)?.mailboxIds || []) as string[];
       await db.update(leadsTable)
         .set({ integrationId: null })
-        .where(inArray(leadsTable.id, leadIds));
+        .where(and(
+          inArray(leadsTable.id, leadIds),
+          inArray(leadsTable.integrationId, campaignMailboxIds.length > 0 ? campaignMailboxIds : [''])
+        ));
 
-      // Mark as aborted in campaign_leads
+      // Mark as aborted in campaign_leads — scoped to this campaign
       await db.update(campaignLeads)
         .set({ status: 'aborted', updatedAt: new Date() })
-        .where(inArray(campaignLeads.leadId, leadIds));
+        .where(and(
+          eq(campaignLeads.campaignId, id),
+          inArray(campaignLeads.status, activeStatuses as any)
+        ));
     }
 
     // Remove ALL BullMQ jobs (repeatable + delayed follow-ups)
@@ -610,12 +654,12 @@ router.delete('/campaigns/:id', requireAuth, async (req, res) => {
     
     if (camLeads.length > 0) {
       const leadIds = camLeads.map((l: { leadId: string | null }) => l.leadId).filter(Boolean) as string[];
+      const campaignMailboxIds = ((campaign.config as any)?.mailboxIds || []) as string[];
       await db.update(leadsTable)
         .set({ integrationId: null })
         .where(and(
           inArray(leadsTable.id, leadIds),
-          eq(leadsTable.integrationId, (campaign.config as any).mailboxId) // Only clear if still assigned to this campaign's context
-          // Note: campaign.config.mailboxIds might be multiple, but we clear generally for these leads
+          inArray(leadsTable.integrationId, campaignMailboxIds.length > 0 ? campaignMailboxIds : [''])
         ));
     }
 

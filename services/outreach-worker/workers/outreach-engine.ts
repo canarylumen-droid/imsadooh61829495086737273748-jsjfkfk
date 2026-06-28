@@ -1103,6 +1103,10 @@ export class OutreachEngine {
         nextActionAt = new Date();
         nextActionAt.setDate(nextActionAt.getDate() + delayDays);
       }
+      // Clamp to at least 60s in the future to prevent immediate re-send after pause
+      if (nextActionAt.getTime() < Date.now() + 60000) {
+        nextActionAt = new Date(Date.now() + 60000);
+      }
     }
 
     await db.update(campaignLeads)
@@ -1473,13 +1477,13 @@ export class OutreachEngine {
       }
 
       for (const unhealthy of unhealthyMailboxes) {
-        // Find leads assigned to this unhealthy mailbox
+        // Find leads assigned to this unhealthy mailbox (use REAL integrationId column)
         const leadsToHeal = await db.select()
           .from(leads)
           .where(and(
             eq(leads.userId, userId),
             eq(leads.status, 'new'),
-            sql`${leads.metadata}->>'integrationId' = ${unhealthy.id}`
+            eq(leads.integrationId, unhealthy.id)
           ))
           .limit(50);
 
@@ -1490,9 +1494,9 @@ export class OutreachEngine {
         for (let i = 0; i < leadsToHeal.length; i++) {
           const targetMailbox = healthyMailboxes[i % healthyMailboxes.length];
           await storage.updateLead(leadsToHeal[i].id, {
+            integrationId: targetMailbox.id,
             metadata: {
               ...(leadsToHeal[i].metadata as any || {}),
-              integrationId: targetMailbox.id,
               healedAt: new Date().toISOString(),
               previousIntegrationId: unhealthy.id
             }

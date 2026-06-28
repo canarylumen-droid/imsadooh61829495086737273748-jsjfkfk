@@ -857,19 +857,29 @@ export class DrizzleStorage implements IStorage {
 
   async archiveMultipleLeads(ids: string[], userId: string, archived: boolean): Promise<void> {
     checkDatabase();
-    await db.update(leads)
-      .set({ archived, updatedAt: new Date() })
-      .where(and(eq(leads.userId, userId), sql`${leads.id} IN ${ids}`));
+    try {
+      await db.update(leads)
+        .set({ archived, updatedAt: new Date() })
+        .where(and(eq(leads.userId, userId), inArray(leads.id, ids)));
+    } catch (err) {
+      console.error('archiveMultipleLeads failed:', err);
+      throw err;
+    }
 
     wsSync.notifyLeadsUpdated(userId, { event: 'BULK_UPDATE', leadIds: ids, updates: { archived } });
   }
 
   async deleteMultipleLeads(ids: string[], userId: string): Promise<void> {
     checkDatabase();
-    // DESTRUCTIVE ACTION GATE: Convert bulk delete to bulk archive
-    await db.update(leads)
-      .set({ archived: true, updatedAt: new Date() })
-      .where(and(eq(leads.userId, userId), sql`${leads.id} IN ${ids}`));
+    try {
+      // DESTRUCTIVE ACTION GATE: Convert bulk delete to bulk archive
+      await db.update(leads)
+        .set({ archived: true, updatedAt: new Date() })
+        .where(and(eq(leads.userId, userId), inArray(leads.id, ids)));
+    } catch (err) {
+      console.error('deleteMultipleLeads failed:', err);
+      throw err;
+    }
     wsSync.notifyLeadsUpdated(userId, { event: 'BULK_UPDATE', leadIds: ids, updates: { archived: true } });
   }
 
@@ -1178,31 +1188,76 @@ export class DrizzleStorage implements IStorage {
     checkDatabase();
     if (!insertLeads || insertLeads.length === 0) return [];
 
-    const results = await db
-      .insert(leads)
-      .values(insertLeads.map(l => ({
-        userId: l.userId,
-        organizationId: l.organizationId || null,
-        externalId: l.externalId || null,
-        name: l.name,
-        company: l.company || null,
-        role: l.role || null,
-        bio: l.bio || null,
-        channel: l.channel as any,
-        email: l.email || null,
-        replyEmail: l.replyEmail || l.email || null,
-        phone: l.phone || null,
-        status: l.status || "new",
-        score: l.score || 0,
-        warm: l.warm || false,
-        lastMessageAt: l.lastMessageAt || null,
-        aiPaused: l.aiPaused || false,
-        verified: l.verified || false,
-        verifiedAt: l.verifiedAt || null,
-        metadata: l.metadata || {},
-        updatedAt: new Date()
-      })))
-      .returning();
+    // Insert in chunks with ON CONFLICT DO NOTHING so one duplicate doesn't kill the entire batch
+    const results: Lead[] = [];
+    const chunkSize = 100;
+    for (let i = 0; i < insertLeads.length; i += chunkSize) {
+      const chunk = insertLeads.slice(i, i + chunkSize);
+      try {
+        const chunkResults = await db
+          .insert(leads)
+          .values(chunk.map(l => ({
+            userId: l.userId,
+            organizationId: l.organizationId || null,
+            externalId: l.externalId || null,
+            name: l.name,
+            company: l.company || null,
+            role: l.role || null,
+            bio: l.bio || null,
+            channel: l.channel as any,
+            email: l.email || null,
+            replyEmail: l.replyEmail || l.email || null,
+            phone: l.phone || null,
+            status: l.status || "new",
+            score: l.score || 0,
+            warm: l.warm || false,
+            lastMessageAt: l.lastMessageAt || null,
+            aiPaused: l.aiPaused || false,
+            verified: l.verified || false,
+            verifiedAt: l.verifiedAt || null,
+            metadata: l.metadata || {},
+            updatedAt: new Date()
+          })))
+          .onConflictDoNothing()
+          .returning();
+        results.push(...chunkResults);
+      } catch (err) {
+        console.warn(`createLeadsBatch chunk ${i}-${i + chunk.length} failed:`, err);
+        // Try one-by-one for this chunk to isolate the problematic lead
+        for (const lead of chunk) {
+          try {
+            const [single] = await db.insert(leads)
+              .values({
+                userId: lead.userId,
+                organizationId: lead.organizationId || null,
+                externalId: lead.externalId || null,
+                name: lead.name,
+                company: lead.company || null,
+                role: lead.role || null,
+                bio: lead.bio || null,
+                channel: lead.channel as any,
+                email: lead.email || null,
+                replyEmail: lead.replyEmail || lead.email || null,
+                phone: lead.phone || null,
+                status: lead.status || "new",
+                score: lead.score || 0,
+                warm: lead.warm || false,
+                lastMessageAt: lead.lastMessageAt || null,
+                aiPaused: lead.aiPaused || false,
+                verified: lead.verified || false,
+                verifiedAt: lead.verifiedAt || null,
+                metadata: lead.metadata || {},
+                updatedAt: new Date()
+              })
+              .onConflictDoNothing()
+              .returning();
+            if (single) results.push(single);
+          } catch (singleErr) {
+            console.warn(`createLeadsBatch single insert failed for ${lead.email}:`, singleErr);
+          }
+        }
+      }
+    }
 
     if (results.length > 0 && !options?.suppressNotification) {
       wsSync.notifyLeadsUpdated(results[0].userId, { event: 'BATCH_CREATE', count: results.length });
@@ -1526,11 +1581,16 @@ export class DrizzleStorage implements IStorage {
               redis.del(`imap:integration:${id}:state`),
               redis.del(`lock:imap:conn:${id}`),
               // Also clean up worker set tracking keys if they exist
-              redis.keys('imap:worker:*:integrations').then(async (keys) => {
-                if (keys && keys.length > 0) {
-                  await Promise.allSettled(keys.map(k => redis.sRem(k, id)));
-                }
-              })
+              (async () => {
+                let cursor = 0;
+                do {
+                  const result = await redis.scan(cursor, { match: 'imap:worker:*:integrations', count: 100 });
+                  cursor = result.cursor;
+                  if (result.keys.length > 0) {
+                    await Promise.allSettled(result.keys.map(k => redis.sRem(k, id)));
+                  }
+                } while (cursor !== 0);
+              })()
             ]);
             console.log(`🧹 [Storage] Successfully purged Redis keys for integration ${id}`);
           }

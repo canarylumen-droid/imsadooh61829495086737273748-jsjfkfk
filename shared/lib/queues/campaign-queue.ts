@@ -1749,21 +1749,29 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
     .where(eq(campaignLeads.campaignId, campaignId))
     .groupBy(campaignLeads.status);
 
-  const stats: Record<string, number> = { total: 0, sent: 0, failed: 0, pending: 0, replied: 0 };
+  const stats: Record<string, number> = { total: 0, sent: 0, failed: 0, pending: 0, replied: 0, queued: 0, processing: 0, aborted: 0 };
 
   leadStats.forEach((s: any) => {
     stats.total += Number(s.count);
     if (stats[s.status] !== undefined) stats[s.status] += Number(s.count);
   });
 
-  // Update campaign stats in DB
+  // Update campaign stats in DB — merge with existing to preserve opened/clicked/consecutive_failures
+  const [existingCampaign] = await withDbRetry(() => db.select({ stats: outreachCampaigns.stats })
+    .from(outreachCampaigns)
+    .where(eq(outreachCampaigns.id, campaignId)));
+  const existingStats = (existingCampaign?.stats as any) || {};
+
   await withDbRetry(() => db.update(outreachCampaigns)
     .set({ 
       stats: {
         total: stats.total || 0,
         sent: stats.sent || 0,
         replied: stats.replied || 0,
-        bounced: (stats as any).bounced || 0
+        bounced: stats.bounced || 0,
+        opened: existingStats.opened || 0,
+        clicked: existingStats.clicked || 0,
+        consecutive_failures: existingStats.consecutive_failures || 0,
       }, 
       updatedAt: new Date() 
     })
@@ -1772,7 +1780,7 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
   // X8 Fix: Check if campaign is complete.
   // A campaign is complete when ALL leads have been sent (no pending OR queued leads remain)
   // AND no leads are still in the 'sent' state waiting for a follow-up step.
-  const pendingOrQueued = (stats.pending || 0) + ((stats as any).queued || 0);
+  const pendingOrQueued = (stats.pending || 0) + (stats.queued || 0) + (stats.processing || 0);
 
   if (pendingOrQueued === 0 && stats.total > 0 && campaign.status === 'active') {
     // Check if all follow-up sequences are also complete (no leads still waiting for next step)

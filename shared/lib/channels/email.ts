@@ -955,23 +955,23 @@ export async function sendEmail(
         options.references,
         options.replyTo
       );
-      if (result && result.messageId) {
-        await storage.createEmailMessage({
-          userId,
-          leadId: options.leadId || null,
-          campaignId: options.campaignId || null,
-          messageId: result.messageId || `outlook-${Date.now()}`,
-          subject: emailSubject,
-          from: credentials.email || '',
-          to: recipientEmail,
-          body: emailBody,
-          direction: 'outbound',
-          provider: 'outlook',
-          sentAt: new Date(),
-          targetUrl: firstUrl,
-          metadata: { trackingId, integrationId: integration.id }
-        });
-      }
+      // Outlook/Microsoft Graph returns HTTP 202 with no messageId — generate one
+      const outlookMessageId = result?.messageId || `outlook-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+      await storage.createEmailMessage({
+        userId,
+        leadId: options.leadId || null,
+        campaignId: options.campaignId || null,
+        messageId: outlookMessageId,
+        subject: emailSubject,
+        from: credentials.email || '',
+        to: recipientEmail,
+        body: emailBody,
+        direction: 'outbound',
+        provider: 'outlook',
+        sentAt: new Date(),
+        targetUrl: firstUrl,
+        metadata: { trackingId, integrationId: integration.id }
+      });
     } else {
       throw new Error(`Unsupported email provider: ${integration.provider}`);
     }

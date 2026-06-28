@@ -21,8 +21,30 @@ import {
 } from '@shared/lib/monitoring/metrics-service.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
-import { gmailOAuth } from '@services/api-gateway/src/oauth/gmail.js';
-import { outlookOAuth } from '@services/api-gateway/src/oauth/outlook.js';
+let gmailOAuth: any = null;
+let outlookOAuth: any = null;
+
+async function ensureGmailOAuth() {
+  if (!gmailOAuth) {
+    try {
+      gmailOAuth = (await import('@services/api-gateway/src/oauth/gmail.js')).gmailOAuth;
+    } catch {
+      console.warn('[IMAP] Gmail OAuth module not available (email-worker deployed separately)');
+    }
+  }
+  return gmailOAuth;
+}
+
+async function ensureOutlookOAuth() {
+  if (!outlookOAuth) {
+    try {
+      outlookOAuth = (await import('@services/api-gateway/src/oauth/outlook.js')).outlookOAuth;
+    } catch {
+      console.warn('[IMAP] Outlook OAuth module not available (email-worker deployed separately)');
+    }
+  }
+  return outlookOAuth;
+}
 import { emailSyncQueue } from '@shared/lib/queues/email-sync-queue.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { getRedisClient } from '@shared/lib/redis/redis.js';
@@ -72,7 +94,11 @@ function jitter(ms: number): number {
 /** Backoff ladder: 0 → 100ms → 500ms → 2s → 10s → 30s */
 const BACKOFF_LADDER = [0, 100, 500, 2_000, 10_000, 30_000];
 function nextBackoff(current: number): number {
-  const idx = BACKOFF_LADDER.indexOf(current);
+  // Find nearest ladder rung below current to handle jittered values
+  let idx = -1;
+  for (let i = BACKOFF_LADDER.length - 1; i >= 0; i--) {
+    if (current >= BACKOFF_LADDER[i]) { idx = i; break; }
+  }
   const next = idx >= 0 && idx < BACKOFF_LADDER.length - 1
     ? BACKOFF_LADDER[idx + 1]
     : 30_000;
@@ -218,8 +244,18 @@ export class ImapConnectionManager {
    *    Dead pods → orphaned integration IDs pushed to Redis orphans list for
    *    the boot-time watchdog to reclaim.
    */
+  private _watchdogInterval: NodeJS.Timeout | null = null;
+
+  dispose(): void {
+    if (this._watchdogInterval) {
+      clearInterval(this._watchdogInterval);
+      this._watchdogInterval = null;
+    }
+  }
+
   private _startGlobalWatchdog(): void {
-    setInterval(async () => {
+    if (this._watchdogInterval) return;
+    this._watchdogInterval = setInterval(async () => {
       try {
         const redis = await getRedisClient();
         if (!redis) return;
@@ -432,9 +468,15 @@ export class ImapConnectionManager {
         ? 'imap.gmail.com'
         : 'outlook.office365.com';
 
+      const oauth = integration.provider === 'gmail' ? await ensureGmailOAuth() : await ensureOutlookOAuth();
+      if (!oauth) {
+        console.warn(`[IMAP] OAuth module not available for ${integration.id} — skipping`);
+        await this._handleAuthFailure(integration);
+        return null;
+      }
       const token = integration.provider === 'gmail'
-        ? await gmailOAuth.getValidToken(integration.userId, user)
-        : await outlookOAuth.getValidToken(integration.userId);
+        ? await oauth.getValidToken(integration.userId, user)
+        : await oauth.getValidToken(integration.userId);
 
       if (!token) {
         console.warn(`[IMAP] No valid OAuth token for ${integration.id} — will mark NEEDS_REAUTH`);
@@ -535,11 +577,15 @@ export class ImapConnectionManager {
       try { data.client.close(); } catch { /* ignore */ }
       imapConnectionsActive.dec({ provider: target.provider });
       // Don't delete from map yet — need reconnectDelay for backoff
+    } else {
+      // No data in map — integration was disconnected, don't reconnect
+      console.log(`[IMAP] ⏭️ Skipping reconnect for ${integrationId} — no active connection data`);
+      return;
     }
 
     imapReconnectTotal.inc({ reason: 'error_or_close' });
 
-    const currentDelay = data?.reconnectDelay ?? 0;
+    const currentDelay = data.reconnectDelay ?? 0;
     const delay = currentDelay === 0 ? 0 : jitter(currentDelay);
 
     console.log(`[IMAP] 🔄 Reconnect ${integrationId} in ${delay}ms (backoff: ${currentDelay}ms)`);
@@ -565,11 +611,11 @@ export class ImapConnectionManager {
   // ── AUTH_FAILED Handler ─────────────────────────────────────────────────────
 
   private async _handleAuthFailure(integration: ImapIntegration): Promise<void> {
-    // 1. Update DB: mark integration as needs_reauth (set connected=false + lastError)
+    // 1. Update DB: mark health as degraded but keep connected=true so it doesn't disappear
     try {
       await storage.updateIntegrationById(integration.id, {
-        connected: false,
-        lastError: 'AUTH_FAILED: Please reconnect your mailbox.',
+        healthStatus: 'degraded',
+        lastError: 'AUTH_FAILED: Reconnection needed. Token may have expired.',
       } as any);
     } catch (dbErr: any) {
       console.error(`[IMAP] DB update failed for AUTH_FAILED on ${integration.id}:`, dbErr.message);

@@ -394,7 +394,7 @@ export default function InboxPage() {
       if (leadsTimeout) clearTimeout(leadsTimeout);
       if (notifTimeout) clearTimeout(notifTimeout);
     };
-  }, [socket, leadId, queryClient, toast]);
+  }, [socket, leadId, queryClient, toast, selectedMailboxId, user]);
 
 
 
@@ -573,7 +573,8 @@ export default function InboxPage() {
   // Highlighting helper
   const HighlightText = useCallback(({ text, query }: { text: string, query: string }) => {
     if (!query) return <>{text}</>;
-    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const parts = text.split(new RegExp(`(${escaped})`, 'gi'));
     return (
       <span>
         {parts.map((part, i) =>
@@ -715,35 +716,6 @@ export default function InboxPage() {
       setIsPolishing(false);
     }
   };
-
-  // Real-time Grammar/Typo Underline Trigger (Debounced)
-  useEffect(() => {
-    if (!replyMessage || replyMessage.length < 10) {
-      setGrammarErrors([]);
-      return;
-    }
-
-    const timeout = setTimeout(async () => {
-      setIsCheckingGrammar(true);
-      try {
-        const res = await fetch("/api/ai/check-grammar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: replyMessage })
-        });
-        const data = await res.json();
-        if (data.errors) {
-          setGrammarErrors(data.errors);
-        }
-      } catch (err) {
-        console.error("Grammar check failed:", err);
-      } finally {
-        setIsCheckingGrammar(false);
-      }
-    }, 1500); // 1.5s debounce
-
-    return () => clearTimeout(timeout);
-  }, [replyMessage]);
 
   const handleAiReply = async () => {
     setIsGenerating(true);
@@ -988,23 +960,6 @@ export default function InboxPage() {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-2">
               <div className="flex items-center gap-2">
                 <h2 className="text-lg font-bold">Inbox</h2>
-                {/* Real-time Connectivity Indicator */}
-                <div className={cn(
-                  "flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider transition-all duration-500",
-                  syncHealth === 'realtime' ? "bg-emerald-500/10 text-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.15)]" :
-                  syncHealth === 'polling' ? "bg-amber-500/10 text-amber-500" :
-                  syncHealth === 'disconnected' ? "bg-red-500/10 text-red-500" :
-                  "bg-muted text-muted-foreground opacity-50"
-                )}>
-                  <div className={cn(
-                    "h-1.5 w-1.5 rounded-full",
-                    syncHealth === 'realtime' ? "bg-emerald-500 animate-pulse" :
-                    syncHealth === 'polling' ? "bg-amber-500" :
-                    syncHealth === 'disconnected' ? "bg-red-500" :
-                    "bg-muted-foreground"
-                  )} />
-                  {syncHealth === 'realtime' ? 'Live' : syncHealth === 'polling' ? 'Polling' : syncHealth === 'disconnected' ? 'Offline' : 'Idle'}
-                </div>
               </div>
               <div className="flex items-center gap-2">
                 {/* Status Filter Dropdown */}
@@ -1039,9 +994,8 @@ export default function InboxPage() {
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-8 px-3 gap-1.5 text-xs font-medium">
-                      <Download className="h-3.5 w-3.5" />
-                      Export
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Download className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">

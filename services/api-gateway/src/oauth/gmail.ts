@@ -210,8 +210,9 @@ export class GmailOAuth {
             return updatedToken.accessToken ? decrypt(updatedToken.accessToken) : null;
           }
         }
-        // If we still don't have it, we'll try to steal the lock or fail
-        console.warn(`[Gmail OAuth] ⚠️ Wait timeout for ${lockKey}, proceeding to steal lock.`);
+        // If we still don't have it, another node will handle it
+        console.warn(`[Gmail OAuth] ⚠️ Wait timeout for ${lockKey}, another node should handle the refresh.`);
+        return null;
       }
 
       const refreshPromise = (async () => {

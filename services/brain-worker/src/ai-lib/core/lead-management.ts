@@ -122,8 +122,9 @@ function calculateEngagementScore(messages: ScoringMessage[]): number {
   const hasQuickReply = messages.some((m: ScoringMessage, i: number) => {
     if (i === 0 || m.direction !== "inbound") return false;
     const prevMessage = messages[i - 1];
+    if (!m.createdAt || !prevMessage.createdAt) return false;
     const timeDiff = (new Date(m.createdAt).getTime() - new Date(prevMessage.createdAt).getTime()) / (1000 * 60 * 60);
-    return timeDiff < 2;
+    return !isNaN(timeDiff) && timeDiff < 2;
   });
 
   return Math.min(100, inboundCount * 20 + openCount * 10 + clickCount * 10 + (hasQuickReply ? 10 : 0));
@@ -192,7 +193,9 @@ function calculateVelocityScore(messages: ScoringMessage[]): number {
   for (let i = 0; i < messages.length; i++) {
     if (messages[i].direction === "inbound" && i > 0) {
       const prevMessage = messages[i - 1];
+      if (!messages[i].createdAt || !prevMessage.createdAt) continue;
       const timeDiff = (new Date(messages[i].createdAt).getTime() - new Date(prevMessage.createdAt).getTime()) / (1000 * 60);
+      if (isNaN(timeDiff)) continue;
       totalTime += timeDiff;
       replyCount++;
     }

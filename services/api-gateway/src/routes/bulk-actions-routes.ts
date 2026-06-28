@@ -4,6 +4,8 @@ import { storage } from '@shared/lib/storage/storage.js';
 import { generateAIReply } from '@services/brain-worker/src/ai-lib/core/conversation-ai.js';
 import { calculateLeadScore } from '@services/brain-worker/src/ai-lib/engines/lead-scoring.js';
 import type { ChannelType, ProviderType, LeadStatus } from '@shared/types.js';
+import { db } from '@shared/lib/db/db.js';
+import { leads, inArray, eq } from '@audnix/shared';
 
 const router = Router();
 
@@ -71,7 +73,7 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
           batchIdentifiers.add(batchKey);
 
           // Full deterministic + MX check
-          const spamCheck = email ? await SpamTrapDetector.verifyFull(email, leadData) : { isTrap: false, score: 0 };
+          const spamCheck = email ? await SpamTrapDetector.verifyFull(email, leadData) : { isTrap: false, score: 0, hasMx: true };
           
           batchToInsert.push({
             userId,
@@ -218,35 +220,26 @@ router.post('/update-status', requireAuth, async (req: Request, res: Response): 
       return;
     }
 
-    const results: BulkResult[] = [];
-    const errors: BulkError[] = [];
+    const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
 
-    for (const leadId of leadIds) {
-      try {
-        const lead = await storage.getLeadById(leadId);
-        if (!lead || lead.userId !== userId) {
-          errors.push({ leadId, error: 'Lead not found or unauthorized' });
-          continue;
-        }
+    // Batch update - single query instead of N queries
+    const chunkSize = 500;
+    for (let i = 0; i < leadIds.length; i += chunkSize) {
+      const chunk = leadIds.slice(i, i + chunkSize);
+      const validUUIDs = chunk.filter(id => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id));
+      if (validUUIDs.length === 0) continue;
 
-        await storage.updateLead(leadId, { status });
-        results.push({ leadId, success: true });
-      } catch (error: unknown) {
-        errors.push({ leadId, error: getErrorMessage(error) });
-      }
+      await db.update(leads)
+        .set({ status, updatedAt: new Date() })
+        .where(inArray(leads.id, validUUIDs));
     }
 
-    // Notify client via WebSocket
-    const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
     wsSync.notifyLeadsUpdated(userId, { type: 'bulk_status_update', leadIds, status });
     wsSync.notifyStatsUpdated(userId);
 
     res.json({
-      success: errors.length === 0,
-      updated: results.length,
-      failed: errors.length,
-      results,
-      errors
+      success: true,
+      updated: leadIds.length,
     });
   } catch (error: unknown) {
     console.error('Bulk status update error:', error);

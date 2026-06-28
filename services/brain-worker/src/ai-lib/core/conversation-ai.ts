@@ -293,11 +293,11 @@ export async function generateAIReply(
     leadTzProfile,
     customKnowledge
   ] = await Promise.all([
-    getBrandContext(lead.userId, personaId),
-    storage.getUserById(lead.userId),
-    retrieveConversationMemory(lead.userId, lead.id),
-    getConversationContext(lead.userId, lead.id),
-    getStyleMarkers(lead.userId),
+    getBrandContext(lead.userId, personaId).catch(() => null),
+    storage.getUserById(lead.userId).catch(() => null),
+    retrieveConversationMemory(lead.userId, lead.id).catch(() => null),
+    getConversationContext(lead.userId, lead.id).catch(() => null),
+    getStyleMarkers(lead.userId).catch(() => ({})),
     lastLeadMessage ? searchSimilarChunks(lastLeadMessage.body, lead.userId, 4).catch(() => []) : Promise.resolve([]),
     lastLeadMessage ? analyzeLeadIntent(lastLeadMessage.body, {
       id: lead.id,
@@ -305,7 +305,7 @@ export async function generateAIReply(
       channel: lead.channel,
       status: lead.status,
       tags: lead.tags || []
-    }) : Promise.resolve(null),
+    }).catch(() => null) : Promise.resolve(null),
     getLeadProfile(lead.id).catch(() => null),
     getCustomKnowledge(lead.userId).catch(() => null)
   ]);
@@ -441,7 +441,7 @@ ${ck.faqs && ck.faqs.length > 0 ? `Frequently Asked Questions:\n${ck.faqs.map((f
             objectionState: objectionDecision.state,
             actionUrl: `/dashboard/inbox?leadId=${lead.id}`
           }
-        }).catch(() => {});
+        }).catch((notifErr) => console.error('[ConversationAI] Failed to create notification:', notifErr));
       }
     } catch (osmErr: any) {
       console.error('[ConversationAI] Objection state machine failed, falling back to legacy handler:', osmErr.message);
@@ -1034,7 +1034,7 @@ ONLY use the following links if necessary: ${allowedLinks.join(', ')}.`;
 
     // Record what tactic we actually sent so the state machine knows for next time
     if (objectionDecision && optimizedText) {
-      recordTacticSent(lead.id, lead.userId, optimizedText.substring(0, 200)).catch(() => {});
+      recordTacticSent(lead.id, lead.userId, optimizedText.substring(0, 200)).catch(() => console.error('[ConversationAI] recordTacticSent failed'));
     }
 
     return {

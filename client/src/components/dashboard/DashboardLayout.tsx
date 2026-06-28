@@ -844,6 +844,8 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                             });
                             try {
                               await apiRequest('POST', '/api/notifications/mark-all-read');
+                            } catch (err) {
+                              console.error('Failed to mark all read:', err);
                             } finally {
                               queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
                             }
@@ -858,8 +860,12 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                           className="h-9 text-[10px] font-black uppercase tracking-[0.12em] flex-1 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/5 transition-all"
                           onClick={async () => {
                             if (confirm("Permanently delete all notifications?")) {
-                              await apiRequest('POST', '/api/notifications/clear-all');
-                              queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+                              try {
+                                await apiRequest('POST', '/api/notifications/clear-all');
+                                queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+                              } catch (err) {
+                                console.error('Failed to clear notifications:', err);
+                              }
                             }
                           }}
                         >

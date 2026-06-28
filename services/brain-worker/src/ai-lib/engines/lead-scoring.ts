@@ -68,13 +68,15 @@ function calculateEngagementScore(messages: Message[]): number {
   else if (messageCount >= 1) score += 10;
   
   // Message length (0-30 points)
-  const avgLength = inboundMessages.reduce((sum, m) => sum + m.body.length, 0) / (messageCount || 1);
-  if (avgLength > 100) score += 30;
-  else if (avgLength > 50) score += 20;
-  else if (avgLength > 20) score += 10;
+  const avgLength = inboundMessages.reduce((sum, m) => sum + (m.body?.length || 0), 0) / (messageCount || 1);
+  if (!isNaN(avgLength)) {
+    if (avgLength > 100) score += 30;
+    else if (avgLength > 50) score += 20;
+    else if (avgLength > 20) score += 10;
+  }
   
   // Question asking (0-30 points)
-  const questionsAsked = inboundMessages.filter(m => m.body.includes('?')).length;
+  const questionsAsked = inboundMessages.filter(m => m.body && m.body.includes('?')).length;
   if (questionsAsked >= 3) score += 30;
   else if (questionsAsked >= 2) score += 20;
   else if (questionsAsked >= 1) score += 10;
@@ -90,7 +92,10 @@ function calculateResponseTimeScore(messages: Message[]): number {
   
   for (let i = 1; i < messages.length; i++) {
     if (messages[i].direction === 'inbound' && messages[i - 1].direction === 'outbound') {
-      const timeDiff = new Date(messages[i].createdAt).getTime() - new Date(messages[i - 1].createdAt).getTime();
+      const t1 = new Date(messages[i].createdAt).getTime();
+      const t2 = new Date(messages[i - 1].createdAt).getTime();
+      if (isNaN(t1) || isNaN(t2)) continue;
+      const timeDiff = t1 - t2;
       const minutes = timeDiff / (1000 * 60);
       totalResponseTime += minutes;
       responseCount++;
