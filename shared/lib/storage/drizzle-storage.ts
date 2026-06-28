@@ -599,7 +599,8 @@ export class DrizzleStorage implements IStorage {
     const [result] = await db
       .select()
       .from(leads)
-      .where(and(eq(leads.email, email), eq(leads.userId, userId)))
+      // Use ilike for case-insensitive email matching
+      .where(and(sql`LOWER(${leads.email}) = LOWER(${email})`, eq(leads.userId, userId)))
       .limit(1);
     return result;
   }
@@ -607,10 +608,11 @@ export class DrizzleStorage implements IStorage {
   async getExistingEmails(userId: string, emails: string[]): Promise<string[]> {
     checkDatabase();
     if (emails.length === 0) return [];
+    const lowerEmails = emails.map(e => e.toLowerCase());
     const results = await db
       .select({ email: leads.email })
       .from(leads)
-      .where(and(eq(leads.userId, userId), inArray(leads.email, emails)));
+      .where(and(eq(leads.userId, userId), sql`LOWER(${leads.email}) = ANY(${lowerEmails}::text[])`));
     return results.map((r: { email: string | null }) => r.email).filter((e: string | null): e is string => !!e);
   }
 

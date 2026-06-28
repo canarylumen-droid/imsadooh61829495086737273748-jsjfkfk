@@ -345,6 +345,7 @@ export default function IntegrationsPage() {
 
   const [integrationPage, setIntegrationPage] = useState(1);
   const [integrationSearch, setIntegrationSearch] = useState("");
+  const [localLimits, setLocalLimits] = useState<Record<string, number>>({});
 
   const queryKey = useMemo(() => {
     const params = new URLSearchParams();
@@ -1359,23 +1360,23 @@ export default function IntegrationsPage() {
                                     : "Init..."}
                                 </span>
                               </div>
-                              <div className="flex flex-col justify-center border-l border-border/40 pl-2 min-w-[70px]">
-                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Limit</span>
-                                 <span className="text-xs sm:text-sm font-black text-primary">
-                                  {/* Part 6: Normalize default to 50 for all providers */}
-                                  {mailbox.dailyLimit || 50}/d
-                                </span>
+                              <div className="flex flex-col justify-center border-l border-border/40 pl-3 min-w-[110px]">
+                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Daily Limit</span>
                                 <Slider
-                                  value={[mailbox.dailyLimit || 50]}
+                                  value={[localLimits[mailbox.id] ?? mailbox.dailyLimit ?? 50]}
                                   onValueChange={async (v) => {
+                                    setLocalLimits(prev => ({ ...prev, [mailbox.id]: v[0] }));
                                     try {
                                       await apiRequest('PATCH', `/api/integrations/${mailbox.id}/daily-limit`, { dailyLimit: v[0] });
                                       queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
                                     } catch (e) { console.error('Failed to update daily limit', e); }
                                   }}
                                   min={10} max={500} step={5}
-                                  className="w-16 sm:w-20 py-0.5 mt-0.5"
+                                  className="w-24 sm:w-28 py-1 mt-1"
                                 />
+                                <span className="text-xs font-black text-primary tabular-nums">
+                                  {localLimits[mailbox.id] ?? mailbox.dailyLimit || 50}/d
+                                </span>
                               </div>
                             </div>
                           )}

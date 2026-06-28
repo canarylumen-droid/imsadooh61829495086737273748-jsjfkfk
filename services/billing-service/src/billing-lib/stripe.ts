@@ -164,24 +164,42 @@ export async function updateSubscriptionPlan(
   subscriptionId: string,
   newPlanKey: keyof typeof PLANS
 ): Promise<void> {
-  if (isDemoMode) {
-    return;
-  }
+  if (isDemoMode || !subscriptionId) return;
 
-  // This function is not directly used with payment links.
-  // It's kept here for potential future use.
+  const client = await getStripeClient();
+  if (!client) throw new Error('Stripe client not initialized');
+
+  const plan = PLANS[newPlanKey];
+  if (!plan || !plan.priceId) throw new Error(`No price ID configured for plan: ${newPlanKey}`);
+
+  try {
+    await client.subscriptions.update(subscriptionId, {
+      items: [{ id: (await client.subscriptions.retrieve(subscriptionId)).items.data[0].id, price: plan.priceId }],
+      proration_behavior: 'create_prorations',
+    });
+    console.log(`[Billing] Subscription ${subscriptionId} updated to plan ${newPlanKey}`);
+  } catch (err: any) {
+    console.error(`[Billing] Failed to update subscription ${subscriptionId}:`, err.message);
+    throw err;
+  }
 }
 
 /**
  * Cancel subscription
  */
 export async function cancelSubscription(subscriptionId: string): Promise<void> {
-  if (isDemoMode) {
-    return;
-  }
+  if (isDemoMode || !subscriptionId) return;
 
-  // This function is not directly used with payment links.
-  // It's kept here for potential future use.
+  const client = await getStripeClient();
+  if (!client) throw new Error('Stripe client not initialized');
+
+  try {
+    await client.subscriptions.cancel(subscriptionId, { invoice_now: true, prorate: true });
+    console.log(`[Billing] Subscription ${subscriptionId} cancelled successfully`);
+  } catch (err: any) {
+    console.error(`[Billing] Failed to cancel subscription ${subscriptionId}:`, err.message);
+    throw err;
+  }
 }
 
 /**

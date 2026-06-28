@@ -108,29 +108,31 @@ export async function searchSimilarChunks(
     if (embedding.length > 0) {
       const embeddingStr = `[${embedding.join(',')}]`;
       // Set a statement timeout to prevent hanging the worker (10s)
-      await db.execute(sql`SET statement_timeout = 10000`);
+      await db.execute(sql`SET LOCAL statement_timeout = 10000`);
       
-      const result = await db.execute(sql`
-        SELECT 
-          snippet as content, 
-          source as file_name, 
-          version,
-          (1 - (embedding <=> ${embeddingStr}::vector)) as similarity
-        FROM brand_embeddings
-        WHERE user_id = ${userId} AND embedding IS NOT NULL
-        ORDER BY (1 - (embedding <=> ${embeddingStr}::vector)) * (1 + (version * 0.05)) DESC
-        LIMIT ${topK}
-      `);
-      
-      // Reset timeout
-      await db.execute(sql`SET statement_timeout = 0`);
+      try {
+        const result = await db.execute(sql`
+          SELECT 
+            snippet as content, 
+            source as file_name, 
+            version,
+            (1 - (embedding <=> ${embeddingStr}::vector)) as similarity
+          FROM brand_embeddings
+          WHERE user_id = ${userId} AND embedding IS NOT NULL
+          ORDER BY (1 - (embedding <=> ${embeddingStr}::vector)) * (1 + (version * 0.05)) DESC
+          LIMIT ${topK}
+        `);
 
-      return result.rows.map((row: any) => ({
-        content: row.content,
-        fileName: row.file_name,
-        version: row.version,
-        similarity: parseFloat(row.similarity) || 0,
-      }));
+        return result.rows.map((row: any) => ({
+          content: row.content,
+          fileName: row.file_name,
+          version: row.version,
+          similarity: parseFloat(row.similarity) || 0,
+        }));
+      } finally {
+        // Reset timeout — runs even if query throws
+        await db.execute(sql`SET LOCAL statement_timeout = 0`);
+      }
     } else {
       // Fallback: keyword search with ILIKE
       const result = await db.execute(sql`

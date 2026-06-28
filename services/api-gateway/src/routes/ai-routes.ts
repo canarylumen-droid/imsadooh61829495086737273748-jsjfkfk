@@ -290,7 +290,12 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
     let mappingResult: any = null;
 
     // ── STREAMING PHASE ───────────────────────────────────────────────
-    const stream = Readable.from(file.buffer.toString('utf-8'));
+    // Strip UTF-8 BOM if present (Excel exports often include it)
+    let csvBuffer = file.buffer;
+    if (csvBuffer.length >= 3 && csvBuffer[0] === 0xEF && csvBuffer[1] === 0xBB && csvBuffer[2] === 0xBF) {
+      csvBuffer = csvBuffer.subarray(3);
+    }
+    const stream = Readable.from(csvBuffer.toString('utf-8'));
     const parser = csvParser();
 
     let streamEnded = false;

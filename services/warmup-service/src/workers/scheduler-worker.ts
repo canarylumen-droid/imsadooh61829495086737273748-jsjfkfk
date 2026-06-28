@@ -281,7 +281,8 @@ export class WarmupScheduler {
         dailySentCount: 0,
         dailyReceivedCount: 0,
         lastResetAt: new Date(),
-      });
+      })
+      .where(eq(warmupMailboxes.status, 'active'));
 
     const resumed = await db
       .update(warmupMailboxes)

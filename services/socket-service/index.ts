@@ -46,3 +46,12 @@ const shutdown = async (signal: string) => {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Global error handlers for stability
+process.on('unhandledRejection', (reason) => {
+  console.error('[SOCKET] Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[SOCKET] Uncaught Exception:', err);
+});
