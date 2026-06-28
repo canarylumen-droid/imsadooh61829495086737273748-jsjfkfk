@@ -293,9 +293,9 @@ export async function generateAIReply(
     leadTzProfile,
     customKnowledge
   ] = await Promise.all([
-    getBrandContext(lead.userId, personaId).catch(() => null),
+    getBrandContext(lead.userId, personaId).catch(() => ({}) as any),
     storage.getUserById(lead.userId).catch(() => null),
-    retrieveConversationMemory(lead.userId, lead.id).catch(() => null),
+    retrieveConversationMemory(lead.userId, lead.id).catch(() => ({ context: '', lastTactic: null, successfulTactics: [] }) as any),
     getConversationContext(lead.userId, lead.id).catch(() => null),
     getStyleMarkers(lead.userId).catch(() => ({})),
     lastLeadMessage ? searchSimilarChunks(lastLeadMessage.body, lead.userId, 4).catch(() => []) : Promise.resolve([]),

@@ -1772,7 +1772,7 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
         opened: existingStats.opened || 0,
         clicked: existingStats.clicked || 0,
         consecutive_failures: existingStats.consecutive_failures || 0,
-      }, 
+      } as any, 
       updatedAt: new Date() 
     })
     .where(eq(outreachCampaigns.id, campaignId)));

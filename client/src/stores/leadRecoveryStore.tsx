@@ -88,32 +88,46 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(false);
 
   const loadStatus = useCallback(async () => {
-    const res = await apiRequest("GET", "/api/lead-recovery/status");
-    const data = await res.json();
-    setIsActive(data.isActive);
-    setHasAvailableMailbox(data.hasAvailableMailbox);
-    setAvailableAt(data.availableAt);
-    setMailboxDetails(data.mailboxDetails || []);
-    setSkipWarning(data.skipWarning || "");
-    setPromptConfigured(Boolean(data.promptConfigured));
+    try {
+      const res = await apiRequest("GET", "/api/lead-recovery/status");
+      const data = await res.json();
+      setIsActive(data.isActive);
+      setHasAvailableMailbox(data.hasAvailableMailbox);
+      setAvailableAt(data.availableAt);
+      setMailboxDetails(data.mailboxDetails || []);
+      setSkipWarning(data.skipWarning || "");
+      setPromptConfigured(Boolean(data.promptConfigured));
+    } catch (e) {
+      console.warn('[LeadRecovery] Failed to load status:', e);
+    }
   }, []);
 
   const loadLeads = useCallback(async () => {
-    const res = await apiRequest("GET", "/api/lead-recovery/leads");
-    const data = await res.json();
-    setLeads(data.leads || []);
+    try {
+      const res = await apiRequest("GET", "/api/lead-recovery/leads");
+      const data = await res.json();
+      setLeads(data.leads || []);
+    } catch (e) {
+      console.warn('[LeadRecovery] Failed to load leads:', e);
+    }
   }, []);
 
   const loadEvents = useCallback(async () => {
-    const res = await apiRequest("GET", "/api/lead-recovery/events");
-    const data = await res.json();
-    setEvents(data.events || []);
+    try {
+      const res = await apiRequest("GET", "/api/lead-recovery/events");
+      const data = await res.json();
+      setEvents(data.events || []);
+    } catch (e) {
+      console.warn('[LeadRecovery] Failed to load events:', e);
+    }
   }, []);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
       await Promise.all([loadStatus(), loadLeads(), loadEvents()]);
+    } catch (e) {
+      console.warn('[LeadRecovery] loadAll failed:', e);
     } finally {
       setLoading(false);
     }
@@ -124,6 +138,8 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     try {
       await apiRequest("POST", "/api/lead-recovery/activate", mailboxId ? { mailboxId } : {});
       await loadAll();
+    } catch (e) {
+      console.warn('[LeadRecovery] Activate failed:', e);
     } finally {
       setLoading(false);
     }
@@ -134,6 +150,8 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     try {
       await apiRequest("POST", "/api/lead-recovery/deactivate", {});
       await loadAll();
+    } catch (e) {
+      console.warn('[LeadRecovery] Deactivate failed:', e);
     } finally {
       setLoading(false);
     }
@@ -144,6 +162,8 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     try {
       await apiRequest("POST", "/api/lead-recovery/sync", mailboxId ? { mailboxId } : {});
       await loadAll();
+    } catch (e) {
+      console.warn('[LeadRecovery] Sync failed:', e);
     } finally {
       setLoading(false);
     }
@@ -157,6 +177,8 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       setSelectedLead(data.lead);
       setDraftModalOpen(true);
       await Promise.all([loadLeads(), loadEvents()]);
+    } catch (e) {
+      console.warn('[LeadRecovery] Recover failed:', e);
     } finally {
       setLoading(false);
     }
@@ -169,6 +191,9 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       const data = await res.json();
       await Promise.all([loadLeads(), loadEvents()]);
       return Number(data.synced || 0);
+    } catch (e) {
+      console.warn('[LeadRecovery] Sync objections failed:', e);
+      return 0;
     } finally {
       setLoading(false);
     }

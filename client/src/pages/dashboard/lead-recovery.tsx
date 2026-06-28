@@ -47,7 +47,7 @@ function LeadRecoveryContent() {
           <Switch
             checked={store.isActive}
             disabled={store.loading}
-            onCheckedChange={(checked) => checked ? store.activate() : store.deactivate()}
+            onCheckedChange={(checked) => { checked ? store.activate() : store.deactivate(); }}
           />
         </div>
       </div>
@@ -75,11 +75,11 @@ function LeadRecoveryContent() {
               <p className="text-[10px] sm:text-xs text-muted-foreground">Stored in MongoDB per tenant, mailbox, and lead conversation.</p>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial text-xs" onClick={store.loadAll} disabled={store.loading}>
+              <Button variant="outline" size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => store.loadAll()} disabled={store.loading}>
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                 Refresh
               </Button>
-              <Button size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => store.syncNow()} disabled={store.loading || store.mailboxDetails.length === 0}>
+              <Button size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => store.syncNow().catch(() => {})} disabled={store.loading || store.mailboxDetails.length === 0}>
                 <DownloadCloud className="mr-1.5 h-3.5 w-3.5" />
                 {syncingMailboxes > 0 ? `Syncing ${syncingMailboxes}` : "Sync 90 days"}
               </Button>

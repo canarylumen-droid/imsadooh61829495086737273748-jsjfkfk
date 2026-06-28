@@ -370,8 +370,8 @@ router.post('/campaigns', requireAuth, async (req, res) => {
     }
 
     // Calculate metrics/safety for response — skip for large campaigns to avoid OOM
-    let safety = { safe: true, warnings: [] };
-    let campaignMetrics = { segments: {}, total: addedCount };
+    let safety: any = { safe: true, warnings: [] };
+    let campaignMetrics: any = { segments: {}, total: addedCount };
     if (addedCount <= 5000) {
       const metricsResult = await createOutreachCampaign(Array.from({ length: addedCount }, () => ({ id: '', email: '', name: '', company: '', data: {} })), name);
       safety = validateCampaignSafety(metricsResult);

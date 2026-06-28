@@ -5,7 +5,8 @@ import { generateAIReply } from '@services/brain-worker/src/ai-lib/core/conversa
 import { calculateLeadScore } from '@services/brain-worker/src/ai-lib/engines/lead-scoring.js';
 import type { ChannelType, ProviderType, LeadStatus } from '@shared/types.js';
 import { db } from '@shared/lib/db/db.js';
-import { leads, inArray, eq } from '@audnix/shared';
+import { leads } from '@audnix/shared';
+import { inArray, eq } from 'drizzle-orm';
 
 const router = Router();
 
