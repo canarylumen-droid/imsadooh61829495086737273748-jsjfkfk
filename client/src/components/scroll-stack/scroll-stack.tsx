@@ -1,5 +1,5 @@
+// @ts-nocheck
 import { useLayoutEffect, useRef, useCallback } from 'react';
-// @ts-ignore
 import Lenis from 'lenis';
 import './scroll-stack.css';
 

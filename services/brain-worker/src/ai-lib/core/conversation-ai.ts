@@ -296,7 +296,7 @@ export async function generateAIReply(
     getBrandContext(lead.userId, personaId).catch(() => ({}) as any),
     storage.getUserById(lead.userId).catch(() => null),
     retrieveConversationMemory(lead.userId, lead.id).catch(() => ({ context: '', lastTactic: null, successfulTactics: [] }) as any),
-    getConversationContext(lead.userId, lead.id).catch(() => null),
+    getConversationContext(lead.userId, lead.id).catch(() => [] as any),
     getStyleMarkers(lead.userId).catch(() => ({})),
     lastLeadMessage ? searchSimilarChunks(lastLeadMessage.body, lead.userId, 4).catch(() => []) : Promise.resolve([]),
     lastLeadMessage ? analyzeLeadIntent(lastLeadMessage.body, {

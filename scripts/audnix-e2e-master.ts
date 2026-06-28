@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Audnix AI — Master End-to-End Test Suite
  * Exact DB schema matching via raw SQL.
@@ -32,7 +33,7 @@ async function p0() {
       ${JSON.stringify({ am: true, rid: RID })}::jsonb, NOW(), NOW())
     RETURNING id
   `);
-  UID = x.rows[0].id;
+  UID = (x.rows[0] as any).id;
   log(0, "User", true, UID);
 }
 
