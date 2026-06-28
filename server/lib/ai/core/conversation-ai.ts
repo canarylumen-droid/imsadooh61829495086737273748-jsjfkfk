@@ -294,17 +294,17 @@ export async function generateAIReply(
     : null;
     
   // --- BRAND RAG (Semantic Retrieval) ---
-  let ragContext = "";
-  if (lastLeadMessage) {
-    try {
-      const relevantChunks = await searchSimilarChunks(lastLeadMessage.body, lead.userId, 4);
-      if (relevantChunks.length > 0) {
-        ragContext = `[RELEVANT BRAND KNOWLEDGE]:n${relevantChunks.map((c: any) => `- ${c.content}`).join('n')}`;
+    let ragContext = "";
+    if (lastLeadMessage) {
+      try {
+        const relevantChunks = await searchSimilarChunks(lastLeadMessage.body, lead.userId, 4);
+        if (relevantChunks.length > 0) {
+          ragContext = `[RELEVANT BRAND KNOWLEDGE]:\n${relevantChunks.map((c: any) => `- ${c.content}`).join('\n')}`;
+        }
+      } catch (ragError) {
+        console.warn("[ConversationAI] RAG search failed:", ragError);
       }
-    } catch (ragError) {
-      console.warn("[ConversationAI] RAG search failed:", ragError);
     }
-  }
 
   // --- STYLE LEARNING ---
   const styleMarkers = await getStyleMarkers(lead.userId);
@@ -380,7 +380,7 @@ export async function generateAIReply(
   }
 
   const enrichedContext = memoryResult.context
-    ? `nnCONVERSATION INSIGHTS:n${memoryResult.context}`
+    ? `\n\nCONVERSATION INSIGHTS:\n${memoryResult.context}`
     : '';
 
   // Phase 23: Dynamic Context Pruning based on estimated tokens (Budget: 3,000 tokens)
@@ -412,8 +412,8 @@ KNOWN SCHEDULING INTELLIGENCE (do NOT disclose to lead):
 - Suggest times like: "How does Thursday at 5pm work for you?"
 `;
 
-  const stylePrompt = intent?.style ? `[STYLE INSTRUCTION]nMirror their ${intent.style} style.` : '';
-  const emotionPrompt = intent?.emotion ? `[EMOTION INSTRUCTION]nAcknowledge their ${intent.emotion} emotion.` : '';
+  const stylePrompt = intent?.style ? `[STYLE INSTRUCTION]\nMirror their ${intent.style} style.` : '';
+  const emotionPrompt = intent?.emotion ? `[EMOTION INSTRUCTION]\nAcknowledge their ${intent.emotion} emotion.` : '';
 
   let currentTokenCount = estimateTokens(enrichedContext + stylePrompt + emotionPrompt + leadIntelContext);
   const messageContext: Array<{ role: 'user' | 'assistant'; content: string }> = [];
@@ -446,7 +446,7 @@ KNOWN SCHEDULING INTELLIGENCE (do NOT disclose to lead):
 [PHASE 53] PERSONALIZED MEDIA ASSETS:
 This is a High-Value lead. Use a personalized approach. 
 If it feels natural (e.g. "I'd love to see a demo" or "How does this work?"), reference this video breakdown:
-${activeVideos.map((v: any) => `- "${v.ctaText}": ${v.videoUrl}`).join('n')}
+${activeVideos.map((v: any) => `- "${v.ctaText}": ${v.videoUrl}`).join('\n')}
 Say something like: "I actually made a quick video breakdown showing exactly how we handle this: ${activeVideos[0].videoUrl}"
 `;
     }
@@ -455,9 +455,9 @@ Say something like: "I actually made a quick video breakdown showing exactly how
   // ─── PHASE 51: CROSS-CHANNEL NARRATIVE ───────────────────────────────────
   const crossChannelHistory = allMessages.filter(m => m.provider !== platform && m.provider !== 'system');
   const narrativeSummary = crossChannelHistory.length > 0
-    ? `n[PHASE 51] CROSS-CHANNEL NARRATIVE HISTORY:n` +
-      crossChannelHistory.slice(-3).map(m => `- [${m.provider.toUpperCase()}]: ${m.body}`).join('n') +
-      `nYou MUST ensure this reply fits the narrative established on other channels.`
+    ? `\n[PHASE 51] CROSS-CHANNEL NARRATIVE HISTORY:\n` +
+      crossChannelHistory.slice(-3).map(m => `- [${m.provider.toUpperCase()}]: ${m.body}`).join('\n') +
+      `\nYou MUST ensure this reply fits the narrative established on other channels.`
     : '';
 
   // ─── STATUS-AWARE DYNAMIC PROMPT BUILDER ─────────────────────────────────
@@ -530,7 +530,7 @@ Only meeting reminders are authorised. Do not generate a response.`,
   const languageName = languageMap[languageCode] || 'English';
 
   const languageInstruction = languageCode !== 'en'
-    ? `nn[GLOBAL LOCALIZATION]: The lead is communicating in ${languageName}. You MUST respond entirely in ${languageName}. Maintain the brand's tone, professionalism, and voice rules natively in ${languageName}. Use cultural business idioms, not literal translations.`
+    ? `\n\n[GLOBAL LOCALIZATION]: The lead is communicating in ${languageName}. You MUST respond entirely in ${languageName}. Maintain the brand's tone, professionalism, and voice rules natively in ${languageName}. Use cultural business idioms, not literal translations.`
     : "";
 
   const regionalInstruction = getRegionalInstruction(intent?.detectedCountry || null);
@@ -545,9 +545,9 @@ ${ragContext}
 [BRAND GUIDELINES]
 ${brandGuidelines}
 
-${(brandContext as any)?.brandSnippets?.length > 0
-  ? `KEY BRAND MESSAGES:n${(brandContext as any).brandSnippets.map((s: string) => `- ${s}`).join('n')}`
-  : ''}
+  ${(brandContext as any)?.brandSnippets?.length > 0
+    ? `KEY BRAND MESSAGES:\n${(brandContext as any).brandSnippets.map((s: string) => `- ${s}`).join('\n')}`
+    : ''}
 
 ${leadIntelContext}
 
@@ -719,7 +719,7 @@ ${enrichedContext}`;
 
     // If meeting requested, check brand preference
     if (linkIntent.intentType === 'meeting') {
-      const hasTimeMention = /at|on|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|next|morning|afternoon|evening|d+/i.test(lastMessage.body);
+      const hasTimeMention = /at|on|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|next|morning|afternoon|evening|\d+/i.test(lastMessage.body);
 
       // If they prefer autonomous booking AND provided a time, propose slots
       if (brandContext.bookingPreference === 'autonomous' || hasTimeMention) {
@@ -761,7 +761,7 @@ ${enrichedContext}`;
     while (retryCount < 2) {
       const currentSystemPrompt = retryCount === 0 
         ? systemPrompt 
-        : `${systemPrompt}nn[DEDUPLICATION ALERT]: Your previous attempt was too similar to our last message. REPHRASE COMPLETELY. Use a different opening and a different value proposition. Do not repeat sentences.`;
+        : `${systemPrompt}\n\n[DEDUPLICATION ALERT]: Your previous attempt was too similar to our last message. REPHRASE COMPLETELY. Use a different opening and a different value proposition. Do not repeat sentences.`;
 
       finalAiResponse = await generateReply(currentSystemPrompt, lastMessage.body, {
         model: MODELS.sales_reasoning,
@@ -902,7 +902,7 @@ export async function generateVoiceScript(
     throw new Error("Voice Service Offline: Live API credentials required.");
   }
 
-  const lastMessages = conversationHistory.slice(-5).map(m => m.body).join('n');
+  const lastMessages = conversationHistory.slice(-5).map(m => m.body).join('\n');
   const isWarm = assessLeadWarmth(conversationHistory, lead);
 
   const voiceMessages = conversationHistory.filter(m =>

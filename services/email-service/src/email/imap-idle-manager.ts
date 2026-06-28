@@ -1106,14 +1106,20 @@ class ImapIdleManager {
                                                 if (lead) {
                                                     if (!isAutonomousMode || lead.aiPaused) continue;
 
+                                                    let messageBody = email.text;
+                                                    if (!messageBody && email.uid) {
+                                                        const fullBody = await this.fetchFullMessageBody(imap, email.uid);
+                                                        messageBody = fullBody.text || '';
+                                                    }
+
                                                     const { processInboundMessageWithAnalysis } = await import('@services/brain-worker/src/ai-lib/analyzers/inbound-message-analyzer.js');
-                                                    const analysis = await processInboundMessageWithAnalysis(lead.id, email.text, 'email');
+                                                    const analysis = await processInboundMessageWithAnalysis(lead.id, messageBody, 'email');
 
                                                     wsSync.notifyMessagesUpdated(userId, { 
                                                         leadId: lead.id, 
                                                         message: { 
                                                             id: email.id, 
-                                                            content: email.text, 
+                                                            content: messageBody,
                                                             direction: 'inbound', 
                                                             createdAt: email.date,
                                                             intent: analysis?.urgencyLevel

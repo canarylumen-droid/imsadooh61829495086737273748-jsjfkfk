@@ -186,7 +186,11 @@ export class CampaignQueueManager {
           console.warn('[CampaignQueue] PG job log insert failed (non-fatal):', e.message)
         );
       }
-      // await campaignQueue.addBulk(bulkJobs); // REPLACED by consumer-distribution below
+      // Write send-batch jobs directly as fallback so EVERY mailbox has a chain
+      // even if consumer-distribution is down. The chain starts in 5s.
+      await campaignQueue.addBulk(bulkJobs).catch((e: any) =>
+        console.warn('[CampaignQueue] addBulk fallback failed (non-fatal):', e.message)
+      );
     }
 
     // ── Consumer Distribution (Any-Available-Worker) ──────────────────────
@@ -576,6 +580,68 @@ export class CampaignQueueManager {
     }
 
     console.log(`[CampaignQueue] 💬 Auto-reply scheduled/timeout for mailbox ${integrationId.slice(-8)} in ${Math.round(delayMs / 1000)}s`);
+  }
+
+  /**
+   * Re-trigger consumer distribution for all mailboxes in a campaign.
+   * Called when new leads are added after the campaign has already started.
+   * Ensures every mailbox has a chance to pick up the new leads.
+   */
+  async refreshCampaignMailboxes(campaignId: string, userId: string, mailboxIds: string[], mailboxLimits: Record<string, number> = {}): Promise<void> {
+    console.log(`[CampaignQueue] 🔄 Refreshing ${mailboxIds.length} mailbox(es) for campaign ${campaignId}`);
+
+    let planDailyDefault = 50;
+    try {
+      const [userRow] = await db.select({ plan: users.plan, subscriptionTier: users.subscriptionTier })
+        .from(users).where(eq(users.id, userId)).limit(1);
+      const tier = (userRow?.subscriptionTier || userRow?.plan || 'starter').toLowerCase();
+      if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 500;
+      else if (tier === 'starter') planDailyDefault = 200;
+    } catch (e) { /* fallback */ }
+
+    if (campaignQueue) {
+      const { consumerQueue } = await import('./consumer-distribution.js');
+      if (consumerQueue) {
+        const bulkJobs = mailboxIds.map(mbId => {
+          const batchSize = mailboxLimits[mbId] || planDailyDefault;
+          const jobKey = `consumer-pull_${campaignId}_${mbId}_refresh_${Date.now()}`;
+          return {
+            name: jobKey,
+            data: {
+              type: 'mailbox:pull-leads' as const,
+              campaignId,
+              userId,
+              integrationId: mbId,
+              batchSize,
+            },
+            opts: { delay: 5000, priority: 2, jobId: jobKey, removeOnComplete: true, removeOnFail: { count: 1000 } },
+          };
+        });
+        await consumerQueue.addBulk(bulkJobs);
+      }
+    }
+
+    // Also restart any fallback intervals
+    if (!campaignQueue) {
+      for (const mbId of mailboxIds) {
+        const jobKey = `send-batch_${campaignId}_${mbId}`;
+        if (this.fallbackIntervals.has(jobKey)) clearInterval(this.fallbackIntervals.get(jobKey));
+        const interval = setInterval(async () => {
+          try {
+            await processSendBatch({
+              type: 'campaign:send-batch',
+              campaignId,
+              userId,
+              integrationId: mbId,
+              dailyLimit: mailboxLimits[mbId] || planDailyDefault,
+            });
+          } catch (err) {
+            console.error(`[CampaignFallback] Batch failed for ${mbId}:`, err);
+          }
+        }, 300_000);
+        this.fallbackIntervals.set(jobKey, interval);
+      }
+    }
   }
 }
 

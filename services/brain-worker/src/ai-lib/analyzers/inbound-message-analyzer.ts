@@ -394,11 +394,36 @@ export async function processInboundMessageWithAnalysis(
     }
 
     const messages = await storage.getMessagesByLeadId(leadId);
-    const latestMessage = messages.find(m => m.body === messageBody);
+
+    // Try exact body match first, fall back to latest inbound message
+    let latestMessage = messages.find(m => m.body === messageBody);
+    if (!latestMessage && messages.length > 0) {
+      const inboundMessages = messages.filter(m => m.direction === 'inbound');
+      latestMessage = inboundMessages[inboundMessages.length - 1] || messages[messages.length - 1];
+      console.log(`[InboundAnalyzer] Body match failed — using latest inbound message for lead ${leadId}`);
+    }
 
     if (!latestMessage) {
-      console.error("Could not find the message to analyze");
-      return null;
+      // Create a synthetic message object from the data we have
+      console.log(`[InboundAnalyzer] No message found — creating synthetic message for analysis on lead ${leadId}`);
+      latestMessage = {
+        id: `synthetic-${Date.now()}`,
+        leadId,
+        userId: lead.userId,
+        provider: channel,
+        direction: 'inbound',
+        body: messageBody,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isRead: true,
+        isWarmup: false,
+        metadata: {},
+        subject: '',
+        audioUrl: null,
+        integrationId: lead.integrationId || null,
+        externalId: null,
+        trackingId: null,
+      } as Message;
     }
 
     return await analyzeInboundMessage(leadId, latestMessage, lead);

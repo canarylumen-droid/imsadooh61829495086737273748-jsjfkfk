@@ -268,7 +268,7 @@ class InboundSweepWorker {
                       .where(eq(leads.id, leadInfo.leadId));
                   }
 
-                  // Trigger auto-reply if campaign has one configured
+                  // Trigger auto-reply or ConversationAI
                   try {
                     const [campaign] = await db!.select()
                       .from(outreachCampaigns)
@@ -276,7 +276,10 @@ class InboundSweepWorker {
                       .limit(1);
 
                     const hasAutoReply = campaign ? !!(campaign.template as any)?.autoReplyBody : false;
-                    if (hasAutoReply && leadInfo.status === 'sent') {
+                    const isFirstReply = leadInfo.status === 'sent';
+
+                    if (hasAutoReply && isFirstReply) {
+                      // Campaign auto-reply template for first-time replies
                       const { campaignQueueManager } = await import('@shared/lib/queues/campaign-queue.js');
                       await campaignQueueManager.scheduleAutoReply(
                         leadInfo.campaignId,
@@ -286,6 +289,22 @@ class InboundSweepWorker {
                         leadInfo.leadId
                       );
                       autoReplies++;
+                    } else {
+                      // AI takes over for:
+                      //   - First reply when no auto-reply template exists
+                      //   - All subsequent replies (ongoing conversations)
+                      try {
+                        const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
+                        await enqueuePriorityReply({
+                          userId: mailbox.userId,
+                          leadId: leadInfo.leadId,
+                          type: 'autonomous_reply',
+                          isAutonomous: true,
+                        });
+                        console.log(`[InboundSweep] ⚡ Enqueued ConversationAI reply for lead ${leadInfo.leadId}`);
+                      } catch (convErr) {
+                        console.warn('[InboundSweep] ConversationAI scheduling failed:', (convErr as Error).message);
+                      }
                     }
                   } catch (arErr) {
                     console.warn('[InboundSweep] Auto-reply scheduling failed:', (arErr as Error).message);

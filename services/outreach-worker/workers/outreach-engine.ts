@@ -1477,7 +1477,7 @@ export class OutreachEngine {
       }
 
       for (const unhealthy of unhealthyMailboxes) {
-        // Find leads assigned to this unhealthy mailbox (use REAL integrationId column)
+        // ── Phase 1: Heal inventory leads (leads table) ──────────────────
         const leadsToHeal = await db.select()
           .from(leads)
           .where(and(
@@ -1487,20 +1487,40 @@ export class OutreachEngine {
           ))
           .limit(50);
 
-        if (leadsToHeal.length === 0) continue;
+        if (leadsToHeal.length > 0) {
+          console.log(`🛡️ [Self-Healing] Redistributing ${leadsToHeal.length} inventory leads from unhealthy mailbox ${unhealthy.id}`);
+          for (let i = 0; i < leadsToHeal.length; i++) {
+            const targetMailbox = healthyMailboxes[i % healthyMailboxes.length];
+            await storage.updateLead(leadsToHeal[i].id, {
+              integrationId: targetMailbox.id,
+              metadata: {
+                ...(leadsToHeal[i].metadata as any || {}),
+                healedAt: new Date().toISOString(),
+                previousIntegrationId: unhealthy.id
+              }
+            });
+          }
+        }
 
-        console.log(`🛡️ [Self-Healing] Redistributing ${leadsToHeal.length} leads from unhealthy mailbox ${unhealthy.id}`);
+        // ── Phase 2: Heal campaign leads (campaignLeads table) ──────────
+        // Stranded campaign leads with status 'pending'/'queued'/'processing'
+        // assigned to an unhealthy mailbox are freed back to the pool so
+        // healthy mailboxes can pick them up via consumer-distribution.
+        const campaignLeadsToHeal = await db.execute(sql`
+          UPDATE campaign_leads
+          SET integration_id = NULL,
+              status = 'queued',
+              updated_at = NOW()
+          WHERE integration_id = ${unhealthy.id}::uuid
+            AND (status = 'pending' OR status = 'queued' OR status = 'processing')
+            AND lead_id IN (
+              SELECT id FROM leads WHERE user_id = ${userId}::uuid
+            )
+          RETURNING id
+        `);
 
-        for (let i = 0; i < leadsToHeal.length; i++) {
-          const targetMailbox = healthyMailboxes[i % healthyMailboxes.length];
-          await storage.updateLead(leadsToHeal[i].id, {
-            integrationId: targetMailbox.id,
-            metadata: {
-              ...(leadsToHeal[i].metadata as any || {}),
-              healedAt: new Date().toISOString(),
-              previousIntegrationId: unhealthy.id
-            }
-          });
+        if (campaignLeadsToHeal.rows.length > 0) {
+          console.log(`🛡️ [Self-Healing] Freed ${campaignLeadsToHeal.rows.length} campaign leads from unhealthy mailbox ${unhealthy.id} back to pool`);
         }
       }
     } catch (error) {
