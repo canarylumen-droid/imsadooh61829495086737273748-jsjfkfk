@@ -19,7 +19,23 @@ export type PauseReason =
   | 'integration_disconnected'
   | 'empty_pool_defensive'
   | 'no_anchor_available'
-  | 'domain_lacks_anchor';
+  | 'domain_lacks_anchor'
+  | 'recovery_mode';
+
+export type RecoveryLevel = 'critical' | 'poor' | 'cautious' | 'healthy';
+
+export interface ReputationState {
+  recoveryLevel: RecoveryLevel;
+  reputationScore: number;
+  warmupLimit: number;
+  maxThreads: number;
+  consecutiveCleanDays: number;
+  lastBounceAt: string | null;
+  recoveryStartedAt: string | null;
+  recoveryEscalatedAt: string | null;
+  lastEvaluatedAt: string;
+  stepDownLevel: RecoveryLevel | null;
+}
 
 export interface PairingCandidate {
   mailboxId: string;

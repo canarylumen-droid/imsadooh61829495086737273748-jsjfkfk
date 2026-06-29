@@ -415,7 +415,7 @@ export default function AuthPage() {
 
       // Check if account setup is incomplete and restore state
       if (data.incompleteSetup && data.restoreState) {
-        const { step, message, username: savedUsername } = data.restoreState;
+        const { message } = data.restoreState;
 
         toast({
           title: "Welcome Back!",
@@ -426,9 +426,18 @@ export default function AuthPage() {
 
         localStorage.setItem('auth_last_active', Date.now().toString());
 
-        // Skip onboarding - go straight to dashboard
+        // Route correctly based on the nextStep needed
         setTimeout(() => {
-          window.location.href = '/dashboard';
+          if (data.nextStep === 'username') {
+            setIsLogin(false);
+            setSignupStep(3);
+            setEmail(data.restoreState.email || '');
+            setUsername(data.suggestedUsername || '');
+          } else if (data.nextStep === 'onboarding') {
+            window.location.href = '/onboarding';
+          } else {
+            window.location.href = '/dashboard';
+          }
         }, 500);
         return;
       }

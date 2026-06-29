@@ -78,4 +78,35 @@ export const WARMUP_CONFIG = {
   // to guarantee they are NEVER picked up by campaign/outreach queries.
   WARMUP_SYSTEM_USER_ID: 'system',
   WARMUP_SOURCE_MARKER: 'warmup_seed',
+
+  // ── Reputation Recovery / Dead IP Revival ──────────────────────────────────
+  // When a mailbox has poor deliverability reputation, warmup volume is boosted
+  // to "ring the IP back to life" by showing natural sending patterns to ISPs.
+  //
+  // Recovery tiers (based on integrations.reputationScore):
+  //   critical (0-39)   → AGGRESSIVE: high warmup to flush out spam signals
+  //   poor     (40-64)  → ELEVATED:  moderate boost to rebuild trust
+  //   cautious (65-84)  → MODERATE:  light boost to maintain progress
+  //   healthy  (85-100) → STANDARD:  normal warmup limits
+  //
+  // These override the base DAILY_SENT_LIMIT when reputation is degraded.
+
+  // Maximum warmup emails per day during aggressive recovery (score < 40)
+  RECOVERY_CRITICAL_WARMUP_LIMIT: parseInt(process.env.WARMUP_RECOVERY_CRITICAL_LIMIT || '40', 10),
+  // Maximum warmup emails per day during poor recovery (score 40-64)
+  RECOVERY_POOR_WARMUP_LIMIT: parseInt(process.env.WARMUP_RECOVERY_POOR_LIMIT || '30', 10),
+  // Maximum warmup emails per day during cautious state (score 65-84)
+  RECOVERY_CAUTIOUS_WARMUP_LIMIT: parseInt(process.env.WARMUP_RECOVERY_CAUTIOUS_LIMIT || '25', 10),
+
+  // Reputation recovery scan interval (ms) — how often we check and adjust
+  RECOVERY_SCAN_INTERVAL_MS: parseInt(process.env.WARMUP_RECOVERY_SCAN_INTERVAL || '300000', 10), // 5 min
+
+  // Minimum consecutive clean days before stepping down a recovery tier
+  RECOVERY_MIN_CLEAN_DAYS_CRITICAL: parseInt(process.env.WARMUP_RECOVERY_CLEAN_DAYS_CRITICAL || '3', 10),
+  RECOVERY_MIN_CLEAN_DAYS_POOR: parseInt(process.env.WARMUP_RECOVERY_CLEAN_DAYS_POOR || '2', 10),
+
+  // Maximum threads per mailbox during recovery (higher = more volume)
+  RECOVERY_MAX_THREADS_CRITICAL: parseInt(process.env.WARMUP_RECOVERY_THREADS_CRITICAL || '6', 10),
+  RECOVERY_MAX_THREADS_POOR: parseInt(process.env.WARMUP_RECOVERY_THREADS_POOR || '5', 10),
+  RECOVERY_MAX_THREADS_CAUTIOUS: parseInt(process.env.WARMUP_RECOVERY_THREADS_CAUTIOUS || '4', 10),
 } as const;

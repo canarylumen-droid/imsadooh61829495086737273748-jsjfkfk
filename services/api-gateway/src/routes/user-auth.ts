@@ -455,6 +455,123 @@ router.post('/signup/verify-otp', authLimiter, async (req: Request, res: Respons
   }
 });
 
+/**
+ * POST /api/user/auth/signup/complete
+ * After OTP verified → User selects username → Saved to DB
+ * This endpoint verifies the user session or OTP, and updates the temporary username.
+ */
+router.post('/signup/complete', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, username, otp } = req.body as { email?: string; username?: string; otp?: string };
+
+    if (!email || !username) {
+      res.status(400).json({ error: 'Email and username required' });
+      return;
+    }
+
+    if (username.length < 3 || username.length > 30) {
+      res.status(400).json({ error: 'Username must be 3-30 characters' });
+      return;
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+      res.status(400).json({ error: 'Only letters, numbers, hyphens and underscores allowed' });
+      return;
+    }
+
+    const normalizedEmail = email.toLowerCase();
+
+    // Find the user by email first (we need their id for the uniqueness check)
+    const user = await storage.getUserByEmail(normalizedEmail);
+    if (!user) {
+      res.status(404).json({ error: 'User not found. Please sign up again.' });
+      return;
+    }
+
+    // Check if username is already taken (by a DIFFERENT user)
+    const existingUsername = await storage.getUserByUsername(username);
+    if (existingUsername && existingUsername.id !== user.id) {
+      res.status(400).json({ error: 'Username already taken' });
+      return;
+    }
+
+    // Verify session or OTP code
+    let isAuthorized = false;
+    
+    if (req.session?.userId === user.id) {
+      isAuthorized = true;
+    } else if (otp) {
+      // Session lost/not established yet, verify OTP
+      const verifyResult = await twilioEmailOTP.verifySignupOTP(normalizedEmail, otp);
+      if (verifyResult.success) {
+        isAuthorized = true;
+        
+        // Log them in (regenerate session and set userId)
+        await new Promise<void>((resolve, reject) => {
+          req.session.regenerate((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        
+        req.session.userId = user.id;
+        req.session.email = normalizedEmail;
+        req.session.isAdmin = false;
+        if (req.session.cookie) {
+          req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+        }
+        
+        if (!req.sessionStore) {
+          throw new Error('Internal session error: Store unavailable');
+        }
+        
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      } else {
+        res.status(400).json({ error: verifyResult.error || 'Invalid or expired verification code' });
+        return;
+      }
+    } else {
+      res.status(401).json({ error: 'Not authenticated. Session expired.' });
+      return;
+    }
+
+    if (!isAuthorized) {
+      res.status(401).json({ error: 'Authentication failed' });
+      return;
+    }
+
+    // Update user username
+    const updatedUser = await storage.updateUser(user.id, { username });
+    if (!updatedUser) {
+      res.status(404).json({ error: 'Failed to update user' });
+      return;
+    }
+
+    console.log(`✅ [Signup Complete] Username set to "${username}" for user ${user.id}`);
+
+    res.json({
+      success: true,
+      message: 'Account setup complete',
+      user: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        username: updatedUser.username,
+        plan: updatedUser.plan,
+        role: updatedUser.role || 'member',
+      },
+    });
+
+  } catch (error: unknown) {
+    console.error('Signup complete error:', error);
+    res.status(500).json({ error: 'Failed to complete signup' });
+  }
+});
+
 router.post('/login', authLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body as { email?: string; password?: string };

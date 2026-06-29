@@ -16,6 +16,7 @@ import { smtpSender } from '../lib/smtp-sender.js';
 import { imapStealth } from '../lib/imap-stealth.js';
 import { warmupInboundQueue } from '../queues/warmup-queues.js';
 import { seedFleetManager } from '../engine/seed-fleet-manager.js';
+import { reputationRecovery } from '../engine/reputation-recovery.js';
 
 export function createOutboundWorker(): Worker {
   return new Worker(
@@ -58,11 +59,17 @@ export function createOutboundWorker(): Worker {
         dynamicLimit = integrationRow?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
       }
 
-      if (sender[0].dailySentCount >= dynamicLimit) {
-        await db
-          .update(warmupMailboxes)
-          .set({ status: 'paused', pauseReason: 'daily_limit_reached' })
-          .where(eq(warmupMailboxes.id, sender[0].id));
+      // Apply reputation recovery boost — dead IPs get higher warmup volume
+      const effectiveLimit = reputationRecovery.getEffectiveLimit(sender[0], dynamicLimit);
+
+      if (sender[0].dailySentCount >= effectiveLimit) {
+        // Don't pause mailboxes in recovery mode — let them keep warming
+        if (!reputationRecovery.isInRecovery(sender[0])) {
+          await db
+            .update(warmupMailboxes)
+            .set({ status: 'paused', pauseReason: 'daily_limit_reached' })
+            .where(eq(warmupMailboxes.id, sender[0].id));
+        }
         return;
       }
 
@@ -214,6 +221,14 @@ export function createOutboundWorker(): Worker {
         expungeSentSync(sender[0], messageId).catch((err: any) => {
           console.warn(`[Warmup][Outbound] Sent-folder expunge failed for ${messageId}:`, err.message);
         });
+      }
+
+      // Mark non-seed failures as bounced for reputation recovery tracking
+      if (!result.success && sender[0].anchorRole !== 'seed') {
+        await db
+          .update(warmupInteractions)
+          .set({ status: 'bounced', errorMessage: result.error || 'SMTP delivery failed' })
+          .where(eq(warmupInteractions.id, interaction.id));
       }
 
       if (!result.success && sender[0].anchorRole === 'seed') {

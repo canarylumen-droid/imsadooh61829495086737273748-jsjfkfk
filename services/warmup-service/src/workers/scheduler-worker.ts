@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db/warmup-db.js';
-import { eq, and, sql, isNotNull, inArray } from 'drizzle-orm';
+import { eq, and, or, sql, isNotNull, inArray } from 'drizzle-orm';
 import { warmupMailboxes, warmupThreads, integrations } from '@audnix/shared';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 import { enrollmentEngine } from '../engine/enrollment-engine.js';
@@ -15,6 +15,7 @@ import { seedFleetManager } from '../engine/seed-fleet-manager.js';
 import { pairingEngine } from '../lib/pairing-engine.js';
 import { threadManager } from '../lib/thread-manager.js';
 import { warmupInboundQueue } from '../queues/warmup-queues.js';
+import { reputationRecovery } from '../engine/reputation-recovery.js';
 
 export class WarmupScheduler {
   private intervals: NodeJS.Timeout[] = [];
@@ -55,6 +56,14 @@ export class WarmupScheduler {
       )
     );
 
+    // Every 5 min: reputation recovery scan — detects dead IPs and boosts warmup
+    this.intervals.push(
+      setInterval(
+        () => reputationRecovery.evaluateAll(),
+        WARMUP_CONFIG.RECOVERY_SCAN_INTERVAL_MS
+      )
+    );
+
     // Every 30 min: spam rescue sweep
     this.intervals.push(
       setInterval(() => {
@@ -88,6 +97,7 @@ export class WarmupScheduler {
     domainClusterEngine.scanAndCluster();
     anchorEngine.rebalanceAll();
     poolHealthMonitor.evaluate();
+    reputationRecovery.evaluateAll();
   }
 
   private scheduleNextReset() {
@@ -147,26 +157,33 @@ export class WarmupScheduler {
 
     for (const mb of allMailboxes) {
       const isSeed = mb.anchorRole === 'seed';
-      let dynamicLimit = mb.dailyLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      let dynamicLimit = mb.dailyLimit ?? (isSeed ? WARMUP_CONFIG.SEED_DAILY_LIMIT : WARMUP_CONFIG.DAILY_SENT_LIMIT);
       if (!isSeed && mb.integrationId) {
         dynamicLimit = mb.dailyLimit ?? limitMap.get(mb.integrationId) ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
       }
 
       // Check if mailbox has too many active threads
       const activeThreadCount = (mb.activeThreadIds || []).length;
-      if (activeThreadCount >= 3) continue; // Cap at 3 concurrent threads per mailbox
+      const maxThreads = reputationRecovery.getMaxThreadsForMailbox(mb);
+      if (activeThreadCount >= maxThreads) continue;
+
+      // Apply reputation recovery boost: if IP is dead/repairing, increase warmup volume
+      const effectiveDynamicLimit = reputationRecovery.getEffectiveLimit(mb, dynamicLimit);
 
       // Check daily sent cap against dynamic warmup limit
-      if (mb.dailySentCount >= dynamicLimit) {
-        await db
-          .update(warmupMailboxes)
-          .set({ status: 'paused', pauseReason: 'daily_limit_reached' })
-          .where(eq(warmupMailboxes.id, mb.id));
+      if (mb.dailySentCount >= effectiveDynamicLimit) {
+        // Don't pause recovery mailboxes — let them keep warming
+        if (!reputationRecovery.isInRecovery(mb)) {
+          await db
+            .update(warmupMailboxes)
+            .set({ status: 'paused', pauseReason: 'daily_limit_reached' })
+            .where(eq(warmupMailboxes.id, mb.id));
+        }
         continue;
       }
 
       // Check daily received cap (same limit for symmetry)
-      if (mb.dailyReceivedCount >= dynamicLimit) {
+      if (mb.dailyReceivedCount >= effectiveDynamicLimit) {
         await db
           .update(warmupMailboxes)
           .set({ status: 'paused', pauseReason: 'daily_received_limit_reached' })
@@ -209,9 +226,10 @@ export class WarmupScheduler {
       if (!recipient[0] || recipient[0].status !== 'active') continue;
 
       const recipientLimit = recipient[0].dailyLimit ?? limitMap.get(recipient[0].integrationId ?? '') ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      const effectiveRecipientLimit = reputationRecovery.getEffectiveLimit(recipient[0], recipientLimit);
       if (
-        recipient[0].dailySentCount >= recipientLimit ||
-        recipient[0].dailyReceivedCount >= recipientLimit
+        recipient[0].dailySentCount >= effectiveRecipientLimit ||
+        recipient[0].dailyReceivedCount >= effectiveRecipientLimit
       ) {
         continue;
       }
@@ -282,7 +300,15 @@ export class WarmupScheduler {
         dailyReceivedCount: 0,
         lastResetAt: new Date(),
       })
-      .where(eq(warmupMailboxes.status, 'active'));
+      .where(
+        or(
+          eq(warmupMailboxes.status, 'active'),
+          and(
+            eq(warmupMailboxes.status, 'paused'),
+            eq(warmupMailboxes.pauseReason, 'recovery_mode')
+          )
+        )
+      );
 
     const resumed = await db
       .update(warmupMailboxes)

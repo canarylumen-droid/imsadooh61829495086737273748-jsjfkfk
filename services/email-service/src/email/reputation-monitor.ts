@@ -237,17 +237,31 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     }
   }
 
-  // Enforce 10% warmup cap: warmup must not exceed 10% of total daily capacity
+  // ── Dead IP Revival: dynamic warmup cap ──────────────────────────────────
+  // When reputation is healthy, warmup stays conservative (10% of daily cap).
+  // When reputation is poor/critical, the cap is raised significantly so warmup
+  // can flood the ISP with natural engagement signals and ring the IP back to life.
+  // This directly enables the warmup-service reputation-recovery engine.
   const effectiveDailyLimit = mailbox.dailyLimit || 50;
-  const maxWarmupPct = Math.max(3, Math.ceil(effectiveDailyLimit * 0.1));
+  let warmupCapPct = 0.1;
+  if (score < 40) {
+    warmupCapPct = 0.6; // critical — aggressive recovery, up to 60%
+  } else if (score < 65) {
+    warmupCapPct = 0.5; // poor — elevated recovery, up to 50%
+  } else if (score < 85) {
+    warmupCapPct = 0.3; // cautious — moderate boost, up to 30%
+  }
+  const maxWarmupPct = Math.max(3, Math.ceil(effectiveDailyLimit * warmupCapPct));
   if (newWarmupLimit > maxWarmupPct) {
-    console.log(`📊 [Reputation Monitor] Mailbox ${mailbox.id} warmup capped at 10% of daily limit: ${newWarmupLimit} → ${maxWarmupPct}`);
+    console.log(`📊 [Reputation Monitor] Mailbox ${mailbox.id} warmup capped at ${Math.round(warmupCapPct * 100)}% of daily limit: ${newWarmupLimit} → ${maxWarmupPct}`);
     newWarmupLimit = maxWarmupPct;
   }
 
-  // Enforce 50-email safety ceiling: initial + warmup ≤ 50
-  if (newInitialLimit + newWarmupLimit > 50) {
-    const overflow = (newInitialLimit + newWarmupLimit) - 50;
+  // Enforce safety ceiling: initial + warmup ≤ 150 (raised from 50 to allow recovery)
+  // During aggressive recovery, we need headroom for warmup volume
+  const safetyCeiling = score < 40 ? 150 : score < 65 ? 100 : 50;
+  if (newInitialLimit + newWarmupLimit > safetyCeiling) {
+    const overflow = (newInitialLimit + newWarmupLimit) - safetyCeiling;
     newInitialLimit = Math.max(5, newInitialLimit - overflow);
   }
 
