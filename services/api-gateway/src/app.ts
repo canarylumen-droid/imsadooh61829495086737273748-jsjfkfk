@@ -7,6 +7,7 @@ import { securityHeaders } from "@services/api-gateway/src/middleware/security-h
 import { pool } from "@shared/lib/db/db.js";
 import hpp from "hpp";
 import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { doubleCsrf } from "csrf-csrf";
 
 function log(message: string, source = "express") {
@@ -197,6 +198,8 @@ export function createApp() {
     .flat()
     .filter(Boolean) as string[];
 
+  app.use(cookieParser());
+
   const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
     getSecret: () => process.env.CSRF_SECRET || process.env.SESSION_SECRET || 'fallback-secret',
     getSessionIdentifier: (req) => req.session?.userId || req.ip || 'anonymous',
@@ -247,7 +250,10 @@ export function createApp() {
     next();
   });
 
-  app.use(doubleCsrfProtection);
+  app.use((req, res, next) => {
+    if (skipPaths.some(p => req.path.startsWith(p))) return next();
+    doubleCsrfProtection(req, res, next);
+  });
 
   app.get("/api/csrf-token", (req, res) => {
     const token = generateCsrfToken(req, res);
