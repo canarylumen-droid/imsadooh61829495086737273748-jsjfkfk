@@ -127,8 +127,23 @@ class QuotaService {
    * Returns a standard middleware that blocks requests if restricted.
    */
   public getSentinelMiddleware() {
+    // Auth paths that must always be reachable regardless of quota status.
+    // These are critical for user access and don't contribute to quota exhaustion.
+    const AUTH_BYPASS_PATHS = [
+      '/api/user/auth',
+      '/api/auth',
+      '/health',
+      '/api/health',
+    ];
+
     return (req: any, res: any, next: any) => {
       if (this.isRestricted()) {
+        // Always allow auth-related requests through so users can log in
+        const isAuthPath = AUTH_BYPASS_PATHS.some(p => req.path?.startsWith(p));
+        if (isAuthPath) {
+          return next();
+        }
+
         const remaining = Math.round(this.getRemainingCooldownMs() / 1000);
         return res.status(503).json({
           error: "Service Temporarily Unavailable",

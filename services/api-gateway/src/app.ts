@@ -127,13 +127,18 @@ export function createApp() {
   });
 
   app.use((req, res, next) => {
-    res.setTimeout(30000, () => {
+    // Auth/signup routes get a longer timeout — bcrypt + session save under DB load
+    // can legitimately take >30s on cold-start Railway deployments.
+    const isAuthRoute = req.path.startsWith('/api/user/auth') || req.path.startsWith('/api/auth');
+    const timeoutMs = isAuthRoute ? 60000 : 30000;
+
+    res.setTimeout(timeoutMs, () => {
       if (!res.headersSent) {
-        console.warn(`[TIMEOUT] ${req.method} ${req.path} timed out after 30s`);
+        console.warn(`[TIMEOUT] ${req.method} ${req.path} timed out after ${timeoutMs / 1000}s`);
         res.status(503).json({
-          error: "Service Temporarily Unavailable",
-          message: "The request took too long to complete. This may be due to high system load or slow provider response.",
-          code: "GATEWAY_TIMEOUT"
+          error: "Request Timeout",
+          message: "The request took too long to complete. Please try again.",
+          code: "REQUEST_TIMEOUT"
         });
       }
     });

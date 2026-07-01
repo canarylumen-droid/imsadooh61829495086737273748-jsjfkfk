@@ -581,7 +581,17 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
       return;
     }
 
-    const user = await storage.getUserByEmail(email);
+    let user;
+    try {
+      user = await storage.getUserByEmail(email);
+    } catch (dbError: any) {
+      console.error('❌ [Login] DB error looking up user:', dbError?.message);
+      res.status(503).json({
+        error: 'Service temporarily unavailable',
+        details: 'Database is temporarily busy — please try again in a moment'
+      });
+      return;
+    }
 
     if (!user || !user.password) {
       console.log(`❌ Login failed: User not found or no password for ${email}`);
@@ -645,18 +655,9 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
       });
     });
 
-    // Auto-update unread status or lead counts on login
-    try {
-      const userLeads = await storage.getLeads({ userId: user.id });
-      const unreadCount = userLeads.filter(l => (l.metadata as any)?.isUnread).length;
-      console.log(`📊 User ${email} has ${unreadCount} unread leads`);
-    } catch (e) {
-      console.error('Error fetching leads on login:', e);
-    }
-
-    // Add delay to ensure session is committed to PostgreSQL before client makes follow-up requests.
-    // Increased to 500ms for high-latency Railway multi-replica environments.
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Small delay to allow the session record to propagate across DB replicas
+    // before the client makes follow-up /api/user/profile requests.
+    await new Promise(resolve => setTimeout(resolve, 150));
 
     // Final safety check - verify session still has userId after save
     console.log(`[Login] Pre-response session check: userId=${req.session.userId}, SID=${req.sessionID}`);

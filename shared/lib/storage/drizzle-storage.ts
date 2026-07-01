@@ -157,7 +157,7 @@ export class DrizzleStorage implements IStorage {
       return result[0];
     } catch (error) {
       console.error("Error in getUserByEmail:", { email, error });
-      return undefined;
+      throw error;
     }
   }
 
