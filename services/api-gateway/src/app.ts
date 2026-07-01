@@ -7,8 +7,7 @@ import { securityHeaders } from "@services/api-gateway/src/middleware/security-h
 import { pool } from "@shared/lib/db/db.js";
 import hpp from "hpp";
 import helmet from "helmet";
-import cookieParser from "cookie-parser";
-import { doubleCsrf } from "csrf-csrf";
+
 
 function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -203,43 +202,6 @@ export function createApp() {
     .flat()
     .filter(Boolean) as string[];
 
-  app.use(cookieParser());
-
-  const { doubleCsrfProtection, generateCsrfToken } = doubleCsrf({
-    getSecret: () => process.env.CSRF_SECRET || process.env.SESSION_SECRET || 'fallback-secret',
-    getSessionIdentifier: (req) => req.session?.userId || req.ip || 'anonymous',
-    cookieName: "XSRF-TOKEN",
-    cookieOptions: {
-      sameSite: "strict",
-      path: "/",
-      secure: process.env.NODE_ENV === "production",
-    },
-    size: 64,
-    getCsrfTokenFromRequest: (req) => req.headers["x-csrf-token"] as string,
-    ignoredMethods: ["GET", "HEAD", "OPTIONS"],
-  });
-
-  const skipPaths = [
-    "/index.html", "/assets", "/api/webhooks", "/api/webhook",
-    "/api/instagram/callback", "/api/instagram/webhook", "/api/outreach",
-    "/api/facebook/webhook", "/api/user/auth", "/api/auth",
-    "/api/auth/login", "/api/auth/signup", "/api/auth/register",
-    "/api/auth/check", "/api/auth/me", "/api/auth/logout",
-    "/api/user/auth/login", "/api/user/auth/signup", "/api/user/auth/register",
-    "/api/user/auth/check", "/api/custom-email", "/api/brand-pdf",
-    "/api/pdf/upload", "/api/prospecting", "/api/user/avatar",
-    "/api/user/profile", "/api/video", "/api/expert-chat",
-    "/auth/instagram", "/api/health", "/api/automation/content",
-    "/api/video-automation", "/api/prospecting/v2",
-    "/api/oauth/instagram/callback", "/api/oauth/instagram/webhook",
-    "/api/oauth/facebook/webhook", "/api/oauth/gmail/callback",
-    "/api/oauth/google-redirect/gmail/callback",
-    "/api/oauth/google-calendar/callback", "/api/oauth/google/callback",
-    "/api/oauth/calendly/callback", "/api/oauth/outlook/callback",
-    "/api/messages", "/api/notifications", "/api/dns/verify",
-    "/api/leads", "/api/bulk",
-  ];
-
   app.use((req, res, next) => {
     if (process.env.NODE_ENV !== 'production') return next();
     const origin = req.headers.origin;
@@ -247,22 +209,11 @@ export function createApp() {
     const isAllowed = ALLOWED_ORIGINS.some(allowed =>
       origin === allowed || origin.endsWith(allowed)
     );
-    const isSkip = skipPaths.some(p => req.path.startsWith(p));
-    if (!isAllowed && !isSkip) {
+    if (!isAllowed) {
       res.status(403).json({ error: 'Forbidden' });
       return;
     }
     next();
-  });
-
-  app.use((req, res, next) => {
-    if (skipPaths.some(p => req.path.startsWith(p))) return next();
-    doubleCsrfProtection(req, res, next);
-  });
-
-  app.get("/api/csrf-token", (req, res) => {
-    const token = generateCsrfToken(req, res);
-    res.json({ csrfToken: token });
   });
 
   app.use((req, res, next) => {
@@ -286,7 +237,7 @@ export function createApp() {
     );
     res.setHeader(
       "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-CSRF-Token, X-Requested-With",
+      "Content-Type, Authorization, X-Requested-With",
     );
     res.setHeader("Access-Control-Max-Age", "86400");
     if (req.method === "OPTIONS") return res.sendStatus(204);
