@@ -6,7 +6,7 @@
 import { db } from '../db/warmup-db.js';
 import { eq, and, or, sql, isNotNull, inArray } from 'drizzle-orm';
 import { warmupMailboxes, warmupThreads, integrations } from '@audnix/shared';
-import { WARMUP_CONFIG } from '../config/warmup-config.js';
+import { WARMUP_CONFIG, getRampLimit } from '../config/warmup-config.js';
 import { enrollmentEngine } from '../engine/enrollment-engine.js';
 import { poolHealthMonitor } from '../engine/pool-health-monitor.js';
 import { domainClusterEngine } from '../engine/domain-cluster.js';
@@ -160,6 +160,11 @@ export class WarmupScheduler {
       let dynamicLimit = mb.dailyLimit ?? (isSeed ? WARMUP_CONFIG.SEED_DAILY_LIMIT : WARMUP_CONFIG.DAILY_SENT_LIMIT);
       if (!isSeed && mb.integrationId) {
         dynamicLimit = mb.dailyLimit ?? limitMap.get(mb.integrationId) ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      }
+
+      // Apply ramp schedule for non-seed mailboxes (gradual volume increase)
+      if (!isSeed) {
+        dynamicLimit = getRampLimit(mb.createdAt, dynamicLimit);
       }
 
       // Check if mailbox has too many active threads

@@ -127,10 +127,11 @@ export default function LeadImportPage() {
         // Map dynamic lead data if available
         if (importResults?.leads?.[0]) {
           const lead = importResults.leads[0];
+          const previewName = lead.name && lead.name !== 'Unknown' ? lead.name : 'there';
           setPreviewData(prev => ({
             ...prev,
             body: prev.body
-              .replace(/\[Name\]/g, lead.name || "there")
+              .replace(/\[Name\]/g, previewName)
               .replace(/\[Company\]/g, lead.company || "your team")
           }));
         }

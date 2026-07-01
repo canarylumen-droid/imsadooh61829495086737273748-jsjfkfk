@@ -176,6 +176,17 @@ async function startEmailService() {
     }
   }, PROVIDER_REPUTATION_INTERVAL);
 
+  // ── Unified Reputation Manager (every 15 minutes) ───────────────────────
+  const { ReputationManager } = await import('@shared/lib/monitoring/reputation-manager.js');
+  const reputationManager = ReputationManager.getInstance();
+  setInterval(async () => {
+    try {
+      await reputationManager.calculateReputationForAll();
+    } catch (err: any) {
+      log.error('[ReputationManager] Tick error', { error: err.message });
+    }
+  }, 15 * 60 * 1000);
+
   // ── Provider Daily Counter Reset (every hour check for midnight crossing) ─
   setInterval(async () => {
     try {

@@ -58,14 +58,14 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
                 const parsed = JSON.parse(saved);
                 setCampaignName(parsed.campaignName || "");
                 setSubject(parsed.subject || "Quick question about {{company}}");
-                setBody(parsed.body || `Hi {{firstName}},\n\nI came across {{company}} and was impressed by what you're building.\n\nWe help companies like yours scale their outreach and close more deals with AI-powered automation.\n\nWould you be open to a quick chat this week?\n\nBest,\n[Your Name]`);
+                setBody(parsed.body || `Hi {{firstName}},\n\nI came across {{company}} and was impressed by what you're building.\n\nWe help companies like yours scale their outreach and close more deals with AI-powered automation.\n\nWould you be open to a quick chat this week?\n\nBest,`);
                 setFollowUpSubject(parsed.followUpSubject || "Re: {{subject}}");
-                setFollowUpBody(parsed.followUpBody || `Hi {{firstName}},\n\nJust wanted to follow up on my previous email. I know you're busy, but I'd love to connect if you have a few minutes.\n\nLet me know if this week works?\n\nBest,\n[Your Name]`);
+                setFollowUpBody(parsed.followUpBody || `Hi {{firstName}},\n\nJust wanted to follow up on my previous email. I know you're busy, but I'd love to connect if you have a few minutes.\n\nLet me know if this week works?\n\nBest,`);
                 setFollowUpSubject2(parsed.followUpSubject2 || "Re: {{subject}}");
-                setFollowUpBody2(parsed.followUpBody2 || `Hi {{firstName}},\n\nI know you're busy, so I'll stop pestering you. Here is a link to our site if you ever need us.\n\nBest,\n[Your Name]`);
-                setDailyLimit(parsed.dailyLimit || 50);
+                setFollowUpBody2(parsed.followUpBody2 || `Hi {{firstName}},\n\nI know you're busy, so I'll stop pestering you. Here is a link to our site if you ever need us.\n\nBest,`);
+                setDailyLimit(parsed.dailyLimit ?? 50);
                 setFollowUpDays(parsed.followUpDays || "3");
-                setAutoReplyBody(parsed.autoReplyBody || `Hi {{firstName}},\n\nThanks for getting back to me! I'm currently in a few meetings but saw your message. \n\nI'll take a look and get back to you with a proper response in just a bit. \n\nIn the meantime, feel free to check out our site if you have any questions!\n\nBest,\n[Your Name]`);
+                setAutoReplyBody(parsed.autoReplyBody || `Hi {{firstName}},\n\nThanks for getting back to me! I'm currently in a few meetings but saw your message. \n\nI'll take a look and get back to you with a proper response in just a bit. \n\nIn the meantime, feel free to check out our site if you have any questions!\n\nBest,`);
             } catch (e) {
                 console.error("Failed to load draft", e);
             }
@@ -73,12 +73,12 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
             // Defaults if nothing saved
             setCampaignName("");
             setSubject("Quick question about {{company}}");
-            setBody(`Hi {{firstName}},\n\nI came across {{company}} and was impressed by what you're building.\n\nWe help companies like yours scale their outreach and close more deals with AI-powered automation.\n\nWould you be open to a quick chat this week?\n\nBest,\n[Your Name]`);
+            setBody(`Hi {{firstName}},\n\nI came across {{company}} and was impressed by what you're building.\n\nWe help companies like yours scale their outreach and close more deals with AI-powered automation.\n\nWould you be open to a quick chat this week?\n\nBest,`);
             setFollowUpSubject("Re: {{subject}}");
-            setFollowUpBody(`Hi {{firstName}},\n\nJust wanted to follow up on my previous email. I know you're busy, but I'd love to connect if you have a few minutes.\n\nLet me know if this week works?\n\nBest,\n[Your Name]`);
+            setFollowUpBody(`Hi {{firstName}},\n\nJust wanted to follow up on my previous email. I know you're busy, but I'd love to connect if you have a few minutes.\n\nLet me know if this week works?\n\nBest,`);
             setFollowUpSubject2("Re: {{subject}}");
-            setFollowUpBody2(`Hi {{firstName}},\n\nI know you're busy, so I'll stop pestering you. Here is a link to our site if you ever need us.\n\nBest,\n[Your Name]`);
-            setAutoReplyBody(`Hi {{firstName}},\n\nThanks for getting back to me! I'm currently in a few meetings but saw your message. \n\nI'll take a look and get back to you with a proper response in just a bit. \n\nIn the meantime, feel free to check out our site if you have any questions!\n\nBest,\n[Your Name]`);
+            setFollowUpBody2(`Hi {{firstName}},\n\nI know you're busy, so I'll stop pestering you. Here is a link to our site if you ever need us.\n\nBest,`);
+            setAutoReplyBody(`Hi {{firstName}},\n\nThanks for getting back to me! I'm currently in a few meetings but saw your message. \n\nI'll take a look and get back to you with a proper response in just a bit. \n\nIn the meantime, feel free to check out our site if you have any questions!\n\nBest,`);
         }
     }, []);
 

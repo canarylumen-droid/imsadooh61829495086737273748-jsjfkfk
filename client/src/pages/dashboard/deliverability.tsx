@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MetricsGrid, useMetricsStream } from '@/components/dashboard/MetricsGrid';
+import { useUser } from '@/hooks/use-user';
 import { MailboxCard } from '@/components/mailboxes/MailboxCard';
 import { PageWrapper } from '@/components/ui/page-wrapper';
 import { Button } from '@/components/ui/button';
@@ -34,7 +35,8 @@ export default function DeliverabilityPage() {
   });
 
   // Use SSE streaming for real-time metrics
-  const { data: metrics, loading: metricsLoading } = useMetricsStream('current-user-id');
+  const { data: user } = useUser();
+  const { data: metrics, loading: metricsLoading } = useMetricsStream(user?.id || '');
 
   const handleRefresh = () => {
     refetchMailboxes();
@@ -75,19 +77,19 @@ export default function DeliverabilityPage() {
       {/* Metrics Grid - Consolidated KPIs */}
       <MetricsGrid
         data={metrics || {
-          deliverabilityScore: 85,
-          bounceRate: 2.1,
-          spamRate: 1.8,
+          deliverabilityScore: mailboxes?.length ? 0 : 100,
+          bounceRate: 0,
+          spamRate: 0,
           activeMailboxes: mailboxes?.length || 0,
-          dailyVolume: 1250,
+          dailyVolume: 0,
           trends: {
-            deliverability: 5.2,
-            bounceRate: -0.3,
-            spamRate: -0.5,
-            volume: 12.5,
+            deliverability: 0,
+            bounceRate: 0,
+            spamRate: 0,
+            volume: 0,
           },
         }}
-        loading={metricsLoading}
+        loading={metricsLoading || !user}
       />
 
       {/* Mailboxes Grid - Using new MailboxCard component */}

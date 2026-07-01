@@ -23,12 +23,42 @@ export class SpamTrapDetector {
     'contact', 'sales', 'support', 'office'
   ];
 
-  // Domains known for hosting spam traps or disposable emails
-  private static readonly DISPOSABLE_DOMAINS = [
-    'mailinator.com', 'guerrillamail.com', 'temp-mail.org', 
+  private static readonly DISPOSABLE_DOMAINS = new Set([
+    'mailinator.com', 'guerrillamail.com', 'temp-mail.org',
     '10minutemail.com', 'spamhero.com', 'hushmail.com',
-    'getnada.com', 'dispostable.com', 'tempmail.com', 'yopmail.com'
-  ];
+    'getnada.com', 'dispostable.com', 'tempmail.com', 'yopmail.com',
+    'maildrop.cc', 'trashmail.com', 'throwaway.email', 'burnermail.io',
+    'tempemail.co', 'spambox.us', 'mailexpire.com', 'mailsac.com',
+    'yopmail.fr', 'yopmail.net', 'jetable.org', 'casualdx.com',
+    'filzmail.com', 'maileater.com', 'mailexpire.com', 'mailmoat.com',
+    'mintemail.com', 'mytrashmail.com', 'nepwk.com', 'nullbox.info',
+    'oneoffemail.com', 'oneoffmail.com', 'paypermail.com', 'quickmail.in',
+    'rcpt.at', 'rejectmail.com', 'schafmail.de', 'sendspamhere.com',
+    'sharpmail.co.uk', 'sneakemail.com', 'spam4.me', 'spambob.com',
+    'spambog.com', 'spambox.info', 'spamcannon.com', 'spamdecoy.net',
+    'spameater.org', 'spamfree24.org', 'spamgoes.in', 'spamherelots.com',
+    'spamhereplease.com', 'spamhole.com', 'spamify.com', 'spaminator.de',
+    'spamkill.info', 'spaml.com', 'spamlot.net', 'spammotel.com',
+    'spamobox.com', 'spamsalad.com', 'spamserver.info', 'spamslicer.com',
+    'spamsphere.com', 'spamspot.com', 'spamstack.net', 'spamthis.co.uk',
+    'spamtrail.com', 'spamwc.de', 'spamx.net', 'speed.1s.fr',
+    'supergreatmail.com', 'temporaryemail.net', 'thanksnospam.info',
+    'thankyou2010.com', 'thc.st', 'thetrash.email', 'trash2009.com',
+    'trashdevil.de', 'trashymail.com', 'tyldd.com', 'uggsrock.com',
+    'wegwerfmail.de', 'wh4f.org', 'whyspam.me', 'willselfdestruct.com',
+    'winemaven.info', 'wronghead.com', 'xagloo.com', 'xemaps.com',
+    'xents.com', 'xmaily.com', 'xoxy.net', 'yep.it', 'yogamaven.com',
+    'yopmail.fr', 'ypmail.webarnak.fr.eu.org', 'yuurok.com',
+    'zehnminutenmail.de', 'zippymail.info', 'zoaxe.com', 'zoemail.org',
+    'spamgourmet.com', 'inboxbear.com', 'emailondeck.com', 'mohmal.com',
+    'sharklasers.com', 'guerrillamail.org', 'guerrillamail.biz',
+  ]);
+
+  // Known spam trap domains operated by tracking organizations
+  private static readonly TRAP_DOMAINS = new Set([
+    'spamtrap.com', 'spamtraps.org', 'projecthoneypot.org',
+    'spamcop.net', 'sorbs.net', 'psbl.org',
+  ]);
 
   /**
    * Deterministic scan for known trap patterns and disposable domains.
@@ -41,30 +71,37 @@ export class SpamTrapDetector {
     const reasons: string[] = [];
     let isDisposable = false;
 
-    // Check prefixes
     if (this.SUSPICIOUS_PREFIXES.includes(prefix)) {
-      score += 40;
+      score += 30;
       reasons.push(`Suspicious prefix: ${prefix}`);
     }
 
-    // Check domains
-    if (this.DISPOSABLE_DOMAINS.includes(domain)) {
+    if (this.TRAP_DOMAINS.has(domain)) {
+      score += 100;
+      reasons.push(`Known spam trap domain: ${domain}`);
+      return { isTrap: true, score: 100, reason: reasons.join(', '), isDisposable: false };
+    }
+
+    if (this.DISPOSABLE_DOMAINS.has(domain)) {
       score += 90;
       isDisposable = true;
       reasons.push(`Known disposable domain: ${domain}`);
     }
 
-    // Check for "random string" prefixes (e.g. asdfghjkl@...)
     const entropy = this.calculateEntropy(prefix);
-    if (entropy > 3.8 && prefix.length > 8 && !prefix.includes('.') && !prefix.includes('_')) {
-      score += 60;
-      reasons.push(`High entropy prefix (${entropy.toFixed(2)}) - likely machine generated trap`);
+    if (entropy > 4.5 && prefix.length > 10 && !prefix.includes('.') && !prefix.includes('-')) {
+      score += 40;
+      reasons.push(`High entropy prefix (${entropy.toFixed(2)})`);
     }
 
-    // [PHASE 120] GIBBERISH PATTERN: Detect bot-style alphanumeric suffixes (e.g. mike8273@...)
-    if (/^[a-z]{3,}\d{4,}$/.test(prefix)) {
-      score += 30;
-      reasons.push('Matches bot-style numeric suffix pattern');
+    if (/^[a-z]{4,}\d{4,}$/.test(prefix)) {
+      score += 20;
+      reasons.push('Alphanumeric suffix pattern');
+    }
+
+    if (domain.includes('temporary') || domain.includes('tempm') || domain.includes('disposable')) {
+      score += 50;
+      reasons.push(`Suspicious domain name: ${domain}`);
     }
 
     return { 

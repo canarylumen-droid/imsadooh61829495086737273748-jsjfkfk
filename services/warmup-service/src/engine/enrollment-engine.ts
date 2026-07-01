@@ -1,5 +1,5 @@
 import { db } from '../db/warmup-db.js';
-import { eq, and, not, inArray, isNull } from 'drizzle-orm';
+import { eq, and, or, not, inArray, isNull, gte } from 'drizzle-orm';
 import {
   integrations,
   users,
@@ -113,7 +113,12 @@ export class EnrollmentEngine {
         and(
           inArray(integrations.provider, ALLOWED_PROVIDERS as any),
           eq(integrations.connected, true),
-          not(inArray(integrations.healthStatus, BLOCKED_HEALTH as any))
+          not(inArray(integrations.healthStatus, BLOCKED_HEALTH as any)),
+          // Reputation pre-check: skip domains with critically low reputation
+          or(
+            gte(integrations.reputationScore, 20),
+            isNull(integrations.reputationScore)
+          )
         )
       );
 

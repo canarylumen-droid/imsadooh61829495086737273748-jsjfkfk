@@ -355,6 +355,8 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
         if (mappingResult.unmappedColumns.length > 0) {
           metadata._unmapped_cols = mappingResult.unmappedColumns.join(',');
         }
+        if ((basicLead as any).niche) metadata.niche = (basicLead as any).niche;
+        if ((basicLead as any).city) metadata.city = (basicLead as any).city;
         return { ...basicLead, replyEmail: basicLead.replyEmail || basicLead.email || null, metadata };
       }).filter(l => l !== null);
 
@@ -399,6 +401,8 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
         if (mappingResult.unmappedColumns.length > 0) {
           metadata._unmapped_cols = mappingResult.unmappedColumns.join(',');
         }
+        if ((basicLead as any).niche) metadata.niche = (basicLead as any).niche;
+        if ((basicLead as any).city) metadata.city = (basicLead as any).city;
         return { ...basicLead, replyEmail: basicLead.replyEmail || basicLead.email || null, metadata };
       }).filter(l => l !== null);
 

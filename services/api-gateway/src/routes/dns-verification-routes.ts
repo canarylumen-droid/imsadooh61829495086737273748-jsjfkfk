@@ -9,6 +9,14 @@ const router = Router();
 
 const verificationCache = new Map<string, { result: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 500;
+function pruneCache() {
+  if (verificationCache.size > CACHE_MAX_ENTRIES) {
+    const entries = [...verificationCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toDelete = entries.slice(0, entries.length - CACHE_MAX_ENTRIES);
+    for (const [key] of toDelete) verificationCache.delete(key);
+  }
+}
 
 router.post('/verify', requireAuth, apiLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -43,6 +51,7 @@ router.post('/verify', requireAuth, apiLimiter, async (req: Request, res: Respon
 
     if (!force) {
       verificationCache.set(cacheKey, { result, timestamp: Date.now() });
+      pruneCache();
     }
 
     const userId = getCurrentUserId(req);
@@ -75,7 +84,11 @@ router.post('/verify', requireAuth, apiLimiter, async (req: Request, res: Respon
 
 router.get('/history', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = getCurrentUserId(req)!;
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
 
     const result = await db.execute(sql`
       SELECT domain, verification_result, created_at

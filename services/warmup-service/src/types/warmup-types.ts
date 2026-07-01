@@ -30,6 +30,7 @@ export interface ReputationState {
   warmupLimit: number;
   maxThreads: number;
   consecutiveCleanDays: number;
+  consecutiveCleanScans?: number;
   lastBounceAt: string | null;
   recoveryStartedAt: string | null;
   recoveryEscalatedAt: string | null;

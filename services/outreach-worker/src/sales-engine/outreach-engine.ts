@@ -3,11 +3,12 @@
  * Combines: Strategy, Message Rotation, Batch Scheduling, Deliverability
  */
 
-import { generateSendSchedule, optimizeForRevenue, estimateRevenue, ScheduledBatch, SendSchedule } from './batch-scheduler.js';
+import { generateSendSchedule, optimizeForRevenue, estimateRevenue, ScheduledBatch, SendSchedule, CampaignConfig } from './batch-scheduler.js';
 import { generateStrategicSequenceMessage, shouldRotateTemplate } from './message-rotator.js';
 import { rankLeadQuality } from './outreach-strategy.js';
 import type { MessageTemplate, MessageType } from './message-rotator.js';
 import type { Lead } from '@audnix/shared';
+import { calculateAveragePerDay, calculateProjectedDuration } from '@services/warmup-service/src/engine/predictive-timing.js';
 
 export interface OutreachCampaign {
   campaignId: string;
@@ -18,6 +19,7 @@ export interface OutreachCampaign {
   queuedSends: ScheduledBatch[];
   estimatedRevenue: number;
   status: 'draft' | 'scheduled' | 'active' | 'completed';
+  config: CampaignConfig;
   metrics: {
     totalSent: number;
     totalFailed: number;
@@ -54,14 +56,13 @@ export interface LeadOutreachState {
  */
 export async function createOutreachCampaign(
   leads: Array<{ id: string; email: string; name: string; company: string; data: Record<string, any> }>,
-  campaignName: string
+  campaignName: string,
+  campaignConfig?: CampaignConfig
 ): Promise<OutreachCampaign> {
   const campaignId = `campaign_${Date.now()}`;
 
-  // Segment leads by quality tier
   const leadsByQuality = segmentByQuality(leads);
 
-  // Generate base schedule with timezone awareness
   const leadTimezones: Record<string, string> = {};
   leads.forEach(l => {
     if (l.data?.timezone) {
@@ -69,13 +70,17 @@ export async function createOutreachCampaign(
     }
   });
 
-  const schedule = generateSendSchedule(leadsByQuality, new Date(), leadTimezones);
+  const schedule = generateSendSchedule(leadsByQuality, new Date(), leadTimezones, campaignConfig);
 
   // Optimize for revenue (reorder batches)
   const optimizedBatches = optimizeForRevenue(schedule);
 
   // Calculate estimated revenue
   const estimatedRevenue = estimateRevenue(schedule);
+
+  const dailyLimit = campaignConfig?.dailyLimit || 300;
+  const durationDays = campaignConfig?.durationDays || 0;
+  const avgPerDay = calculateAveragePerDay(leads.length, durationDays || calculateProjectedDuration(leads.length, dailyLimit));
 
   return {
     campaignId,
@@ -86,6 +91,7 @@ export async function createOutreachCampaign(
     queuedSends: optimizedBatches,
     estimatedRevenue,
     status: 'draft',
+    config: { dailyLimit, durationDays, ...campaignConfig },
     metrics: {
       totalSent: 0,
       totalFailed: 0,

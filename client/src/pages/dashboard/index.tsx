@@ -25,6 +25,9 @@ const ProspectingPage = lazy(() => import("./prospecting"));
 const LeadProfilePage = lazy(() => import("./lead-profile"));
 const PendingPaymentsPage = lazy(() => import("./pending-payments"));
 const LeadRecoveryPage = lazy(() => import("./lead-recovery"));
+const AIAnalyticsPage = lazy(() => import("./ai-analytics"));
+const DeliverabilityPage = lazy(() => import("./deliverability"));
+const BulkActionsPage = lazy(() => import("./bulk-actions"));
 
 export default function DashboardRoutes() {
   const [location] = useLocation();
@@ -58,6 +61,9 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/prospecting" component={ProspectingPage} />
           <Route path="/dashboard/pending-payments" component={PendingPaymentsPage} />
           <Route path="/dashboard/lead-recovery" component={LeadRecoveryPage} />
+          <Route path="/dashboard/ai-analytics" component={AIAnalyticsPage} />
+          <Route path="/dashboard/deliverability" component={DeliverabilityPage} />
+          <Route path="/dashboard/bulk-actions" component={BulkActionsPage} />
         </Switch>
       </Suspense>
     </DashboardLayout>

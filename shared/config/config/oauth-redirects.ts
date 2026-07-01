@@ -1,4 +1,4 @@
-export function getOAuthRedirectUrl(provider: 'gmail' | 'google-calendar' | 'outlook' | 'instagram' | 'calendly'): string {
+export function getOAuthRedirectUrl(provider: 'gmail' | 'google-calendar' | 'outlook' | 'instagram' | 'calendly' | 'postmaster'): string {
   const isProduction = process.env.NODE_ENV === 'production';
   const domain = process.env.DOMAIN || 'audnixai.com';
 

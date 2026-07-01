@@ -1,8 +1,3 @@
-/**
- * Batch Scheduler - Intelligent batching with randomization
- * Sends leads in human-like patterns to maximize deliverability
- */
-
 import {
   OUTREACH_STRATEGY,
   getRandomInterval,
@@ -11,13 +6,21 @@ import {
   rankLeadQuality,
   DELIVERABILITY_RULES,
 } from './outreach-strategy.js';
+import { generateSendDistribution, calculateAveragePerDay, getSendDelayFromWindow, analyzeSendTiming } from '@services/warmup-service/src/engine/predictive-timing.js';
+
+export interface CampaignConfig {
+  dailyLimit?: number;
+  durationDays?: number;
+  startTime?: Date;
+  mailboxLimits?: Record<string, number>;
+}
 
 export interface ScheduledBatch {
   batchId: string;
   segmentId: keyof typeof OUTREACH_STRATEGY;
-  leadIds: string[]; // Still keep leadIds but length will be 1 for 1-by-1
+  leadIds: string[];
   scheduledTime: Date;
-  intervalBetweenLeads: number; // For 1-by-1, this is the delay to next send
+  intervalBetweenLeads: number;
   status: 'pending' | 'sending' | 'completed' | 'failed';
   sentCount: number;
   failedCount: number;
@@ -25,20 +28,19 @@ export interface ScheduledBatch {
 
 export interface SendSchedule {
   totalLeads: number;
-  totalBatches: number; // Now represents total messages
+  totalBatches: number;
   segmentDistribution: Record<string, number>;
   estimatedCompletionDate: Date;
+  averagePerDay: number;
+  dailyBreakdown: Array<{ day: number; sends: number }>;
   batchSchedules: ScheduledBatch[];
 }
 
-/**
- * Generate 5-day send schedule across all segments
- * Optimized for: deliverability, humanization, revenue maximization
- */
 export function generateSendSchedule(
   leadsBySegment: Record<string, string[]>,
   startTime: Date = new Date(),
-  leadTimezones?: Record<string, string>
+  leadTimezones?: Record<string, string>,
+  campaignConfig?: CampaignConfig
 ): SendSchedule {
   const batchSchedules: ScheduledBatch[] = [];
   const segmentDistribution: Record<string, number> = {};
@@ -46,19 +48,19 @@ export function generateSendSchedule(
   let totalLeads = 0;
   const startDay = new Date(startTime);
 
-  // Align to next available business hour if currently in quiet hours
   if (startDay.getHours() >= 22 || startDay.getHours() < 7) {
     startDay.setHours(8, 0, 0, 0);
     if (startTime.getHours() >= 22) startDay.setDate(startDay.getDate() + 1);
   }
 
-  // Distribution settings for the campaign
-  const campaignDays = {
-    day1: 300,
-    day2: 400,
-    day3: 500,
-    standard: 500
-  };
+  const dailyLimit = campaignConfig?.dailyLimit || 300;
+  const durationDays = campaignConfig?.durationDays || 0;
+  const distribution = generateSendDistribution(
+    Object.values(leadsBySegment).reduce((sum, ids) => sum + ids.length, 0),
+    dailyLimit,
+    durationDays
+  );
+  const avgPerDay = calculateAveragePerDay(totalLeads, durationDays);
 
   // Process all leads into a 1-by-1 queue
   Object.entries(leadsBySegment).forEach(([segmentId, leadIds]) => {
@@ -73,17 +75,14 @@ export function generateSendSchedule(
     let dayIndex = 0;
 
     while (leadsRemaining.length > 0) {
-      // Determine daily limit for this day of the campaign
-      const dayKey = `day${dayIndex + 1}` as keyof typeof campaignDays;
-      const dailyLimit = campaignDays[dayKey] || campaignDays.standard;
+      const dayDistribution = distribution[dayIndex] || distribution[distribution.length - 1] || { sends: dailyLimit };
+      const todayLimit = dayDistribution.sends || dailyLimit;
 
-      // Calculate interval: 60 mins / (dailyLimit / 9 active hours)
-      // 9 AM to 6 PM = 9 hours
       const activeHoursPerDay = 9;
-      const leadsPerHour = dailyLimit / activeHoursPerDay;
+      const leadsPerHour = todayLimit / activeHoursPerDay;
       const intervalMinutes = 60 / leadsPerHour;
 
-      for (let i = 0; i < dailyLimit && leadsRemaining.length > 0; i++) {
+      for (let i = 0; i < todayLimit && leadsRemaining.length > 0; i++) {
         const leadId = leadsRemaining.shift();
         if (!leadId) break;
 
@@ -166,6 +165,8 @@ export function generateSendSchedule(
     totalBatches: sortedQueue.length,
     segmentDistribution,
     estimatedCompletionDate: sortedQueue.length > 0 ? sortedQueue[sortedQueue.length - 1].scheduledTime : new Date(),
+    averagePerDay: avgPerDay,
+    dailyBreakdown: distribution,
     batchSchedules: sortedQueue,
   };
 }

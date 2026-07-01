@@ -80,26 +80,15 @@ export class DNSValidationEngine {
    */
   private async validateSPF(domain: string): Promise<{ valid: boolean; record: string; error?: string }> {
     try {
-      const records = await dnsPromises.resolveTxt(`_spf1.${domain}`);
-      
-      if (records.length === 0) {
-        // Try direct domain SPF record
-        const directRecords = await dnsPromises.resolveTxt(domain).catch(() => []);
-        const spfRecord = directRecords.flat().join(' ');
-        
-        if (spfRecord.startsWith('v=spf1')) {
-          return { valid: true, record: spfRecord };
-        }
-        
-        return { valid: false, record: '', error: 'No SPF record found' };
+      // SPF records live on the domain's TXT records, not on _spf1.${domain}
+      const records = await dnsPromises.resolveTxt(domain);
+      const spfRecord = records.flat().find(r => r.startsWith('v=spf1'));
+
+      if (spfRecord) {
+        return { valid: true, record: spfRecord };
       }
 
-      const spfRecord = records.flat().join(' ');
-      if (!spfRecord.startsWith('v=spf1')) {
-        return { valid: false, record: spfRecord, error: 'Invalid SPF record format' };
-      }
-
-      return { valid: true, record: spfRecord };
+      return { valid: false, record: '', error: 'No SPF record found' };
     } catch (error) {
       return { valid: false, record: '', error: (error as Error).message };
     }

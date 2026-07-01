@@ -22,8 +22,7 @@ export const WARMUP_CONFIG = {
   MIN_REPLY_EXPECTATION_HOURS: 1,
   MAX_REPLY_EXPECTATION_HOURS: 4,
 
-  // IMAP stealth
-  HIDDEN_FOLDER_NAME: process.env.WARMUP_HIDDEN_FOLDER || '.Audnix-Warmup',
+  HIDDEN_FOLDER_NAME: process.env.WARMUP_HIDDEN_FOLDER || '.Warmup-Archive',
   IMAP_TIMEOUT_MS: parseInt(process.env.WARMUP_IMAP_TIMEOUT_MS || '15000', 10),
 
   // Scheduler intervals (ms)
@@ -39,13 +38,23 @@ export const WARMUP_CONFIG = {
   OUTBOUND_CONCURRENCY: parseInt(process.env.WARMUP_OUTBOUND_CONCURRENCY || '5', 10),
   INBOUND_CONCURRENCY: parseInt(process.env.WARMUP_INBOUND_CONCURRENCY || '5', 10),
 
-  // LLM
-  LLM_MAX_TOKENS: 200,
-  LLM_TEMPERATURE: 0.8,
-
   // Retry / backoff
   MAX_SEND_ATTEMPTS: 3,
   MAX_IMAP_ATTEMPTS: 3,
+
+  // Ramp schedule — percentage of final DAILY_SENT_LIMIT
+  // Gradually increase warmup volume to avoid ISP rate limiting and flagging.
+  // Day 1-2:  10%   (e.g. 2/day if limit=20)
+  // Day 3-5:  25%   (e.g. 5/day)
+  // Day 6-10: 50%   (e.g. 10/day)
+  // Day 11-14: 75%  (e.g. 15/day)
+  // Day 15+:  100%  (full limit)
+  RAMP_DAILY_PERCENTS: [
+    { maxDays: 2, percent: 0.10 },
+    { maxDays: 5, percent: 0.25 },
+    { maxDays: 10, percent: 0.50 },
+    { maxDays: 14, percent: 0.75 },
+  ] as const,
 
   // Domain clustering
   DOMAIN_CLUSTER_SCAN_INTERVAL_MS: parseInt(process.env.WARMUP_DOMAIN_SCAN_INTERVAL || '300000', 10),
@@ -109,4 +118,19 @@ export const WARMUP_CONFIG = {
   RECOVERY_MAX_THREADS_CRITICAL: parseInt(process.env.WARMUP_RECOVERY_THREADS_CRITICAL || '6', 10),
   RECOVERY_MAX_THREADS_POOR: parseInt(process.env.WARMUP_RECOVERY_THREADS_POOR || '5', 10),
   RECOVERY_MAX_THREADS_CAUTIOUS: parseInt(process.env.WARMUP_RECOVERY_THREADS_CAUTIOUS || '4', 10),
-} as const;
+};
+
+/**
+ * Get the warmup daily limit based on mailbox age (percentage-based ramp schedule)
+ * Gradually increases volume to avoid ISP rate limiting and flagging.
+ * Percentages of the final daily limit:
+ *   Day 1-2:  10%   Day 3-5:  25%   Day 6-10: 50%   Day 11-14: 75%   Day 15+: 100%
+ */
+export function getRampLimit(createdAt: Date | null | undefined, baseLimit: number): number {
+  if (!createdAt) return Math.max(1, Math.round(baseLimit * WARMUP_CONFIG.RAMP_DAILY_PERCENTS[0].percent));
+  const ageDays = (Date.now() - new Date(createdAt).getTime()) / (24 * 60 * 60 * 1000);
+  for (const stage of WARMUP_CONFIG.RAMP_DAILY_PERCENTS) {
+    if (ageDays <= stage.maxDays) return Math.max(1, Math.round(baseLimit * stage.percent));
+  }
+  return baseLimit;
+}

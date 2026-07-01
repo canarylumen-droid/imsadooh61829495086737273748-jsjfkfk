@@ -13,12 +13,54 @@ import type { WarmupMailbox } from '../types/warmup-types.js';
 const SUBJECT_TEMPLATES = [
   'Quick question about your workflow',
   'Following up on our last conversation',
-  'Just checking in — quick ask',
+  'Just checking in',
   'Thought you might find this useful',
   'Quick scheduling note',
   'Hey, wanted to run something by you',
   'Small follow-up from earlier',
   'Can I get your quick take on this?',
+  'Checking in on this',
+  'Circling back on this',
+  'A quick thought',
+  'Wanted to share something',
+  'What do you think about this?',
+  'A quick ask',
+  'Quick question for you',
+  'Looking for your input',
+  'Appreciate your perspective',
+  'Had a thought I wanted to share',
+  'Hope you are having a good week',
+  'Wanted to touch base',
+  'A quick note',
+  'Touching base on this',
+  'A few thoughts to share',
+  'Would love your feedback',
+  'Curious about your take',
+  'Hope this finds you well',
+  'Following up on a previous note',
+  'An idea I wanted to run by you',
+  'Have a quick minute?',
+  'Thinking about this more',
+  'A question for you',
+  'Wanted to see what you think',
+  'Small update on my end',
+  'Hope all is well',
+  'Been meaning to ask',
+  'A quick check-in',
+  'Revisiting an earlier idea',
+  'Just a friendly ping',
+  'Looking ahead to next steps',
+  'A quick thought on this',
+  'Had an idea I wanted to share',
+  'Here is an update',
+  'Quick heads up',
+  'A small favor to ask',
+  'Appreciate any guidance',
+  'Wanted to follow up properly',
+  'Hope your week is going well',
+  'A quick question on timing',
+  'Checking in on priorities',
+  'A thought on our last chat',
 ];
 
 export class ThreadManager {
@@ -133,7 +175,13 @@ export class ThreadManager {
   }
 
   generateMessageId(): string {
-    return `<${randomUUID()}@audnix-warmup.com>`;
+    const domains = [
+      'mail.example.com', 'correspondence.net', 'messages.local',
+      'outboundmail.com', 'post.delivery', 'mail-transfer.net',
+      'relaypost.org', 'dispatchmail.net',
+    ];
+    const domain = domains[Math.floor(Math.random() * domains.length)];
+    return `<${randomUUID()}@${domain}>`;
   }
 
   private randomBetween(min: number, max: number): number {

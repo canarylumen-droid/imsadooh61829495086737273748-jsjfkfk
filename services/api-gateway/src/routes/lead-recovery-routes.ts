@@ -42,7 +42,12 @@ function tenantIdFrom(req: Express.Request): string {
 }
 
 function renderTemplate(template: string, values: Record<string, string>): string {
-  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => values[key] || "");
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
+    if (!(key in values) || values[key] === "") {
+      console.warn(`[LeadRecovery] Unresolved template variable: {{${key}}}`);
+    }
+    return values[key] || "";
+  });
 }
 
 async function getMailboxDetails(tenantId: string) {

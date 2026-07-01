@@ -422,12 +422,28 @@ export class FollowUpWorker {
         aiReply = suggestedBody;
       } else if (customAutoReply) {
         // Basic template substitution
-        const firstName = lead.name.split(' ')[0] || 'there';
-        const company = (lead.metadata as any)?.company || 'your company';
+        const rawLeadName = lead.name?.trim();
+        const cleanName = rawLeadName === 'Unknown' ? undefined : rawLeadName;
+        const firstName = cleanName?.split(' ')[0] || 'there';
+        const lastName = cleanName?.split(' ').slice(1).join(' ') || 'there';
+        const fullName = cleanName || firstName;
+        const company = (lead as any).company?.trim() || (lead.metadata as any)?.company || 'your company';
+        const meta = (lead as any).metadata || {};
+        const city = meta.city || '';
+        const industry = meta.industry || '';
+        const niche = meta.niche || '';
+        const website = meta.website || '';
         aiReply = customAutoReply
           .replace(/{{firstName}}/g, firstName)
-          .replace(/{{name}}/g, lead.name)
-          .replace(/{{company}}/g, company);
+          .replace(/{{lastName}}/g, lastName)
+          .replace(/{{name}}/g, fullName)
+          .replace(/{{lead_name}}/g, fullName)
+          .replace(/{{company}}/g, company)
+          .replace(/{{business_name}}/g, company)
+          .replace(/{{city}}/g, city)
+          .replace(/{{industry}}/g, industry)
+          .replace(/{{niche}}/g, niche)
+          .replace(/{{website}}/g, website);
       } else if (isAutoReply || intent === 'payment' || intent === 'booking') {
         const { generateAIReply } = await import('./conversation-ai.js');
         let intentInstruction = "";

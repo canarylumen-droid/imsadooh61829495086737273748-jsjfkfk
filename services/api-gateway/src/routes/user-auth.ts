@@ -1139,33 +1139,6 @@ router.post('/notifications/:id/read', async (req: Request, res: Response): Prom
 });
 
 /**
- * POST /api/user/auth/metadata
- * Update current user's metadata JSON
-    const onboardingProfile = await storage.getOnboardingProfile(user.id);
-    if (onboardingProfile) {
-      await storage.updateOnboardingProfile(user.id, {
-        ...onboardingProfile,
-        completed: false,
-      });
-    }
-
-    // Destroy any existing sessions for this user
-    req.session.destroy(() => { });
-
-    console.log(`🔄 User account reset for: ${email}`);
-
-    res.json({
-      success: true,
-      message: 'Account reset. Please login with your email and password to continue.',
-      action: 'login',
-    });
-  } catch (error: unknown) {
-    console.error('Reset account error:', error);
-    res.status(500).json({ error: 'Failed to reset account' });
-  }
-});
-
-/**
  * GET /api/user/auth/me
  * Get current authenticated user
  */

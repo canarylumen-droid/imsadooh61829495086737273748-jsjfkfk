@@ -321,6 +321,8 @@ export const integrations = pgTable("integrations", {
   aiAutonomousMode: boolean("ai_autonomous_mode").notNull().default(false),
   reputationScore: integer("reputation_score").notNull().default(100),
   healthLevel: text("health_level", { enum: ["healthy", "cautious", "poor", "critical"] }).notNull().default("healthy"),
+  lastReputationCheck: timestamp("last_reputation_check"),
+  sourceOfScore: text("source_of_score", { enum: ["local", "postmaster", "fbl"] }),
   gracefulDailyLimit: integer("graceful_daily_limit"),
   warmupStatus: text("warmup_status", { enum: ["active", "paused", "completed", "none"] }).notNull().default("none"),
   syncMetadata: jsonb("sync_metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),

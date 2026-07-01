@@ -390,23 +390,33 @@ export class PairingEngine {
 
   private async batchCountActiveThreads(mailboxIds: string[]): Promise<Map<string, number>> {
     if (mailboxIds.length === 0) return new Map();
-    const result = await db
-      .select({
-        mailboxId: sql<string>`CASE WHEN ${warmupThreads.senderMailboxId} = ANY(ARRAY[${sql.join(mailboxIds.map(id => sql`${id}`), sql`, `)}]::uuid[]) THEN ${warmupThreads.senderMailboxId} ELSE ${warmupThreads.recipientMailboxId} END`,
-        count: sql<number>`count(*)`,
-      })
-      .from(warmupThreads)
-      .where(
-        and(
-          eq(warmupThreads.status, 'active'),
-          sql`(${warmupThreads.senderMailboxId} = ANY(ARRAY[${sql.join(mailboxIds.map(id => sql`${id}`), sql`, `)}]::uuid[]) OR ${warmupThreads.recipientMailboxId} = ANY(ARRAY[${sql.join(mailboxIds.map(id => sql`${id}`), sql`, `)}]::uuid[]))`
-        )
+    const uuidArr = sql.join(mailboxIds.map(id => sql`${id}::uuid`), sql`, `);
+    const result = await db.execute(sql`
+      WITH mailbox_ids AS (
+        SELECT unnest(ARRAY[${uuidArr}]) AS mid
+      ),
+      thread_counts AS (
+        SELECT t.sender_mailbox_id AS mb_id, COUNT(*) AS cnt
+        FROM warmup_threads t
+        WHERE t.status = 'active'
+        AND t.sender_mailbox_id = ANY(ARRAY[${uuidArr}])
+        GROUP BY t.sender_mailbox_id
+        UNION ALL
+        SELECT t.recipient_mailbox_id AS mb_id, COUNT(*) AS cnt
+        FROM warmup_threads t
+        WHERE t.status = 'active'
+        AND t.recipient_mailbox_id = ANY(ARRAY[${uuidArr}])
+        GROUP BY t.recipient_mailbox_id
       )
-      .groupBy(sql`1`);
+      SELECT m.mid AS mailbox_id, COALESCE(SUM(t.cnt), 0) AS count
+      FROM mailbox_ids m
+      LEFT JOIN thread_counts t ON t.mb_id = m.mid
+      GROUP BY m.mid
+    `);
 
     const map = new Map<string, number>();
-    for (const row of result) {
-      map.set(row.mailboxId, row.count);
+    for (const row of result.rows) {
+      map.set(String(row.mailbox_id), Number(row.count));
     }
     return map;
   }

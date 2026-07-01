@@ -99,13 +99,14 @@ export class TwilioEmailOTP {
 
   async verifyEmailOTP(email: string, otp: string): Promise<OTPVerificationResult> {
     try {
-      // Bypass for development/emergency (SendGrid down)
-      if (otp === '000000') {
-        console.log(`ℹ️ [OTP Bypass] Emergency bypass code '000000' used for ${email}`);
+      const normalizedEmail = email.toLowerCase();
+
+      // SECURITY: Emergency bypass only when BYPASS_OTP_CODE env is set and matches
+      const bypassCode = process.env.BYPASS_OTP_CODE;
+      if (bypassCode && otp === bypassCode) {
+        console.log(`ℹ️ [OTP Bypass] Emergency bypass code used for ${email}`);
         return { success: true };
       }
-
-      const normalizedEmail = email.toLowerCase();
 
       // Get latest OTP from database
       const otpRecord = await storage.getLatestOtpCode(normalizedEmail);
@@ -245,9 +246,10 @@ export class TwilioEmailOTP {
         return { success: false, error: 'Signup OTP not found. Please start signup again.' };
       }
 
-      // Bypass for development/emergency (SendGrid down)
-      if (otp === '000000') {
-        console.log(`ℹ️ [OTP Bypass] Emergency signup bypass '000000' used for ${normalizedEmail}`);
+      // SECURITY: Emergency bypass only when BYPASS_OTP_CODE env is set and matches
+      const bypassCode = process.env.BYPASS_OTP_CODE;
+      if (bypassCode && otp === bypassCode) {
+        console.log(`ℹ️ [OTP Bypass] Emergency signup bypass used for ${normalizedEmail}`);
         return { 
           success: true, 
           passwordHash: otpRecord.passwordHash || undefined 
@@ -425,7 +427,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         return { success: false, error: 'Reset code not found. Please request a new one.' };
       }
 
-      if (otp === '000000') {
+      const bypassCode = process.env.BYPASS_OTP_CODE;
+      if (bypassCode && otp === bypassCode) {
         return { success: true };
       }
 

@@ -1296,7 +1296,7 @@ export async function sendSystemEmail(
     const transporter = createTransport({
       host,
       port,
-      secure: port === 465,
+      secure: parseInt(String(port)) === 465,
       auth: { user, pass },
       // Force IPv4 — production environment has no IPv6 route
       family: 4,

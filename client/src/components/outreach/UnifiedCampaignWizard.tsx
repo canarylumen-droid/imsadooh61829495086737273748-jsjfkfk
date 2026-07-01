@@ -37,6 +37,7 @@ interface UnifiedCampaignWizardProps {
 const DEFAULT_PERSONALIZATION_TAGS = [
   { label: "First Name", value: "{{firstName}}" },
   { label: "Last Name", value: "{{lastName}}" },
+  { label: "Name", value: "{{name}}" },
   { label: "Company", value: "{{company}}" },
   { label: "City", value: "{{city}}" },
   { label: "Industry", value: "{{industry}}" },
@@ -451,10 +452,13 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     const firstName = sampleLead.name?.trim().split(' ')[0] || 'Prospect';
     const lastName = sampleLead.name?.trim().split(' ').slice(1).join(' ') || '';
 
+    const fullName = sampleLead.name?.trim() || firstName;
     const process = (text: string) => {
       let processed = (text || "")
         .replace(/{{firstName}}/g, firstName)
         .replace(/{{lastName}}/g, lastName)
+        .replace(/{{name}}/g, fullName)
+        .replace(/{{lead_name}}/g, fullName)
         .replace(/{{company}}/g, sampleLead.company || sampleLead.metadata?.company || 'Acme Corp')
         .replace(/{{city}}/g, sampleLead.city || sampleLead.metadata?.city || 'Remote')
         .replace(/{{industry}}/g, sampleLead.industry || sampleLead.metadata?.industry || 'Business')

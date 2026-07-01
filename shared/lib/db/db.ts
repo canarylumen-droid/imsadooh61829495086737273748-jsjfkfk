@@ -169,8 +169,42 @@ export function initializeDb() {
   }
 }
 
-// Immediate initialization for top-level exports
-const { db, pool } = initializeDb() as { db: NodePgDatabase<typeof schema>, pool: pgPkg.Pool };
+let _dbExported: NodePgDatabase<typeof schema> | null = null;
+let _poolExported: pgPkg.Pool | null = null;
+
+export function getDb(): NodePgDatabase<typeof schema> {
+  if (!_dbExported) {
+    const result = initializeDb();
+    _dbExported = result.db as NodePgDatabase<typeof schema>;
+    _poolExported = result.pool as pgPkg.Pool;
+  }
+  return _dbExported;
+}
+
+export function getPool(): pgPkg.Pool {
+  if (!_poolExported) {
+    const result = initializeDb();
+    _dbExported = result.db as NodePgDatabase<typeof schema>;
+    _poolExported = result.pool as pgPkg.Pool;
+  }
+  return _poolExported;
+}
+
+const db = new Proxy({} as NodePgDatabase<typeof schema>, {
+  get(_target, prop) {
+    const conn = getDb();
+    const value = Reflect.get(conn, prop);
+    return typeof value === 'function' ? value.bind(conn) : value;
+  }
+});
+
+const pool = new Proxy({} as pgPkg.Pool, {
+  get(_target, prop) {
+    const conn = getPool();
+    const value = Reflect.get(conn, prop);
+    return typeof value === 'function' ? value.bind(conn) : value;
+  }
+});
 
 export { db, pool };
 

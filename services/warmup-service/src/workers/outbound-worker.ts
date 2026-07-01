@@ -8,7 +8,7 @@ import { createFreshConnection } from '@shared/lib/queues/redis-config.js';
 import { db } from '../db/warmup-db.js';
 import { eq, sql } from 'drizzle-orm';
 import { warmupMailboxes, warmupThreads, warmupInteractions, integrations } from '@audnix/shared';
-import { WARMUP_CONFIG } from '../config/warmup-config.js';
+import { WARMUP_CONFIG, getRampLimit } from '../config/warmup-config.js';
 import { pairingEngine } from '../lib/pairing-engine.js';
 import { threadManager } from '../lib/thread-manager.js';
 import { llmCopywriter } from '../lib/llm-copywriter.js';
@@ -17,6 +17,24 @@ import { imapStealth } from '../lib/imap-stealth.js';
 import { warmupInboundQueue } from '../queues/warmup-queues.js';
 import { seedFleetManager } from '../engine/seed-fleet-manager.js';
 import { reputationRecovery } from '../engine/reputation-recovery.js';
+import crypto from 'crypto';
+
+function decryptWarmupSecret(ciphertext: string): string {
+  if (!ciphertext || !ciphertext.includes(':')) return ciphertext;
+  const key = process.env.WARMUP_ENCRYPTION_KEY || 'default-insecure-key-change-in-production';
+  try {
+    const parts = ciphertext.split(':');
+    if (parts.length !== 3) return ciphertext;
+    const [ivHex, authTagHex, encrypted] = parts;
+    const decipher = crypto.createDecipheriv('aes-256-gcm', crypto.createHash('sha256').update(key).digest(), Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch {
+    return ciphertext;
+  }
+}
 
 export function createOutboundWorker(): Worker {
   return new Worker(
@@ -59,6 +77,11 @@ export function createOutboundWorker(): Worker {
         dynamicLimit = integrationRow?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
       }
 
+      // Apply percentage-based ramp schedule for non-seed mailboxes
+      if (sender[0].anchorRole !== 'seed') {
+        dynamicLimit = getRampLimit(sender[0].createdAt, dynamicLimit);
+      }
+
       // Apply reputation recovery boost — dead IPs get higher warmup volume
       const effectiveLimit = reputationRecovery.getEffectiveLimit(sender[0], dynamicLimit);
 
@@ -91,14 +114,27 @@ export function createOutboundWorker(): Worker {
         volleyNumber: thread[0].messageCount + 1,
       };
 
-      const body = await llmCopywriter.generateReply(context);
+      const body = llmCopywriter.generateReply(context);
 
-      // Build headers
       const messageId = threadManager.generateMessageId();
-      const headers: Record<string, string> = {
-        'X-Audnix-Warmup': 'true',
-        'X-Audnix-Warmup-Thread': threadId,
-      };
+      const priorityOptions = ['', '', '', '1 (Highest)', '3 (Normal)', '5 (Lowest)'];
+      const importanceOptions = ['', '', 'high', 'normal', 'low'];
+      const msPriorityOptions = ['', '', 'High', 'Normal', 'Low'];
+      const chosenPriority = priorityOptions[Math.floor(Math.random() * priorityOptions.length)];
+      const headers: Record<string, string> = {};
+      if (chosenPriority) {
+        headers['X-Priority'] = chosenPriority;
+      }
+      if (importanceOptions[Math.floor(Math.random() * importanceOptions.length)]) {
+        headers['Importance'] = importanceOptions[Math.floor(Math.random() * importanceOptions.length)];
+      }
+      if (msPriorityOptions[Math.floor(Math.random() * msPriorityOptions.length)] && Math.random() > 0.5) {
+        headers['X-MSMail-Priority'] = msPriorityOptions[Math.floor(Math.random() * msPriorityOptions.length)];
+      }
+      // Rarely add Message-ID header override — normally leave it to the MTA
+      if (Math.random() > 0.8) {
+        headers['Message-ID'] = messageId;
+      }
 
       if (thread[0].lastMessageId) {
         headers['In-Reply-To'] = thread[0].lastMessageId;
@@ -108,13 +144,12 @@ export function createOutboundWorker(): Worker {
         ].join(' ');
       }
 
-      // Extract SMTP credentials
       const meta = sender[0].metadata as any;
       const host = meta?.smtpHost || meta?.smtp_host || getDefaultSmtpHost(sender[0].provider);
       const port = meta?.smtpPort || meta?.smtp_port || 587;
-      const pass = meta?.smtpPass || meta?.smtp_pass || meta?.password || '';
+      const rawPass = meta?.smtpPass || meta?.smtp_pass || meta?.password || '';
+      const pass = decryptWarmupSecret(rawPass);
 
-      // Credential validation for custom_email
       if (sender[0].provider === 'custom_email') {
         if (!host) {
           throw new Error(`[Warmup][Outbound] Missing SMTP host for ${sender[0].email}`);
@@ -124,11 +159,9 @@ export function createOutboundWorker(): Worker {
         }
       }
 
-      // Infer secure flag from port for custom_email
       let secure = meta?.smtpSecure ?? false;
       if (sender[0].provider === 'custom_email') {
-        secure = port === 465; // SSL/TLS
-        // Port 587, 25, 2525 use STARTTLS (secure: false)
+        secure = parseInt(String(port)) === 465;
       }
 
       const credentials = {
@@ -292,14 +325,6 @@ function getDefaultSmtpHost(provider: string): string {
   }
 }
 
-/**
- * Synchronously expunge a warmup email from the Sent folder immediately after
- * SMTP delivery. Retries up to 3 times with 1.5s backoff if the message hasn't
- * appeared in the Sent folder yet (some providers have sub-second indexing delay).
- *
- * Target: < 800ms from SMTP 250 OK to IMAP EXPUNGE.
- * Replaces the previous 5-second delayed BullMQ job approach.
- */
 async function expungeSentSync(
   mailbox: any,
   messageId: string,
@@ -307,22 +332,27 @@ async function expungeSentSync(
 ): Promise<void> {
   const MAX_RETRIES = 3;
   const RETRY_DELAY_MS = 1500;
+  const OPERATION_TIMEOUT_MS = 10000;
 
   try {
-    const success = await imapStealth.expungeSentWarmup(mailbox, messageId);
-    if (!success && attempt < MAX_RETRIES) {
-      // Message not yet indexed in Sent folder — retry after short delay
+    const result = await Promise.race([
+      imapStealth.expungeSentWarmup(mailbox, messageId),
+      new Promise<false>((_, reject) =>
+        setTimeout(() => reject(new Error('IMAP expunge timed out')), OPERATION_TIMEOUT_MS)
+      ),
+    ]);
+    if (!result && attempt < MAX_RETRIES) {
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       return expungeSentSync(mailbox, messageId, attempt + 1);
     }
-    if (success) {
-      console.log(`[Warmup][Outbound] ✅ Sent-folder expunged for ${messageId} (attempt ${attempt})`);
+    if (result) {
+      console.log(`[Warmup][Outbound] Sent-folder expunged for ${messageId} (attempt ${attempt})`);
     }
   } catch (err: any) {
-    if (attempt < MAX_RETRIES) {
+    if (attempt < MAX_RETRIES && !err.message?.includes('timed out')) {
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
       return expungeSentSync(mailbox, messageId, attempt + 1);
     }
-    throw err;
+    console.warn(`[Warmup][Outbound] Sent-folder expunge failed for ${messageId}:`, err.message);
   }
 }

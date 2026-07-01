@@ -745,7 +745,7 @@ async function getMailboxSentCount(userId: string, integrationId: string): Promi
     WHERE user_id = ${userId}
     AND direction = 'outbound'
     AND integration_id = ${integrationId}::uuid
-    AND created_at >= CURRENT_DATE::timestamp
+    AND created_at >= (NOW() AT TIME ZONE 'UTC')::date::timestamptz
   `);
   const count = Number(result.rows[0].count);
   sentCountCache.set(cacheKey, { count, expiresAt: Date.now() + SENT_COUNT_TTL_MS });
@@ -768,7 +768,7 @@ async function getMailboxInitialSendCount(integrationId: string): Promise<number
     AND step_index = 0
     AND status = 'sent'
     AND (is_warmup IS NULL OR is_warmup = false)
-    AND sent_at >= CURRENT_DATE::timestamp
+    AND sent_at >= (NOW() AT TIME ZONE 'UTC')::date::timestamptz
   `);
   const count = Number(result.rows[0].count);
   sentCountCache.set(cacheKey, { count, expiresAt: Date.now() + SENT_COUNT_TTL_MS });
@@ -822,9 +822,9 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?
   }
 
   const now = new Date();
-  const currentHour = now.getHours(); // Local server time
+  const currentHour = now.getUTCHours(); // UTC time for consistent global behavior
   
-  // Detect Night Watch (10 PM to 6 AM)
+  // Detect Night Watch (10 PM to 6 AM UTC)
   const isNightWatch = currentHour >= 22 || currentHour < 6;
 
   const endOfDay = new Date(now);
@@ -1181,6 +1181,21 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
         await campaignQueue.add(jobKey, data, { delay: 60_000, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
         console.log(`[CampaignQueue] ⏳ Waiting for smart routing. Retrying mailbox ${integrationId.slice(-8)} in 1m`);
         return;
+      }
+
+      // CAMPAIGN DURATION CHECK: Auto-complete if campaign has exceeded its configured duration
+      const campaignCreatedAt = campaign.createdAt ? new Date(campaign.createdAt).getTime() : 0;
+      const durationDays = (campaign.config as any)?.targetDays || (campaign.config as any)?.durationDays || 0;
+      if (durationDays > 0) {
+        const expiryTime = campaignCreatedAt + (durationDays * 24 * 60 * 60 * 1000);
+        if (Date.now() > expiryTime) {
+          console.log(`[CampaignWorker] ⏰ Campaign ${campaignId} has exceeded its ${durationDays}-day duration. Auto-completing.`);
+          await withDbRetry(() => db.update(outreachCampaigns)
+            .set({ status: 'completed' })
+            .where(eq(outreachCampaigns.id, campaignId)));
+          await campaignQueueManager.completeCampaign(campaignId);
+          return;
+        }
       }
 
       // BUG X8 FIX: Check if the entire campaign is terminal.
@@ -1662,12 +1677,25 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
 
   // Variable replacement
   const firstName = lead.name?.trim().split(' ')[0] || 'there';
+  const lastName = lead.name?.trim().split(' ').slice(1).join(' ') || 'there';
+  const fullName = lead.name?.trim() || firstName;
   const company = (lead as any).company?.trim() || 'your company';
+  const meta = (lead as any).metadata || {};
+  const city = meta.city || (lead as any).city || '';
+  const industry = meta.industry || '';
+  const niche = meta.niche || '';
+  const website = meta.website || '';
   body = body
     .replace(/{{firstName}}/g, firstName)
-    .replace(/{{name}}/g, lead.name?.trim() || firstName)
+    .replace(/{{lastName}}/g, lastName)
+    .replace(/{{name}}/g, fullName)
+    .replace(/{{lead_name}}/g, fullName)
     .replace(/{{company}}/g, company)
-    .replace(/{{business_name}}/g, company);
+    .replace(/{{business_name}}/g, company)
+    .replace(/{{city}}/g, city)
+    .replace(/{{industry}}/g, industry)
+    .replace(/{{niche}}/g, niche)
+    .replace(/{{website}}/g, website);
 
   // AI Adjustment Toggle: Check campaign config
   if ((campaign.config as any)?.aiAdjustCopy) {
@@ -1983,18 +2011,40 @@ async function deliverCampaignEmail(
 
 
   // Variable replacement
-  const firstName = lead.name?.trim().split(' ')[0] || 'there';
+  const rawLeadName = lead.name?.trim();
+  const cleanName = rawLeadName === 'Unknown' ? undefined : rawLeadName;
+  const firstName = cleanName?.split(' ')[0] || 'there';
+  const lastName = cleanName?.split(' ').slice(1).join(' ') || 'there';
+  const fullName = cleanName || firstName;
   const company = (lead as any).company?.trim() || 'your company';
+  const meta = (lead as any).metadata || {};
+  const city = meta.city || (lead as any).city || '';
+  const industry = meta.industry || '';
+  const niche = meta.niche || '';
+  const website = meta.website || '';
   body = body
     .replace(/{{firstName}}/g, firstName)
-    .replace(/{{lead_name}}/g, lead.name?.trim() || firstName)
+    .replace(/{{lastName}}/g, lastName)
+    .replace(/{{name}}/g, fullName)
+    .replace(/{{lead_name}}/g, fullName)
     .replace(/{{company}}/g, company)
-    .replace(/{{business_name}}/g, company);
+    .replace(/{{business_name}}/g, company)
+    .replace(/{{city}}/g, city)
+    .replace(/{{industry}}/g, industry)
+    .replace(/{{niche}}/g, niche)
+    .replace(/{{website}}/g, website);
 
   subject = subject
     .replace(/{{firstName}}/g, firstName)
-    .replace(/{{lead_name}}/g, lead.name?.trim() || firstName)
-    .replace(/{{company}}/g, company);
+    .replace(/{{lastName}}/g, lastName)
+    .replace(/{{name}}/g, fullName)
+    .replace(/{{lead_name}}/g, fullName)
+    .replace(/{{company}}/g, company)
+    .replace(/{{business_name}}/g, company)
+    .replace(/{{city}}/g, city)
+    .replace(/{{industry}}/g, industry)
+    .replace(/{{niche}}/g, niche)
+    .replace(/{{website}}/g, website);
 
   // --- PHASE 51: AUTONOMOUS COMPLIANCE GUARD ---
   // Universal SafetyGuard: Catch hallucinations, placeholders, and tone issues in ALL outreach
@@ -2093,20 +2143,38 @@ async function deliverCampaignEmail(
 
   // ── CROSS-CAMPAIGN SEND DEDUP ──────────────────────────────────────
   // Prevent a lead from receiving emails from multiple campaigns within 1 hour.
+  // Uses Redis for speed, falls back to PG for reliability.
+  let alreadySent = false;
   try {
     const { getRedisClient } = await import('@shared/lib/redis/redis.js');
     const redisClient = await getRedisClient();
     if (redisClient) {
       const lastSendKey = `lead:last_email:${lead.id}`;
-      const alreadySent = await redisClient.get(lastSendKey);
-      if (alreadySent) {
-        console.warn(`[CampaignWorker] Cross-campaign dedup: lead ${lead.id} already emailed within last hour. Skipping campaign ${campaign.id}.`);
-        await releaseLock(lockKey);
-        return;
-      }
+      alreadySent = !!(await redisClient.get(lastSendKey));
     }
-  } catch (dedupErr) {
-    // fail open if Redis is unavailable
+  } catch {
+    // Redis unavailable - fall through to PG check
+  }
+
+  // PG fallback for cross-campaign dedup (when Redis is unavailable)
+  if (!alreadySent) {
+    try {
+      const pgDedup = await db.execute(sql`
+        SELECT 1 FROM campaign_emails
+        WHERE lead_id = ${lead.id}::uuid
+        AND campaign_id != ${campaign.id}::uuid
+        AND status = 'sent'
+        AND sent_at >= NOW() - INTERVAL '1 hour'
+        LIMIT 1
+      `);
+      alreadySent = pgDedup.rows.length > 0;
+    } catch {}
+  }
+
+  if (alreadySent) {
+    console.warn(`[CampaignWorker] Cross-campaign dedup: lead ${lead.id} already emailed within last hour. Skipping campaign ${campaign.id}.`);
+    await releaseLock(lockKey);
+    return;
   }
 
   // --- REFINED THREADING LOGIC ---
@@ -2320,12 +2388,28 @@ async function deliverCampaignInstagram(
   }
 
   // Personalization
-  const firstName = lead.name?.trim().split(' ')[0] || 'there';
+  const rawLeadName = lead.name?.trim();
+  const cleanName = rawLeadName === 'Unknown' ? undefined : rawLeadName;
+  const firstName = cleanName?.split(' ')[0] || 'there';
+  const lastName = cleanName?.split(' ').slice(1).join(' ') || 'there';
+  const fullName = cleanName || firstName;
   const company = (lead as any).company?.trim() || 'your company';
+  const meta = (lead as any).metadata || {};
+  const city = meta.city || (lead as any).city || '';
+  const industry = meta.industry || '';
+  const niche = meta.niche || '';
+  const website = meta.website || '';
   body = body
     .replace(/{{firstName}}/g, firstName)
-    .replace(/{{lead_name}}/g, lead.name?.trim() || firstName)
-    .replace(/{{company}}/g, company);
+    .replace(/{{lastName}}/g, lastName)
+    .replace(/{{name}}/g, fullName)
+    .replace(/{{lead_name}}/g, fullName)
+    .replace(/{{company}}/g, company)
+    .replace(/{{business_name}}/g, company)
+    .replace(/{{city}}/g, city)
+    .replace(/{{industry}}/g, industry)
+    .replace(/{{niche}}/g, niche)
+    .replace(/{{website}}/g, website);
 
   // ── PRE-SEND IDEMPOTENCY WRITE ─────────────────────────────────────
   const igMessageId = `ig:${campaign.id}:${lead.id}:${leadEntry.currentStep}:${Date.now()}`;

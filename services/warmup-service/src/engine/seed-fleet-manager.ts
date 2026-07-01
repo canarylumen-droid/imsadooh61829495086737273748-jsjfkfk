@@ -8,6 +8,34 @@ import { domainClusterEngine } from './domain-cluster.js';
 import { detectProvider } from '../lib/provider-utils.js';
 import nodemailer from 'nodemailer';
 import { ImapFlow } from 'imapflow';
+import crypto from 'crypto';
+
+const ENCRYPTION_KEY = process.env.WARMUP_ENCRYPTION_KEY || 'default-insecure-key-change-in-production';
+const ALGORITHM = 'aes-256-gcm';
+
+function encryptSecret(plaintext: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ALGORITHM, crypto.createHash('sha256').update(ENCRYPTION_KEY).digest(), iv);
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag().toString('hex');
+  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+}
+
+function decryptSecret(ciphertext: string): string {
+  try {
+    const parts = ciphertext.split(':');
+    if (parts.length !== 3) return ciphertext;
+    const [ivHex, authTagHex, encrypted] = parts;
+    const decipher = crypto.createDecipheriv(ALGORITHM, crypto.createHash('sha256').update(ENCRYPTION_KEY).digest(), Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch {
+    return ciphertext;
+  }
+}
 
 interface SeedConfig {
   email: string;
@@ -83,7 +111,12 @@ export class SeedFleetManager {
           status: 'active',
           dailyLimit: config.dailyLimit || WARMUP_CONFIG.SEED_DAILY_LIMIT,
           maxPartners: config.maxPartners || WARMUP_CONFIG.SEED_MAX_PARTNERS,
-          metadata: { ...config, source: 'env_provisioned' },
+          metadata: {
+            ...config,
+            smtpPass: config.smtpPass ? encryptSecret(config.smtpPass) : undefined,
+            imapPass: config.imapPass ? encryptSecret(config.imapPass) : undefined,
+            source: 'env_provisioned',
+          },
         })
         .returning();
 
@@ -127,7 +160,7 @@ export class SeedFleetManager {
   private async testSmtp(config: SeedConfig): Promise<boolean> {
     const host = config.smtpHost || (config.provider === 'outlook' ? 'smtp.office365.com' : 'smtp.gmail.com');
     const port = config.smtpPort || (config.provider === 'outlook' ? 587 : 587);
-    const secure = port === 465;
+    const secure = parseInt(String(port)) === 465;
     const user = config.smtpUser || config.email;
 
     const transporter = nodemailer.createTransport({
@@ -186,8 +219,8 @@ export class SeedFleetManager {
     const meta = (availableSeed.metadata as any) || {};
     const config = meta as SeedConfig;
 
-    const smtpPass = config.smtpPass || '';
-    const imapPass = config.imapPass || config.smtpPass || '';
+    const rawSmtpPass = config.smtpPass ? decryptSecret(config.smtpPass) : '';
+    const rawImapPass = config.imapPass ? decryptSecret(config.imapPass) : (rawSmtpPass || '');
 
     const [seedMailbox] = await db
       .insert(warmupMailboxes)
@@ -206,11 +239,11 @@ export class SeedFleetManager {
           smtpHost: config.smtpHost,
           smtpPort: config.smtpPort,
           smtpUser: config.smtpUser || availableSeed.email,
-          smtpPass,
+          smtpPass: rawSmtpPass ? encryptSecret(rawSmtpPass) : '',
           imapHost: config.imapHost,
           imapPort: config.imapPort,
           imapUser: config.imapUser || availableSeed.email,
-          imapPass,
+          imapPass: rawImapPass ? encryptSecret(rawImapPass) : '',
           oauthUserId: config.oauthUserId,
           seedAccountId: availableSeed.id,
           source: 'warmup_seed',
@@ -400,17 +433,24 @@ export class SeedFleetManager {
     if (!mb[0]) return;
     const meta = mb[0].metadata as any;
     const seedAccountId = meta?.seedAccountId;
-    if (seedAccountId) {
-      await db
-        .update(warmupSeedAccounts)
-        .set({ dailySentCount: sql`${warmupSeedAccounts.dailySentCount} + 1` })
-        .where(eq(warmupSeedAccounts.id, seedAccountId));
-    }
+    if (!seedAccountId) return;
 
-    const newSentCount = mb[0].dailySentCount + 1;
-    if (newSentCount >= (mb[0].dailyLimit || WARMUP_CONFIG.SEED_DAILY_LIMIT)) {
-      await this.markExhausted(seedAccountId);
-    }
+    // Atomic increment + exhaust check in single query to eliminate race condition.
+    // Using a CTE: increment dailySentCount, then update status to exhausted
+    // IF the new dailySentCount >= dailyLimit, all in one transaction.
+    await db.execute(sql`
+      WITH incremented AS (
+        UPDATE warmup_seed_accounts
+        SET daily_sent_count = daily_sent_count + 1
+        WHERE id = ${seedAccountId}::uuid
+        RETURNING id, daily_sent_count, daily_limit
+      )
+      UPDATE warmup_seed_accounts
+      SET status = 'exhausted'
+      FROM incremented
+      WHERE warmup_seed_accounts.id = incremented.id
+      AND incremented.daily_sent_count >= COALESCE(incremented.daily_limit, ${WARMUP_CONFIG.SEED_DAILY_LIMIT})
+    `);
   }
 
   async resetSeedDailyCounters(): Promise<void> {

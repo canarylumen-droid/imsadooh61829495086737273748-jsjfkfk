@@ -862,14 +862,24 @@ router.get('/integrations/:id/health', requireAuth, async (req: Request, res: Re
         const flattenedTxt = txtRecords.flat().join(' ').toLowerCase();
         spf = flattenedTxt.includes('v=spf1');
         
-        // Very basic DMARC check
+        // DMARC check
         try {
           const dmarcTxt = await resolveTxt(`_dmarc.${domainToCheck}`);
           dmarc = dmarcTxt.flat().join(' ').toLowerCase().includes('v=dmarc1');
         } catch (e) {}
 
-        // DKIM is harder to check without knowing the selector, so typically we assume true if SPF/DMARC exist or default false
-        dkim = spf || dmarc; 
+        // DKIM: Try common selectors (google, default, selector1, etc.)
+        dkim = false;
+        const commonSelectors = ['google', 'default', 'selector1', 'dkim', 'mail', 's1', 's2'];
+        for (const sel of commonSelectors) {
+          try {
+            const dkimTxt = await resolveTxt(`${sel}._domainkey.${domainToCheck}`);
+            if (dkimTxt.flat().join(' ').toLowerCase().includes('v=dkim1')) {
+              dkim = true;
+              break;
+            }
+          } catch (e) {}
+        }
       } catch (e) {
         console.warn(`DNS lookup failed for ${domainToCheck}:`, e);
       }

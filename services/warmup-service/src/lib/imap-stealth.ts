@@ -10,15 +10,91 @@ import { eq, sql } from 'drizzle-orm';
 import { warmupMailboxes, warmupInteractions } from '@audnix/shared';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 import type { ImapCredentials, WarmupMailbox } from '../types/warmup-types.js';
+import crypto from 'crypto';
+
+function decryptWarmupSecret(ciphertext: string): string {
+  if (!ciphertext || !ciphertext.includes(':')) return ciphertext;
+  const key = process.env.WARMUP_ENCRYPTION_KEY || 'default-insecure-key-change-in-production';
+  try {
+    const parts = ciphertext.split(':');
+    if (parts.length !== 3) return ciphertext;
+    const [ivHex, authTagHex, encrypted] = parts;
+    const decipher = crypto.createDecipheriv('aes-256-gcm', crypto.createHash('sha256').update(key).digest(), Buffer.from(ivHex, 'hex'));
+    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  } catch {
+    return ciphertext;
+  }
+}
 
 interface CachedClient {
   client: ImapFlow;
   createdAt: number;
+  lastUsedAt: number;
 }
 
 export class ImapStealth {
   private clients = new Map<string, CachedClient>();
-  private readonly CONNECTION_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly CONNECTION_TTL_MS = 5 * 60 * 1000;
+  private readonly MAX_CONNECTIONS = parseInt(process.env.WARMUP_MAX_IMAP_CONNECTIONS || '50', 10);
+  private readonly CONNECTION_SEMAPHORE_TIMEOUT_MS = 30000;
+  private activeConnectionCount = 0;
+  private connectionQueue: Array<{ resolve: () => void; reject: (err: Error) => void; createdAt: number }> = [];
+  private cleanupInterval?: NodeJS.Timeout;
+
+  constructor() {
+    this.cleanupInterval = setInterval(() => this.cleanupStaleConnections(), Math.min(this.CONNECTION_TTL_MS, 60000));
+  }
+
+  private async acquireConnectionSlot(): Promise<void> {
+    if (this.activeConnectionCount < this.MAX_CONNECTIONS) {
+      this.activeConnectionCount++;
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      const entry = { resolve, reject, createdAt: Date.now() };
+      this.connectionQueue.push(entry);
+      setTimeout(() => {
+        const idx = this.connectionQueue.indexOf(entry);
+        if (idx !== -1) {
+          this.connectionQueue.splice(idx, 1);
+          reject(new Error(`[Warmup][IMAP] Connection slot timeout after ${this.CONNECTION_SEMAPHORE_TIMEOUT_MS}ms`));
+        }
+      }, this.CONNECTION_SEMAPHORE_TIMEOUT_MS);
+    });
+  }
+
+  private releaseConnectionSlot(): void {
+    if (this.connectionQueue.length > 0) {
+      const next = this.connectionQueue.shift()!;
+      if (Date.now() - next.createdAt < this.CONNECTION_SEMAPHORE_TIMEOUT_MS) {
+        next.resolve();
+        return;
+      }
+      this.releaseConnectionSlot();
+    }
+    this.activeConnectionCount = Math.max(0, this.activeConnectionCount - 1);
+  }
+
+  private async cleanupStaleConnections(): Promise<void> {
+    const now = Date.now();
+    let closed = 0;
+    for (const [id, cached] of this.clients) {
+      const expired = now - cached.createdAt > this.CONNECTION_TTL_MS;
+      const idleTooLong = now - cached.lastUsedAt > Math.min(this.CONNECTION_TTL_MS, 120000);
+      if (expired || idleTooLong || !cached.client.authenticated) {
+        try { await cached.client.logout(); } catch {}
+        this.clients.delete(id);
+        this.releaseConnectionSlot();
+        closed++;
+      }
+    }
+    if (closed > 0) {
+      console.log(`[Warmup][IMAP] Cleaned ${closed} stale connection(s), pool: ${this.clients.size}/${this.MAX_CONNECTIONS}`);
+    }
+  }
 
   async ensureHiddenFolder(mailbox: WarmupMailbox): Promise<string> {
     const client = await this.getClient(mailbox);
@@ -185,20 +261,20 @@ export class ImapStealth {
     if (this.clients.has(cacheKey)) {
       const cached = this.clients.get(cacheKey)!;
       const isExpired = now - cached.createdAt > this.CONNECTION_TTL_MS;
-      const isHealthy = cached.client.authenticated;
+      const isIdleTooLong = now - cached.lastUsedAt > Math.min(this.CONNECTION_TTL_MS, 120000);
 
-      if (!isExpired && isHealthy) {
+      if (!isExpired && !isIdleTooLong) {
+        cached.lastUsedAt = now;
         return cached.client;
       }
 
-      // Stale or disconnected — clean up
       try { await cached.client.logout(); } catch {}
       this.clients.delete(cacheKey);
+      this.releaseConnectionSlot();
     }
 
     const creds = await this.extractImapCreds(mailbox);
 
-    // Credential validation for custom_email
     if (mailbox.provider === 'custom_email') {
       if (!creds.host) {
         throw new Error(`[Warmup][IMAP] Missing IMAP host for ${mailbox.email}`);
@@ -207,6 +283,8 @@ export class ImapStealth {
         throw new Error(`[Warmup][IMAP] Missing IMAP password for ${mailbox.email}`);
       }
     }
+
+    await this.acquireConnectionSlot();
 
     const auth: any = { user: creds.user, pass: creds.pass };
     if (creds.accessToken) {
@@ -223,17 +301,21 @@ export class ImapStealth {
       greetingTimeout: WARMUP_CONFIG.IMAP_TIMEOUT_MS,
     });
 
-    await client.connect();
+    try {
+      await client.connect();
+    } catch (err: any) {
+      this.releaseConnectionSlot();
+      throw err;
+    }
 
-    // Reset IMAP failure counter on successful connection
     await db
       .update(warmupMailboxes)
       .set({
-        metadata: sql`${warmupMailboxes.metadata} || ${JSON.stringify({ imapFailureCount: 0 })}`,
+        metadata: sql`jsonb_set(COALESCE(${warmupMailboxes.metadata}, '{}'::jsonb), '{imapFailureCount}', '0'::jsonb)`,
       })
       .where(eq(warmupMailboxes.id, mailbox.id));
 
-    this.clients.set(cacheKey, { client, createdAt: now });
+    this.clients.set(cacheKey, { client, createdAt: now, lastUsedAt: now });
     return client;
   }
 
@@ -270,14 +352,13 @@ export class ImapStealth {
       // Port 143 typically uses STARTTLS (secure: false in ImapFlow)
     }
 
+    const rawPass = meta?.imapPass || meta?.imap_pass || meta?.smtpPass || meta?.smtp_pass || meta?.password || '';
     const creds: ImapCredentials & { accessToken?: string } = {
       host: d.host,
       port: d.port,
       secure,
       user: mailbox.email,
-      // Prefer dedicated IMAP password, fall back to SMTP password.
-      // Some providers use different credentials for IMAP vs SMTP.
-      pass: meta?.imapPass || meta?.imap_pass || meta?.smtpPass || meta?.smtp_pass || meta?.password || '',
+      pass: decryptWarmupSecret(rawPass),
     };
 
     // OAuth for Gmail / Outlook
@@ -335,10 +416,14 @@ export class ImapStealth {
   }
 
   async disconnectAll(): Promise<void> {
+    if (this.cleanupInterval) clearInterval(this.cleanupInterval);
     for (const [id, cached] of this.clients) {
       try { await cached.client.logout(); } catch {}
       this.clients.delete(id);
+      this.releaseConnectionSlot();
     }
+    this.connectionQueue.length = 0;
+    this.activeConnectionCount = 0;
   }
 }
 

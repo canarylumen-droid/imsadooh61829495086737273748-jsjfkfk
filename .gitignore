@@ -10,6 +10,8 @@ vite.config.ts.*
 *.log
 # Keep Replit config files in repo for environment setup
 
+coverage/
+
 # WhatsApp session files (sensitive)
 .wwebjs_auth/
 .wwebjs_cache/

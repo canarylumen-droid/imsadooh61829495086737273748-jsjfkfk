@@ -17,7 +17,7 @@ import net from 'net';
 import dns from 'dns';
 import { promisify } from 'util';
 
-dns.setServers(['1.1.1.1', '8.8.8.8', '208.67.222.222']);
+// DNS servers already set by dns-verification.ts — avoid overwriting
 const resolveMx = promisify(dns.resolveMx);
 
 // ─── Types ────────────────────────────────────────────────────────────────────

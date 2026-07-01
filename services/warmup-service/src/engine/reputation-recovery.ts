@@ -129,15 +129,25 @@ export class ReputationRecovery {
     const last24hSends = await this.countRecentSends(mb.id, 24);
     const hasRecentBounce = last24hBounces > 0;
 
-    // ── Consecutive clean days (Fix: uses actual interval) ────────────────
-    let consecutiveCleanDays = recoveryMeta?.consecutiveCleanDays ?? 0;
-    const scanIntervalMinutes = WARMUP_CONFIG.RECOVERY_SCAN_INTERVAL_MS / (60 * 1000);
+    let consecutiveCleanScans = recoveryMeta?.consecutiveCleanScans ?? 0;
+    if (recoveryMeta?.consecutiveCleanDays && !recoveryMeta?.consecutiveCleanScans) {
+      const oldScansPerDay = (24 * 60 * 60 * 1000) / 300000;
+      consecutiveCleanScans = Math.ceil(recoveryMeta.consecutiveCleanDays * oldScansPerDay);
+    }
+    const scansPerDay = (24 * 60 * 60 * 1000) / WARMUP_CONFIG.RECOVERY_SCAN_INTERVAL_MS;
     if (!hasRecentBounce && last24hSends > 0) {
-      consecutiveCleanDays += scanIntervalMinutes / (60 * 24);
+      consecutiveCleanScans++;
     } else if (hasRecentBounce) {
+      consecutiveCleanScans = 0;
+    }
+    let consecutiveCleanDays = Math.min(Math.floor(consecutiveCleanScans / scansPerDay), 30);
+
+    const last24hComplaints = await this.countRecentComplaints(mb.id, 24);
+    const hasComplaint = last24hComplaints > 0;
+    if (hasComplaint) {
+      consecutiveCleanScans = 0;
       consecutiveCleanDays = 0;
     }
-    consecutiveCleanDays = Math.min(consecutiveCleanDays, 30);
 
     // ── Step-down logic (durable) ─────────────────────────────────────────
     let stepDownLevel: RecoveryLevel | null = persistedStepDownLevel;
@@ -148,6 +158,7 @@ export class ReputationRecovery {
       stepDownLevel = nextLevel;
       recoveryLevel = nextLevel;
       consecutiveCleanDays = 0;
+      consecutiveCleanScans = 0;
 
       if (nextLevel === 'healthy') {
         transition = 'recovered';
@@ -166,6 +177,7 @@ export class ReputationRecovery {
       recoveryLevel = scoreBasedLevel;
       transition = 'escalated';
       consecutiveCleanDays = 0;
+      consecutiveCleanScans = 0;
       console.log(`[Warmup][Recovery] ${mb.email} escalated ${prevLevel} → ${scoreBasedLevel} (score=${score})`);
     }
 
@@ -179,6 +191,7 @@ export class ReputationRecovery {
       warmupLimit,
       maxThreads,
       consecutiveCleanDays,
+      consecutiveCleanScans,
       lastBounceAt: hasRecentBounce ? now.toISOString() : (recoveryMeta?.lastBounceAt ?? null),
       recoveryStartedAt: recoveryMeta?.recoveryStartedAt ?? (
         recoveryLevel !== 'healthy' ? now.toISOString() : null
@@ -191,7 +204,8 @@ export class ReputationRecovery {
     };
 
     // ── Fix #7: Clean up metadata when healthy for more than 7 days ──────
-    if (recoveryLevel === 'healthy' && (recoveryMeta?.consecutiveCleanDays ?? 0) > 7 && recoveryMeta?.recoveryStartedAt) {
+    const cleanDays = consecutiveCleanDays > 7 || (recoveryMeta?.consecutiveCleanDays ?? 0) > 7;
+    if (recoveryLevel === 'healthy' && cleanDays && recoveryMeta?.recoveryStartedAt) {
       // Remove recovery key entirely to clean up metadata
       await db
         .update(warmupMailboxes)
@@ -204,13 +218,14 @@ export class ReputationRecovery {
 
     // ── Pause/reactivate based on recent bounces ──────────────────────────
     const wantPaused = recoveryLevel !== 'healthy' && hasRecentBounce;
+    const recoveryJson = sql`${JSON.stringify(recoveryState)}::jsonb`;
     if (wantPaused && mb.status === 'active') {
       await db
         .update(warmupMailboxes)
         .set({
           status: 'paused',
           pauseReason: 'recovery_mode',
-          metadata: sql`jsonb_set(${warmupMailboxes.metadata}, '{recovery}', ${JSON.stringify(recoveryState)}::jsonb)`,
+          metadata: sql`jsonb_set(COALESCE(${warmupMailboxes.metadata}, '{}'::jsonb), '{recovery}', ${recoveryJson})`,
         })
         .where(eq(warmupMailboxes.id, mb.id));
       console.log(`[Warmup][Recovery] ${mb.email} paused — recent bounce during recovery (score=${score})`);
@@ -220,7 +235,7 @@ export class ReputationRecovery {
         .set({
           status: 'active',
           pauseReason: null,
-          metadata: sql`jsonb_set(${warmupMailboxes.metadata}, '{recovery}', ${JSON.stringify(recoveryState)}::jsonb)`,
+          metadata: sql`jsonb_set(COALESCE(${warmupMailboxes.metadata}, '{}'::jsonb), '{recovery}', ${recoveryJson})`,
         })
         .where(eq(warmupMailboxes.id, mb.id));
       console.log(`[Warmup][Recovery] ${mb.email} reactivated — no recent bounces`);
@@ -228,7 +243,7 @@ export class ReputationRecovery {
       await db
         .update(warmupMailboxes)
         .set({
-          metadata: sql`jsonb_set(${warmupMailboxes.metadata}, '{recovery}', ${JSON.stringify(recoveryState)}::jsonb)`,
+          metadata: sql`jsonb_set(COALESCE(${warmupMailboxes.metadata}, '{}'::jsonb), '{recovery}', ${recoveryJson})`,
         })
         .where(eq(warmupMailboxes.id, mb.id));
     }
@@ -288,11 +303,12 @@ export class ReputationRecovery {
   }
 
   private getWarmupLimit(level: RecoveryLevel): number {
+    const base = WARMUP_CONFIG.DAILY_SENT_LIMIT;
     switch (level) {
-      case 'critical': return WARMUP_CONFIG.RECOVERY_CRITICAL_WARMUP_LIMIT;
-      case 'poor':     return WARMUP_CONFIG.RECOVERY_POOR_WARMUP_LIMIT;
-      case 'cautious': return WARMUP_CONFIG.RECOVERY_CAUTIOUS_WARMUP_LIMIT;
-      case 'healthy':  return WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      case 'critical': return Math.min(WARMUP_CONFIG.RECOVERY_CRITICAL_WARMUP_LIMIT, base);
+      case 'poor':     return Math.min(WARMUP_CONFIG.RECOVERY_POOR_WARMUP_LIMIT, base);
+      case 'cautious': return Math.min(WARMUP_CONFIG.RECOVERY_CAUTIOUS_WARMUP_LIMIT, base);
+      case 'healthy':  return base;
     }
   }
 
@@ -355,6 +371,18 @@ export class ReputationRecovery {
     return result[0]?.count ?? 0;
   }
 
+  private async countRecentComplaints(mailboxId: string, hours: number): Promise<number> {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const result = await db.execute(sql`
+      SELECT COUNT(*) as count FROM bounce_tracker bt
+      JOIN warmup_mailboxes wm ON wm.integration_id = bt.integration_id
+      WHERE wm.id = ${mailboxId}::uuid
+      AND bt.bounce_type = 'spam'
+      AND bt.created_at >= ${since}::timestamptz
+    `);
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   private getDefaultState(): ReputationState {
     return {
       recoveryLevel: 'healthy',
@@ -362,6 +390,7 @@ export class ReputationRecovery {
       warmupLimit: WARMUP_CONFIG.DAILY_SENT_LIMIT,
       maxThreads: 3,
       consecutiveCleanDays: 0,
+      consecutiveCleanScans: 0,
       lastBounceAt: null,
       recoveryStartedAt: null,
       recoveryEscalatedAt: null,

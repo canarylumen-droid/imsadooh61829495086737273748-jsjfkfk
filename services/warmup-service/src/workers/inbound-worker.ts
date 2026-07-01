@@ -8,7 +8,7 @@ import { createFreshConnection } from '@shared/lib/queues/redis-config';
 import { db } from '../db/warmup-db.js';
 import { eq, and } from 'drizzle-orm';
 import { warmupMailboxes, warmupThreads, warmupInteractions } from '@audnix/shared';
-import { WARMUP_CONFIG } from '../config/warmup-config.js';
+import { WARMUP_CONFIG, getRampLimit } from '../config/warmup-config.js';
 import { imapStealth } from '../lib/imap-stealth.js';
 import { withImapTimeout } from '../lib/watchdog.js';
 import { llmCopywriter } from '../lib/llm-copywriter.js';
@@ -79,9 +79,10 @@ async function handleExpectReply(data: any) {
       .where(eq(warmupMailboxes.id, recipientMailboxId))
       .limit(1);
 
+    const recipientLimit = getRampLimit(recipientMb[0].createdAt, WARMUP_CONFIG.DAILY_SENT_LIMIT);
     if (
       recipientMb[0] &&
-      recipientMb[0].dailySentCount < WARMUP_CONFIG.DAILY_SENT_LIMIT
+      recipientMb[0].dailySentCount < recipientLimit
     ) {
       await warmupOutboundQueue.add(
         'send-reply',
@@ -93,12 +94,13 @@ async function handleExpectReply(data: any) {
         },
         {
           delay:
-            Math.floor(
-              Math.random() *
-                (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_HOURS -
-                  WARMUP_CONFIG.MIN_REPLY_EXPECTATION_HOURS +
-                  1)
-            ) *
+            (WARMUP_CONFIG.MIN_REPLY_EXPECTATION_HOURS +
+              Math.floor(
+                Math.random() *
+                  (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_HOURS -
+                    WARMUP_CONFIG.MIN_REPLY_EXPECTATION_HOURS +
+                    1)
+              )) *
               60 *
               60 *
               1000,

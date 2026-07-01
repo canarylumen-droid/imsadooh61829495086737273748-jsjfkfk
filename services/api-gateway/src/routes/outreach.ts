@@ -18,6 +18,15 @@ import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { isNull } from 'drizzle-orm';
 import validator from 'validator';
 
+// Rate limiter: max 10 campaign creations per user per minute
+import { rateLimit } from 'express-rate-limit';
+const campaignCreateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.session?.userId || req.ip || 'unknown',
+  message: { error: 'Too many campaigns created. Please wait before creating another.' },
+});
+
 const router = Router();
 
 /**
@@ -95,7 +104,7 @@ router.get('/campaigns', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/campaigns', requireAuth, async (req, res) => {
+router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -123,9 +132,11 @@ router.post('/campaigns', requireAuth, async (req, res) => {
       );
     }
 
-    // Enforce reasonable daily limits based on plan or safety (increased from 500)
     if (campaignConfig.dailyLimit) {
       campaignConfig.dailyLimit = Math.min(parseInt(campaignConfig.dailyLimit) || 50, 2500);
+    }
+    if (campaignConfig.durationDays) {
+      campaignConfig.durationDays = Math.max(1, Math.min(parseInt(campaignConfig.durationDays) || 30, 365));
     }
 
     // ── PLAN-BASED CAMPAIGN LIMITS ──────────────────────────────────────
@@ -378,6 +389,14 @@ router.post('/campaigns', requireAuth, async (req, res) => {
       campaignMetrics = formatCampaignMetrics(metricsResult);
     }
 
+    // Calculate average per day based on daily limit and duration
+    const dailyLimit = campaignConfig.dailyLimit || 50;
+    const durationDays = campaignConfig.durationDays || 30;
+    const totalLeadsForCalc = addedCount || 0;
+    const averagePerDay = totalLeadsForCalc > 0 && durationDays > 0
+      ? Math.ceil(dailyLimit / durationDays)
+      : 0;
+
     // Notify UI of new campaign
     wsSync.notifyCampaignsUpdated(userId);
 
@@ -385,7 +404,14 @@ router.post('/campaigns', requireAuth, async (req, res) => {
       ...campaign,
       addedLeads: addedCount,
       safety,
-      metrics: campaignMetrics
+      metrics: campaignMetrics,
+      schedule: {
+        dailyLimit,
+        durationDays,
+        totalLeads: totalLeadsForCalc,
+        averagePerDay,
+        estimatedDaysToComplete: dailyLimit > 0 ? Math.ceil(totalLeadsForCalc / dailyLimit) : 0,
+      }
     });
   } catch (error: any) {
     console.error('Campaign creation error:', error);

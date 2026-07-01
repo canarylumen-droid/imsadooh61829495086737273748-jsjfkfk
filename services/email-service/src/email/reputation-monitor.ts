@@ -14,7 +14,7 @@ import { promises as dns } from 'dns';
  */
 export async function calculateReputationScore(integrationId: string): Promise<number> {
   const mailboxMatch = await db.select().from(integrations).where(eq(integrations.id, integrationId));
-  if (mailboxMatch.length === 0) return 100;
+  if (mailboxMatch.length === 0) return 50;
   const mailbox = mailboxMatch[0];
 
   let score = 100;
@@ -116,11 +116,11 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     console.log(`⚠️ [Reputation Monitor] Mailbox ${mailbox.id} penalty: High likelihood of SPAM folder placement (Open Rate: ${stats.openRate.toFixed(2)}%) -> -${spamPenalty}`);
   }
 
-  // 1.7 Bounce Rate Penalty (Dampened for low volume)
+    // 1.7 Bounce Rate Penalty (Dampened for low volume)
   if (stats.totalMessages > 15) {
     const rawBounceRate = (hardBounces / stats.totalMessages) * 100;
-    // Industry standard is < 2%. We penalize exponentially after 3%.
-    if (rawBounceRate > 3) {
+    // Google Postmaster standard: keep bounce rate < 0.3%. Penalize after 0.5%.
+    if (rawBounceRate > 0.5) {
       // Dampening factor: small bounces on low volume are less lethal
       const volumeSmoothing = Math.min(1.0, stats.totalMessages / 50);
       const bouncePenalty = Math.min(60, (Math.pow(rawBounceRate, 1.2) * 2) * volumeSmoothing);
@@ -153,8 +153,8 @@ export async function calculateReputationScore(integrationId: string): Promise<n
   // Warmup is increased during reputation repair to accelerate recovery.
 
   let healthLevel: 'healthy' | 'cautious' | 'poor' | 'critical' = 'healthy';
-  let newInitialLimit = mailbox.initialOutreachLimit || 50;
-  let newWarmupLimit = mailbox.warmupLimit || 5;
+  let newInitialLimit = mailbox.initialOutreachLimit ?? 50;
+  let newWarmupLimit = mailbox.warmupLimit ?? 5;
   const originalLimit = mailbox.originalDailyLimit ?? newInitialLimit;
 
   // Calculate bounce & spam rates for the last 24h window (reuse existing oneDayAgo / last24hBounces)
@@ -180,7 +180,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
       newWarmupLimit = Math.min(10, newWarmupLimit + 5);
       const throttleDays = 3 + Math.floor(Math.random() * 3); // 3–5 days
       const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
-      await db.update(integrations).set({ throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      await db.update(integrations).set({ throttleUntil, mailboxPauseUntil: throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
       console.warn(`🔴 [Reputation Monitor] Mailbox ${mailbox.id} CRITICAL (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
     }
   } else if (score < 65) {
@@ -193,7 +193,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
       newWarmupLimit = Math.min(10, newWarmupLimit + 5);
       const throttleDays = 3 + Math.floor(Math.random() * 3);
       const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
-      await db.update(integrations).set({ throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      await db.update(integrations).set({ throttleUntil, mailboxPauseUntil: throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
       console.warn(`🟠 [Reputation Monitor] Mailbox ${mailbox.id} POOR (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
     }
   } else if (score < 85) {

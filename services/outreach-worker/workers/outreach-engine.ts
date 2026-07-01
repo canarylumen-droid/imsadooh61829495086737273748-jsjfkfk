@@ -583,14 +583,16 @@ export class OutreachEngine {
     let effectiveLimit = baseEffectiveLimit;
     
     // --- Neural Brain Smart Capping ---
+    // Unified with campaign-queue.ts values: starter 100/200, pro 300/500
     if (!isEnterprise) {
       const createdAt = new Date((integration as any).createdAt || Date.now());
       const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
+      const tier = ((integration as any).tier || 'starter').toLowerCase();
       
-      // NEURAL BRAIN CAP: 60/day max for non-enterprise (overrides user setting)
-      const smartCap = isWarmed ? 60 : 45; // Deterministic: no Math.random in limit calc
+      const smartCap = tier === 'pro'
+        ? (isWarmed ? 500 : 300)
+        : (isWarmed ? 200 : 100);
       effectiveLimit = Math.min(effectiveLimit, smartCap);
-      console.log(`[OutreachEngine] 🧠 NEURAL BRAIN: Mailbox ${integration.id.slice(-8)} capped at ${effectiveLimit} (Warmed: ${isWarmed})`);
     }
     
     // --- EMERGENCY SUSPENSION CHECK: Instagram ---
@@ -905,18 +907,41 @@ export class OutreachEngine {
     }
 
     // Variable replacement fallback (Expanded for safety)
-    const firstName = lead.name?.trim().split(' ')[0] || 'there';
+    const rawLeadName = lead.name?.trim();
+    const cleanName = rawLeadName === 'Unknown' ? undefined : rawLeadName;
+    const firstName = cleanName?.split(' ')[0] || 'there';
+    const lastName = cleanName?.split(' ').slice(1).join(' ') || 'there';
+    const fullName = cleanName || firstName;
     const company = lead.company?.trim() || 'your company';
+    const meta = (lead as any).metadata || {};
+    const city = meta.city || lead.city || '';
+    const industry = meta.industry || '';
+    const niche = meta.niche || '';
+    const website = meta.website || '';
     body = body
       .replace(/{{firstName}}/g, firstName)
-      .replace(/{{lead_name}}/g, lead.name?.trim() || firstName)
+      .replace(/{{lastName}}/g, lastName)
+      .replace(/{{name}}/g, fullName)
+      .replace(/{{lead_name}}/g, fullName)
       .replace(/{{company}}/g, company)
-      .replace(/{{business_name}}/g, company);
+      .replace(/{{business_name}}/g, company)
+      .replace(/{{city}}/g, city)
+      .replace(/{{industry}}/g, industry)
+      .replace(/{{niche}}/g, niche)
+      .replace(/{{website}}/g, website);
 
     // Subject variable replacement
     subject = subject
       .replace(/{{firstName}}/g, firstName)
-      .replace(/{{lead_name}}/g, lead.name?.trim() || firstName);
+      .replace(/{{lastName}}/g, lastName)
+      .replace(/{{name}}/g, fullName)
+      .replace(/{{lead_name}}/g, fullName)
+      .replace(/{{company}}/g, company)
+      .replace(/{{business_name}}/g, company)
+      .replace(/{{city}}/g, city)
+      .replace(/{{industry}}/g, industry)
+      .replace(/{{niche}}/g, niche)
+      .replace(/{{website}}/g, website);
 
     // SYSTEM 8: Duplicate Send Guard
     const { DuplicateSendGuard } = await import('@shared/lib/guards/duplicate-send-guard.js');
