@@ -1736,28 +1736,31 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
 
   const trackingId = Math.random().toString(36).substring(2, 11);
 
-  // --- REFINED THREADING LOGIC ---
+  // --- THREADING LOGIC: always reference the initial email ---
   let inReplyTo: string | undefined = undefined;
   let references: string | undefined = undefined;
   let threadId: string | undefined = undefined;
 
   try {
-    const lastMessages = await db.select()
+    const allMessages = await db.select()
       .from(messages)
       .where(eq(messages.leadId, lead.id))
-      .orderBy(desc(messages.createdAt))
-      .limit(1);
+      .orderBy(asc(messages.createdAt));
 
-    if (lastMessages.length > 0) {
-      const lastMsg = lastMessages[0];
-      const meta = (lastMsg.metadata as any) || {};
-      
-      inReplyTo = lastMsg.externalId || meta.externalId;
-      threadId = meta.providerThreadId || meta.threadId;
+    if (allMessages.length > 0) {
+      const firstMsg = allMessages[0];
+      const firstMeta = (firstMsg.metadata as any) || {};
+      const initialId = firstMsg.externalId || firstMeta.externalId;
 
-      if (inReplyTo) {
-        const prevRefs = meta.references || "";
-        references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+      threadId = firstMeta.providerThreadId || firstMeta.threadId;
+
+      if (initialId) {
+        inReplyTo = initialId;
+        const refs = allMessages
+          .map(m => m.externalId || ((m.metadata as any)?.externalId))
+          .filter(Boolean)
+          .join(' ');
+        references = `${initialId}${refs ? ' ' + refs : ''}`;
       }
     }
   } catch (threadErr) {
@@ -2177,7 +2180,7 @@ async function deliverCampaignEmail(
     return;
   }
 
-  // --- REFINED THREADING LOGIC ---
+  // --- THREADING LOGIC: always reference the initial email ---
   let inReplyTo: string | undefined = undefined;
   let references: string | undefined = undefined;
   let threadId: string | undefined = undefined;
@@ -2188,22 +2191,25 @@ async function deliverCampaignEmail(
     const isPriorityReply = leadEntry.currentStep > 0 && (lead.status === 'replied' || lead.status === 'interested' || lead.status === 'warm');
 
     try {
-      const lastMessages = await db.select()
+      const allMessages = await db.select()
         .from(messages)
         .where(eq(messages.leadId, lead.id))
-        .orderBy(desc(messages.createdAt))
-        .limit(1);
+        .orderBy(asc(messages.createdAt));
 
-      if (lastMessages.length > 0) {
-        const lastMsg = lastMessages[0];
-        const meta = (lastMsg.metadata as any) || {};
-        
-        inReplyTo = lastMsg.externalId || meta.externalId;
-        threadId = meta.providerThreadId || meta.threadId;
+      if (allMessages.length > 0) {
+        const firstMsg = allMessages[0];
+        const firstMeta = (firstMsg.metadata as any) || {};
+        const initialId = firstMsg.externalId || firstMeta.externalId;
 
-        if (inReplyTo) {
-          const prevRefs = meta.references || "";
-          references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+        threadId = firstMeta.providerThreadId || firstMeta.threadId;
+
+        if (initialId) {
+          inReplyTo = initialId;
+          const refs = allMessages
+            .map(m => m.externalId || ((m.metadata as any)?.externalId))
+            .filter(Boolean)
+            .join(' ');
+          references = `${initialId}${refs ? ' ' + refs : ''}`;
         }
       }
     } catch (threadErr) {

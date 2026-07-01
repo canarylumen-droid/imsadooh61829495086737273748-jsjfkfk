@@ -402,8 +402,18 @@ export default function InboxPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
+  const simpleStatuses = ['new', 'open', 'replied', 'booked', 'converted', 'not_interested', 'cold', 'warm'];
+
   const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching } = useQuery<any>({
-    queryKey: ["/api/leads", { limit: PAGE_SIZE, offset: page * PAGE_SIZE, includeArchived: showArchived, integrationId: selectedMailboxId }],
+    queryKey: ["/api/leads", {
+      limit: PAGE_SIZE,
+      offset: page * PAGE_SIZE,
+      includeArchived: showArchived,
+      integrationId: selectedMailboxId,
+      search: searchQuery || undefined,
+      channel: filterChannel !== "all" ? filterChannel : undefined,
+      status: simpleStatuses.includes(filterStatus) ? filterStatus : undefined,
+    }],
     placeholderData: (prev: any) => prev,
     staleTime: 15_000,
   });

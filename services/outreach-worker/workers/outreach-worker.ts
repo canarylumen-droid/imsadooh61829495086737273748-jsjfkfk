@@ -493,6 +493,30 @@ Provide a 1-sentence strategic directive for the outreach generation.
       messageId: `auto_${Date.now()}`
     });
 
+    // Build threading headers from last message for proper reply tracking
+    let inReplyTo: string | undefined;
+    let references: string | undefined;
+    try {
+      const { messages } = await import('@audnix/shared');
+      const { eq, desc } = await import('drizzle-orm');
+      const lastMessages = await db.select()
+        .from(messages)
+        .where(eq(messages.leadId, lead.id))
+        .orderBy(desc(messages.createdAt))
+        .limit(1);
+      if (lastMessages.length > 0) {
+        const lastMsg = lastMessages[0];
+        const meta = (lastMsg.metadata as any) || {};
+        inReplyTo = lastMsg.externalId || meta.externalId;
+        if (inReplyTo) {
+          const prevRefs = meta.references || "";
+          references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+        }
+      }
+    } catch (threadErr) {
+      console.warn(`[AutoOutreach] Failed to fetch threading headers:`, threadErr);
+    }
+
     // Send the email
     await sendEmail(
       userId,
@@ -502,7 +526,9 @@ Provide a 1-sentence strategic directive for the outreach generation.
       { 
         isHtml: true,
         trackingId: token,
-        leadId: lead.id
+        leadId: lead.id,
+        inReplyTo,
+        references,
       }
     );
 

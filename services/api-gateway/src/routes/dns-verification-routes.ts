@@ -4,6 +4,7 @@ import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import { apiLimiter } from '../middleware/rate-limit.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
+import { sendError } from '@shared/lib/api/error-response.js';
 
 const router = Router();
 
@@ -75,10 +76,7 @@ router.post('/verify', requireAuth, apiLimiter, async (req: Request, res: Respon
     });
   } catch (error: any) {
     console.error('DNS verification error:', error);
-    res.status(500).json({
-      error: 'Failed to verify domain DNS',
-      message: error.message,
-    });
+    sendError(res, 500, 'Failed to verify domain DNS', error.message);
   }
 });
 

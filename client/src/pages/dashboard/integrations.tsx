@@ -519,15 +519,18 @@ export default function IntegrationsPage() {
       const response = await apiRequest("POST", "/api/custom-email/connect", config);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       setIsEditingCustomEmail(false);
       setCustomEmailConfig({ smtpHost: '', smtpPort: '587', imapHost: '', imapPort: '993', email: '', password: '', fromName: '' });
-      toast({ title: "Email Connected", description: "SMTP settings saved successfully." });
+      if (data.smtpVerified) {
+        toast({ title: "Email Connected & Verified", description: "SMTP credentials are working. Mailbox is ready." });
+      } else {
+        toast({ title: "Email Saved (Unverified)", description: data.smtpVerifyError || "SMTP verification failed. Sending may not work until credentials are corrected.", variant: "destructive" });
+      }
     },
     onError: (error: Error) => {
-      // apiRequest throws "400: {json}" - try to extract structured error
       let errorMsg = error.message;
       let tipMsg = '';
       try {
@@ -535,8 +538,8 @@ export default function IntegrationsPage() {
         const parsed = JSON.parse(jsonStr);
         errorMsg = parsed.error || errorMsg;
         tipMsg = parsed.tip || '';
-      } catch { /* use raw message */ }
-      const description = tipMsg ? `${errorMsg}\n\n💡 ${tipMsg}` : errorMsg;
+      } catch { }
+      const description = tipMsg ? `${errorMsg}\n\n${tipMsg}` : errorMsg;
       toast({ title: "Connection Failed", description, variant: "destructive" });
     }
   });
@@ -885,7 +888,7 @@ export default function IntegrationsPage() {
                       <Button
                         variant="outline"
                         className={cn(
-                          "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-[140px]",
+                          "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]",
                           isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise' 
                             ? "opacity-50 cursor-not-allowed border-muted bg-muted/20" 
                             : "border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
@@ -893,14 +896,14 @@ export default function IntegrationsPage() {
                         onClick={() => handleConnect('gmail')}
                         disabled={isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'}
                       >
-                        <SiGoogle className="h-5 w-5" />
+                        <SiGoogle className="h-5 w-5 shrink-0" />
                         <span className="text-[10px] font-bold uppercase tracking-widest">Connect Google</span>
                       </Button>
 
                       <Button
                         variant="outline"
                         className={cn(
-                          "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-[140px]",
+                          "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]",
                           isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'
                             ? "opacity-50 cursor-not-allowed border-muted bg-muted/20"
                             : "border-blue-500/20 bg-blue-500/5 text-blue-500 hover:bg-blue-500/10"
@@ -918,7 +921,7 @@ export default function IntegrationsPage() {
 
                       <Button
                         variant="outline"
-                        className="rounded-xl px-4 py-6 border-border/50 bg-muted/20 text-foreground hover:bg-muted/30 transition-all flex flex-col items-center gap-2 flex-1 min-w-[140px]"
+                        className="rounded-xl px-4 py-6 border-border/50 bg-muted/20 text-foreground hover:bg-muted/30 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]"
                         onClick={() => {
                           setCustomEmailConfig({ smtpHost: '', smtpPort: '587', imapHost: '', imapPort: '993', email: '', password: '', fromName: '' });
                           // Actually we are already in the edit view if we see this, but let's reset form
@@ -939,7 +942,7 @@ export default function IntegrationsPage() {
                             Enterprise Bulk Import
                           </h4>
                         </div>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs text-muted-foreground break-words">
                           Upload CSV or TSV with email, password, smtpHost, smtpPort, imapHost, imapPort, and fromName columns.
                         </p>
                       </div>
@@ -1546,13 +1549,15 @@ export default function IntegrationsPage() {
                             ? "bg-orange-500/5 border-orange-500/10 text-orange-400"
                             : "bg-red-500/5 border-red-500/10 text-red-400"
                       )}>
-                        {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Please connect a mailbox to initiate domain health monitoring." :
-                         reputationNum === null ? "AI is initiating a health checkpoint for your domain." :
-                          reputationNum >= 70
-                            ? "Your domain parameters are within safe limits. AI is managing 1-by-1 sending autonomously."
-                            : reputationNum >= 40
-                            ? "Warning: Reputation drops detected. Sending speed is reduced to protect deliverability."
-                            : "Critical: Low reputation detected. Sending speed drastically throttled to 5 per day to prevent blocklisting."}
+                        <span className="break-words">
+                          {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Please connect a mailbox to initiate domain health monitoring." :
+                           reputationNum === null ? "AI is initiating a health checkpoint for your domain." :
+                             reputationNum >= 70
+                               ? "Your domain parameters are within safe limits. AI is managing 1-by-1 sending autonomously."
+                               : reputationNum >= 40
+                               ? "Warning: Reputation drops detected. Sending speed is reduced to protect deliverability."
+                               : "Critical: Low reputation detected. Sending speed drastically throttled to 5 per day to prevent blocklisting."}
+                        </span>
                       </div>
 
                       {stats?.domainVerifications?.length > 0 && (
@@ -1571,7 +1576,7 @@ export default function IntegrationsPage() {
                                   </Badge>
                                 </div>
                                 {v.result && (
-                                  <div className="grid grid-cols-4 gap-1">
+                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
                                     {['SPF', 'DKIM', 'DMARC', 'MX'].map(record => {
                                       const key = record.toLowerCase();
                                       const isFound = v.result[key]?.found;

@@ -1294,11 +1294,38 @@ export class OutreachEngine {
           return;
         }
 
+        // Fetch threading headers from last message for proper threading
+        let inReplyTo: string | undefined;
+        let references: string | undefined;
+        let threadId: string | undefined;
+        try {
+          const lastMessages = await db.select()
+            .from(messages)
+            .where(eq(messages.leadId, lead.id))
+            .orderBy(desc(messages.createdAt))
+            .limit(1);
+          if (lastMessages.length > 0) {
+            const lastMsg = lastMessages[0];
+            const meta = (lastMsg.metadata as any) || {};
+            inReplyTo = lastMsg.externalId || meta.externalId;
+            threadId = meta.providerThreadId || meta.threadId;
+            if (inReplyTo) {
+              const prevRefs = meta.references || "";
+              references = prevRefs ? `${prevRefs} ${inReplyTo}` : inReplyTo;
+            }
+          }
+        } catch (threadErr) {
+          console.warn(`[OutreachEngine] Failed to fetch threading headers:`, threadErr);
+        }
+
         await sendEmail(userId, lead.email, body, subject, {
           isRaw: true,
           isHtml: true,
           leadId: lead.id,
-          integrationId
+          integrationId,
+          inReplyTo,
+          references,
+          threadId,
         });
       }
     } catch (sendError: any) {

@@ -95,7 +95,7 @@ export class ReputationManager {
 
     try {
       const oauth2 = await import('googleapis');
-      const meta = JSON.parse(decryptToJSON(integration.encryptedMeta));
+      const meta = decryptToJSON(integration.encryptedMeta);
       if (meta.gmailAccessToken) {
         const oauthClient = new oauth2.google.auth.OAuth2();
         oauthClient.setCredentials({ access_token: meta.gmailAccessToken });
@@ -110,7 +110,7 @@ export class ReputationManager {
   }
 
   private async getAccessToken(integration: any): Promise<string | null> {
-    const meta = JSON.parse(decryptToJSON(integration.encryptedMeta));
+    const meta = decryptToJSON(integration.encryptedMeta);
     return meta.gmailAccessToken || null;
   }
 

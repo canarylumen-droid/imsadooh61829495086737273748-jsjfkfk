@@ -28,31 +28,43 @@ export async function apiClient<T>(
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
 
-      // User-friendly error messages
-      let message = error.message || 'Something went wrong';
+      // Use server-provided error details with tip support
+      let title = error.error || 'Error';
+      let description = error.details || error.message || 'Something went wrong';
+      let tip = error.tip || '';
 
       if (response.status === 401) {
-        message = 'Please sign in to continue';
-        // Only redirect if we are in a protected route
+        title = 'Session Expired';
+        description = 'Please sign in to continue';
         const path = window.location.pathname;
         if (path.startsWith('/dashboard') || path.startsWith('/admin')) {
           window.location.href = '/auth';
         }
       } else if (response.status === 403) {
-        message = 'You do not have permission for this action';
+        title = 'Access Denied';
+        description = error.message || 'You do not have permission for this action';
       } else if (response.status === 429) {
-        message = 'Too many requests. Please try again later.';
+        title = 'Rate Limited';
+        description = error.message || 'Too many requests. Please try again later.';
+      } else if (response.status === 400) {
+        title = error.error || 'Validation Error';
+        description = error.details || error.message || 'Invalid request';
       } else if (response.status >= 500) {
-        message = 'Server error. Our team has been notified.';
+        title = 'Server Error';
+        description = error.details || error.message || 'Our team has been notified.';
       }
+
+      // Format the message with tip if available
+      const fullMessage = tip ? `${description}\n\n💡 ${tip}` : description;
 
       toast({
         variant: 'destructive',
-        title: 'Error',
-        description: message,
+        title,
+        description: fullMessage,
+        duration: tip ? 8000 : 5000,
       });
 
-      throw new APIError(response.status, message, error.code);
+      throw new APIError(response.status, fullMessage, error.code);
     }
 
     return response.json();

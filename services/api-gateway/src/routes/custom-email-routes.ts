@@ -7,10 +7,12 @@ import { smtpAbuseProtection } from '@services/email-service/src/email/smtp-abus
 import { bounceHandler } from '@services/email-service/src/email/bounce-handler.js';
 import { EmailDiscoveryService } from '@services/email-service/src/email/email-discovery.js';
 import { checkDomainHealth } from '@shared/lib/deliverability/dns-health-checker.js';
+import { verifyDomainDns } from '@services/email-service/src/email/dns-verification.js';
 import validator from 'validator';
 import { db } from '@shared/lib/db/db.js';
 import { outreachCampaigns } from '@audnix/shared';
 import { eq, and } from 'drizzle-orm';
+import { sendError } from '@shared/lib/api/error-response.js';
 
 const router = Router();
 
@@ -70,7 +72,101 @@ router.post('/discover', requireAuth, async (req: Request, res: Response) => {
     res.json(settings);
   } catch (error) {
     console.error('[Email Discovery] Error:', error);
-    return res.status(500).json({ error: 'Discovery failed' });
+    return sendError(res, 500, 'Discovery failed');
+  }
+});
+
+/**
+ * POST /custom-email/test
+ * Test SMTP + IMAP connection without saving
+ */
+router.post('/test', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const { smtpHost, smtpPort, imapHost, imapPort, email, password } = req.body;
+    if (!smtpHost || !email || !password) {
+      return res.status(400).json({ error: 'Missing required fields (smtpHost, email, password)' });
+    }
+
+    const parsedSmtpPort = parseInt(smtpPort) || 587;
+    const parsedImapPort = parseInt(imapPort) || 993;
+
+    let smtpVerified = false;
+    let smtpError: string | null = null;
+    let imapVerified = false;
+    let imapError: string | null = null;
+    let dnsHealth = null;
+
+    // Test SMTP
+    try {
+      const nodemailer = await import('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: parsedSmtpPort,
+        secure: parsedSmtpPort === 465,
+        auth: { user: email, pass: password },
+        family: 4,
+        tls: { rejectUnauthorized: false },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+      } as any);
+      await transporter.verify();
+      smtpVerified = true;
+    } catch (err: any) {
+      smtpError = err?.message || 'SMTP connection failed';
+    }
+
+    // Test IMAP
+    if (imapHost) {
+      try {
+        const Imap = await import('imap');
+        const imap = new Imap.default({
+          user: email,
+          password,
+          host: imapHost,
+          port: parsedImapPort || 993,
+          tls: true,
+          tlsOptions: { rejectUnauthorized: false },
+          connTimeout: 10000,
+          authTimeout: 10000,
+        });
+        await new Promise<void>((resolve, reject) => {
+          imap.once('ready', () => { imap.end(); resolve(); });
+          imap.once('error', (err: any) => reject(err));
+          imap.connect();
+        });
+        imapVerified = true;
+      } catch (err: any) {
+        imapError = err?.message || 'IMAP connection failed';
+      }
+    }
+
+    // Check DNS
+    try {
+      const domain = email.split('@')[1];
+      if (domain) {
+        dnsHealth = await checkDomainHealth(domain);
+      }
+    } catch (err: any) {
+      console.warn('[Email Test] DNS check failed:', err.message);
+    }
+
+    const success = smtpVerified || imapVerified;
+
+    res.json({
+      success,
+      smtpVerified,
+      smtpError,
+      imapVerified,
+      imapError,
+      dnsHealth,
+      port: parsedSmtpPort,
+      message: success
+        ? 'Connection verified successfully'
+        : 'Could not connect. Check your credentials and server settings.'
+    });
+  } catch (error: any) {
+    console.error('[Email Test] Error:', error);
+    sendError(res, 500, 'Test failed', error.message);
   }
 });
 
@@ -218,11 +314,6 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
     password = password?.trim();
     fromName = fromName?.trim();
 
-    // ── Basic format validation only — no network calls ──────────────────────
-    // Railway and many cloud providers block all outbound SMTP ports (25/465/587/2525)
-    // at the infrastructure level. Doing a live TCP/SMTP check from the server will
-    // ALWAYS fail regardless of whether the user's credentials are correct.
-    // The real credential test happens on first send (same as Thunderbird / Apple Mail).
     if (!smtpHost || !email || !password) {
       console.warn(`[Email Connect] Missing required fields for user ${userId}`);
       res.status(400).json({ error: 'Missing required fields (SMTP host, email, password)' });
@@ -248,21 +339,83 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       return;
     }
 
+    // ── Build IMAP host/port before verification ─────────────────────────────
+    const effectiveImapHost = imapHost || smtpHost.replace(/^smtp\./i, 'imap.');
+    const parsedImapPort = parseInt(imapPort) || 993;
+
+    // ── Verify SMTP credentials before saving ──────────────────────────────
+    let smtpVerified = false;
+    let smtpVerifyError: string | null = null;
+    try {
+      const nodemailer = await import('nodemailer');
+      const transporter = nodemailer.createTransport({
+        host: smtpHost,
+        port: parsedSmtpPort,
+        secure: parsedSmtpPort === 465,
+        auth: { user: email, pass: password },
+        family: 4,
+        tls: { rejectUnauthorized: false },
+        connectionTimeout: 10000,
+        greetingTimeout: 10000,
+        socketTimeout: 10000,
+      } as any);
+      await transporter.verify();
+      smtpVerified = true;
+    } catch (verifyErr: any) {
+      smtpVerified = false;
+      smtpVerifyError = verifyErr?.message || 'SMTP verification failed';
+      console.warn(`[Email Connect] SMTP verify failed for ${email}: ${smtpVerifyError}`);
+    }
+
+    // ── Verify IMAP connection ────────────────────────────────────────────
+    let imapVerified = false;
+    let imapVerifyError: string | null = null;
+    if (effectiveImapHost) {
+      try {
+        const Imap = await import('imap');
+        const imap = new Imap.default({
+          user: email,
+          password,
+          host: effectiveImapHost,
+          port: parsedImapPort || 993,
+          tls: true,
+          tlsOptions: { rejectUnauthorized: false },
+          connTimeout: 10000,
+          authTimeout: 10000,
+        });
+        await new Promise<void>((resolve, reject) => {
+          imap.once('ready', () => { imap.end(); resolve(); });
+          imap.once('error', (err: any) => reject(err));
+          imap.connect();
+        });
+        imapVerified = true;
+      } catch (imapErr: any) {
+        imapVerified = false;
+        imapVerifyError = imapErr?.message || 'IMAP verification failed';
+        console.warn(`[Email Connect] IMAP verify failed for ${email}: ${imapVerifyError}`);
+      }
+    } else {
+      imapVerified = true;
+    }
+
+    // ── Don't save if both SMTP and IMAP fail ────────────────────────────
+    if (!smtpVerified && !imapVerified) {
+      const details = smtpVerifyError || imapVerifyError || 'Connection verification failed';
+      let tip = 'Check your email password. If 2FA is enabled, use an App Password.';
+      if (details.includes('DNS') || details.includes('ENOTFOUND')) {
+        tip = 'Check that your SMTP/IMAP hostnames are correct. Common hosts: smtp.office365.com, smtp.gmail.com, smtp.zoho.com';
+      }
+      sendError(res, 400, 'Could not connect to mailbox', details, tip);
+      return;
+    }
+
     // ── Enforce mailbox limits ────────────────────────────────────────────────
     const limitCheck = await storage.checkMailboxLimit(userId);
     if (!limitCheck.allowed) {
       console.warn(`[Email Connect] User ${userId} reached mailbox limit (${limitCheck.current}/${limitCheck.limit}) for plan ${limitCheck.plan}`);
-      res.status(403).json({
-        error: "Mailbox limit reached",
-        details: `Your current plan (${limitCheck.plan}) allows up to ${limitCheck.limit} mailboxes. You already have ${limitCheck.current} connected.`,
-        tip: "Upgrade to a higher plan to add more mailboxes."
-      });
+      sendError(res, 403, 'Mailbox limit reached', `Your current plan (${limitCheck.plan}) allows up to ${limitCheck.limit} mailboxes. You already have ${limitCheck.current} connected.`, 'Upgrade to a higher plan to add more mailboxes.');
       return;
     }
-
-    // ── Build and save credentials ────────────────────────────────────────────
-    const effectiveImapHost = imapHost || smtpHost.replace(/^smtp\./i, 'imap.');
-    const parsedImapPort = parseInt(imapPort) || 993;
 
     const credentials: EmailConfig = {
       smtp_host:  smtpHost,
@@ -283,19 +436,32 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
     } catch (encryptError: unknown) {
       const msg = encryptError instanceof Error ? encryptError.message : 'Encryption failed';
       console.error(`[Email Connect] Encryption error:`, encryptError);
-      res.status(500).json({ error: 'Failed to securely store credentials', details: msg });
+      sendError(res, 500, 'Failed to securely store credentials', msg);
       return;
     }
 
     // Attempt DNS Health Check
     let dnsHealth = undefined;
+    const emailDomain = email.split('@')[1];
     try {
-      const emailDomain = email.split('@')[1];
       if (emailDomain) {
         dnsHealth = await checkDomainHealth(emailDomain);
       }
     } catch (e) {
       console.warn('[Email Connect] DNS Health Check failed', e);
+    }
+
+    // Store detailed DNS verification result for dashboard display
+    try {
+      if (emailDomain) {
+        const dnsResult = await verifyDomainDns(emailDomain, undefined, false);
+        await storage.createDomainVerification(userId, {
+          domain: emailDomain,
+          verificationResult: dnsResult,
+        });
+      }
+    } catch (e) {
+      console.warn('[Email Connect] DNS verification storage failed', e);
     }
 
     try {
@@ -310,7 +476,7 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
     } catch (dbError: unknown) {
       const msg = dbError instanceof Error ? dbError.message : 'Database error';
       console.error(`[Email Connect] Storage error:`, dbError);
-      res.status(500).json({ error: 'Failed to save email configuration', details: msg });
+      sendError(res, 500, 'Failed to save email configuration', msg);
       return;
     }
 
@@ -362,8 +528,11 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
 
     res.json({
       success: true,
-      smtpVerified: false, // verified at send-time, not connection-time
-      message: `${email} connected successfully. Your first outbound email will confirm the credentials are working.`,
+      smtpVerified,
+      smtpVerifyError,
+      message: smtpVerified
+        ? `${email} connected and verified successfully.`
+        : `${email} saved but SMTP verification failed: ${smtpVerifyError}. Your mailbox is added but sending may not work until credentials are corrected.`,
       leadsImported: 0,
       leadsSkipped: 0,
       backgroundImport: true,
@@ -372,10 +541,7 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
   } catch (error: unknown) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[Email Connect] Fatal error:`, error);
-    res.status(500).json({
-      error: 'Failed to connect custom email',
-      details: errorMsg
-    });
+    sendError(res, 500, 'Failed to connect custom email', errorMsg);
   }
 });
 
@@ -389,10 +555,7 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
     const user = await storage.getUserById(userId);
 
     if (!isEnterpriseUser(user)) {
-      res.status(403).json({
-        error: 'Enterprise plan required',
-        details: 'Bulk mailbox import is only available for enterprise accounts.'
-      });
+      sendError(res, 403, 'Enterprise plan required', 'Bulk mailbox import is only available for enterprise accounts.');
       return;
     }
 
@@ -496,6 +659,28 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
         enterpriseBulkImport: true,
       };
 
+      // Verify SMTP before saving
+      let smtpOk = false;
+      let smtpErrMsg: string | null = null;
+      try {
+        const nodemailer = await import('nodemailer');
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465,
+          auth: { user: email, pass: password },
+          family: 4,
+          tls: { rejectUnauthorized: false },
+          connectionTimeout: 8000,
+          greetingTimeout: 8000,
+        } as any);
+        await transporter.verify();
+        smtpOk = true;
+      } catch (verifyErr: any) {
+        smtpOk = false;
+        smtpErrMsg = verifyErr?.message || 'SMTP verify failed';
+      }
+
       try {
         const encryptedMeta = await encrypt(JSON.stringify(credentials));
         const integration = await storage.createIntegration({
@@ -504,10 +689,15 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
           encryptedMeta,
           connected: true,
           accountType: email,
-          dailyLimit: 50, // Part 7: Set default so frontend never gets null
+          dailyLimit: 50,
         });
         existingEmails.add(email);
-        imported.push({ id: integration.id, email });
+        const result: any = { id: integration.id, email, smtpVerified: smtpOk };
+        if (!smtpOk) result.warning = `SMTP verification failed: ${smtpErrMsg}`;
+        imported.push(result);
+        if (!smtpOk) {
+          errors.push({ row: rowNumber, email, error: `Saved but SMTP verify failed: ${smtpErrMsg}` });
+        }
       } catch (err: any) {
         errors.push({ row: rowNumber, email, error: err?.message || 'Failed to save mailbox.' });
       }
@@ -549,10 +739,7 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
     });
   } catch (error: any) {
     console.error('[Bulk Email Import] Fatal error:', error);
-    res.status(500).json({
-      error: 'Failed to bulk import mailboxes',
-      details: error?.message || String(error)
-    });
+    sendError(res, 500, 'Failed to bulk import mailboxes', error?.message || String(error));
   }
 });
 
@@ -630,7 +817,7 @@ router.post('/import', requireAuth, async (req: Request, res: Response): Promise
       }
     }
   } catch (error: unknown) {
-    res.status(500).json({ error: 'Failed to import emails' });
+    sendError(res, 500, 'Failed to import emails');
     return;
   }
 });
@@ -702,11 +889,7 @@ router.post('/test', requireAuth, async (req: Request, res: Response): Promise<v
     
     // Specifically handle decryption failures which often cause timeout/hangs
     if (error?.message?.includes("Unsupported state") || error?.message?.includes("unable to authenticate data")) {
-      res.status(400).json({
-        error: "Decryption Failed",
-        message: "The server failed to decrypt your credentials. This usually means the ENCRYPTION_KEY has changed or is missing. Please check your .env file.",
-        code: "CRYPTO_ERROR"
-      });
+      sendError(res, 400, 'Decryption Failed', 'The server failed to decrypt your credentials. This usually means the ENCRYPTION_KEY has changed or is missing. Please check your .env file.', undefined, 'CRYPTO_ERROR');
       return;
     }
 
@@ -779,7 +962,7 @@ router.post('/disconnect', requireAuth, async (req: Request, res: Response): Pro
       message: 'Email account disconnected'
     });
   } catch (error: unknown) {
-    res.status(500).json({ error: 'Failed to disconnect custom email' });
+    sendError(res, 500, 'Failed to disconnect custom email');
     return;
   }
 });
@@ -868,7 +1051,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
       email: mailboxes[0]?.email || null
     });
   } catch (error: unknown) {
-    res.status(500).json({ error: 'Failed to get email status' });
+    sendError(res, 500, 'Failed to get email status');
     return;
   }
 });
@@ -922,10 +1105,7 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
 
     const errorMsg = error?.message || 'Send failed';
     console.error('[Email Send Test] Failed:', error);
-    res.status(500).json({
-      error: errorMsg,
-      details: error instanceof Error ? error.stack : undefined
-    });
+    sendError(res, 500, errorMsg, error instanceof Error ? error.stack : undefined);
   }
 });
 
@@ -938,7 +1118,7 @@ router.get('/settings', requireAuth, async (req: Request, res: Response): Promis
     const settings = await storage.getSmtpSettings(userId);
     res.json(settings);
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch SMTP settings' });
+    sendError(res, 500, 'Failed to fetch SMTP settings');
     return;
   }
 });
@@ -983,7 +1163,7 @@ router.get('/folders', requireAuth, async (req: Request, res: Response): Promise
       isDiscovering: false
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch folders' });
+    sendError(res, 500, 'Failed to fetch folders');
     return;
   }
 });
@@ -1005,7 +1185,7 @@ router.post('/sync-now', requireAuth, async (req: Request, res: Response): Promi
       message: 'Sync triggered successfully'
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to trigger sync' });
+    sendError(res, 500, 'Failed to trigger sync');
     return;
   }
 });
@@ -1061,7 +1241,7 @@ router.post('/sync-history', requireAuth, async (req: Request, res: Response): P
       message: `Historical sync started. Check back in a few minutes.`
     });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to trigger historical sync' });
+    sendError(res, 500, 'Failed to trigger historical sync');
     return;
   }
 });

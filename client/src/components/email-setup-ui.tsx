@@ -50,6 +50,8 @@ export function EmailSetupUI() {
   const [connectionStep, setConnectionStep] = useState<string>('');
   const [dnsWarnings, setDnsWarnings] = useState<string[]>([]);
   const [testingConnection, setTestingConnection] = useState(false);
+  const [verificationSteps, setVerificationSteps] = useState<string[]>([]);
+  const [verificationResults, setVerificationResults] = useState<{step: string; status: 'pending' | 'success' | 'failed'; message?: string}[]>([]);
 
   useEffect(() => {
     fetchStatus();
@@ -128,22 +130,48 @@ export function EmailSetupUI() {
     }
 
     setTestingConnection(true);
-    setConnectionStep('Testing connection and verifying DNS...');
+    setConnectionStep('Verifying mailbox credentials...');
     setDnsWarnings([]);
+    setVerificationResults([
+      { step: 'SMTP Verification', status: 'pending' },
+      { step: 'IMAP Verification', status: 'pending' },
+      { step: 'DNS Health Check', status: 'pending' },
+    ]);
 
     try {
+      const steps = [...verificationResults];
+      steps[0] = { step: 'SMTP Verification', status: 'pending' };
+      steps[1] = { step: 'IMAP Verification', status: 'pending' };
+      steps[2] = { step: 'DNS Health Check', status: 'pending' };
+      setVerificationResults(steps);
+
       const res = await fetch('/api/custom-email/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           smtpHost: config.smtpHost,
           smtpPort: config.smtpPort,
+          imapHost: config.imapHost,
+          imapPort: config.imapPort,
           email: config.email,
           password: config.password,
         })
       });
 
       const data = await res.json();
+
+      const updatedSteps = [...verificationResults];
+      if (data.smtpVerified) {
+        updatedSteps[0] = { step: 'SMTP Verification', status: 'success' };
+      } else {
+        updatedSteps[0] = { step: 'SMTP Verification', status: 'failed', message: data.smtpError || 'SMTP connection failed' };
+      }
+      if (data.imapVerified) {
+        updatedSteps[1] = { step: 'IMAP Verification', status: 'success' };
+      } else {
+        updatedSteps[1] = { step: 'IMAP Verification', status: 'failed', message: data.imapError || 'IMAP connection failed' };
+      }
+      setVerificationResults(updatedSteps);
 
       if (!res.ok) {
         const description = data.tip ? `${data.error}\n\n💡 ${data.tip}` : data.error;
@@ -154,6 +182,14 @@ export function EmailSetupUI() {
       if (data.port && data.port !== config.smtpPort) {
         setConfig(prev => ({ ...prev, smtpPort: data.port }));
       }
+
+      const dnsSteps = [...updatedSteps];
+      if (data.dnsHealth) {
+        dnsSteps[2] = { step: 'DNS Health Check', status: 'success', message: `${data.dnsHealth.score || 'N/A'}%` };
+      } else {
+        dnsSteps[2] = { step: 'DNS Health Check', status: 'failed', message: 'Could not verify DNS records' };
+      }
+      setVerificationResults(dnsSteps);
 
       if (data.dnsHealth?.warnings?.length > 0) {
         setDnsWarnings(data.dnsHealth.warnings);
@@ -216,8 +252,11 @@ export function EmailSetupUI() {
         });
 
         toast({
-          title: 'Success!',
-          description: `Email connected! ${data.leadsImported} contacts imported.`
+          title: data.smtpVerified ? 'Connected & Verified!' : 'Connected (Unverified)',
+          description: data.smtpVerified
+            ? `SMTP credentials verified. Mailbox is ready.`
+            : `SMTP check failed: ${data.smtpVerifyError || 'unknown error'}. Sending may not work.`,
+          variant: data.smtpVerified ? 'default' : 'destructive',
         });
 
         // Force refresh of dashboard analytics to update "Connected" status
@@ -479,6 +518,38 @@ export function EmailSetupUI() {
                 </div>
               )}
             </div>
+
+            {/* Verification Steps Progress */}
+            {testingConnection && verificationResults.length > 0 && (
+              <div className="bg-cyan-500/5 border border-cyan-500/20 rounded p-3 space-y-2">
+                <p className="text-xs font-medium text-cyan-600 dark:text-cyan-400 mb-2">
+                  ⚡ Verification Progress
+                </p>
+                {verificationResults.map((step, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    {step.status === 'pending' && (
+                      <div className="w-4 h-4 rounded-full border-2 border-cyan-500 border-t-transparent animate-spin" />
+                    )}
+                    {step.status === 'success' && (
+                      <CheckCircle className="w-4 h-4 text-green-500" />
+                    )}
+                    {step.status === 'failed' && (
+                      <AlertCircle className="w-4 h-4 text-red-500" />
+                    )}
+                    <span className={
+                      step.status === 'success' ? 'text-green-600 dark:text-green-400' :
+                      step.status === 'failed' ? 'text-red-600 dark:text-red-400' :
+                      'text-cyan-600 dark:text-cyan-400'
+                    }>
+                      {step.step}
+                    </span>
+                    {step.message && (
+                      <span className="text-muted-foreground ml-1">- {step.message}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* DNS Warnings */}
             {dnsWarnings.length > 0 && (

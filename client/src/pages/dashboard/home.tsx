@@ -78,8 +78,12 @@ interface DashboardStats {
   hardenedLeads?: number;
   bouncyLeads?: number;
   recoveredLeads?: number;
-  lastSync?: string | null;
-  engineStatus?: string;
+  sync?: {
+    status: string;
+    lastSync: string | null;
+    activeMonitors: number;
+    isAutonomous: boolean;
+  };
   openRate?: number;
   responseRate?: number;
   pipelineValue?: number;
@@ -88,10 +92,10 @@ interface DashboardStats {
   undeliveredLeads?: number;
   lastOutreachActivity?: string | null;
   domainHealth?: number;
-  health?: {
-    score: number;
-    status: 'healthy' | 'warning' | 'critical';
-    reputation: number;
+    health?: {
+        score: number | null;
+        status: 'healthy' | 'fair' | 'poor' | 'critical' | 'initializing';
+        reputation: number | null;
     bounces: {
       hard: number;
       soft: number;
@@ -448,10 +452,10 @@ export default function DashboardHome() {
               onValueChange={setSelectedIntegrationId}
               className="flex w-full md:w-auto"
             />
-            {stats?.lastSync && (
+            {stats?.sync?.lastSync && (
               <Badge variant="outline" className="px-3 py-1.5 bg-muted/30 text-muted-foreground border-border/40 rounded-lg font-bold text-[11px]">
                 <RefreshCw className="w-3 h-3 mr-2 opacity-50" />
-                Synced {formatTimeAgo(stats.lastSync)}
+                Synced {formatTimeAgo(stats.sync!.lastSync)}
               </Badge>
             )}
             {trialDaysLeft > 0 && (
@@ -597,7 +601,7 @@ export default function DashboardHome() {
 
             <ReputationCard 
               score={stats?.health?.score !== undefined ? stats.health.score : null}
-              status={(stats?.health?.status === 'warning' ? 'fair' : (stats?.health?.status || 'healthy')) as any}
+              status={(stats?.health?.status || 'healthy') as any}
               bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
               dns={stats?.health?.dns}
               isLoading={statsLoading}
@@ -614,14 +618,14 @@ export default function DashboardHome() {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium flex items-center gap-3">
                     <div className={cn("h-2 w-2 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]",
-                      (stats?.engineStatus === "Autonomous" && stats?.leads !== 0) ? "bg-emerald-500 shadow-emerald-500/40" : "bg-amber-500 shadow-amber-500/40"
+                      (stats?.sync?.status === "Autonomous" && stats?.leads !== 0) ? "bg-emerald-500 shadow-emerald-500/40" : "bg-amber-500 shadow-amber-500/40"
                     )} />
                     AI Automation
                   </span>
                   <Badge variant="secondary" className={cn("border-0 text-[10px] uppercase font-bold tracking-tighter",
-                    (stats?.engineStatus === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
+                    (stats?.sync?.status === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
                   )}>
-                    {(stats?.engineStatus === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "Active" : (stats?.engineStatus === "Autonomous" ? "Monitoring" : "Idle")}
+                    {(stats?.sync?.status === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "Active" : (stats?.sync?.status === "Autonomous" ? "Monitoring" : "Idle")}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">
