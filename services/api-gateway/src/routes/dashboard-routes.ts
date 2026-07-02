@@ -157,21 +157,34 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     let reputationScore: number | null = null;
     let globalBounceRate: number | null = null;
 
-    // 7-Day Reputation Trend Calculation
-    const trendData = [];
+    // 7-Day Reputation Trend — built from real DNS verification scores
+    const trendData: Array<{ date: string; score: number; bounces: number }> = [];
+    const allVerifications = await storage.getDomainVerifications(userId, 30);
+    // Sort oldest first so we can carry forward the last known score
+    const sortedVerifs = allVerifications
+      .filter(v => v.verification_result && typeof (v.verification_result as any).overallScore === 'number')
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+    
+    let verifIdx = 0;
+    let lastKnownScore: number | null = null;
+    
     for (let i = 6; i >= 0; i--) {
       const d = new Date();
       d.setDate(d.getDate() - i);
       const dateStr = d.toISOString().split('T')[0];
+      const dayEnd = new Date(dateStr + 'T23:59:59.999Z');
+      
+      // Advance through sorted (oldest-first) verifications up to this day
+      while (verifIdx < sortedVerifs.length && new Date(sortedVerifs[verifIdx].created_at) <= dayEnd) {
+        lastKnownScore = (sortedVerifs[verifIdx].verification_result as any).overallScore;
+        verifIdx++;
+      }
       
       const dayBounces = recentBounces.filter(b => b.timestamp.toISOString().split('T')[0] === dateStr);
-      const dayPenalty = (dayBounces.filter(b => b.bounceType === 'hard').length * 7) + 
-                         (dayBounces.filter(b => b.bounceType === 'soft').length * 3) + 
-                         (dayBounces.filter(b => b.bounceType === 'spam').length * 25);
       
       trendData.push({
         date: dateStr.substring(5), // MM-DD
-        score: Math.max(0, 100 - dayPenalty),
+        score: lastKnownScore ?? 50,
         bounces: dayBounces.length
       });
     }
@@ -255,7 +268,11 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     const globalOpenRate = Number(globalMsgStats?.totalSent || 0) > 0
       ? Number(((Number(globalMsgStats?.opened || 0) / Number(globalMsgStats?.totalSent || 0)) * 100).toFixed(2))
       : null; // No data: don't fabricate a benchmark
-    const domainHealth = reputationScore !== null ? Number(reputationScore.toFixed(2)) : null;
+    // Use the most recent DNS verification score as domainHealth (real %)
+    const latestDnsScore = activeVerifications.length > 0
+      ? ((activeVerifications[0].verification_result as any)?.overallScore ?? null)
+      : null;
+    const domainHealth = latestDnsScore !== null ? Number(Number(latestDnsScore).toFixed(2)) : null;
 
     // Map verification results nicely
     const mappedVerifications = activeVerifications.map(v => {
@@ -295,6 +312,8 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
       spf: mappedVerifications.some(v => v.result?.spf?.valid),
       dkim: mappedVerifications.some(v => v.result?.dkim?.valid),
       dmarc: mappedVerifications.some(v => v.result?.dmarc?.valid),
+      mx: mappedVerifications.some(v => v.result?.mx?.found),
+      ptr: mappedVerifications.some(v => v.result?.ptr?.valid),
       blacklist: mappedVerifications.some(v => v.result?.blacklist?.isBlacklisted)
     };
 

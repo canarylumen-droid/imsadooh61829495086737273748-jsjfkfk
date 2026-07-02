@@ -106,7 +106,9 @@ interface DashboardStats {
       spf: boolean;
       dkim: boolean;
       dmarc: boolean;
+      mx: boolean;
       ptr: boolean;
+      blacklist: boolean;
     };
   };
   benchmarks?: {

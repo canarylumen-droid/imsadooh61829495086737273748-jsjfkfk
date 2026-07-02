@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useMailbox } from "@/hooks/use-mailbox";
-import { Upload, Loader2, CheckCircle2, Sparkles, Send } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, Sparkles, Send, FileText } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRealtime } from "@/hooks/use-realtime";
 import { PdfIcon, CsvIcon } from "@/components/ui/CustomIcons";
@@ -39,6 +39,7 @@ export default function LeadImportPage() {
   const [enableAi, setEnableAi] = useState(true);
   const [progress, setProgress] = useState(0);
   const [manualPasteText, setManualPasteText] = useState("");
+  const [pasteMode, setPasteMode] = useState(false);
   const [importResults, setImportResults] = useState<{ imported: number; skipped: number; filtered?: number; leads?: any[] } | null>(null);
   const [isOutreachModalOpen, setIsOutreachModalOpen] = useState(false);
   const [leadStats, setLeadStats] = useState<{ total: number; planLimit: number } | null>(null);
@@ -326,7 +327,13 @@ export default function LeadImportPage() {
             email: l.email,
             phone: l.phone,
             company: l.company,
-            ...l.metadata // Include mapped metadata
+            role: l.role,
+            bio: l.bio,
+            channel: l.channel,
+            replyEmail: l.replyEmail,
+            niche: l.niche,
+            city: l.city,
+            ...l.metadata
           })),
           channel: 'email',
           aiPaused: !enableAi,
@@ -426,23 +433,23 @@ export default function LeadImportPage() {
           <div className="flex justify-center">
             <div className="bg-muted/10 p-1 rounded-2xl flex gap-1 border border-border/10">
               <Button
-                variant={!manualPasteText.trim() ? "default" : "ghost"}
+                variant={!pasteMode ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setManualPasteText("")}
+                onClick={() => { setPasteMode(false); setManualPasteText(""); }}
                 className={cn(
                   "rounded-xl text-[9px] sm:text-[10px] font-bold h-8 sm:h-10 px-4 sm:px-6 transition-all",
-                  !manualPasteText.trim() ? "bg-primary shadow-lg text-primary-foreground" : "hover:bg-primary/10 text-muted-foreground"
+                  !pasteMode ? "bg-primary shadow-lg text-primary-foreground" : "hover:bg-primary/10 text-muted-foreground"
                 )}
               >
                 FILE UPLOAD
               </Button>
               <Button
-                variant={manualPasteText.trim() ? "default" : "ghost"}
+                variant={pasteMode ? "default" : "ghost"}
                 size="sm"
-                onClick={() => setManualPasteText(" ")} // Trigger manual mode
+                onClick={() => { setPasteMode(true); setFile(null); }}
                 className={cn(
                   "rounded-xl text-[9px] sm:text-[10px] font-bold h-8 sm:h-10 px-4 sm:px-6 transition-all",
-                  manualPasteText.trim() ? "bg-primary shadow-lg text-primary-foreground" : "hover:bg-primary/10 text-muted-foreground"
+                  pasteMode ? "bg-primary shadow-lg text-primary-foreground" : "hover:bg-primary/10 text-muted-foreground"
                 )}
               >
                 PASTE TEXT
@@ -465,6 +472,24 @@ export default function LeadImportPage() {
             </div>
           </div>
 
+          {pasteMode ? (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
+                <FileText className="h-4 w-4" />
+                <span>Paste your leads data below (CSV, list, or raw text)</span>
+              </div>
+              <textarea
+                value={manualPasteText}
+                onChange={(e) => setManualPasteText(e.target.value)}
+                placeholder={`John Doe, john@acme.com, 555-0100, Acme Corp\nJane Smith, jane@startup.io, 555-0200, Startup Inc\n-- or any format with names, emails, phones, companies`}
+                className="w-full min-h-[200px] p-4 rounded-xl bg-muted/20 border border-border/40 text-sm font-mono resize-y focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50 transition-all placeholder:text-muted-foreground/30"
+                disabled={importing}
+              />
+              <p className="text-[10px] text-muted-foreground/60">
+                AI will automatically extract names, emails, phones, and companies from any format.
+              </p>
+            </div>
+          ) : (
           <div
             className={cn(
               "border-2 border-dashed rounded-2xl p-6 sm:p-10 text-center transition-all cursor-pointer group/upload relative overflow-hidden",
@@ -513,6 +538,7 @@ export default function LeadImportPage() {
               </p>
             </label>
           </div>
+          )}
 
           {importResults && (
             <div className="space-y-4">
@@ -581,8 +607,8 @@ export default function LeadImportPage() {
               Preview Outreach
             </Button>
             <Button
-              onClick={manualPasteText.trim() ? handleManualImport : handleImport}
-              disabled={(manualPasteText.trim() ? false : !file) || importing}
+              onClick={pasteMode ? handleManualImport : handleImport}
+              disabled={(pasteMode ? false : !file) || importing}
               className="flex-1 h-10 sm:h-12 rounded-xl text-xs font-semibold uppercase tracking-wider shadow-lg shadow-primary/10 bg-primary hover:bg-primary/90 transition-all min-w-0 text-[10px] sm:text-xs"
             >
               {importing ? (
@@ -591,7 +617,7 @@ export default function LeadImportPage() {
                   <span className="truncate">Synchronizing...</span>
                 </>
               ) : (
-                <span className="truncate">{manualPasteText.trim() ? 'Extract Leads' : 'Start Import'}</span>
+                <span className="truncate">{pasteMode ? 'Extract Leads' : 'Start Import'}</span>
               )}
             </Button>
           </div>

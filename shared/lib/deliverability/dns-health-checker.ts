@@ -25,6 +25,7 @@ export interface DomainHealth {
   dkimSelectors?: string[];
   bimi: boolean;
   bimiRecord?: string;
+  mx: boolean;
   blacklist: boolean;
   blacklistedOn?: string[];
   rblChecked: boolean;
@@ -77,6 +78,7 @@ export async function checkDomainHealth(domain: string): Promise<DomainHealth> {
     dmarc: false,
     dkim: false,
     bimi: false,
+    mx: false,
     blacklist: false,
     rblChecked: false,
     score: 0,
@@ -143,6 +145,14 @@ export async function checkDomainHealth(domain: string): Promise<DomainHealth> {
       if (logoMatch) health.bimiRecord = logoMatch;
     }
 
+    // MX check
+    try {
+      const mxRecords = await dns.resolveMx(domain);
+      health.mx = mxRecords.length > 0;
+    } catch {
+      health.mx = false;
+    }
+
     const rblResults = await getCachedOrFetch(`rbl:${domain}`, () => queryRBL(domain));
     health.rblChecked = true;
     if (rblResults.length > 0) {
@@ -151,8 +161,21 @@ export async function checkDomainHealth(domain: string): Promise<DomainHealth> {
       health.warnings.push(`Domain blacklisted on: ${rblResults.join(', ')}`);
     }
 
-    health.score = (health.spf ? 25 : 0) + (health.dkim ? 25 : 0) + (health.dmarc ? 25 : 0) + (health.bimi ? 10 : 0) + (health.blacklist ? -50 : 0) + (rblResults.length > 0 ? -20 : 15);
-    health.score = Math.max(0, Math.min(100, health.score));
+    // Percentage-based scoring (0–100)
+    // Weights: SPF=20, DKIM=20, DMARC=20, BIMI=10, MX=15 → subtotal 85
+    // Not blacklisted bonus: +15 → max total = 100
+    let earnedScore = 0;
+    if (health.spf) earnedScore += 20;
+    if (health.dmarc) earnedScore += 20;
+    if (health.dkim) earnedScore += 20;
+    if (health.bimi) earnedScore += 10;
+    if (health.mx) earnedScore += 15;
+    if (health.blacklist) {
+      earnedScore = Math.round(earnedScore * 0.7);
+    } else {
+      earnedScore += 15;
+    }
+    health.score = Math.round(Math.max(0, Math.min(100, earnedScore)));
 
     if (health.score >= 80) {
       health.status = 'excellent';

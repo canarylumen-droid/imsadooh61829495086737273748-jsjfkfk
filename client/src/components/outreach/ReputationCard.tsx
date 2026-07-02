@@ -31,7 +31,9 @@ interface ReputationCardProps {
     spf: boolean;
     dkim: boolean;
     dmarc: boolean;
+    mx: boolean;
     ptr: boolean;
+    blacklist: boolean;
   };
   isLoading?: boolean;
   hasIntegrations?: boolean;
@@ -156,18 +158,22 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
         </div>
 
         {/* DNS Status Grid */}
-        <div className="grid grid-cols-4 gap-2">
-          {['SPF', 'DKIM', 'DMARC', 'PTR'].map((type) => {
-            const isValid = dns ? (dns as any)[type.toLowerCase()] !== false : true;
+        <div className="flex flex-wrap gap-x-3 gap-y-2">
+          {['SPF', 'DKIM', 'DMARC', 'MX', 'PTR', 'BLACKLIST'].map((type) => {
+            const key = type === 'BLACKLIST' ? 'blacklist' : type.toLowerCase();
+            const val = dns ? (dns as any)[key] : undefined;
+            const isGood = val === true && key !== 'blacklist';
+            const isBad = key === 'blacklist' ? val === true : val === false;
+            const isUnknown = val === undefined;
             return (
               <div key={type} className="flex flex-col items-center gap-1">
                 <div className={cn(
                   "w-full h-1 rounded-full",
-                  isPending ? "bg-sky-500/20" : (isValid ? "bg-emerald-500/40" : "bg-rose-500/40")
+                  isPending || isUnknown ? "bg-sky-500/20" : isGood ? "bg-emerald-500/40" : "bg-rose-500/40"
                 )} />
                 <span className={cn(
                   "text-[8px] font-black uppercase tracking-tighter",
-                  isPending ? "text-sky-500/60" : (isValid ? "text-emerald-500/60" : "text-rose-500")
+                  isPending || isUnknown ? "text-sky-500/60" : isGood ? "text-emerald-500/60" : "text-rose-500"
                 )}>
                   {type}
                 </span>

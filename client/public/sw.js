@@ -2,7 +2,7 @@
 const CACHE_NAME = 'audnix-v1';
 const urlsToCache = [
   '/',
-  '/logo.jpg',
+  '/favicon-white.png',
   '/notification.mp3'
 ];
 
@@ -28,8 +28,8 @@ self.addEventListener('push', (event) => {
   
   const options = {
     body: data.message || 'You have a new notification',
-    icon: '/logo.jpg',
-    badge: '/logo.jpg',
+    icon: '/favicon-white.png',
+    badge: '/favicon-white.png',
     vibrate: [200, 100, 200],
     tag: data.type || 'notification',
     sound: '/notification.mp3',

@@ -94,6 +94,7 @@ interface UserData {
 interface BulkMailboxImportRow {
   email: string;
   password: string;
+  passwordType?: string;
   smtpHost: string;
   smtpPort?: string;
   imapHost?: string;
@@ -107,7 +108,8 @@ type BulkMailboxField = keyof BulkMailboxImportRow;
 
 const BULK_MAILBOX_HEADERS: Record<BulkMailboxField, string[]> = {
   email: ["email", "mailbox", "address", "username", "smtpuser", "smtp_user", "smtp user"],
-  password: ["password", "pass", "apppassword", "app_password", "app password", "smtppass", "smtp_pass", "smtp pass"],
+  password: ["password", "pass", "apppassword", "app_password", "app password", "smtppass", "smtp_pass", "smtp pass", "mailboxpassword", "mailbox_password", "mailbox pass"],
+  passwordType: ["passwordtype", "password_type", "password type", "credentialtype", "credential_type", "credential type"],
   smtpHost: ["smtphost", "smtp_host", "smtp host", "smtpserver", "smtp_server", "smtp server"],
   smtpPort: ["smtpport", "smtp_port", "smtp port"],
   imapHost: ["imaphost", "imap_host", "imap host", "imapserver", "imap_server", "imap server"],
@@ -333,6 +335,7 @@ export default function IntegrationsPage() {
   const [disconnectIntegrationId, setDisconnectIntegrationId] = useState<string | null>(null);
 
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
+  const [passwordType, setPasswordType] = useState<'app_password' | 'mailbox_password'>('mailbox_password');
   const [appPasswordGuide, setAppPasswordGuide] = useState<any>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
   const bulkMailboxInputRef = useRef<HTMLInputElement>(null);
@@ -515,7 +518,7 @@ export default function IntegrationsPage() {
   });
 
   const connectCustomEmailMutation = useMutation({
-    mutationFn: async (config: typeof customEmailConfig) => {
+    mutationFn: async (config: typeof customEmailConfig & { passwordType?: string }) => {
       const response = await apiRequest("POST", "/api/custom-email/connect", config);
       return response.json();
     },
@@ -1104,26 +1107,40 @@ export default function IntegrationsPage() {
                     {[
                       { label: "SMTP Host", key: "smtpHost", placeholder: "e.g. smtp.gmail.com" },
                       { label: "SMTP Port", key: "smtpPort", placeholder: "587" },
-                      { label: "App Password", key: "password", placeholder: "Minimum 16 characters", type: "password" },
-                      { label: "IMAP Host (Optional)", key: "imapHost", placeholder: "e.g. imap.gmail.com" },
-                      { label: "IMAP Port", key: "imapPort", placeholder: "993" }
                     ].map((field) => (
                       <div key={field.key} className="space-y-1.5">
-                        <Label className="text-xs font-semibold text-muted-foreground ml-1 flex items-center gap-1.5">
-                          {field.label}
-                          {field.key === 'password' && (
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <AlertCircle className="h-3 w-3 text-primary animate-pulse cursor-help" />
-                                </TooltipTrigger>
-                                <TooltipContent className="max-w-[280px] p-4 space-y-3 bg-indigo-950/90 border-primary/20 backdrop-blur-xl">
-                                  <div className="space-y-1">
-                                    <p className="font-black text-[10px] uppercase tracking-widest text-primary flex items-center gap-2">
-                                      <Sparkles className="h-3 w-3" /> Gmail / Outlook Guide
-                                    </p>
-                                    <p className="text-xs leading-relaxed text-foreground/90 italic">Manual connection for personal accounts requires a 16-character <strong>App Password</strong>.</p>
-                                  </div>
+                        <Label className="text-xs font-semibold text-muted-foreground ml-1">{field.label}</Label>
+                        <Input
+                          placeholder={field.placeholder}
+                          value={(customEmailConfig as any)[field.key]}
+                          onChange={(e) => setCustomEmailConfig({ ...customEmailConfig, [field.key]: e.target.value })}
+                          className="rounded-xl border-border/50 focus:ring-primary/20"
+                        />
+                      </div>
+                    ))}
+
+                    {/* Password field with toggle */}
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold text-muted-foreground ml-1 flex items-center gap-1.5">
+                        {passwordType === 'app_password' ? 'App Password' : 'Mailbox Password'}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <AlertCircle className="h-3 w-3 text-primary animate-pulse cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-[280px] p-4 space-y-3 bg-indigo-950/90 border-primary/20 backdrop-blur-xl">
+                              <div className="space-y-1">
+                                <p className="font-black text-[10px] uppercase tracking-widest text-primary flex items-center gap-2">
+                                  <Sparkles className="h-3 w-3" /> {passwordType === 'app_password' ? 'App Password Guide' : 'Mailbox Password Guide'}
+                                </p>
+                                <p className="text-xs leading-relaxed text-foreground/90 italic">
+                                  {passwordType === 'app_password'
+                                    ? 'Manual connection for personal accounts requires a 16-character <strong>App Password</strong>.'
+                                    : 'Use your regular mailbox password (or app password if 2FA is enabled).'}
+                                </p>
+                              </div>
+                              {passwordType === 'app_password' ? (
+                                <>
                                   <div className="space-y-2 py-1">
                                     <div className="flex items-start gap-2">
                                       <div className="h-4 w-4 rounded-full bg-primary/20 flex items-center justify-center text-[8px] font-bold text-primary mt-0.5 shrink-0">1</div>
@@ -1149,13 +1166,53 @@ export default function IntegrationsPage() {
                                   >
                                     Open Google Settings <ArrowRight className="ml-1 h-3 w-3" />
                                   </Button>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                        </Label>
+                                </>
+                              ) : (
+                                <p className="text-[10px] text-muted-foreground leading-snug">
+                                  Use the same password you use to log into your email account. Some providers (Gmail, Outlook with 2FA) may still require an <strong>App Password</strong> — switch to App Password mode if connection fails.
+                                </p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      </Label>
+                      <Input
+                        type="password"
+                        placeholder={passwordType === 'app_password' ? "Minimum 16 characters" : "Your mailbox password"}
+                        value={customEmailConfig.password}
+                        onChange={(e) => setCustomEmailConfig({ ...customEmailConfig, password: e.target.value })}
+                        className="rounded-xl border-border/50 focus:ring-primary/20"
+                      />
+                      <div className="flex items-center gap-1 mt-1">
+                        <button
+                          type="button"
+                          onClick={() => setPasswordType(passwordType === 'app_password' ? 'mailbox_password' : 'app_password')}
+                          className="text-[10px] font-bold tracking-wide underline underline-offset-2 decoration-dotted transition-colors"
+                        >
+                          <span className={passwordType === 'mailbox_password' ? 'text-primary' : 'text-muted-foreground hover:text-primary'}>
+                            {passwordType === 'app_password' ? 'Use Mailbox Password' : 'Use App Password'}
+                          </span>
+                        </button>
+                        {appPasswordGuide && passwordType === 'app_password' && (
+                          <span className="text-[9px] text-indigo-500 font-bold uppercase tracking-widest bg-indigo-500/10 px-1.5 py-0.5 rounded-full ml-auto">
+                            Recommended
+                          </span>
+                        )}
+                        {passwordType === 'mailbox_password' && (
+                          <span className="text-[9px] text-emerald-500 font-bold uppercase tracking-widest bg-emerald-500/10 px-1.5 py-0.5 rounded-full ml-auto">
+                            Default
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {[
+                      { label: "IMAP Host (Optional)", key: "imapHost", placeholder: "e.g. imap.gmail.com" },
+                      { label: "IMAP Port", key: "imapPort", placeholder: "993" }
+                    ].map((field) => (
+                      <div key={field.key} className="space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground ml-1">{field.label}</Label>
                         <Input
-                          type={field.type || "text"}
                           placeholder={field.placeholder}
                           value={(customEmailConfig as any)[field.key]}
                           onChange={(e) => setCustomEmailConfig({ ...customEmailConfig, [field.key]: e.target.value })}
@@ -1169,7 +1226,7 @@ export default function IntegrationsPage() {
                     <Button
                       className="rounded-xl px-8 font-semibold h-11 flex-1"
                       disabled={connectCustomEmailMutation.isPending || (isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise')}
-                      onClick={() => connectCustomEmailMutation.mutate(customEmailConfig)}
+                      onClick={() => connectCustomEmailMutation.mutate({ ...customEmailConfig, passwordType })}
                     >
                       {connectCustomEmailMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                       {isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise' ? 'Limit Reached' : 'Add Mailbox'}
@@ -1322,6 +1379,18 @@ export default function IntegrationsPage() {
                                     stats.health.dns.dmarc ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
                                   )}>
                                     DMARC
+                                  </Badge>
+                                  <Badge className={cn(
+                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
+                                    stats.health.dns.mx ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                                  )}>
+                                    MX
+                                  </Badge>
+                                  <Badge className={cn(
+                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
+                                    !stats.health.dns.blacklist ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                                  )}>
+                                    RBL
                                   </Badge>
                                 </span>
                               )}
@@ -1576,18 +1645,25 @@ export default function IntegrationsPage() {
                                   </Badge>
                                 </div>
                                 {v.result && (
-                                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1">
-                                    {['SPF', 'DKIM', 'DMARC', 'MX'].map(record => {
-                                      const key = record.toLowerCase();
-                                      const isFound = v.result[key]?.found;
-                                      const isValid = v.result[key]?.valid ?? true;
+                                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
+                                    {['SPF', 'DKIM', 'DMARC', 'MX', 'PTR', 'BLACKLIST'].map(record => {
+                                      const key = record === 'BLACKLIST' ? 'blacklist' : record.toLowerCase();
+                                      const rec = v.result[key];
+                                      if (record === 'BLACKLIST') {
+                                        const isBlacklisted = rec?.isBlacklisted || rec?.listedOn?.length > 0;
+                                        return (
+                                          <div key={record} className="flex flex-col items-center gap-1 p-1 rounded bg-black/20">
+                                            <span className="text-[7px] font-bold text-muted-foreground uppercase">BL</span>
+                                            <div className={cn("h-1 w-full rounded-full", isBlacklisted ? "bg-red-500" : "bg-emerald-500")} />
+                                          </div>
+                                        );
+                                      }
+                                      const isFound = rec?.found;
+                                      const isValid = rec?.valid ?? true;
                                       return (
                                         <div key={record} className="flex flex-col items-center gap-1 p-1 rounded bg-black/20">
                                           <span className="text-[7px] font-bold text-muted-foreground uppercase">{record}</span>
-                                          <div className={cn(
-                                            "h-1 w-full rounded-full",
-                                            isFound && isValid ? "bg-emerald-500" : isFound ? "bg-amber-500" : "bg-red-500"
-                                          )} />
+                                          <div className={cn("h-1 w-full rounded-full", isFound && isValid ? "bg-emerald-500" : isFound ? "bg-amber-500" : "bg-red-500")} />
                                         </div>
                                       );
                                     })}

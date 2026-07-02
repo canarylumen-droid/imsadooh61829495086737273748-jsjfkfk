@@ -496,11 +496,14 @@ export class ImapConnectionManager {
       const port: number = Number(meta.imap_port || meta.imapPort || 993);
       const user = meta.smtp_user || meta.smtpUser || meta.user || meta.email || integration.accountType || '';
       const pass = meta.smtp_pass || meta.smtpPass || meta.imap_pass || meta.imapPass || meta.password || '';
+      const pwdType = meta.passwordType || 'mailbox_password';
 
       if (!imapHost || !user || !pass) {
         console.warn(`[IMAP] Custom email config incomplete for ${integration.id}: host/user/pass required.`);
         return null;
       }
+
+      console.log(`[IMAP] Connecting ${integration.id} (${user}) via ${imapHost}:${port} [password type: ${pwdType}]`);
 
       return {
         host: imapHost,

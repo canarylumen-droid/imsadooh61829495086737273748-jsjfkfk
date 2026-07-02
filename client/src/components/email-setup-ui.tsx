@@ -43,6 +43,7 @@ export function EmailSetupUI() {
   const [importStats, setImportStats] = useState({ imported: 0, skipped: 0, errors: 0 });
   const [showSetup, setShowSetup] = useState(false);
   const [showFilterInfo, setShowFilterInfo] = useState(false);
+  const [passwordType, setPasswordType] = useState<'app_password' | 'mailbox_password'>('mailbox_password');
   const [appPasswordGuide, setAppPasswordGuide] = useState<any>(null);
   const [discovering, setDiscovering] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -228,6 +229,7 @@ export function EmailSetupUI() {
           imapPort: config.imapPort,
           email: config.email,
           password: config.password,
+          passwordType,
           fromName: config.fromName
         })
       });
@@ -446,14 +448,32 @@ export function EmailSetupUI() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium mb-1">Password / App Password</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-sm font-medium">
+                    {passwordType === 'app_password' ? 'App Password' : 'Mailbox Password'}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setPasswordType(passwordType === 'app_password' ? 'mailbox_password' : 'app_password')}
+                    className="text-[10px] font-bold underline underline-offset-2 decoration-dotted hover:text-primary transition-colors"
+                  >
+                    <span className={passwordType === 'mailbox_password' ? 'text-primary' : 'text-muted-foreground hover:text-primary'}>
+                      Switch to {passwordType === 'app_password' ? 'Mailbox Password' : 'App Password'}
+                    </span>
+                  </button>
+                </div>
                 <Input
                   type="password"
-                  placeholder="Your email password or app-specific password"
+                  placeholder={passwordType === 'app_password' ? "Your app-specific password (16+ characters)" : "Your mailbox password"}
                   value={config.password}
                   onChange={(e) => setConfig({ ...config, password: e.target.value })}
                   className="font-mono text-sm"
                 />
+                {passwordType === 'mailbox_password' && (
+                  <p className="text-[10px] text-muted-foreground mt-1">
+                    Using your regular mailbox password. If 2FA is enabled, you may need to switch to App Password.
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-between pb-1">

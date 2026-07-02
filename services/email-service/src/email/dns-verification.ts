@@ -372,44 +372,49 @@ export async function verifyDomainDns(domain: string, dkimSelector?: string, for
     recommendations: []
   };
 
-  let score = 0;
+  let earnedScore = 0;
   const recommendations: string[] = [];
 
-  if (spf.found && spf.valid) score += 30;
-  else if (spf.found) score += 15;
+  // ── Percentage-based scoring (0–100) ──────────────────────────────────────
+  // Each record contributes its weight. Blacklist applies a penalty multiplier.
+  // Weights: SPF=25, DKIM=25, DMARC=25, MX=15, PTR=10 → total 100
+
+  if (spf.found && spf.valid) earnedScore += 25;
+  else if (spf.found) earnedScore += 15;
   else recommendations.push('Add SPF record to authorize email senders');
 
-  if (dkim.found && dkim.valid) score += 30;
-  else if (dkim.found) score += 15;
+  if (dkim.found && dkim.valid) earnedScore += 25;
+  else if (dkim.found) earnedScore += 15;
   else recommendations.push('Set up DKIM signing for email authentication');
 
   if (dmarc.found && dmarc.valid) {
-    if (dmarc.policy === 'reject') score += 40;
-    else if (dmarc.policy === 'quarantine') score += 35;
-    else score += 25;
+    if (dmarc.policy === 'reject') earnedScore += 25;
+    else if (dmarc.policy === 'quarantine') earnedScore += 22;
+    else earnedScore += 18;
   } else if (dmarc.found) {
-    score += 15;
+    earnedScore += 10;
   } else {
     recommendations.push('Add DMARC policy to prevent email spoofing');
   }
 
-  if (!mx.found) {
-    recommendations.push('No MX records found - email delivery may fail');
-  }
+  if (mx.found) earnedScore += 15;
+  else recommendations.push('No MX records found - email delivery may fail');
 
-  if (ptr.found && ptr.valid) score += 10;
+  if (ptr.found && ptr.valid) earnedScore += 10;
   else if (ptr.found) recommendations.push('PTR record does not match domain');
   else recommendations.push('Missing PTR record (Reverse DNS)');
 
   if (blacklist.isBlacklisted) {
-    score = Math.min(20, score);
+    earnedScore = Math.round(earnedScore * 0.7);
     recommendations.push(`CRITICAL: Domain is listed on ${blacklist.listedOn.length} blacklists: ${blacklist.listedOn.join(', ')}`);
   }
+
+  const score = Math.round(Math.max(0, Math.min(100, earnedScore)));
 
   let overallStatus: DnsVerificationResult['overallStatus'];
   if (blacklist.isBlacklisted) overallStatus = 'blacklisted';
   else if (score >= 90) overallStatus = 'excellent';
-  else if (score >= 70) overallStatus = 'good';
+  else if (score >= 75) overallStatus = 'good';
   else if (score >= 50) overallStatus = 'fair';
   else overallStatus = 'poor';
 

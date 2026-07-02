@@ -279,12 +279,14 @@ interface ConnectRequestBody {
   imapPort: string;
   email: string;
   password: string;
+  passwordType?: string;
   fromName?: string;
 }
 
 interface BulkMailboxImportRow extends Partial<ConnectRequestBody> {
   smtpUser?: string;
   imapUser?: string;
+  passwordType?: string;
 }
 
 const BULK_MAILBOX_LIMIT = 1000;
@@ -305,7 +307,7 @@ function isEnterpriseUser(user: any): boolean {
 router.post('/connect', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
-    let { smtpHost, smtpPort, imapHost, imapPort, email, password, fromName } = req.body as ConnectRequestBody;
+    let { smtpHost, smtpPort, imapHost, imapPort, email, password, passwordType, fromName } = req.body as ConnectRequestBody;
 
     // Sanitize inputs to prevent trailing copy-paste spaces from failing validation
     smtpHost = smtpHost?.trim();
@@ -417,7 +419,7 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       return;
     }
 
-    const credentials: EmailConfig = {
+    const credentials: EmailConfig & { passwordType?: string } = {
       smtp_host:  smtpHost,
       smtp_port:  parsedSmtpPort,
       imap_host:  effectiveImapHost,
@@ -425,7 +427,8 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       smtp_user:  email,
       smtp_pass:  password,
       from_name:  fromName || '',
-      provider:   'custom'
+      provider:   'custom',
+      passwordType: passwordType || 'mailbox_password',
     };
 
     console.log(`[Email Connect] Saving ${email} — SMTP ${smtpHost}:${parsedSmtpPort} / IMAP ${effectiveImapHost}:${parsedImapPort}`);
@@ -596,6 +599,7 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
       const smtpHost = String(row.smtpHost || '').trim().toLowerCase();
       const imapHostRaw = String(row.imapHost || '').trim().toLowerCase();
       const password = String(row.password || '').trim();
+      const passwordType = String(row.passwordType || '').trim().toLowerCase() || 'mailbox_password';
       const fromName = String(row.fromName || '').trim();
 
       if (!email || !smtpHost || !password) {
@@ -653,6 +657,7 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
         smtp_pass: password,
         smtpPass: password,
         password,
+        passwordType,
         from_name: fromName,
         fromName,
         provider: 'custom',
