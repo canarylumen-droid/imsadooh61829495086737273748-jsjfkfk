@@ -523,6 +523,7 @@ export const outreachCampaigns = pgTable("outreach_campaigns", {
     isManual?: boolean;
     replyEmail?: string;
     aiAdjustCopy?: boolean;
+    threadFollowUp?: boolean;
   }>().notNull().default(sql`'{"dailyLimit": 50, "minDelayMinutes": 2, "maxDelayMinutes": 10}'::jsonb`),
   replyEmail: text("reply_email"),
   aiAutonomousMode: boolean("ai_autonomous_mode").notNull().default(false),

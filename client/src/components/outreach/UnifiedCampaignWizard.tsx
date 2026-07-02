@@ -77,6 +77,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [excludeWeekends, setExcludeWeekends] = useState(false);
   const [aiAutonomousMode, setAiAutonomousMode] = useState(true);
   const [aiAdjustCopy, setAiAdjustCopy] = useState(false);
+  const [threadFollowUp, setThreadFollowUp] = useState(true);
   const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState("");
 
@@ -222,13 +223,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
           ]);
         }
         if (data.autoReplyBody) setAutoReplyBody(data.autoReplyBody);
+        if (data.threadFollowUp !== undefined) setThreadFollowUp(data.threadFollowUp);
       } catch (e) {}
     }
   }, []);
 
   useEffect(() => {
     if (isOpen) {
-      const draft = { campaignName, subject, body, followups, autoReplyBody, totalDailyVolume, targetDays, excludeWeekends };
+      const draft = { campaignName, subject, body, followups, autoReplyBody, totalDailyVolume, targetDays, excludeWeekends, threadFollowUp };
       localStorage.setItem("campaign_draft", JSON.stringify(draft));
     }
   }, [campaignName, subject, body, followups, autoReplyBody, totalDailyVolume, targetDays, excludeWeekends, isOpen]);
@@ -324,7 +326,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
           estimatedDays,
           minimumDaysAtCurrentCapacity,
           replyTo: replyTo || undefined,
-          aiAdjustCopy
+          aiAdjustCopy,
+          threadFollowUp
         },
         template: {
           subject,
@@ -834,6 +837,13 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                              <p className="text-[9px] opacity-40 mt-1 text-emerald-600">Pauses sending on Saturdays/Sundays</p>
                            </div>
                            <Switch checked={excludeWeekends} onCheckedChange={setExcludeWeekends} className="scale-110" />
+                        </div>
+                        <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 flex items-center justify-between gap-4">
+                           <div>
+                             <p className="text-[10px] font-black uppercase">Thread Follow-ups</p>
+                             <p className="text-[9px] opacity-40 mt-1 text-primary">Replies in the same email thread for better deliverability</p>
+                           </div>
+                           <Switch checked={threadFollowUp} onCheckedChange={setThreadFollowUp} className="scale-110" />
                         </div>
                       </div>
 

@@ -29,7 +29,7 @@ import { eq, and, or, sql, lte, isNull, isNotNull, ne, asc, gt, desc } from 'dri
 import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from '../channels/email.js';
 import { adjustCopyIfNecessary } from "../ai/copy-adjuster.js";
-import { generateExpertOutreach } from "@services/brain-worker/src/ai-lib/core/conversation-ai.js";
+import { generateExpertOutreach, generateAIReply } from "@services/brain-worker/src/ai-lib/core/conversation-ai.js";
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { decryptToJSON } from '@shared/lib/crypto/encryption.js';
 import { mailboxHealthService } from '@services/email-service/src/email/mailbox-health-service.js';
@@ -37,6 +37,7 @@ import { warmupService } from '@services/outreach-worker/src/outreach-lib/warmup
 import { canSendToProvider, recordProviderOutcome } from '@services/email-service/src/email/provider-reputation.js';
 import { shouldYieldInitialSends } from '@services/email-service/src/email/mailbox-coordinator.js';
 import { getLeadProfile, isWithinLeadPreferredWindow, getOptimalSendProbability } from '../calendar/lead-timezone-intelligence.js';
+import { isWeekend, addBusinessDays } from '@shared/lib/utils/validation.js';
 
 // ─── Job Type Definitions ─────────────────────────────────────────────────────
 
@@ -119,6 +120,10 @@ export class CampaignQueueManager {
   async startCampaign(campaign: any): Promise<void> {
     if (!campaignQueue) {
       console.log('[CampaignQueue] Redis unavailable — campaign will use setInterval fallback');
+      return;
+    }
+    if (!campaign) {
+      console.warn('[CampaignQueue] startCampaign called with null/undefined campaign');
       return;
     }
 
@@ -864,7 +869,9 @@ async function rescheduleSendBatch(data: SendBatchJobData, delayMs: number): Pro
   const jobKey = `send-batch_${campaignId}_${integrationId}`;
   // Upsert PG heartbeat BEFORE Redis so watchdog always sees a valid scheduled_at
   await logJobPending(jobKey, 'campaign:send-batch', campaignId, data.userId, integrationId, null, null, data as Record<string, any>, delayMs).catch(() => {});
-  await campaignQueue.add(jobKey, data, { delay: delayMs, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
+  await campaignQueue.add(jobKey, data, { delay: delayMs, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } }).catch((e: any) => {
+    console.warn(`[CampaignWorker] ⚠️ Failed to reschedule mailbox ${integrationId.slice(-8)}: ${e.message}`);
+  });
 }
 
 // ─── PostgreSQL Job Lifecycle Helpers (Self-Healing Watchdog) ─────────────────
@@ -992,8 +999,12 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     return;
   }
 
-  // 24/7 MODE: Ignoring weekend exclusion flag for autonomous performance
-  // if (isWeekend && campaign.excludeWeekends) return;
+  // Respect weekend exclusion flag
+  if (campaign.excludeWeekends && isWeekend()) {
+    console.log(`[CampaignWorker] 🌙 Weekend — skipping send batch for ${integrationId.slice(-8)} (excludeWeekends enabled)`);
+    await rescheduleSendBatch(data, 24 * 60 * 60 * 1000);
+    return;
+  }
 
   // 3. FAULT TOLERANCE: Check mailbox health (Smart Recovery aware)
   const { MailboxHealthMonitor } = await import('@shared/lib/monitoring/health-monitor.js');
@@ -1163,7 +1174,9 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     if (soonestLeadResult.length > 0 && campaignQueue) {
       const delay = Math.max(60000, new Date(soonestLeadResult[0].nextActionAt!).getTime() - Date.now());
       const jobKey = `send-batch_${campaignId}_${integrationId}`;
-      await campaignQueue.add(jobKey, data, { delay, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
+      await campaignQueue.add(jobKey, data, { delay, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } }).catch((e: any) => {
+        console.warn(`[CampaignWorker] ⚠️ Failed to reschedule mailbox (no-leads path): ${e.message}`);
+      });
       console.log(`[CampaignQueue] 😴 No leads ready. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(delay/60000)}m`);
     } else {
       const routingPending = await db.select({ id: campaignLeads.id })
@@ -1178,7 +1191,9 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
 
       if (routingPending.length > 0 && campaignQueue) {
         const jobKey = `send-batch_${campaignId}_${integrationId}`;
-        await campaignQueue.add(jobKey, data, { delay: 60_000, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
+        await campaignQueue.add(jobKey, data, { delay: 60_000, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } }).catch((e: any) => {
+          console.warn(`[CampaignWorker] ⚠️ Failed to reschedule mailbox (routing path): ${e.message}`);
+        });
         console.log(`[CampaignQueue] ⏳ Waiting for smart routing. Retrying mailbox ${integrationId.slice(-8)} in 1m`);
         return;
       }
@@ -1237,7 +1252,17 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
   // BUG #10 FIX: Iterate up to 5 leads so a timezone-gated lead
   // doesn't stall the entire mailbox queue.
   let didSend = false;
+  let batchSentCount = 0;
   for (const row of nextLeadResult) {
+    // Mid-batch budget check: re-check daily limit after each send
+    if (batchSentCount > 0) {
+      const updatedSentToday = await getMailboxSentCount(userId, integrationId);
+      if (updatedSentToday >= effectiveLimit) {
+        console.log(`[CampaignWorker] ⏸️ Mid-batch budget hit (${updatedSentToday}/${effectiveLimit}) — rescheduling remaining leads.`);
+        // Release remaining leads back to queue for next cycle
+        break;
+      }
+    }
     const leadEntry = (row as any).campaignLead;
     const lead = (row as any).lead;
 
@@ -1376,8 +1401,13 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
         const initialSentAt = leadEntry.metadata?.initialSentAt;
         if (initialSentAt) {
           const targetDate = new Date(initialSentAt);
-          targetDate.setDate(targetDate.getDate() + delayDays);
-          delayMs = Math.max(60000, targetDate.getTime() - Date.now());
+          if (campaign.excludeWeekends) {
+            const bizDate = addBusinessDays(targetDate, delayDays);
+            delayMs = Math.max(60000, bizDate.getTime() - Date.now());
+          } else {
+            targetDate.setDate(targetDate.getDate() + delayDays);
+            delayMs = Math.max(60000, targetDate.getTime() - Date.now());
+          }
         }
         await campaignQueueManager.scheduleFollowUp(campaignId, userId, leadEntry.id, integrationId, nextStep, delayMs);
       }
@@ -1387,13 +1417,18 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
       // Reschedule the mailbox for the next send
       if (campaignQueue) {
         const jobKey = `send-batch_${campaignId}_${integrationId}`;
-        const nextDelay = calcMailboxInterval(sentToday + 1, dailyLimit, currentIntegration);
-        await campaignQueue.add(jobKey, data, { delay: nextDelay, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
-        console.log(`[CampaignQueue] 🎯 Sent lead. Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(nextDelay/60000)}m`);
+        const totalSent = sentToday + batchSentCount;
+        const nextDelay = calcMailboxInterval(totalSent, dailyLimit, currentIntegration);
+        await campaignQueue.add(jobKey, data, { delay: nextDelay, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } }).catch((e: any) => {
+          console.warn(`[CampaignWorker] ⚠️ Failed to reschedule mailbox (post-send path): ${e.message}`);
+        });
+        console.log(`[CampaignWorker] 🎯 Sent lead (${batchSentCount} in batch). Rescheduling mailbox ${integrationId.slice(-8)} in ${Math.round(nextDelay/60000)}m`);
       }
 
       didSend = true;
-      break; // Only one send per batch cycle to respect pacing
+      batchSentCount++;
+      // Continue to next lead instead of breaking — skip failed leads and keep going
+      continue;
 
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
@@ -1596,11 +1631,20 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
       const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
       let delayMs = delayDays * 24 * 60 * 60 * 1000;
 
-      // Relative scheduling
+      // Relative scheduling with weekend awareness
       const initialSentAt = leadEntry.metadata?.initialSentAt;
       if (initialSentAt) {
-        const targetDate = new Date(initialSentAt);
-        targetDate.setDate(targetDate.getDate() + delayDays);
+        let targetDate = new Date(initialSentAt);
+        if (campaign.excludeWeekends) {
+          // Use business days to skip weekends
+          targetDate = addBusinessDays(targetDate, delayDays);
+        } else {
+          targetDate.setDate(targetDate.getDate() + delayDays);
+        }
+        delayMs = Math.max(60000, targetDate.getTime() - Date.now());
+      } else if (campaign.excludeWeekends) {
+        // If no initial sent date, calculate from now with business days
+        const targetDate = addBusinessDays(new Date(), delayDays);
         delayMs = Math.max(60000, targetDate.getTime() - Date.now());
       }
 
@@ -1669,33 +1713,83 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     .where(eq(campaignLeads.id, campaignLeadId));
   if (!leadEntry) return;
 
-  // Auto-replies NEVER check daily limits — they are responses to incoming messages
-  // Get the auto-reply body from campaign template
-  let body = (campaign.template as any)?.autoReply?.body || (campaign.template as any)?.autoReplyBody || "Thanks for your reply! We'll get back to you soon.";
-  let subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject || 'Re: ';
-  subject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
+  // Dedup: check if an auto-reply was already sent to this lead for this campaign
+  const existingAutoReply = await db.select({ id: messages.id })
+    .from(messages)
+    .where(and(
+      eq(messages.leadId, leadId),
+      eq(messages.userId, userId),
+      eq(messages.direction, 'outbound'),
+      sql`metadata->>'step' = 'auto-reply'`,
+      sql`metadata->>'campaignId' = ${campaignId}`
+    ))
+    .limit(1);
+  if (existingAutoReply.length > 0) {
+    console.log(`[CampaignWorker] ⚡ Auto-reply already sent to lead ${leadId} for campaign ${campaignId} — skipping.`);
+    return;
+  }
 
-  // Variable replacement
-  const firstName = lead.name?.trim().split(' ')[0] || 'there';
-  const lastName = lead.name?.trim().split(' ').slice(1).join(' ') || 'there';
-  const fullName = lead.name?.trim() || firstName;
-  const company = (lead as any).company?.trim() || 'your company';
-  const meta = (lead as any).metadata || {};
-  const city = meta.city || (lead as any).city || '';
-  const industry = meta.industry || '';
-  const niche = meta.niche || '';
-  const website = meta.website || '';
-  body = body
-    .replace(/{{firstName}}/g, firstName)
-    .replace(/{{lastName}}/g, lastName)
-    .replace(/{{name}}/g, fullName)
-    .replace(/{{lead_name}}/g, fullName)
-    .replace(/{{company}}/g, company)
-    .replace(/{{business_name}}/g, company)
-    .replace(/{{city}}/g, city)
-    .replace(/{{industry}}/g, industry)
-    .replace(/{{niche}}/g, niche)
-    .replace(/{{website}}/g, website);
+  // Auto-replies NEVER check daily limits — they are responses to incoming messages
+  let body: string;
+  let subject: string;
+
+  const hasAutoReplyTemplate = !!((campaign.template as any)?.autoReply?.body || (campaign.template as any)?.autoReplyBody);
+
+  if (hasAutoReplyTemplate) {
+    // Use the campaign's auto-reply template
+    body = (campaign.template as any).autoReply?.body || (campaign.template as any).autoReplyBody;
+    subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject || 'Re: ';
+    subject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
+
+    // Variable replacement
+    const firstName = lead.name?.trim().split(' ')[0] || 'there';
+    const lastName = lead.name?.trim().split(' ').slice(1).join(' ') || 'there';
+    const fullName = lead.name?.trim() || firstName;
+    const company = (lead as any).company?.trim() || 'your company';
+    const meta = (lead as any).metadata || {};
+    const city = meta.city || (lead as any).city || '';
+    const industry = meta.industry || '';
+    const niche = meta.niche || '';
+    const website = meta.website || '';
+    body = body
+      .replace(/{{firstName}}/g, firstName)
+      .replace(/{{lastName}}/g, lastName)
+      .replace(/{{name}}/g, fullName)
+      .replace(/{{lead_name}}/g, fullName)
+      .replace(/{{company}}/g, company)
+      .replace(/{{business_name}}/g, company)
+      .replace(/{{city}}/g, city)
+      .replace(/{{industry}}/g, industry)
+      .replace(/{{niche}}/g, niche)
+      .replace(/{{website}}/g, website);
+  } else {
+    // No auto-reply template — use AI to generate a contextual reply
+    try {
+      const history = await db.select()
+        .from(messages)
+        .where(and(eq(messages.leadId, lead.id), eq(messages.userId, userId)))
+        .orderBy(asc(messages.createdAt));
+
+      const aiResult = await generateAIReply(
+        lead as any,
+        history as any,
+        'email',
+        {
+          businessName: (lead as any).company || undefined,
+          calendarLink: (lead.metadata as any)?.calendarLink || undefined,
+        }
+      );
+
+      body = aiResult.text;
+      subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject || 'Re: ';
+      subject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
+    } catch (aiErr: any) {
+      console.warn(`[CampaignWorker] AI auto-reply failed for lead ${lead.id}, using template subject: ${aiErr.message}`);
+      subject = (campaign.template as any)?.initial?.subject || (campaign.template as any)?.subject || 'Re: ';
+      subject = subject.toLowerCase().startsWith('re:') ? subject : `Re: ${subject}`;
+      body = `Hi ${lead.name?.split(' ')[0] || 'there'},\n\nThanks for your message! I'd love to help answer any questions you have.\n\nBest regards`;
+    }
+  }
 
   // AI Adjustment Toggle: Check campaign config
   if ((campaign.config as any)?.aiAdjustCopy) {
@@ -1736,7 +1830,7 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
 
   const trackingId = Math.random().toString(36).substring(2, 11);
 
-  // --- THREADING LOGIC: always reference the initial email ---
+  // --- THREADING LOGIC: always reply to the lead's last message ---
   let inReplyTo: string | undefined = undefined;
   let references: string | undefined = undefined;
   let threadId: string | undefined = undefined;
@@ -1748,19 +1842,20 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
       .orderBy(asc(messages.createdAt));
 
     if (allMessages.length > 0) {
-      const firstMsg = allMessages[0];
-      const firstMeta = (firstMsg.metadata as any) || {};
-      const initialId = firstMsg.externalId || firstMeta.externalId;
+      // Use the LAST message (lead's inbound reply) as the inReplyTo target
+      const lastMsg = allMessages[allMessages.length - 1];
+      const lastMeta = (lastMsg.metadata as any) || {};
+      const lastId = lastMsg.externalId || lastMeta.externalId;
 
-      threadId = firstMeta.providerThreadId || firstMeta.threadId;
+      threadId = lastMeta.providerThreadId || lastMeta.threadId;
 
-      if (initialId) {
-        inReplyTo = initialId;
+      if (lastId) {
+        inReplyTo = lastId;
         const refs = allMessages
           .map(m => m.externalId || ((m.metadata as any)?.externalId))
           .filter(Boolean)
           .join(' ');
-        references = `${initialId}${refs ? ' ' + refs : ''}`;
+        references = `${lastId}${refs ? ' ' + refs : ''}`;
       }
     }
   } catch (threadErr) {
@@ -1924,6 +2019,12 @@ async function deliverCampaignEmail(
   leadEntry: any,
   integrationId: string
 ): Promise<void> {
+  // Respect weekend exclusion — skip delivery if weekends are excluded and today is a weekend
+  if (campaign.excludeWeekends && isWeekend()) {
+    console.log(`[CampaignWorker] 🌙 Weekend — skipping delivery for lead ${lead.id.slice(-8)} (excludeWeekends enabled)`);
+    return;
+  }
+
   const template = campaign.template as any;
   let subject = template?.initial?.subject || template?.subject || 'Contacting you';
   let body = template?.initial?.body || template?.body;
@@ -1932,13 +2033,17 @@ async function deliverCampaignEmail(
   let variantId = 'standard';
   let isBreakup = false;
 
+  const threadFollowUp = (campaign.config as any)?.threadFollowUp !== false;
+
   if (leadEntry.currentStep > 0) {
     const followups = (campaign.template as any)?.followups || [];
     const fuConfig = followups[leadEntry.currentStep - 1];
     if (fuConfig) {
       body = fuConfig.body || body;
       const fuSubject = fuConfig.subject || subject;
-      subject = fuSubject.toLowerCase().startsWith('re:') ? fuSubject : `Re: ${fuSubject}`;
+      subject = threadFollowUp
+        ? (fuSubject.toLowerCase().startsWith('re:') ? fuSubject : `Re: ${fuSubject}`)
+        : fuSubject;
       isBreakup = fuConfig.isBreakup || false;
     }
   }
@@ -2180,7 +2285,7 @@ async function deliverCampaignEmail(
     return;
   }
 
-  // --- THREADING LOGIC: always reference the initial email ---
+  // --- THREADING LOGIC: reference the initial email when threadFollowUp is enabled ---
   let inReplyTo: string | undefined = undefined;
   let references: string | undefined = undefined;
   let threadId: string | undefined = undefined;
@@ -2190,30 +2295,33 @@ async function deliverCampaignEmail(
     // Determine if this is a priority reply
     const isPriorityReply = leadEntry.currentStep > 0 && (lead.status === 'replied' || lead.status === 'interested' || lead.status === 'warm');
 
-    try {
-      const allMessages = await db.select()
-        .from(messages)
-        .where(eq(messages.leadId, lead.id))
-        .orderBy(asc(messages.createdAt));
+    if (threadFollowUp) {
+      try {
+        const allMessages = await db.select()
+          .from(messages)
+          .where(eq(messages.leadId, lead.id))
+          .orderBy(asc(messages.createdAt));
 
-      if (allMessages.length > 0) {
-        const firstMsg = allMessages[0];
-        const firstMeta = (firstMsg.metadata as any) || {};
-        const initialId = firstMsg.externalId || firstMeta.externalId;
+        if (allMessages.length > 0) {
+          // Use the LAST message as the inReplyTo target for proper threading
+          const refMsg = allMessages[allMessages.length - 1];
+          const refMeta = (refMsg.metadata as any) || {};
+          const refId = refMsg.externalId || refMeta.externalId;
 
-        threadId = firstMeta.providerThreadId || firstMeta.threadId;
+          threadId = refMeta.providerThreadId || refMeta.threadId;
 
-        if (initialId) {
-          inReplyTo = initialId;
-          const refs = allMessages
-            .map(m => m.externalId || ((m.metadata as any)?.externalId))
-            .filter(Boolean)
-            .join(' ');
-          references = `${initialId}${refs ? ' ' + refs : ''}`;
+          if (refId) {
+            inReplyTo = refId;
+            const refs = allMessages
+              .map(m => m.externalId || ((m.metadata as any)?.externalId))
+              .filter(Boolean)
+              .join(' ');
+            references = `${refId}${refs ? ' ' + refs : ''}`;
+          }
         }
+      } catch (threadErr) {
+        console.warn(`[CampaignWorker] Failed to fetch threading headers for lead ${lead.id}:`, threadErr);
       }
-    } catch (threadErr) {
-      console.warn(`[CampaignWorker] Failed to fetch threading headers for lead ${lead.id}:`, threadErr);
     }
 
     await sendEmail(userId, lead.email, body, subject, {
@@ -2307,12 +2415,20 @@ async function deliverCampaignEmail(
 
     if (hasMore) {
       const delayDays = followupsArr[nextStep - 1]?.delayDays || 3;
-      if (newMetadata.initialSentAt) {
-        nextActionAt = new Date(newMetadata.initialSentAt);
-        nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+      if (campaign.excludeWeekends) {
+        if (newMetadata.initialSentAt) {
+          nextActionAt = addBusinessDays(new Date(newMetadata.initialSentAt), delayDays);
+        } else {
+          nextActionAt = addBusinessDays(new Date(), delayDays);
+        }
       } else {
-        nextActionAt = new Date();
-        nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+        if (newMetadata.initialSentAt) {
+          nextActionAt = new Date(newMetadata.initialSentAt);
+          nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+        } else {
+          nextActionAt = new Date();
+          nextActionAt.setDate(nextActionAt.getDate() + delayDays);
+        }
       }
     }
 
