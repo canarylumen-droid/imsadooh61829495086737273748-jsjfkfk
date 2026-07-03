@@ -16,9 +16,8 @@ process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
   log.error('🚨 unhandledRejection', { reason: reason?.message || String(reason), promise });
 });
 process.on('uncaughtException', (err: Error) => {
-  log.error('🚨 uncaughtException — shutting down gracefully', { error: err.message, stack: err.stack });
-  // Give logger time to flush, then exit (BullMQ will auto-restart via Railway/ECS)
-  setTimeout(() => process.exit(1), 1500);
+  log.error('🚨 uncaughtException — shutting down', { error: err.message, stack: err.stack });
+  process.exit(1);
 });
 
 async function startOutreachService() {
@@ -41,9 +40,10 @@ async function startOutreachService() {
     try {
       const result = startFn();
       if (result instanceof Promise) {
-        result.catch((err: any) =>
-          log.error(`${name} async startup failed`, { error: err?.message })
-        );
+        await result.catch((err: any) => {
+          log.error(`${name} async startup failed`, { error: err?.message });
+          throw err;
+        });
       }
       log.info(`${name} ✅ Online`);
     } catch (err: any) {
@@ -99,12 +99,12 @@ async function startOutreachService() {
   await startWorkerModule('Verification Pipeline', () => verificationPipelineModule?.startVerificationWorker?.());
   await startWorkerModule('Active Watchdog',       () => activeWatchdogModule?.startActiveWatchdog?.());
   await startWorkerModule('Fleet Auditor',         () => fleetAuditorModule?.fleetAuditor?.start?.());
-  await startWorkerModule('Daily Checkpoint',      () => {
-    const { dailyCheckpoint } = require('@shared/lib/queues/daily-checkpoint.js');
+  await startWorkerModule('Daily Checkpoint',      async () => {
+    const { dailyCheckpoint } = await import('@shared/lib/queues/daily-checkpoint.js');
     dailyCheckpoint?.start?.();
   });
-  await startWorkerModule('Hourly Distribution',   () => {
-    const { hourlyDistribution } = require('@shared/lib/queues/hourly-distribution.js');
+  await startWorkerModule('Hourly Distribution',   async () => {
+    const { hourlyDistribution } = await import('@shared/lib/queues/hourly-distribution.js');
     hourlyDistribution?.start?.();
   });
 
@@ -162,32 +162,57 @@ eventScheduler('autonomous-scaler', async () => {
   }));
 
   // ── Graceful shutdown ─────────────────────────────────────────────────────
+  let shuttingDown = false;
   const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     log.info(`🛑 ${signal} — shutting down Outreach Worker service...`);
-    try { outreachEngine.stop(); }             catch (_e) {}
-    try { autonomousOutreachWorker.stop(); }   catch (_e) {}
-    try { meetingReminderWorker.stop(); }      catch (_e) {}
-    // Wait for active BullMQ jobs to finish before exiting
+
+    // Force exit after 10s regardless of what's happening
+    const forceExit = setTimeout(() => process.exit(0), 10000);
+    forceExit.unref();
+
     try {
-      if (outreachBullWorker) {
-        await outreachBullWorker.close(false);
-        log.info('BullMQ worker closed gracefully');
+      const results = await Promise.allSettled([
+        Promise.resolve(outreachEngine.stop?.()),
+        Promise.resolve(autonomousOutreachWorker.stop?.()),
+        Promise.resolve(meetingReminderWorker.stop?.()),
+      ]);
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          log.warn('Worker stop error (non-fatal)', { error: result.reason?.message });
+        }
       }
     } catch (_e: any) {
-      log.warn('BullMQ worker close error', { error: _e?.message });
+      log.warn('Shutdown error (non-fatal)', { error: _e?.message });
     }
+
+    // Close BullMQ worker gracefully
+    if (outreachBullWorker) {
+      try {
+        await outreachBullWorker.close(false);
+        log.info('BullMQ worker closed gracefully');
+      } catch (_e: any) {
+        log.warn('BullMQ worker close error', { error: _e?.message });
+      }
+    }
+
     log.info('Outreach Worker shutdown complete');
+    clearTimeout(forceExit);
     if (process.env.UNIFIED_MODE !== 'true') process.exit(0);
   };
+
   if (process.env.UNIFIED_MODE !== 'true') {
-    process.on('SIGTERM', async () => {
-      await serviceRegistry.deregister();
-      await shutdown('SIGTERM');
-    });
-    process.on('SIGINT', async () => {
-      await serviceRegistry.deregister();
-      await shutdown('SIGINT');
-    });
+    const onSignal = async (signal: string) => {
+      try {
+        await serviceRegistry.deregister();
+      } catch (_e: any) {
+        log.warn('ServiceRegistry deregister error', { error: _e?.message });
+      }
+      await shutdown(signal);
+    };
+    process.on('SIGTERM', () => onSignal('SIGTERM'));
+    process.on('SIGINT', () => onSignal('SIGINT'));
   }
 
   log.info('🚀 Outreach Worker Service fully online');

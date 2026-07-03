@@ -1,5 +1,6 @@
 import { Express, Response } from "express";
 import http from "http";
+import net from "net";
 import path from "path";
 import fs from "fs";
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
@@ -175,14 +176,64 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   // Create HTTP server
   const server = http.createServer(app);
 
-  // Initialize WebSocket server for real-time sync unless this process is the
-  // API-only Railway service. Dedicated sockets boot via start:socket.
-  if (process.env.API_DISABLE_SOCKET !== 'true') {
+  // When running in API-only mode, proxy /socket.io requests to the dedicated socket service
+  if (process.env.API_DISABLE_SOCKET === 'true') {
+    const SOCKET_PORT = process.env.SOCKET_PORT || '5001';
+    const SOCKET_HOST = process.env.SOCKET_HOST || '127.0.0.1';
+
+    // Proxy HTTP requests for socket.io polling transport
+    app.use('/socket.io', (req, res) => {
+      const options = {
+        hostname: SOCKET_HOST,
+        port: parseInt(SOCKET_PORT, 10),
+        path: req.url,
+        method: req.method,
+        headers: { ...req.headers, connection: 'close' },
+      };
+
+      const proxyReq = http.request(options, (proxyRes) => {
+        res.writeHead(proxyRes.statusCode || 200, proxyRes.headers);
+        proxyRes.pipe(res, { end: true });
+      });
+
+      proxyReq.on('error', (err: Error) => {
+        console.error('[SocketProxy] Proxy error:', err.message);
+        if (!res.headersSent) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Socket service unavailable' }));
+        }
+      });
+
+      req.pipe(proxyReq, { end: true });
+    });
+
+    // Proxy WebSocket upgrade requests for socket.io
+    server.on('upgrade', (req, socket, head) => {
+      if (req.url?.startsWith('/socket.io')) {
+        const proxySocket = net.createConnection(parseInt(SOCKET_PORT, 10), SOCKET_HOST, () => {
+          proxySocket.write(
+            `${req.method} ${req.url} HTTP/1.1\r\n` +
+            Object.entries(req.headers).map(([k, v]) => `${k}: ${v}\r\n`).join('') +
+            '\r\n'
+          );
+          proxySocket.write(head);
+          proxySocket.pipe(socket);
+          socket.pipe(proxySocket);
+        });
+
+        proxySocket.on('error', () => {
+          socket.destroy();
+        });
+
+        socket.on('error', () => {
+          proxySocket.destroy();
+        });
+      }
+    });
+  } else {
+    // Initialize WebSocket server for real-time sync
     wsSync.initialize(server);
   }
-
-  // Outreach engine is initialized in server/index.ts
-
 
   return server;
 }

@@ -1306,19 +1306,21 @@ class ImapIdleManager {
             }
 
             // For OAuth providers, proactively refresh token before reconnecting.
-            // This prevents an expired token causing an infinite auth-failure loop.
+            // Transient failures will retry via backoff instead of permanent abort.
             if (integration.provider === 'gmail' || integration.provider === 'outlook') {
                 try {
                     const token = integration.provider === 'gmail'
                         ? await gmailOAuth.getValidToken(integration.userId, integration.accountType || undefined)
                         : await outlookOAuth.getValidToken(integration.userId);
                     if (!token) {
-                        console.warn(`[IMAP Reconnect] Could not refresh OAuth token for ${integrationId}. Aborting reconnect.`);
+                        console.warn(`[IMAP Reconnect] Could not refresh OAuth token for ${integrationId}. Will retry (backoff: ${Math.round(currentDelay / 1000)}s).`);
+                        this.reconnect(integrationId, integration);
                         return;
                     }
                     console.log(`[IMAP Reconnect] OAuth token refreshed for ${integrationId}. Reconnecting...`);
                 } catch (tokenErr: any) {
-                    console.error(`[IMAP Reconnect] Token refresh failed for ${integrationId}:`, tokenErr.message);
+                    console.error(`[IMAP Reconnect] Token refresh failed for ${integrationId}: ${tokenErr.message}. Will retry (backoff: ${Math.round(currentDelay / 1000)}s).`);
+                    this.reconnect(integrationId, integration);
                     return;
                 }
             }
@@ -1637,10 +1639,21 @@ class ImapIdleManager {
         this.watchdogInterval = setInterval(async () => {
             // Phase 11: Zombie detection
             const now = new Date().getTime();
+            const redis = await getRedisClient();
             for (const [key, lastSeen] of this.lastActivity.entries()) {
+                const [integrationId, folderName] = key.split(':');
                 const idleTime = now - lastSeen.getTime();
                 if (idleTime > this.ZOMBIE_TIMEOUT_MS) {
-                    const [integrationId, folderName] = key.split(':');
+                    // Check if this integration is now managed by the autonomous worker cluster
+                    if (redis) {
+                        const activeKey = IMAP_KEYS.active(integrationId);
+                        const isWorkerManaged = await redis.exists(activeKey);
+                        if (isWorkerManaged) {
+                            console.log(`[WATCHDOG] 🤖 ${integrationId}:${folderName} is managed by worker cluster. Cleaning up local state.`);
+                            this.cleanupIntegration(integrationId);
+                            continue;
+                        }
+                    }
                     console.warn(`🚨 [WATCHDOG] Zombie detected on ${integrationId}:${folderName} (${Math.round(idleTime/1000/60)}m idle). Recycling...`);
                     this.forceRecycleConnection(integrationId, folderName);
                 }
@@ -1653,12 +1666,22 @@ class ImapIdleManager {
                 for (const provider of providers) {
                     const integrations = await storage.getIntegrationsByProvider(provider);
                     for (const integration of integrations) {
-                        if (integration.connected && !this.connections.has(integration.id)) {
-                            // If it's missing from our active map, it's a drop. Bring it back instantly.
-                            console.log(`🔦 [WATCHDOG] Active resurrection for ${integration.provider} integration ${integration.id} (User: ${integration.userId})`);
-                            this.failureCooldowns.delete(integration.id); // Clear any cooldown to allow instant recovery
-                            this.setupConnection(integration.id, integration);
+                        if (!integration.connected) continue;
+                        if (this.connections.has(integration.id)) continue;
+
+                        // Skip if failure cooldown is active (recent failures should back off)
+                        const cooldownUntil = this.failureCooldowns.get(integration.id);
+                        if (cooldownUntil && Date.now() < cooldownUntil) continue;
+
+                        // Skip if worker cluster is already managing this integration
+                        if (redis) {
+                            const activeKey = IMAP_KEYS.active(integration.id);
+                            const isWorkerManaged = await redis.exists(activeKey);
+                            if (isWorkerManaged) continue;
                         }
+
+                        console.log(`🔦 [WATCHDOG] Active resurrection for ${integration.provider} integration ${integration.id} (User: ${integration.userId})`);
+                        this.setupConnection(integration.id, integration);
                     }
                 }
             } catch (resErr) {
@@ -1681,6 +1704,61 @@ class ImapIdleManager {
                 console.error(`[WATCHDOG] Failed to destroy zombie connection ${integrationId}:`, e);
             }
         }
+    }
+
+    private cleanupIntegration(integrationId: string): void {
+        const folderMap = this.connections.get(integrationId);
+        if (folderMap) {
+            for (const [, imap] of folderMap) {
+                try { imap.destroy(); } catch (_e) {}
+            }
+        }
+
+        this.connections.delete(integrationId);
+        this.folders.delete(integrationId);
+        this.backoffDelays.delete(integrationId);
+        this.failureCooldowns.delete(integrationId);
+
+        // Remove all lastActivity entries for this integration
+        for (const [key] of this.lastActivity) {
+            if (key.startsWith(`${integrationId}:`)) {
+                this.lastActivity.delete(key);
+            }
+        }
+
+        // Remove sync intervals for this integration
+        const syncMap = this.syncIntervals.get(integrationId);
+        if (syncMap) {
+            for (const [, interval] of syncMap) {
+                clearInterval(interval);
+            }
+            this.syncIntervals.delete(integrationId);
+        }
+
+        // Remove reconnect timers
+        const reconnectTimer = this.reconnectTimers.get(integrationId);
+        if (reconnectTimer) {
+            clearTimeout(reconnectTimer);
+            this.reconnectTimers.delete(integrationId);
+        }
+
+        // Remove restart timers
+        const restartMap = this.restartTimers.get(integrationId);
+        if (restartMap) {
+            for (const [, timer] of restartMap) {
+                clearTimeout(timer);
+            }
+            this.restartTimers.delete(integrationId);
+        }
+
+        // Remove from syncingFolders
+        for (const [key] of this.syncingFolders) {
+            if (key.startsWith(`${integrationId}:`)) {
+                this.syncingFolders.delete(key);
+            }
+        }
+
+        console.log(`[WATCHDOG] Cleaned up local state for integration ${integrationId}`);
     }
 
     /**

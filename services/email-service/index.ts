@@ -160,9 +160,9 @@ async function startEmailService() {
   const healthMonitor = new HealthMonitor();
   healthMonitor.startMonitoring();
 
-  // ── Per-Provider Reputation Recalculation (every 6 hours) ──────────────
+  // ── Per-Provider Reputation Recalculation (every 1 hour) ──────────────
   const { recalculateProviderReputation, resetProviderDailyCounters } = await import('./src/email/provider-reputation.js');
-  const PROVIDER_REPUTATION_INTERVAL = parseInt(process.env.PROVIDER_REPUTATION_INTERVAL_MS || '21600000', 10);
+  const PROVIDER_REPUTATION_INTERVAL = parseInt(process.env.PROVIDER_REPUTATION_INTERVAL_MS || '3600000', 10);
   setInterval(async () => {
     try {
       const activeIntegrations = await db.select({ id: integrations.id }).from(integrations)

@@ -30,27 +30,70 @@ export interface DomainHealth {
   blacklistedOn?: string[];
   rblChecked: boolean;
   score: number;
+  scorePrecise: number;
   status: string;
   riskLevel: 'low' | 'medium' | 'high';
   warnings: string[];
 }
 
-const RBL_SERVERS = [
+const IP_RBL_SERVERS = [
   'zen.spamhaus.org',
   'bl.spamcop.net',
   'dnsbl.sorbs.net',
   'b.barracudacentral.org',
 ];
 
+const DOMAIN_RBL_SERVERS = [
+  'dbl.spamhaus.org',
+  'multi.surbl.org',
+  'uribl.com',
+];
+
 async function queryRBL(domain: string): Promise<string[]> {
   const results: string[] = [];
-  for (const rbl of RBL_SERVERS) {
+  const seen = new Set<string>();
+
+  // Resolve domain to IP first for IP-based RBL checks
+  let resolvedIp: string | null = null;
+  try {
+    const ips = await dns.resolve4(domain);
+    if (ips.length > 0) resolvedIp = ips[0];
+  } catch {}
+
+  // IP-based RBL checks (need reversed IP format)
+  if (resolvedIp) {
+    const reverseIp = resolvedIp.split('.').reverse().join('.');
+    for (const rbl of IP_RBL_SERVERS) {
+      try {
+        const lookupDomain = `${reverseIp}.${rbl}`;
+        const records = await dns.resolve4(lookupDomain);
+        if (records && records.length > 0) {
+          // RBLs return 127.0.0.x for listed entries
+          const isListed = records.some(r => r.startsWith('127.'));
+          if (isListed && !seen.has(rbl)) {
+            results.push(rbl);
+            seen.add(rbl);
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // Domain-based RBL checks
+  for (const rbl of DOMAIN_RBL_SERVERS) {
     try {
-      const lookupDomain = domain.split('.').reverse().join('.') + '.' + rbl;
-      await dns.resolve4(lookupDomain);
-      results.push(rbl);
+      const lookupDomain = `${domain}.${rbl}`;
+      const records = await dns.resolve4(lookupDomain);
+      if (records && records.length > 0) {
+        const isListed = records.some(r => r.startsWith('127.'));
+        if (isListed && !seen.has(rbl)) {
+          results.push(rbl);
+          seen.add(rbl);
+        }
+      }
     } catch {}
   }
+
   return results;
 }
 
@@ -82,6 +125,7 @@ export async function checkDomainHealth(domain: string): Promise<DomainHealth> {
     blacklist: false,
     rblChecked: false,
     score: 0,
+    scorePrecise: 0,
     status: 'unknown',
     riskLevel: 'low',
     warnings: [],
@@ -161,8 +205,8 @@ export async function checkDomainHealth(domain: string): Promise<DomainHealth> {
       health.warnings.push(`Domain blacklisted on: ${rblResults.join(', ')}`);
     }
 
-    // Percentage-based scoring (0–100)
-    // Weights: SPF=20, DKIM=20, DMARC=20, BIMI=10, MX=15 → subtotal 85
+    // Percentage-based scoring (0–100) with precise decimal calculation
+    // Weights: SPF=20, DKIM=20, DMARC=20, BIMI=10, MX=15 → max 85 from records
     // Not blacklisted bonus: +15 → max total = 100
     let earnedScore = 0;
     if (health.spf) earnedScore += 20;
@@ -170,11 +214,29 @@ export async function checkDomainHealth(domain: string): Promise<DomainHealth> {
     if (health.dkim) earnedScore += 20;
     if (health.bimi) earnedScore += 10;
     if (health.mx) earnedScore += 15;
+
+    // Precision bonus for SPF hard fail
+    if (health.spfHardFail) earnedScore += 2;
+    // Precision bonus for DMARC reject/quarantine
+    if (health.dmarcPolicy === 'reject') earnedScore += 3;
+    else if (health.dmarcPolicy === 'quarantine') earnedScore += 1;
+    // Penalty for missing SPF all mechanism
+    if (health.spf && health.spfHardFail === false && health.spfRecord?.includes('~all') === false) {
+      earnedScore -= 5;
+    }
+
     if (health.blacklist) {
-      earnedScore = Math.round(earnedScore * 0.7);
+      // Less harsh blacklist penalty: each blacklist reduces 15% of base, max 60%
+      const blacklistCount = health.blacklistedOn?.length || 1;
+      const penalty = Math.min(0.6, blacklistCount * 0.15);
+      earnedScore = earnedScore * (1 - penalty);
+      // Blacklisted domains cannot score above 60
+      earnedScore = Math.min(60, earnedScore);
     } else {
       earnedScore += 15;
     }
+
+    health.scorePrecise = Math.round(Math.max(0, Math.min(100, earnedScore)) * 100) / 100;
     health.score = Math.round(Math.max(0, Math.min(100, earnedScore)));
 
     if (health.score >= 80) {

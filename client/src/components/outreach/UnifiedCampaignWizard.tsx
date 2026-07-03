@@ -843,7 +843,12 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                              <p className="text-[10px] font-black uppercase">Thread Follow-ups</p>
                              <p className="text-[9px] opacity-40 mt-1 text-primary">Replies in the same email thread for better deliverability</p>
                            </div>
-                           <Switch checked={threadFollowUp} onCheckedChange={setThreadFollowUp} className="scale-110" />
+                            <Switch checked={threadFollowUp} onCheckedChange={v => {
+                              setThreadFollowUp(v);
+                              if (v) {
+                                setFollowups(prev => prev.map(f => ({ ...f, subject: "" })));
+                              }
+                            }} className="scale-110" />
                         </div>
                       </div>
 
@@ -964,19 +969,34 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                  </Select>
                                </div>
                              </div>
-                             <div className="space-y-2">
-                               {renderTagBar(`fs${i}`)}
-                               <Input 
-                                 value={f.subject} 
-                                 onChange={e => {
-                                   const newF = [...followups];
-                                   newF[i].subject = e.target.value;
-                                   setFollowups(newF);
-                                 }} 
-                                 placeholder={`S${i+2} SUBJECT (OPTIONAL)`} 
-                                 className="h-12 bg-muted/20 border border-border/40 font-semibold text-sm rounded-xl px-6"
-                               />
-                             </div>
+                              <div className="space-y-2">
+                                {renderTagBar(`fs${i}`)}
+                                <div className="relative">
+                                  <Input 
+                                    value={threadFollowUp ? (subject || "Original subject will be inherited") : f.subject} 
+                                    onChange={e => {
+                                      if (threadFollowUp) return;
+                                      const newF = [...followups];
+                                      newF[i].subject = e.target.value;
+                                      setFollowups(newF);
+                                    }} 
+                                    placeholder={threadFollowUp ? `Inherits: "${subject || 'Original Subject'}"` : `S${i+2} SUBJECT (OPTIONAL)`} 
+                                    className={cn(
+                                      "h-12 bg-muted/20 border font-semibold text-sm rounded-xl px-6",
+                                      threadFollowUp 
+                                        ? "border-dashed border-primary/30 text-muted-foreground/60 cursor-not-allowed opacity-60" 
+                                        : "border-border/40"
+                                    )}
+                                    readOnly={threadFollowUp}
+                                    tabIndex={threadFollowUp ? -1 : 0}
+                                  />
+                                  {threadFollowUp && (
+                                    <div className="absolute -top-2 right-2 px-2 py-0.5 bg-primary/10 rounded-full text-[8px] font-bold text-primary uppercase tracking-wider border border-primary/20">
+                                      Auto-threaded
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
                              <div className="space-y-2">
                                {renderTagBar(`fb${i}`)}
                                <Textarea 

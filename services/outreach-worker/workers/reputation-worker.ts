@@ -81,6 +81,11 @@ export class ReputationWorker {
                     const { calculateReputationScore } = await import("@services/email-service/src/email/reputation-monitor.js");
                     await calculateReputationScore(integration.id);
 
+                    wsSync.notifyReputationUpdate(user.id, {
+                      integrationId: integration.id,
+                      score: result.overallScore,
+                      status: result.overallStatus
+                    });
                     wsSync.notifyStatsUpdated(user.id);
                 } catch (innerError: any) {
                     console.error(`[ReputationWorker] Failed for integration ${integration.id}:`, innerError.message);

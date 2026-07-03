@@ -411,8 +411,11 @@ class DomainReputationMonitor extends EventEmitter {
       });
 
       // Queue mailbox health update based on reputation score
+      // Note: Never set healthStatus = 'failed' from reputation alone.
+      // 'failed' is reserved for permanent auth/invalid-credential errors only.
+      // Low reputation throttles sending via reputation scoring system, not by blocking connections.
       if (integrationId) {
-        const healthStatus = reputation.score >= 70 ? 'connected' : reputation.score >= 40 ? 'warning' : 'failed';
+        const healthStatus = reputation.score >= 70 ? 'connected' : 'warning';
         await queueMailboxHealthUpdate({
           userId,
           integrationId,

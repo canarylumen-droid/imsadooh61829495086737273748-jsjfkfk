@@ -153,8 +153,6 @@ export class EmailDiscoveryService {
         }
 
         // 2. Probe common subdomains + port combinations for custom/enterprise domains
-        // Tries: smtp.domain (587, 465, 25), mail.domain (587, 465), mx.domain (587)
-        //        imap.domain (993, 143), mail.domain (993, 995)
         const smtpCandidates: Array<{ host: string; port: number }> = [
             { host: `smtp.${domain}`, port: 587 },
             { host: `smtp.${domain}`, port: 465 },
@@ -172,9 +170,9 @@ export class EmailDiscoveryService {
             { host: domain, port: 993 },
         ];
 
+        const { default: net } = await import('net');
         const probePort = (host: string, port: number, timeoutMs = 3000): Promise<boolean> =>
             new Promise(resolve => {
-                const net = require('net');
                 const sock = new net.Socket();
                 sock.setTimeout(timeoutMs);
                 sock.once('connect', () => { sock.destroy(); resolve(true); });

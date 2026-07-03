@@ -271,7 +271,7 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
   ];
   const domainProviders = [
     'dbl.spamhaus.org',
-    'surbl.org',
+    'multi.surbl.org',
     'uribl.com'
   ];
   
@@ -282,15 +282,19 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
     const ip = ips.length > 0 ? ips[0] : null;
     const reverseIp = ip ? ip.split('.').reverse().join('.') : null;
 
-    const checks = [];
+    const checks: Promise<void>[] = [];
 
-    // IP-based checks
+    // IP-based checks (reversed IP format for IP-based RBLs)
     if (reverseIp) {
       for (const provider of ipProviders) {
         checks.push((async () => {
           try {
             const result = await promisify(dns.resolve4)(`${reverseIp}.${provider}`);
-            if (result && result.length > 0) listedOn.push(provider);
+            if (result && result.length > 0) {
+              // RBLs return 127.0.0.x for listed entries
+              const isListed = result.some(r => r.startsWith('127.'));
+              if (isListed) listedOn.push(provider);
+            }
           } catch (e) {}
         })());
       }
@@ -301,9 +305,29 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
       checks.push((async () => {
         try {
           const result = await promisify(dns.resolve4)(`${domain}.${provider}`);
-          if (result && result.length > 0) listedOn.push(provider);
+          if (result && result.length > 0) {
+            const isListed = result.some(r => r.startsWith('127.'));
+            if (isListed) listedOn.push(provider);
+          }
         } catch (e) {}
       })());
+    }
+
+    // Open public IP reputation check via AbuseIPDB or similar (no API key needed for basic DNSBL)
+    // Check against additional public RBLs for comprehensive coverage
+    const publicRbls = ['cbl.abuseat.org', 'psbl.surriel.com', 'ivm.sorbs.net'];
+    if (reverseIp) {
+      for (const rbl of publicRbls) {
+        checks.push((async () => {
+          try {
+            const result = await promisify(dns.resolve4)(`${reverseIp}.${rbl}`);
+            if (result && result.length > 0) {
+              const isListed = result.some(r => r.startsWith('127.'));
+              if (isListed) listedOn.push(rbl);
+            }
+          } catch (e) {}
+        })());
+      }
     }
 
     await Promise.all(checks);
@@ -311,9 +335,12 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
     console.warn(`[DNSBL] Failed to perform complete check for ${domain}`, e);
   }
 
+  // Deduplicate
+  const unique = [...new Set(listedOn)];
+
   return {
-    isBlacklisted: listedOn.length > 0,
-    listedOn
+    isBlacklisted: unique.length > 0,
+    listedOn: unique
   };
 }
 

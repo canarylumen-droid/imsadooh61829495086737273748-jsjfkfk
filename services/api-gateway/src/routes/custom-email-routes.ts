@@ -400,14 +400,17 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       imapVerified = true;
     }
 
-    // ── Don't save if both SMTP and IMAP fail ────────────────────────────
-    if (!smtpVerified && !imapVerified) {
-      const details = smtpVerifyError || imapVerifyError || 'Connection verification failed';
+    // ── Both SMTP and IMAP must verify before saving ───────────────────
+    const errors: string[] = [];
+    if (!smtpVerified) errors.push(smtpVerifyError || 'SMTP connection failed');
+    if (!imapVerified) errors.push(imapVerifyError || 'IMAP connection failed');
+    if (errors.length > 0) {
+      const details = errors.join('; ');
       let tip = 'Check your email password. If 2FA is enabled, use an App Password.';
-      if (details.includes('DNS') || details.includes('ENOTFOUND')) {
+      if (details.includes('DNS') || details.includes('ENOTFOUND') || details.includes('timed out')) {
         tip = 'Check that your SMTP/IMAP hostnames are correct. Common hosts: smtp.office365.com, smtp.gmail.com, smtp.zoho.com';
       }
-      sendError(res, 400, 'Could not connect to mailbox', details, tip);
+      sendError(res, 400, `Could not connect to mailbox (SMTP: ${smtpVerified ? 'OK' : 'FAIL'}, IMAP: ${imapVerified ? 'OK' : 'FAIL'})`, details, tip);
       return;
     }
 
@@ -525,6 +528,13 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
       wsSync.notifySettingsUpdated(userId);
       wsSync.notifySyncStatus(userId, { syncing: true });
+      if (dnsHealth) {
+        wsSync.notifyReputationUpdate(userId, {
+          integrationId: customEmail.id,
+          score: dnsHealth.score,
+          status: dnsHealth.status
+        });
+      }
     } catch (e) {
       console.warn('[Email Connect] Could not notify frontend via websocket:', e);
     }
@@ -1084,8 +1094,7 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
 
     const { sendEmail } = await import('@shared/lib/channels/email.js');
 
-    // Manual timeout wrapper — set to 14s (1s under Railway's 15s gateway limit)
-    // to ensure we always respond before the load balancer cuts the connection.
+    // Timeout wrapper - 14s to stay under infrastructure limits
     const sendPromise = sendEmail(
       userId,
       recipientEmail,
@@ -1096,7 +1105,7 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
 
     const result = await Promise.race([
       sendPromise,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('[TIMEOUT] POST /send-test timed out after 25s')), 25000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('[TIMEOUT] Test send timed out after 14s. SMTP connection may be slow or blocked.')), 14000))
     ]);
 
     if (res.headersSent) return;
