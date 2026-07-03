@@ -48,7 +48,7 @@
     "start:worker:warmup": "node --import tsx --import ./instrument.ts services/warmup-service/index.ts",
     "start:infra:scaler": "node --import tsx --import ./instrument.ts services/outreach-worker/src/outreach-lib/infra-scaler-entry.ts",
     "start:all": "concurrently \"npm run start:api\" \"npm run start:all-workers\"",
-    "start:all-workers": "concurrently \"npm run start:worker:email\" \"npm run start:worker:imap\" \"npm run start:worker:ai\" \"npm run start:worker:outreach\" \"npm run start:worker:lead-recovery\" \"npm run start:worker:social\" \"npm run start:worker:billing\" \"npm run start:worker:orchestrator\" \"npm run start:worker:knowledge\" \"npm run start:worker:audit\" \"npm run start:worker:warmup\" \"npm run start:infra:scaler\"",
+    "start:all-workers": "concurrently \"npm run start:worker:email\" \"npm run start:worker:imap\" \"npm run start:worker:ai\" \"npm run start:worker:outreach\" \"npm run start:worker:lead-recove[...]",
     "start:pm2": "pm2 start ecosystem.config.cjs",
     "start:pm2:production": "pm2 start ecosystem.config.cjs --env production",
     "stop:pm2": "pm2 stop ecosystem.config.cjs",
