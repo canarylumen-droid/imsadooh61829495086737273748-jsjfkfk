@@ -29,6 +29,7 @@ COPY --chown=nodejs:nodejs packages ./packages
 COPY --chown=nodejs:nodejs api ./api
 COPY --chown=nodejs:nodejs scripts ./scripts
 COPY --chown=nodejs:nodejs instrument.ts ./instrument.ts
+COPY --chown=nodejs:nodejs polyfill-file.cjs ./polyfill-file.cjs
 COPY --chown=nodejs:nodejs tsconfig.json ./tsconfig.json
 COPY --chown=nodejs:nodejs package.json ./package.json
 

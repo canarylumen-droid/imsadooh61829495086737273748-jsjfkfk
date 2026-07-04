@@ -4,7 +4,7 @@ module.exports = {
       name: 'audnix-api-gateway',
       script: './services/api-gateway/api-only.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       dotenv: '.env',
@@ -28,7 +28,7 @@ module.exports = {
       name: 'audnix-socket-server',
       script: './services/socket-service/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -49,7 +49,7 @@ module.exports = {
       name: 'audnix-worker-email',
       script: './services/email-service/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -69,7 +69,7 @@ module.exports = {
       name: 'audnix-worker-imap',
       script: './services/email-worker/src/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -89,7 +89,7 @@ module.exports = {
       name: 'audnix-worker-ai',
       script: './services/brain-worker/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -109,7 +109,7 @@ module.exports = {
       name: 'audnix-worker-outreach',
       script: './services/outreach-worker/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -129,7 +129,7 @@ module.exports = {
       name: 'audnix-worker-lead-recovery',
       script: './services/lead-recovery-worker/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -149,7 +149,7 @@ module.exports = {
       name: 'audnix-worker-social',
       script: './services/social-worker/src/social/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -169,7 +169,7 @@ module.exports = {
       name: 'audnix-worker-billing',
       script: './services/billing-service/src/billing/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -189,7 +189,7 @@ module.exports = {
       name: 'audnix-worker-orchestrator',
       script: './services/brain-worker/src/orchestrator/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -209,7 +209,7 @@ module.exports = {
       name: 'audnix-worker-rag',
       script: './services/rag-worker/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -229,7 +229,7 @@ module.exports = {
       name: 'audnix-worker-knowledge',
       script: './services/rag-worker/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -249,7 +249,7 @@ module.exports = {
       name: 'audnix-worker-audit',
       script: './shared/services/audit/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -269,7 +269,7 @@ module.exports = {
       name: 'audnix-worker-vectordb',
       script: './services/vector-db-service/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -289,7 +289,7 @@ module.exports = {
       name: 'audnix-worker-warmup',
       script: './services/warmup-service/index.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {
@@ -309,7 +309,7 @@ module.exports = {
       name: 'audnix-infra-scaler',
       script: './services/outreach-worker/src/outreach-lib/infra-scaler-entry.ts',
       interpreter: 'node',
-      interpreter_args: '--import tsx --import ./instrument.ts',
+      interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
       env: {

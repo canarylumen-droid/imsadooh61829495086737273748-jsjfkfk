@@ -1,10 +1,33 @@
 /**
- * PDF Polyfills for Node.js environments
- * Fixes "ReferenceError: DOMMatrix is not defined" and missing canvas modules
- * when using pdfjs-dist in Node.js (e.g., via pdf-parse)
+ * Global polyfills for Node.js environments
+ * Fixes missing browser APIs like File, DOMMatrix, Path2D, ImageData
  */
 
 if (typeof global !== 'undefined') {
+    // Polyfill `File` for undici (used by cheerio) in Node <20
+    if (typeof (global as any).File === 'undefined') {
+        (global as any).File = class File {
+            name: string;
+            size: number;
+            type: string;
+            lastModified: number;
+            _data: Buffer;
+            constructor(data: (string | Buffer)[], name: string, options?: { type?: string; lastModified?: number }) {
+                this.name = name;
+                this.size = data.reduce((acc: number, chunk: string | Buffer) => acc + (typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk.length), 0);
+                this.type = options?.type || '';
+                this.lastModified = options?.lastModified || Date.now();
+                this._data = Buffer.concat(data.map((chunk: string | Buffer) => typeof chunk === 'string' ? Buffer.from(chunk) : chunk));
+            }
+            async text() { return this._data.toString('utf-8'); }
+            async arrayBuffer() { return this._data.buffer.slice(0); }
+            async bytes() { return new Uint8Array(this._data); }
+            slice() { return this; }
+            stream() { throw new Error('Not implemented'); }
+        };
+        console.log('✅ Polyfilled File for undici compatibility');
+    }
+
     // Minimal polyfill for DOMMatrix
     if (typeof (global as any).DOMMatrix === 'undefined') {
         (global as any).DOMMatrix = class DOMMatrix {

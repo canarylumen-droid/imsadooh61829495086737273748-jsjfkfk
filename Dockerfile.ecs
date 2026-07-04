@@ -39,6 +39,7 @@ COPY --from=builder --chown=nodejs:nodejs /app/server ./server
 COPY --from=builder --chown=nodejs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nodejs:nodejs /app/api ./api
 COPY --from=builder --chown=nodejs:nodejs /app/instrument.ts ./instrument.ts
+COPY --from=builder --chown=nodejs:nodejs /app/polyfill-file.cjs ./polyfill-file.cjs
 COPY --from=builder --chown=nodejs:nodejs /app/tsconfig.json ./tsconfig.json
 COPY --from=builder --chown=nodejs:nodejs /app/package.json ./package.json
 
