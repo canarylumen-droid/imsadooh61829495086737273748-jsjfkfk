@@ -58,18 +58,15 @@ services:
       dockerfile: Dockerfile.production
     image: audnix-ai:latest
     container_name: audnix-app
-    ports:
-      - "5000:5000"
-      - "5001:5001"
+    network_mode: host
     env_file:
       - .env
     environment:
       - NODE_OPTIONS=--dns-result-order=ipv4first
+      - REDIS_HOST=localhost
     restart: unless-stopped
     mem_limit: 5g
     memswap_limit: 6g
-    networks:
-      - audnix-net
 
 volumes:
   certbot-data:
