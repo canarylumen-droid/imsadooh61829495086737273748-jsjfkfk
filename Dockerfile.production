@@ -65,8 +65,7 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -fsS http://localhost:5000/health || exit 1
 
-# Run API + Socket directly — no PM2 overhead
+# Run API gateway directly — socket service included internally
 CMD ["sh", "-c", "\
   if [ -f dist/server/db/patch.js ]; then node dist/server/db/patch.js; fi; \
-  node --require ./polyfill-file.cjs --import tsx --import ./instrument.ts services/socket-service/index.ts & \
   npm run start:api-gateway"]
