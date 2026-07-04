@@ -1,14 +1,18 @@
-name: Build, Push to ECR, and Deploy to ECS
+name: CI/CD Pipeline
 
 on:
   push:
     branches: [main]
-    tags: ['v*.*.*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
   ECR_REPOSITORY: audnix-ai
-  ECS_CLUSTER: ${{ vars.ECS_CLUSTER || 'audnix-prod' }}
   IMAGE_TAG: ${{ github.sha }}
 
 permissions:
@@ -16,14 +20,30 @@ permissions:
   contents: read
 
 jobs:
+  quality:
+    name: TypeScript & Build Check
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type check
+        run: npm run check
+      - name: Build client
+        run: npm run build:client
+
   build-and-push:
     name: Build & Push to ECR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build-image.outputs.image }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -40,14 +60,16 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          docker build -f Dockerfile.ecs -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -f Dockerfile.ecs -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG" >> $GITHUB_OUTPUT
 
   deploy:
     name: Deploy to ECS
-    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build-and-push
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -97,8 +119,7 @@ jobs:
             container: audnix-worker
             role: lead-recovery
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -109,8 +130,7 @@ jobs:
       - name: Resolve AWS Account ID
         id: aws-account
         run: |
-          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-          echo "account_id=$ACCOUNT_ID" >> $GITHUB_OUTPUT
+          echo "account_id=$(aws sts get-caller-identity --query Account --output text)" >> $GITHUB_OUTPUT
 
       - name: Substitute task-definition placeholders
         id: substitute
@@ -137,5 +157,5 @@ jobs:
         with:
           task-definition: ${{ steps.render.outputs.task-definition }}
           service: ${{ matrix.service.name }}
-          cluster: ${{ env.ECS_CLUSTER }}
+          cluster: ${{ vars.ECS_CLUSTER || 'audnix-prod' }}
           wait-for-service-stability: true

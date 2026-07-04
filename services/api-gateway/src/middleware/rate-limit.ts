@@ -24,25 +24,34 @@ function createRedisStoreConfig(prefix: string): RedisStoreConfig | undefined {
   }
 
   const sendCommand: SendCommandFn = (async (...args: string[]) => {
-    try {
-      const client = await getRedisClient();
-      if (!client) {
-        throw new Error('Redis client not initialized');
+    let lastError: Error | null = null;
+    for (let attempt = 0; attempt < 15; attempt++) {
+      try {
+        const client = await getRedisClient();
+        if (client) {
+          return await client.sendCommand(args);
+        }
+        lastError = new Error('Redis client not initialized');
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt >= 14) {
+          console.error(`❌ Redis Command Error in Rate Limiter [${prefix}]:`, lastError.message);
+          throw lastError;
+        }
       }
-      return await client.sendCommand(args);
-    } catch (err) {
-      console.error(`❌ Redis Command Error in Rate Limiter [${prefix}]:`, (err as Error).message);
-      throw err;
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
+    throw lastError || new Error('Redis client not initialized');
   }) as SendCommandFn;
 
-  console.log(`⚡ Rate Limiter [${prefix}] initialized with Redis storage`);
-  return {
-    store: new RedisStore({
-      sendCommand,
-      prefix
-    })
-  };
+  try {
+    const store = new RedisStore({ sendCommand, prefix });
+    console.log(`⚡ Rate Limiter [${prefix}] initialized with Redis storage`);
+    return { store };
+  } catch (err) {
+    console.warn(`⚠️ Rate Limiter [${prefix}] Redis init postponed (will retry on first request):`, (err as Error).message);
+    return undefined;
+  }
 }
 
 function createUserKeyGenerator(keyPrefix: string): (req: Request) => string {
