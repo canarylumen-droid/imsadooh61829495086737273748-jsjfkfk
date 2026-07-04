@@ -1,6 +1,6 @@
 services:
   kumomta:
-    image: kumomta/kumomta:latest
+    image: ghcr.io/kumocorp/kumomta:latest
     restart: always
     ports:
       - "2525:2525"
