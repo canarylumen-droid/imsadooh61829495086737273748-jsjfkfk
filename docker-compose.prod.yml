@@ -58,21 +58,14 @@ services:
       dockerfile: Dockerfile.production
     image: audnix-ai:latest
     container_name: audnix-app
-    # Load ALL env vars directly from .env — no need to list them individually.
-    # This prevents variable name mismatches and keeps docker-compose in sync automatically.
+    ports:
+      - "5000:5000"
+      - "5001:5001"
     env_file:
       - .env
-    # Override only the Node.js memory/DNS tuning that shouldn't be in .env
     environment:
       - NODE_OPTIONS=--dns-result-order=ipv4first
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:5000/health"]
-      interval: 30s
-      timeout: 10s
-      start_period: 120s
-      retries: 3
-    restart: always
-    # mem_limit is enforced by regular docker-compose (deploy.resources is Swarm-only)
+    restart: unless-stopped
     mem_limit: 5g
     memswap_limit: 6g
     networks:

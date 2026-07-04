@@ -62,29 +62,11 @@ ENV NODE_OPTIONS="--dns-result-order=ipv4first"
 EXPOSE 5000
 
 # Healthcheck — curl is more reliable than busybox wget on alpine
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-  CMD curl -fsS http://localhost:${PORT:-5000}/health || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -fsS http://localhost:5000/health || exit 1
 
-# Start script handles DB migrations/patches before launching
-# Using 'node' directly from dist/ instead of 'tsx' for maximum performance
+# Run API + Socket directly — no PM2 overhead
 CMD ["sh", "-c", "\
   if [ -f dist/server/db/patch.js ]; then node dist/server/db/patch.js; fi; \
-  case \"$APP_ROLE\" in \
-    api)          npm run start:api-gateway ;; \
-    socket)       npm run start:socket-server ;; \
-    email)        npm run start:worker:email ;; \
-    imap)         npm run start:worker:imap ;; \
-    lead-recovery) npm run start:worker:lead-recovery ;; \
-    outreach)     npm run start:worker:outreach ;; \
-    ai|brain)     npm run start:worker:ai ;; \
-    social)       npm run start:worker:social ;; \
-    billing)      npm run start:worker:billing ;; \
-    orchestrator) npm run start:worker:orchestrator ;; \
-    knowledge|rag) npm run start:worker:knowledge ;; \
-    audit)        npm run start:worker:audit ;; \
-    infra-scaler) npm run start:infra:scaler ;; \
-    vectordb)     npm run start:worker:vectordb ;; \
-    warmup)       npm run start:worker:warmup ;; \
-    unified)      npm run start:pm2:production ;; \
-    *)            npm run start:pm2:production ;; \
-  esac"]
+  node --require ./polyfill-file.cjs --import tsx --import ./instrument.ts services/socket-service/index.ts & \
+  npm run start:api-gateway"]
