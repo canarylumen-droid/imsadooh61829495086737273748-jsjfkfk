@@ -80,6 +80,7 @@ async function startEmailService() {
     { redistributionWorker },
     { imapIdleManager },
     { PushNotificationService },
+    { reputationPollWorker },
     { spamRescueWorker },
     { inboundSweepWorker },
   ] = await Promise.all([
@@ -88,6 +89,7 @@ async function startEmailService() {
     import('@services/email-service/src/email/redistribution-worker.js'),
     import('@services/email-service/src/email/imap-idle-manager.js'),
     import('@services/email-service/src/email/push-notification-service.js'),
+    import('@services/email-service/src/email/reputation-poll-worker.js'),
     import('@services/email-service/src/imap/spam-rescue.js'),
     import('@services/email-service/src/imap/inbound-sweep.js'),
   ]);
@@ -99,6 +101,7 @@ async function startEmailService() {
   await startWorkerModule('Native Push',           () => PushNotificationService.initializeAll());
   await startWorkerModule('Spam Rescue',           () => spamRescueWorker.start());
   await startWorkerModule('Inbound Sweep',         () => inboundSweepWorker.start());
+  await startWorkerModule('Reputation Poll',       () => reputationPollWorker.start());
 
   // ── Worker Discovery Registry ───────────────────────────────────────────
   await discoveryRegistry.register();

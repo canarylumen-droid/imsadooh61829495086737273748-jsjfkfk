@@ -4,6 +4,7 @@ import { eq, and, sql, gte, desc } from 'drizzle-orm';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { pubsubService } from '@shared/lib/realtime/pubsub-service.js';
+import { getRedisClient } from '@shared/lib/redis/redis.js';
 import { promises as dns } from 'dns';
 
 // No local checkDNSBL needed, we use the results from verifyDomainDns in the database
@@ -271,9 +272,21 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     spamRiskScore: currentSpamRisk,
     initialOutreachLimit: newInitialLimit,
     warmupLimit: newWarmupLimit,
-    dailyLimit: newInitialLimit + newWarmupLimit, // backward-compat overall cap
+    dailyLimit: newInitialLimit + newWarmupLimit,
     updatedAt: new Date()
   }).where(eq(integrations.id, integrationId));
+
+  // Update Redis reputation pause flag for KumoMTA Lua hook
+  try {
+    const redis = await getRedisClient();
+    if (redis) {
+      if (score < 85) {
+        await redis.set(`rep:paused:${integrationId}`, 'true', { EX: 3600 });
+      } else {
+        await redis.del(`rep:paused:${integrationId}`);
+      }
+    }
+  } catch { /* non-critical */ }
 
   // Notify UI
   wsSync.broadcastToUser(mailbox.userId, { 

@@ -1241,26 +1241,51 @@ class ImapIdleManager {
             for (const imap of folderMap.values()) {
                 try { 
                     if ((imap as any)._idleWaiter) (imap as any).stopIdle();
-                    try { imap.destroy(); } catch (e) { console.debug('[IMAP] Error destroying in forceRecycleConnection:', (e as Error)?.message); } 
-                } catch (e) { console.debug('[IMAP] Error in forceRecycleConnection cleanup:', (e as Error)?.message); }
+                    imap.destroy();
+                } catch (e) { /* already disconnected */ }
             }
         }
         this.connections.delete(integrationId);
-        
+
         const intervals = this.syncIntervals.get(integrationId);
         if (intervals) {
             for (const interval of intervals.values()) clearInterval(interval);
             this.syncIntervals.delete(integrationId);
         }
-        
+
         this.folders.delete(integrationId);
         this.syncing.delete(integrationId);
-        
-        // Phase 12: Clear any pending reconnection timers
+        this.backoffDelays.delete(integrationId);
+        this.failureCooldowns.delete(integrationId);
+
+        for (const [key] of this.lastActivity) {
+            if (key.startsWith(`${integrationId}:`)) {
+                this.lastActivity.delete(key);
+            }
+        }
+
         const timer = this.reconnectTimers.get(integrationId);
         if (timer) {
             clearTimeout(timer);
             this.reconnectTimers.delete(integrationId);
+        }
+
+        const restartMap = this.restartTimers.get(integrationId);
+        if (restartMap) {
+            for (const [, rt] of restartMap) clearTimeout(rt);
+            this.restartTimers.delete(integrationId);
+        }
+
+        for (const [key] of this.syncingFolders) {
+            if (key.startsWith(`${integrationId}:`)) {
+                this.syncingFolders.delete(key);
+            }
+        }
+
+        const pollingEntry = this.pollingOnlyIntegrations.get(integrationId);
+        if (pollingEntry) {
+            clearInterval(pollingEntry.interval);
+            this.pollingOnlyIntegrations.delete(integrationId);
         }
     }
 
@@ -1704,61 +1729,6 @@ class ImapIdleManager {
                 console.error(`[WATCHDOG] Failed to destroy zombie connection ${integrationId}:`, e);
             }
         }
-    }
-
-    private cleanupIntegration(integrationId: string): void {
-        const folderMap = this.connections.get(integrationId);
-        if (folderMap) {
-            for (const [, imap] of folderMap) {
-                try { imap.destroy(); } catch (_e) {}
-            }
-        }
-
-        this.connections.delete(integrationId);
-        this.folders.delete(integrationId);
-        this.backoffDelays.delete(integrationId);
-        this.failureCooldowns.delete(integrationId);
-
-        // Remove all lastActivity entries for this integration
-        for (const [key] of this.lastActivity) {
-            if (key.startsWith(`${integrationId}:`)) {
-                this.lastActivity.delete(key);
-            }
-        }
-
-        // Remove sync intervals for this integration
-        const syncMap = this.syncIntervals.get(integrationId);
-        if (syncMap) {
-            for (const [, interval] of syncMap) {
-                clearInterval(interval);
-            }
-            this.syncIntervals.delete(integrationId);
-        }
-
-        // Remove reconnect timers
-        const reconnectTimer = this.reconnectTimers.get(integrationId);
-        if (reconnectTimer) {
-            clearTimeout(reconnectTimer);
-            this.reconnectTimers.delete(integrationId);
-        }
-
-        // Remove restart timers
-        const restartMap = this.restartTimers.get(integrationId);
-        if (restartMap) {
-            for (const [, timer] of restartMap) {
-                clearTimeout(timer);
-            }
-            this.restartTimers.delete(integrationId);
-        }
-
-        // Remove from syncingFolders
-        for (const [key] of this.syncingFolders) {
-            if (key.startsWith(`${integrationId}:`)) {
-                this.syncingFolders.delete(key);
-            }
-        }
-
-        console.log(`[WATCHDOG] Cleaned up local state for integration ${integrationId}`);
     }
 
     /**

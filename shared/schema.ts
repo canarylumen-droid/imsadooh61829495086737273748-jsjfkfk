@@ -351,6 +351,25 @@ export const integrations = pgTable("integrations", {
   integrationsConnectedIdx: index('integrations_connected_idx').on(table.connected),
 }));
 
+export const integrationReputation = pgTable("integration_reputation", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  integrationId: uuid("integration_id").notNull().unique().references(() => integrations.id, { onDelete: "cascade" }),
+  score: integer("score").notNull().default(100),
+  details: jsonb("details").$type<{
+    spamhaus: { listed: boolean; score: number; lastChecked: string };
+    abuseipdb: { score: number; categories: string[]; lastChecked: string };
+    talos: { score: number; lastChecked: string };
+    gmailPostmaster: { spamRate: number; reputation: string; lastChecked: string };
+    microsoftSnds: { spamRate: number; volume: number; lastChecked: string };
+  }>().notNull().default(sql`'{}'::jsonb`),
+  sources: jsonb("sources").$type<Record<string, number>>().notNull().default(sql`'{}'::jsonb`),
+  lastCheckedAt: timestamp("last_checked_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  reputationScoreIdx: index('rep_score_idx').on(table.score),
+}));
+
 export const deals = pgTable("deals", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
   leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),

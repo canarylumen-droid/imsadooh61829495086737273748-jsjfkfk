@@ -488,6 +488,9 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
 
     console.log(`[Email Connect] ✅ Email account saved for user ${userId}`);
 
+    // Fetch created integration reference for notifications
+    let connectedIntegrationId: string | null = null;
+
     // ── Trigger background sync (fire-and-forget) ────────────────────────────
     try {
       const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
@@ -497,6 +500,7 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       const integrations = await storage.getIntegrations(userId);
       const customEmail = integrations.find((i: any) => i.provider === 'custom_email' && i.accountType === email);
       if (customEmail) {
+        connectedIntegrationId = customEmail.id;
         // Bug #9 fix: Only redistribute leads if the user has an active campaign.
         // Firing on every mailbox connect caused massive unnecessary DB writes and
         // a race condition when connecting multiple mailboxes in quick succession.
@@ -528,9 +532,9 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
       const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
       wsSync.notifySettingsUpdated(userId);
       wsSync.notifySyncStatus(userId, { syncing: true });
-      if (dnsHealth) {
+      if (dnsHealth && connectedIntegrationId) {
         wsSync.notifyReputationUpdate(userId, {
-          integrationId: customEmail.id,
+          integrationId: connectedIntegrationId,
           score: dnsHealth.score,
           status: dnsHealth.status
         });

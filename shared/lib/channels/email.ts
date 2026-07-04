@@ -4,6 +4,8 @@ import * as cheerio from 'cheerio';
 import { type Integration } from '@audnix/shared';
 import dns from 'dns';
 
+const USE_KUMOMTA = process.env.NEW_EMAIL_BACKEND === 'kumomta';
+
 
 /**
  * Email messaging functions with branded templates using extracted PDF brand colors
@@ -145,6 +147,56 @@ export function autoDiscoverSettings(email: string): Partial<EmailConfig> {
 }
 
 // DELETED local tracking functions - moving to centralized lib/email/email-tracking.ts
+
+/**
+ * Send email via KumoMTA MTA daemon (localhost:2525).
+ * Submits via SMTP — KumoMTA holds persistent TLS connections per recipient MX.
+ * No connection pool, no DNS resolve, no port cycling, no auth needed.
+ */
+async function sendViaKumoMTA(
+  config: EmailConfig,
+  to: string,
+  subject: string,
+  body: string,
+  isHtml: boolean,
+  integrationId?: string,
+  inReplyTo?: string,
+  references?: string,
+  replyTo?: string
+): Promise<{ messageId: string }> {
+  const nodemailer = await import('nodemailer');
+  const transporter = nodemailer.createTransport({
+    host: '127.0.0.1',
+    port: 2525,
+    secure: false,
+    tls: { rejectUnauthorized: false },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
+  });
+
+  const fromAddress = config.from_name
+    ? `"${config.from_name}" <${config.smtp_user}>`
+    : config.smtp_user;
+
+  const headers: Record<string, string> = {};
+  if (integrationId) headers['X-Integration-Id'] = integrationId;
+
+  const info = await transporter.sendMail({
+    from: fromAddress,
+    to,
+    subject,
+    [isHtml ? 'html' : 'text']: body,
+    ...(inReplyTo && { inReplyTo }),
+    ...(references && { references }),
+    ...(replyTo && { replyTo }),
+    headers,
+  });
+
+  transporter.close();
+
+  return { messageId: info.messageId || `<${Date.now()}@audnixai.com>` };
+}
 
 /**
  * Send email via custom SMTP (for custom domain emails)
@@ -792,19 +844,35 @@ export async function sendEmail(
       targetUrl: firstUrl || undefined
     });
 
-    const result = await sendCustomSMTP(
-      userId, 
-      credentials, 
-      recipientEmail, 
-      subject, 
-      emailBody, 
-      true, 
-      trackingId, 
-      integration.id,
-      options.inReplyTo,
-      options.references,
-      options.replyTo
-    );
+    if (USE_KUMOMTA && integration.id) {
+      try {
+        const redis = await import('@shared/lib/redis/redis.js').then(m => m.getRedisClient());
+        if (redis) {
+          const paused = await redis.get(`rep:paused:${integration.id}`);
+          if (paused === 'true') {
+            throw new Error(`Mailbox paused — reputation below threshold. Check dashboard.`);
+          }
+        }
+      } catch (err: any) {
+        if (err.message.includes('paused')) throw err;
+      }
+    }
+
+    const result = USE_KUMOMTA
+      ? await sendViaKumoMTA(credentials, recipientEmail, subject, emailBody, true, integration.id, options.inReplyTo, options.references, options.replyTo)
+      : await sendCustomSMTP(
+          userId,
+          credentials,
+          recipientEmail,
+          subject,
+          emailBody,
+          true,
+          trackingId,
+          integration.id,
+          options.inReplyTo,
+          options.references,
+          options.replyTo
+        );
 
     if (result?.messageId) {
       await storage.createEmailMessage({

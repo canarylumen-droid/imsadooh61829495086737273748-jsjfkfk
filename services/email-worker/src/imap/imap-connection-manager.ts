@@ -76,7 +76,7 @@ interface ImapClientData {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const RECYCLE_TIME     = 29 * 60 * 1000; // 29 min proactive recycle
-const HEARTBEAT_TIME   =  2 * 60 * 1000; // 2 min NOOP + Redis TTL refresh (was 5min)
+const HEARTBEAT_TIME   =  4 * 60 * 1000; // 4 min NOOP + Redis TTL refresh
 // 50 mailboxes per pod: ~10MB/connection × 50 = 500MB IMAP budget.
 // Keeps event loop fast (<5ms latency per IDLE event) and isolates crashes.
 // Scale out by adding replicas (TOTAL_REPLICAS env var), not increasing this cap.
