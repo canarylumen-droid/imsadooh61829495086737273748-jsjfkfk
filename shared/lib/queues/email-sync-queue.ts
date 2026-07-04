@@ -54,6 +54,19 @@ export const emailSyncQueue = createLazyQueue('email-sync-tasks', {
   },
 });
 
+// ─── Integration Cache (avoids DB hit per job) ──────────────────────────────
+
+const integrationCache = new Map<string, { data: any; expiresAt: number }>();
+const CACHE_TTL_MS = 30000;
+
+async function getCachedIntegration(integrationId: string): Promise<any | null> {
+  const cached = integrationCache.get(integrationId);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+  const data = await storage.getIntegrationById(integrationId);
+  if (data) integrationCache.set(integrationId, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+  return data;
+}
+
 // ─── Worker ───────────────────────────────────────────────────────────────────
 
 let emailSyncWorkerModule: Worker | null = null;
@@ -77,7 +90,7 @@ export function startEmailSyncWorker() {
 
             try {
               // Fetch the integration to build IMAP connection config
-              const integration = await storage.getIntegrationById(integrationId);
+              const integration = await getCachedIntegration(integrationId);
               if (!integration || !integration.connected) {
                 console.warn(`[EmailSyncQueue] Integration ${integrationId} not connected — skipping new-mail fetch`);
                 return;

@@ -8,34 +8,7 @@ import { domainClusterEngine } from './domain-cluster.js';
 import { detectProvider } from '../lib/provider-utils.js';
 import nodemailer from 'nodemailer';
 import { ImapFlow } from 'imapflow';
-import crypto from 'crypto';
-
-const ENCRYPTION_KEY = process.env.WARMUP_ENCRYPTION_KEY || 'default-insecure-key-change-in-production';
-const ALGORITHM = 'aes-256-gcm';
-
-function encryptSecret(plaintext: string): string {
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv(ALGORITHM, crypto.createHash('sha256').update(ENCRYPTION_KEY).digest(), iv);
-  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  const authTag = cipher.getAuthTag().toString('hex');
-  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
-}
-
-function decryptSecret(ciphertext: string): string {
-  try {
-    const parts = ciphertext.split(':');
-    if (parts.length !== 3) return ciphertext;
-    const [ivHex, authTagHex, encrypted] = parts;
-    const decipher = crypto.createDecipheriv(ALGORITHM, crypto.createHash('sha256').update(ENCRYPTION_KEY).digest(), Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch {
-    return ciphertext;
-  }
-}
+import { encryptWarmupSecret, decryptWarmupSecret } from '../lib/warmup-crypto.js';
 
 interface SeedConfig {
   email: string;
@@ -86,7 +59,7 @@ export class SeedFleetManager {
         .limit(1);
 
       const provider = (config.provider || detectProvider(config.email)) as any;
-      const mappedProvider = (provider === 'custom_email' || provider === 'yahoo' || provider === 'aol') ? 'gmail' : provider;
+      const mappedProvider = provider === 'custom_email' ? 'gmail' : provider;
 
       if (existing.length > 0) {
         await db
@@ -113,8 +86,8 @@ export class SeedFleetManager {
           maxPartners: config.maxPartners || WARMUP_CONFIG.SEED_MAX_PARTNERS,
           metadata: {
             ...config,
-            smtpPass: config.smtpPass ? encryptSecret(config.smtpPass) : undefined,
-            imapPass: config.imapPass ? encryptSecret(config.imapPass) : undefined,
+            smtpPass: config.smtpPass ? encryptWarmupSecret(config.smtpPass) : undefined,
+            imapPass: config.imapPass ? encryptWarmupSecret(config.imapPass) : undefined,
             source: 'env_provisioned',
           },
         })
@@ -195,8 +168,8 @@ export class SeedFleetManager {
       secure: true,
       auth: { user, pass },
       logger: false,
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
     });
 
     try {
@@ -219,8 +192,8 @@ export class SeedFleetManager {
     const meta = (availableSeed.metadata as any) || {};
     const config = meta as SeedConfig;
 
-    const rawSmtpPass = config.smtpPass ? decryptSecret(config.smtpPass) : '';
-    const rawImapPass = config.imapPass ? decryptSecret(config.imapPass) : (rawSmtpPass || '');
+    const rawSmtpPass = config.smtpPass ? decryptWarmupSecret(config.smtpPass) : '';
+    const rawImapPass = config.imapPass ? decryptWarmupSecret(config.imapPass) : (rawSmtpPass || '');
 
     const [seedMailbox] = await db
       .insert(warmupMailboxes)
@@ -239,11 +212,11 @@ export class SeedFleetManager {
           smtpHost: config.smtpHost,
           smtpPort: config.smtpPort,
           smtpUser: config.smtpUser || availableSeed.email,
-          smtpPass: rawSmtpPass ? encryptSecret(rawSmtpPass) : '',
+          smtpPass: rawSmtpPass ? encryptWarmupSecret(rawSmtpPass) : '',
           imapHost: config.imapHost,
           imapPort: config.imapPort,
           imapUser: config.imapUser || availableSeed.email,
-          imapPass: rawImapPass ? encryptSecret(rawImapPass) : '',
+          imapPass: rawImapPass ? encryptWarmupSecret(rawImapPass) : '',
           oauthUserId: config.oauthUserId,
           seedAccountId: availableSeed.id,
           source: 'warmup_seed',

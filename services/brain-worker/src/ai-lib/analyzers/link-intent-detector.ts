@@ -85,16 +85,16 @@ export function detectLinkIntent(
     }
   }
   
-  // Payment intent - validate link before using
+  // Payment intent → redirect to booking (admin handles payments manually)
   if (paymentScore > meetingScore && paymentScore >= appScore) {
-    const link = brand.paymentLink?.trim();
+    const link = brand.meetingLink?.trim();
     if (isValidURL(link)) {
       return {
         detected: true,
-        intentType: 'payment',
+        intentType: 'meeting',
         confidence,
         link: link || null,
-        suggestedResponse: generatePaymentResponse(brand)
+        suggestedResponse: generatePaymentRedirectResponse(brand)
       };
     }
   }
@@ -136,14 +136,14 @@ function generateMeetingResponse(brand: BrandContext): string {
 }
 
 /**
- * Generate payment response
+ * Generate redirect response when payment is requested — admin handles manually
  */
-function generatePaymentResponse(brand: BrandContext): string {
+function generatePaymentRedirectResponse(brand: BrandContext): string {
   const responses = [
-    `Let's get you started! Here's where you can complete payment: ${brand.paymentLink}`,
-    `Awesome! Here's the payment link: ${brand.paymentLink}`,
-    `Ready to roll! Complete your order here: ${brand.paymentLink}`,
-    `Here you go - complete your purchase here: ${brand.paymentLink}`,
+    `Great, let's discuss how we can get you set up. Book a call so we can go over the details: ${brand.meetingLink}`,
+    `Awesome! Let's hop on a quick call to get everything sorted. Pick a time here: ${brand.meetingLink}`,
+    `Perfect — let's talk through the next steps. Schedule a time with us here: ${brand.meetingLink}`,
+    `Let's iron out the details together. Book a call here: ${brand.meetingLink}`,
   ];
   return responses[Math.floor(Math.random() * responses.length)];
 }
@@ -207,9 +207,10 @@ export async function appendLinkIfNeeded(
   }
   
   // Append the appropriate link as plain text (works in DMs, emails, chat)
+  // Payment intent always redirects to booking (admin handles payments manually)
   const linkAppendages: Record<string, string> = {
     meeting: `\n\nBook your spot here: ${linkIntent.link}`,
-    payment: `\n\nComplete payment here: ${linkIntent.link}`,
+    payment: `\n\nLet's discuss further on a call — book here: ${linkIntent.link}`,
     app: `\n\nGet started here: ${linkIntent.link}`,
   };
   

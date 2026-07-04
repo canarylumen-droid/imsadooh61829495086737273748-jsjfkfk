@@ -1,5 +1,4 @@
 import { ImapFlow, type FetchMessageObject } from "imapflow";
-import { simpleParser } from "mailparser";
 import type { Integration } from "@audnix/shared";
 import { decryptToJSON } from "@shared/lib/crypto/encryption.js";
 import { gmailOAuth } from "@services/api-gateway/src/oauth/gmail.js";
@@ -44,6 +43,8 @@ async function buildClient(integration: Integration): Promise<ImapFlow | null> {
   const email = getEmailAddress(integration, config);
   if (!email) return null;
 
+  const IMAP_TIMEOUT = 15000;
+
   if (integration.provider === "gmail") {
     const accessToken = await gmailOAuth.getValidToken(integration.userId, email);
     if (!accessToken) return null;
@@ -53,6 +54,8 @@ async function buildClient(integration: Integration): Promise<ImapFlow | null> {
       secure: true,
       auth: { user: email, accessToken },
       logger: false,
+      connectionTimeout: IMAP_TIMEOUT,
+      greetingTimeout: IMAP_TIMEOUT,
     });
   }
 
@@ -65,6 +68,8 @@ async function buildClient(integration: Integration): Promise<ImapFlow | null> {
       secure: true,
       auth: { user: email, accessToken },
       logger: false,
+      connectionTimeout: IMAP_TIMEOUT,
+      greetingTimeout: IMAP_TIMEOUT,
     });
   }
 
@@ -81,26 +86,52 @@ async function buildClient(integration: Integration): Promise<ImapFlow | null> {
       pass: password,
     },
     logger: false,
+    connectionTimeout: IMAP_TIMEOUT,
+    greetingTimeout: IMAP_TIMEOUT,
   });
 }
 
 async function parseFetchedEmail(message: FetchMessageObject, fallbackTo: string[]): Promise<RecoveryEmail | null> {
-  if (!message.source) return null;
-  const parsed = await simpleParser(message.source);
-  const html = typeof parsed.html === "string" ? parsed.html : "";
-  const text = parsed.text?.trim() || html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() || "";
+  const textBody = message.bodyParts?.get('TEXT')?.toString() || '';
+  const headerText = message.bodyParts?.get('HEADER')?.toString() || '';
+  const text = textBody.trim() || '';
   if (!text) return null;
-  const toValues = Array.isArray(parsed.to) ? parsed.to.flatMap((item) => item.value) : parsed.to?.value || [];
+
+  let from = '';
+  let to: string[] = [];
+  let subject = '';
+  let messageId: string | undefined;
+  let date: Date | undefined;
+
+  if (message.envelope) {
+    from = message.envelope.from?.[0]?.address || '';
+    to = (message.envelope.to || []).map(a => a.address || '').filter(Boolean);
+    subject = message.envelope.subject || '';
+    messageId = message.envelope.messageId;
+    date = message.envelope.date;
+  }
+
+  if (!from && headerText) {
+    const m = headerText.match(/^From:\s*(.+)$/im);
+    if (m) from = m[1].trim();
+  }
+  if (to.length === 0 && headerText) {
+    const m = headerText.match(/^To:\s*(.+)$/im);
+    if (m) to = m[1].split(',').map(s => s.trim());
+  }
+  if (!subject && headerText) {
+    const m = headerText.match(/^Subject:\s*(.+)$/im);
+    if (m) subject = m[1].trim();
+  }
 
   return {
     uid: String(message.uid),
-    messageId: parsed.messageId || undefined,
-    from: parsed.from?.value?.[0]?.address,
-    to: toValues.map((address) => address.address || "").filter(Boolean) || fallbackTo,
-    subject: parsed.subject || "",
+    messageId,
+    from: from || undefined,
+    to: to.length > 0 ? to : fallbackTo,
+    subject,
     text,
-    html: html || undefined,
-    date: parsed.date || message.envelope?.date,
+    date,
   };
 }
 
@@ -124,7 +155,7 @@ export async function fetchRecoveryEmails(
     for await (const message of client.fetch(searchQuery, {
       uid: true,
       envelope: true,
-      source: true,
+      bodyParts: ['HEADER', 'TEXT'],
     })) {
       const parsed = await parseFetchedEmail(message, fallbackTo);
       if (parsed) emails.push(parsed);

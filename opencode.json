@@ -8,5 +8,16 @@
         "baseURL": "https://api.z.ai/api/coding/paas/v4"
       }
     }
+  },
+  "mcp": {
+    "aws": {
+      "type": "local",
+      "command": ["node", "scripts/aws-mcp-server.mjs"],
+      "enabled": true,
+      "env": {
+        "AWS_PROFILE": "mcp-full-access",
+        "AWS_REGION": "us-east-1"
+      }
+    }
   }
 }

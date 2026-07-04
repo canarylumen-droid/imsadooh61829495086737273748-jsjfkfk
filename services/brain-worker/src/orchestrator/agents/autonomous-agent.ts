@@ -1,7 +1,7 @@
 import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
 import { extractJson } from "@shared/lib/utils/json-util.js";
 import { db } from '@shared/lib/db/db.js';
-import { leads, auditTrail, followUpQueue, users, aiActionLogs } from '@audnix/shared';
+import { leads, auditTrail, followUpQueue, users, notifications, aiActionLogs } from '@audnix/shared';
 import { eq, desc, and } from 'drizzle-orm';
 import { calendlyOAuth } from "@services/api-gateway/src/oauth/calendly.js";
 import { availabilityService } from "@shared/lib/calendar/availability-service.js";
@@ -9,7 +9,7 @@ import ObjectionHandler from "@services/outreach-worker/src/sales-engine/objecti
 import { searchSimilarChunks, userHasChunks } from "../../ai-lib/context/vector-rpc.js";
 
 export interface AgentActionDecision {
-  action: 'send_payment_link' | 'send_invoice' | 'schedule_followup' | 'book_meeting' | 'request_info' | 'pause_nurture' | 'unknown';
+  action: 'schedule_followup' | 'book_meeting' | 'request_info' | 'pause_nurture' | 'unknown';
   reasoning: string;
   delayDays: number;
   confidence: number;
@@ -100,7 +100,7 @@ ${objectionContext}
 RULE 1: If drafting an objection response, ONLY use facts from the Brand Knowledge section above.
 RULE 2: Do NOT invent features, pricing, or timelines. If unsure, request another meeting.
 RULE 3: Do NOT chase aggressively if the lead is cold. Be respectful to preserve the deal.
-RULE 4: If no Brand Knowledge is available, keep the email generic but professional — never fabricate specifics.
+RULE 4: If no Brand Knowledge is available, do NOT fabricate specifics. Instead, prioritize booking a call — propose specific times from the Availability list.
 
 ### Decision rules for CLOSING (Expert Mode)
 1. **Target 3-Email Conversion**: Do not waste time on fluff. Be direct, value-driven.
@@ -115,9 +115,7 @@ If the lead has a specific objection/need, map it to one of these categories to 
 Return this category in \`attachedAssetCategory\` if applicable.
 
 ### Available Actions
-- send_payment_link: Ready for checkout (ONLY if deal < $5k).
-- send_invoice: Asked for formal billing.
-- book_meeting: Agreed to follow-up/demo or deal > $5k. Propose specific times + Link.
+- book_meeting: Lead is interested or ready. Propose specific times + Booking Link.
 - schedule_followup: "Cool down" required. 
 - request_info: Asked for pitch deck/case studies.
 - pause_nurture: Said "No" or requested DNC.
@@ -151,11 +149,11 @@ Return this category in \`attachedAssetCategory\` if applicable.
     const result = await generateReply(systemPrompt, userPrompt, { jsonMode: true, temperature: 0.1, nga1Enforced: true });
     const parsed = extractJson<any>(result.text);
 
-    // Hard Enforcement of $5k rule post-AI just in case
-    if (parsed.action === 'send_payment_link' && dealValue >= 5000) {
-        console.warn(`[NGA-1] AI proposed payment link for $${dealValue} deal. Overriding to book_meeting.`);
+    // Payments are admin-only — always redirect to booking
+    if (parsed.action === 'send_payment_link' || parsed.action === 'send_invoice') {
+        console.warn(`[NGA-1] AI proposed payment action for lead. Overriding to book_meeting — admin handles payments manually.`);
         parsed.action = 'book_meeting';
-        parsed.reasoning += " (NGA-1 Override: High-ticket human handoff required)";
+        parsed.reasoning += " (Payment redirect: admin handles payments manually, booking call instead)";
     }
 
 
@@ -254,7 +252,7 @@ Return this category in \`attachedAssetCategory\` if applicable.
   const scheduledDate = new Date();
   scheduledDate.setDate(scheduledDate.getDate() + (decision.delayDays || 0));
 
-  if (['send_payment_link', 'send_invoice', 'book_meeting', 'schedule_followup', 'request_info'].includes(decision.action)) {
+  if (['book_meeting', 'schedule_followup', 'request_info'].includes(decision.action)) {
     const isReady = decision.action !== 'schedule_followup'; // schedule_followup is pure delay
     
     await db.insert(followUpQueue).values({
@@ -280,6 +278,15 @@ Return this category in \`attachedAssetCategory\` if applicable.
     await db.update(leads)
       .set({ aiPaused: true, status: 'hardened' })
       .where(eq(leads.id, lead.id));
+  } else {
+    // Payment actions and unknown — create notification for admin to handle
+    await db.insert(notifications).values({
+      userId: lead.userId,
+      type: 'info',
+      title: '👋 Lead Needs Manual Attention',
+      message: `Lead ${lead.name} (${lead.email}) is ready for next step. AI suggestion: ${decision.action}. Reason: ${decision.reasoning}`,
+      metadata: { leadId: lead.id, action: decision.action, reasoning: decision.reasoning }
+    });
   }
 
   return decision;

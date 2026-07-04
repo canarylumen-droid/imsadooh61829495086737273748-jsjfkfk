@@ -10,24 +10,7 @@ import { eq, sql } from 'drizzle-orm';
 import { warmupMailboxes, warmupInteractions } from '@audnix/shared';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 import type { ImapCredentials, WarmupMailbox } from '../types/warmup-types.js';
-import crypto from 'crypto';
-
-function decryptWarmupSecret(ciphertext: string): string {
-  if (!ciphertext || !ciphertext.includes(':')) return ciphertext;
-  const key = process.env.WARMUP_ENCRYPTION_KEY || 'default-insecure-key-change-in-production';
-  try {
-    const parts = ciphertext.split(':');
-    if (parts.length !== 3) return ciphertext;
-    const [ivHex, authTagHex, encrypted] = parts;
-    const decipher = crypto.createDecipheriv('aes-256-gcm', crypto.createHash('sha256').update(key).digest(), Buffer.from(ivHex, 'hex'));
-    decipher.setAuthTag(Buffer.from(authTagHex, 'hex'));
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
-  } catch {
-    return ciphertext;
-  }
-}
+import { decryptWarmupSecret } from './warmup-crypto.js';
 
 interface CachedClient {
   client: ImapFlow;
@@ -103,7 +86,9 @@ export class ImapStealth {
     try {
       await client.mailboxCreate(folderName);
     } catch (err: any) {
-      if (!err.responseText?.includes('EXISTS')) throw err;
+      const msg = (err.responseText || err.message || '').toLowerCase();
+      if (msg.includes('exists') || msg.includes('already')) return folderName;
+      throw err;
     }
 
     const list = await client.list();
@@ -135,33 +120,27 @@ export class ImapStealth {
       });
       if (!uids || uids.length === 0) return 0;
 
-      let movedCount = 0;
-      for (const uid of uids) {
-        const message = await client.fetchOne(uid.toString(), {
-          envelope: true,
-          headers: true,
-        });
-        if (!message) continue;
+      const warmupMessages: Array<{ uid: number; messageId?: string }> = [];
+      for await (const message of client.fetch(
+        uids,
+        { headers: ['X-Audnix-Warmup'], envelope: true }
+      )) {
         const headers = (message.headers as any)?.toString() || '';
-
         if (headers.includes('X-Audnix-Warmup: true')) {
-          await client.messageMove(uid.toString(), hiddenPath);
-          movedCount++;
+          warmupMessages.push({ uid: message.uid, messageId: message.envelope?.messageId });
+        }
+      }
 
-          // Track that this mailbox received a warmup email
-          await this.incrementDailyReceivedCount(mailbox.id);
-
-          if (message.envelope?.messageId) {
-            await db
-              .update(warmupInteractions)
-              .set({ movedToHiddenFolder: true })
-              .where(
-                eq(
-                  warmupInteractions.messageId,
-                  message.envelope.messageId
-                )
-              );
-          }
+      let movedCount = 0;
+      for (const msg of warmupMessages) {
+        await client.messageMove(msg.uid.toString(), hiddenPath);
+        movedCount++;
+        await this.incrementDailyReceivedCount(mailbox.id);
+        if (msg.messageId) {
+          await db
+            .update(warmupInteractions)
+            .set({ movedToHiddenFolder: true })
+            .where(eq(warmupInteractions.messageId, msg.messageId));
         }
       }
       return movedCount;
@@ -185,13 +164,7 @@ export class ImapStealth {
 
       if (!uids || uids.length === 0) return false;
 
-      for (const uid of uids) {
-        await client.messageFlagsSet(uid.toString(), ['\\Deleted'], {
-          uid: true,
-        });
-      }
-
-      await (client as any).expunge();
+      await client.messageDelete(uids, { uid: true });
 
       await db
         .update(warmupInteractions)
@@ -214,7 +187,6 @@ export class ImapStealth {
     try {
       lock = await client.getMailboxLock(spamFolder);
     } catch {
-      // Spam folder may not exist
       return 0;
     }
 
@@ -224,29 +196,29 @@ export class ImapStealth {
       });
       if (!uids || uids.length === 0) return 0;
 
-      let rescuedCount = 0;
-      for (const uid of uids) {
-        const msg = await client.fetchOne(uid.toString(), {
-          envelope: true,
-          headers: true,
-        });
-        if (!msg) continue;
-        const headers = (msg.headers as any)?.toString() || '';
-
+      const warmupMessages: Array<{ uid: number; messageId?: string }> = [];
+      for await (const message of client.fetch(
+        uids,
+        { headers: ['X-Audnix-Warmup'], envelope: true }
+      )) {
+        const headers = (message.headers as any)?.toString() || '';
         if (headers.includes('X-Audnix-Warmup: true')) {
-          await client.messageMove(uid.toString(), hiddenPath);
-          try {
-            await client.messageFlagsSet(uid.toString(), ['\\NotJunk'], {
-              uid: true,
-            });
-          } catch {
-            // NotJunk flag may not be supported on all providers
-          }
-          rescuedCount++;
-
-          // Track that this mailbox received a warmup email (from spam rescue)
-          await this.incrementDailyReceivedCount(mailbox.id);
+          warmupMessages.push({ uid: message.uid, messageId: message.envelope?.messageId });
         }
+      }
+
+      let rescuedCount = 0;
+      for (const msg of warmupMessages) {
+        await client.messageMove(msg.uid.toString(), hiddenPath);
+        try {
+          await client.messageFlagsSet(msg.uid.toString(), ['\\NotJunk'], {
+            uid: true,
+          });
+        } catch {
+          // NotJunk flag may not be supported on all providers
+        }
+        rescuedCount++;
+        await this.incrementDailyReceivedCount(mailbox.id);
       }
       return rescuedCount;
     } finally {
@@ -286,22 +258,23 @@ export class ImapStealth {
 
     await this.acquireConnectionSlot();
 
-    const auth: any = { user: creds.user, pass: creds.pass };
-    if (creds.accessToken) {
-      auth.accessToken = creds.accessToken;
-    }
-
-    const client = new ImapFlow({
-      host: creds.host,
-      port: creds.port,
-      secure: creds.secure,
-      auth,
-      logger: false,
-      connectionTimeout: WARMUP_CONFIG.IMAP_TIMEOUT_MS,
-      greetingTimeout: WARMUP_CONFIG.IMAP_TIMEOUT_MS,
-    });
-
+    let client: ImapFlow;
     try {
+      const auth: any = { user: creds.user, pass: creds.pass };
+      if (creds.accessToken) {
+        auth.accessToken = creds.accessToken;
+      }
+
+      client = new ImapFlow({
+        host: creds.host,
+        port: creds.port,
+        secure: creds.secure,
+        auth,
+        logger: false,
+        connectionTimeout: WARMUP_CONFIG.IMAP_TIMEOUT_MS,
+        greetingTimeout: WARMUP_CONFIG.IMAP_TIMEOUT_MS,
+      });
+
       await client.connect();
     } catch (err: any) {
       this.releaseConnectionSlot();
@@ -337,6 +310,8 @@ export class ImapStealth {
     const defaults: Record<string, { host: string; port: number; secure: boolean }> = {
       gmail: { host: 'imap.gmail.com', port: 993, secure: true },
       outlook: { host: 'outlook.office365.com', port: 993, secure: true },
+      yahoo: { host: 'imap.mail.yahoo.com', port: 993, secure: true },
+      aol: { host: 'imap.aol.com', port: 993, secure: true },
       custom_email: { host: meta?.imapHost || meta?.imap_host || '', port: meta?.imapPort || meta?.imap_port || 993, secure: true },
     };
     if (mailbox.provider === 'custom_email' && !(meta?.imapHost || meta?.imap_host)) {

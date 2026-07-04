@@ -5,7 +5,6 @@ import { stripe, verifyWebhookSignature, processTopupSuccess, PLANS } from '@ser
 import { storage } from '@shared/lib/storage/storage.js';
 import { handleCalendlyWebhook, handleCalendlyVerification, verifyCalendlySignature } from '@services/api-gateway/src/webhooks/calendly-webhook.js';
 import { handleInstagramWebhook, handleInstagramVerification } from '@services/api-gateway/src/webhooks/instagram-webhook.js';
-import { enqueueFathomMeeting } from '@shared/lib/queues/fathom-queue.js';
 
 import type { PlanType } from '@shared/types.js';
 
@@ -115,8 +114,9 @@ router.post('/fathom', async (req: Request, res: Response): Promise<void> => {
       }
     }
 
-    await enqueueFathomMeeting(req.body);
-    res.json({ received: true, queued: true });
+    // Fathom is disabled — call processing is handled by Calendly + manual flow
+    console.log(`[Fathom Webhook] Received but disabled. Meeting: ${req.body?.data?.recording_id || req.body?.data?.id}`);
+    res.json({ received: true, queued: false, disabled: true });
   } catch (error: unknown) {
     console.error('Fathom webhook error:', error);
     res.status(500).json({ error: 'Webhook processing failed' });

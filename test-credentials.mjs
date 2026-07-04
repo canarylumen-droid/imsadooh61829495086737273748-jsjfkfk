@@ -90,6 +90,7 @@ async function testIMAP() {
       auth: { user: EMAIL, pass: PASSWORD },
       logger: false,
       connectionTimeout: 15000,
+      greetingTimeout: 15000,
       tls: { rejectUnauthorized: false },
     });
 

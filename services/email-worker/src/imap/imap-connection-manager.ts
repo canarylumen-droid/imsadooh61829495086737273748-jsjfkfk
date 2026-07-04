@@ -71,6 +71,10 @@ interface ImapClientData {
   reconnectTimeout?: NodeJS.Timeout;
   /** True while a proactive recycle is in progress — suppresses reactive reconnect race */
   isRecycling: boolean;
+  /** True while a reactive reconnect is queued — prevents dual reconnect timers */
+  isReconnecting: boolean;
+  /** Consecutive heartbeat failures — forces reconnect after 3 */
+  heartbeatFailures: number;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -382,6 +386,8 @@ export class ImapConnectionManager {
       heartbeatInterval: null as any,
       recycleTimeout: null as any,
       isRecycling: false,
+      isReconnecting: false,
+      heartbeatFailures: 0,
     };
 
     this.connections.set(integration.id, clientData);
@@ -523,14 +529,30 @@ export class ImapConnectionManager {
     this._cleanupClientTimers(data);
 
     // 1. NOOP heartbeat every 5 minutes + Redis TTL refresh
+    const HEARTBEAT_FAILURE_LIMIT = 3;
     data.heartbeatInterval = setInterval(async () => {
       try {
         if (data.client.usable) {
           await data.client.noop();
           await this._redisHeartbeat(data.integration.id);
+          data.heartbeatFailures = 0;
+        } else {
+          data.heartbeatFailures++;
+          console.warn(`[IMAP] Heartbeat skipped — client not usable for ${data.integration.id} (${data.heartbeatFailures}/${HEARTBEAT_FAILURE_LIMIT})`);
         }
       } catch (e: any) {
-        console.warn(`[IMAP] Heartbeat failed for ${data.integration.id}:`, e.message);
+        data.heartbeatFailures++;
+        console.warn(`[IMAP] Heartbeat failed for ${data.integration.id} (${data.heartbeatFailures}/${HEARTBEAT_FAILURE_LIMIT}): ${e.message}`);
+      }
+
+      if (data.heartbeatFailures >= HEARTBEAT_FAILURE_LIMIT) {
+        console.warn(`[IMAP] 🔄 Heartbeat failure limit reached for ${data.integration.id} — forcing reconnect`);
+        data.isRecycling = true;
+        this._cleanupClientTimers(data);
+        try { await data.client.logout(); } catch { try { data.client.close(); } catch {} }
+        this.connections.delete(data.integration.id);
+        imapConnectionsActive.dec({ provider: data.integration.provider });
+        this._establishConnection(data.integration, true);
       }
     }, HEARTBEAT_TIME);
 
@@ -575,16 +597,21 @@ export class ImapConnectionManager {
     const target = integration || data?.integration;
     if (!target) return;
 
-    if (data) {
-      this._cleanupClientTimers(data);
-      try { data.client.close(); } catch { /* ignore */ }
-      imapConnectionsActive.dec({ provider: target.provider });
-      // Don't delete from map yet — need reconnectDelay for backoff
-    } else {
-      // No data in map — integration was disconnected, don't reconnect
+    if (!data) {
       console.log(`[IMAP] ⏭️ Skipping reconnect for ${integrationId} — no active connection data`);
       return;
     }
+
+    // Prevent dual reconnect timers when error + close fire together
+    if (data.isReconnecting) {
+      console.log(`[IMAP] ⏭️ Reconnect already queued for ${integrationId} — skipping duplicate`);
+      return;
+    }
+    data.isReconnecting = true;
+
+    this._cleanupClientTimers(data);
+    try { data.client.close(); } catch { /* ignore */ }
+    imapConnectionsActive.dec({ provider: target.provider });
 
     imapReconnectTotal.inc({ reason: 'error_or_close' });
 
@@ -595,20 +622,16 @@ export class ImapConnectionManager {
 
     const timeout = setTimeout(async () => {
       const nextDelay = nextBackoff(currentDelay);
-      // Update backoff in map before wiping it
       if (this.connections.has(integrationId)) {
         this.connections.get(integrationId)!.reconnectDelay = nextDelay;
       }
-      // Wipe stale entry so _establishConnection can re-enter cleanly
       this.connections.delete(integrationId);
       await this._redisRelease(integrationId);
 
       await this._establishConnection(target, true);
     }, delay);
 
-    if (data) {
-      data.reconnectTimeout = timeout;
-    }
+    data.reconnectTimeout = timeout;
   }
 
   // ── AUTH_FAILED Handler ─────────────────────────────────────────────────────

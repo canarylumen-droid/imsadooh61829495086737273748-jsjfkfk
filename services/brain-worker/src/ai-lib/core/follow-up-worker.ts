@@ -449,7 +449,15 @@ export class FollowUpWorker {
         let intentInstruction = "";
         
         if (intent === 'payment') {
-          intentInstruction = `\n\nCRITICAL TASK: This lead has agreed to a partnership or requested payment details. You MUST acknowledge this and provide the next steps for payment. Use the context: "${reasoning}".`;
+          // Payments are admin-only — redirect to booking instead
+          try {
+            const { availabilityService } = await import('@shared/lib/calendar/availability-service.js');
+            const slots = await availabilityService.getSuggestedTimes(job.userId, 72);
+            const slotsText = availabilityService.formatSlotsForAI(slots);
+            intentInstruction = `\n\nCRITICAL TASK: This lead wants to move forward or discussed payment. You MUST redirect them to book a call to finalize details. Provide the calendar link and suggest available times: [${slotsText}].`;
+          } catch (e) {
+            intentInstruction = `\n\nCRITICAL TASK: This lead wants to move forward or discussed payment. You MUST provide the calendar link and encourage them to book a call to finalize.`;
+          }
         } else if (intent === 'booking') {
           try {
             const { availabilityService } = await import('@shared/lib/calendar/availability-service.js');
@@ -586,8 +594,9 @@ export class FollowUpWorker {
       };
 
       if (intent === 'payment') {
-        sendOptions.buttonText = 'Pay Securely';
-        sendOptions.buttonUrl = (userDetail as any).paymentLink || (lead.metadata as any).payment_link || 'https://audnix.com/payment';
+        // Admin handles payments — redirect to booking call
+        sendOptions.buttonText = 'Book a Call';
+        sendOptions.buttonUrl = calendarLink;
       } else if (intent === 'booking') {
         sendOptions.buttonText = 'Book a Time';
         sendOptions.buttonUrl = calendarLink;

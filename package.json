@@ -93,7 +93,11 @@
     "vitest": "^4.1.9"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1079.0",
+    "@aws-sdk/client-ec2": "^3.1079.0",
+    "@aws-sdk/client-lambda": "^3.1079.0",
     "@aws-sdk/client-s3": "^3.1035.0",
+    "@aws-sdk/client-sts": "^3.1079.0",
     "@aws-sdk/lib-storage": "^3.1035.0",
     "@aws-sdk/s3-request-presigner": "^3.1036.0",
     "@google-cloud/local-auth": "^3.0.1",
@@ -102,6 +106,7 @@
     "@gsap/react": "^2.1.2",
     "@hookform/resolvers": "^3.10.0",
     "@jridgewell/trace-mapping": "^0.3.25",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/canvas": "^0.1.89",
     "@neondatabase/serverless": "^1.0.2",
     "@radix-ui/react-accordion": "^1.2.4",

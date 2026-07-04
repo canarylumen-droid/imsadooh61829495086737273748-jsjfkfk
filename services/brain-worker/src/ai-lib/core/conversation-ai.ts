@@ -696,7 +696,7 @@ Score: ${lead.score}/100
 Lead Status: ${currentStatus.toUpperCase()}
 ${statusInstruction}
 
-${shouldPushBooking
+${shouldPushBooking || brandGuidelines === "No specific brand guidelines provided."
   ? `This lead is ready. Move toward booking. Suggest a specific day+time from their niche window.
 Write copy like: "How does Thursday at 5pm work?" or "Are you free Wednesday around 6pm? — 20 minutes max."
 Never say "slot available" — sound human.`
