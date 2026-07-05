@@ -26,8 +26,9 @@ export function serveStatic(app: Express) {
 
   // Try paths in priority order: client/dist (dev/Railway fallback), dist/public (Vercel standard), and fallback
   const possiblePaths = [
-    path.resolve(process.cwd(), "client", "dist"),
+    path.resolve(process.cwd(), "dist", "dist", "public"),
     path.resolve(process.cwd(), "dist", "public"),
+    path.resolve(process.cwd(), "client", "dist"),
     path.resolve(__dirname, "..", "dist", "public"),
   ];
 

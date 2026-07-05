@@ -61,25 +61,15 @@ import { sseRouter } from "./sse-routes";
 
 export async function registerRoutes(app: Express): Promise<http.Server> {
   // 1. Static Assets & Public Manifests (Served before auth/rate limiting for common assets)
+  let staticDistPath = "";
+  for (const p of [path.join(process.cwd(), "dist", "public"), path.join(process.cwd(), "dist", "dist", "public"), path.join(process.cwd(), "client", "dist")]) {
+    if (fs.existsSync(p)) { staticDistPath = p; break; }
+  }
   const sendPublicFile = (fileName: string, res: Response) => {
-    // 1. Check in dist/public (Production build output)
-    const distPath = path.join(process.cwd(), "dist/public", fileName);
-    if (fs.existsSync(distPath)) {
-      return res.sendFile(distPath);
+    if (staticDistPath) {
+      const filePath = path.join(staticDistPath, fileName);
+      if (fs.existsSync(filePath)) return res.sendFile(filePath);
     }
-    
-    // 2. Check in client/public (Source directory for local dev)
-    const publicPath = path.join(process.cwd(), "client/public", fileName);
-    if (fs.existsSync(publicPath)) {
-      return res.sendFile(publicPath);
-    }
-    
-    // 3. Check in client/dist (Vite's default build output)
-    const clientDistPath = path.join(process.cwd(), "client/dist", fileName);
-    if (fs.existsSync(clientDistPath)) {
-      return res.sendFile(clientDistPath);
-    }
-    
     res.status(404).end();
   };
 
@@ -87,6 +77,7 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.get("/favicon.svg", (req, res) => sendPublicFile("favicon.svg", res));
   app.get("/manifest.json", (req, res) => sendPublicFile("manifest.json", res));
   app.get("/logo.svg", (req, res) => sendPublicFile("logo.svg", res));
+  app.get("/", (req, res) => sendPublicFile("index.html", res));
 
   const { handleInstagramWebhook, handleInstagramVerification } = await import("@services/api-gateway/src/webhooks/instagram-webhook.js");
 
