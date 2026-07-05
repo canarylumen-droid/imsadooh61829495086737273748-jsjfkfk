@@ -68,8 +68,8 @@ export function serveStatic(app: Express) {
   }));
 
   // Explicit route handlers for PWA/Manifest files with strict path validation
-  app.get(['/sw.js', '/manifest.json', '/favicon.ico', '/robots.txt', '/favicon.svg'], (req, res) => {
-    const safeFiles = ['sw.js', 'manifest.json', 'favicon.ico', 'robots.txt', 'favicon.svg'];
+  app.get(['/sw.js', '/manifest.json', '/favicon.ico', '/robots.txt', '/favicon.svg', '/sitemap.xml'], (req, res) => {
+    const safeFiles = ['sw.js', 'manifest.json', 'favicon.ico', 'robots.txt', 'favicon.svg', 'sitemap.xml'];
     const fileName = req.path.substring(1);
 
     if (!safeFiles.includes(fileName)) {
@@ -101,7 +101,7 @@ export function serveStatic(app: Express) {
     }
 
     // Do not serve index.html for static assets that were genuinely missing
-    if (req.path.match(/\.(js|css|map|png|jpg|svg|ico|json|woff|woff2|ttf)$/i)) {
+    if (req.path.match(/\.(js|css|map|png|jpg|svg|ico|json|woff|woff2|ttf|xml)$/i)) {
       return res.status(404).end();
     }
 

@@ -1,13 +1,27 @@
 User-agent: *
 Allow: /
+Allow: /compare
 Allow: /signup
 Allow: /login
-Disallow: /admin
-Disallow: /dashboard
-Disallow: /auth
+Allow: /pricing
+Allow: /lead-recovery
+Allow: /objection-handling
+Allow: /solutions/agencies
+Allow: /solutions/sales-teams
+Allow: /solutions/creators
+Allow: /resources/niche-vault
+Allow: /resources/outreach-playbooks
+Allow: /resources/api-docs
+Allow: /privacy-policy
+Allow: /terms-of-service
+Allow: /data-deletion
+
+Disallow: /dashboard/
 Disallow: /find-leads
-Disallow: /onboarding
+Disallow: /onboarding/
+Disallow: /admin
 Disallow: /api/
+Disallow: /auth
 
 # AI Crawler Support
 User-agent: GPTBot
@@ -22,6 +36,9 @@ User-agent: Amazonbot
 Allow: /
 User-agent: Claude-Web
 Allow: /
+User-agent: PerplexityBot
+Allow: /
 
-# Sitemap
+Crawl-delay: 1
+
 Sitemap: https://audnixai.com/sitemap.xml

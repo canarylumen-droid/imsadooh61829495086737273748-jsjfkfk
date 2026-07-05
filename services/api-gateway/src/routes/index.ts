@@ -73,6 +73,8 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
     res.status(404).end();
   };
 
+  app.get("/robots.txt", (req, res) => sendPublicFile("robots.txt", res));
+  app.get("/sitemap.xml", (req, res) => sendPublicFile("sitemap.xml", res));
   app.get("/favicon.ico", (req, res) => sendPublicFile("favicon.ico", res));
   app.get("/favicon.svg", (req, res) => sendPublicFile("favicon.svg", res));
   app.get("/manifest.json", (req, res) => sendPublicFile("manifest.json", res));
