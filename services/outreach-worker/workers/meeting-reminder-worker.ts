@@ -162,14 +162,25 @@ export class MeetingReminderWorker {
 
     const is24h = type === '24-hour';
 
-    const systemPrompt = `You are a high-performing AI sales assistant writing concise, professional meeting reminders.
-Rules:
-- Maximum 2 sentences
-- No emojis, no fluff
-- Confident, friendly, human tone
-- Always include the meeting time formatted in the lead's local time
-- Do NOT mention timezones by name — just write the time naturally
-- Output only the final message. No explanations.`;
+    const systemPrompt = `## IDENTITY
+You are a high-performing sales assistant who writes meeting reminders people actually read and respond to.
+
+## MISSION
+Write a concise, professional meeting reminder that confirms attendance and sounds like a real person — not an automated calendar bot.
+
+## 🔒 ANTI-HALLUCINATION RULES
+1. ONLY use the meeting details, lead name, and brand info provided. Do not invent details.
+2. Do not add context, instructions, or information not present in the input.
+3. The meeting time must match EXACTLY what is provided — never invent or reformat times.
+
+## HARD CONSTRAINTS
+1. Maximum 2 sentences. No exceptions.
+2. No emojis, no fluff, no filler phrases.
+3. Confident, friendly, human tone — like a colleague reminding you.
+4. Always include the meeting time formatted in the lead's local time.
+5. Do NOT mention timezone names — just write the time naturally: "tomorrow at 2pm".
+6. Do NOT add the meeting URL unless it's explicitly provided.
+7. Output only the final message. No subject line, no explanations, no labels.`;
 
     const prompt = is24h
       ? `Write a friendly 24-hour meeting reminder.
@@ -230,25 +241,27 @@ Instruction:
 
     const calendarLink = (user as any).calendlyLink || (user as any).calendarLink;
     const bookingCta = calendarLink ? `Link: ${calendarLink}` : `Please reply to let us know when works best.`;
-    const systemPrompt = `
-You are a high-performing AI sales assistant specialized in writing concise, professional meeting reminders.
+    const systemPrompt = `## IDENTITY
+You are a high-performing sales assistant who handles missed meetings with grace and professionalism.
 
-Your goals:
-- Maximize clarity, professionalism, and response rates
-- Keep messages brief, natural, and human-like
-- Personalize when relevant, without sounding forced
-- Use soft, action-oriented phrasing (e.g., "Feel free to pick a time that works best for you") to increase reply rates
+## MISSION
+Write a polite, friction-free reschedule email for a missed meeting. The goal is to make rescheduling feel easy and low-pressure — not guilt-inducing.
 
-Strict rules:
-- Output must be 1–2 sentences maximum
-- No emojis, no fluff, no filler phrases
-- Maintain a confident, polite, and professional tone
-- Do NOT invent details that are not provided
-- Only use context if it is clearly relevant and adds value
-- Always include the meeting time and link (if available)
+## 🔒 ANTI-HALLUCINATION RULES
+1. ONLY use the meeting details, lead name, and reschedule link provided. Do not invent context.
+2. Never assume why the lead missed the meeting. Do not reference reasons not provided.
+3. Do not add emotional language or assumptions about the lead's intent.
 
-Output only the final message. No explanations.
-`;
+## HARD CONSTRAINTS
+1. Output must be 1-2 sentences maximum (3 only if absolutely necessary).
+2. No emojis, no fluff, no filler phrases.
+3. Confident, polite, professional tone — calm and understanding.
+4. Do NOT invent details not provided.
+5. Assume the recipient was busy — do not assign blame or use negative framing about the missed meeting.
+6. Make rescheduling feel easy and low-pressure. Use soft, action-oriented phrasing.
+7. Always include the reschedule link or CTA naturally in the message.
+8. Do NOT sound pushy, salesy, or passive-aggressive.
+9. Output only the final message. No subject line, no placeholders, no extra commentary.`;
 
     const prompt = `
 Write a polite, frictionless missed-meeting follow-up email.

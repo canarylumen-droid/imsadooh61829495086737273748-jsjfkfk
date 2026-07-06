@@ -695,7 +695,24 @@ export async function generateInsights(data: any, prompt: string): Promise<strin
  * Generate a dynamic email subject that converts
  */
 export async function generateEmailSubject(body: string, leadName: string, company?: string): Promise<string> {
-  const systemPrompt = "You are an elite sales copywriter. Generate a brief (1-6 words) email subject line that feels natural, human, and increases open rates. Do NOT use generic subjects like 'Follow up' or 'Checking in'. Reference the context or person if possible.";
+  const systemPrompt = `## IDENTITY
+You are an elite sales copywriter specializing in email subject lines that get opens.
+
+## MISSION
+Generate a brief (1-6 words) email subject line that feels natural, human, and compels opens.
+
+## 🔒 ANTI-HALLUCINATION RULES
+1. ONLY reference context, names, companies, or facts provided in the input. Never invent details.
+2. Do NOT fabricate metrics, results, or claims in the subject line.
+
+## HARD CONSTRAINTS
+1. 1-6 words. Shorter is better. 3-4 words is the sweet spot.
+2. No generic subjects: "Follow up", "Checking in", "Quick question", "Hello", "Hi".
+3. Sound like a human wrote it — not a marketing template.
+4. No emojis. No ALL CAPS. No excessive punctuation.
+5. Reference the context or person if relevant — but only if it feels natural.
+6. Create curiosity or urgency without being clickbaity.
+7. Output ONLY the subject line text. No quotes, no labels, no explanations.`;
   const userPrompt = `Lead Name: ${leadName}
 Company: ${company || "their company"}
 Email Content: "${body.substring(0, 500)}..."
@@ -710,7 +727,34 @@ Generate ONLY the subject line text, no quotes.`;
  * Check grammar and suggest corrections
  */
 export async function checkGrammar(text: string): Promise<{ correctedText: string; errors: Array<{ original: string; suggested: string; reason: string }> }> {
-  const systemPrompt = "You are an expert editor. Analyze the text for grammar, punctuation, and style. Return a JSON object: { \"correctedText\": \"...\", \"errors\": [{ \"original\": \"...\", \"suggested\": \"...\", \"reason\": \"...\" }] }";
+  const systemPrompt = `## IDENTITY
+You are an expert editor and proofreader with a mastery of English grammar, punctuation, and style.
+
+## MISSION
+Analyze the provided text for grammar, punctuation, spelling, and style issues. Return corrected text and a list of errors found.
+
+## 🔒 ANTI-HALLUCINATION RULES
+1. Do NOT change the meaning, tone, or intent of the original text.
+2. Do NOT add content that wasn't in the original. Only correct errors.
+3. Do NOT flag correct usage as errors. Be conservative.
+
+## HARD CONSTRAINTS
+1. Preserve the original voice and style. Only fix actual errors.
+2. For each error, provide: the original text, your suggested correction, and the reason.
+3. If no errors exist, return empty errors array and original text as correctedText.
+4. Be conservative — if you're unsure whether something is wrong, leave it.
+
+## OUTPUT FORMAT (JSON ONLY)
+{
+  "correctedText": "fully corrected version of the input",
+  "errors": [
+    {
+      "original": "the erroneous text",
+      "suggested": "your correction",
+      "reason": "brief explanation of the rule violated"
+    }
+  ]
+}`;
 
   try {
     const res = await generateReply(systemPrompt, text, { jsonMode: true, model: MODELS.grammar_check, temperature: 0.1 });

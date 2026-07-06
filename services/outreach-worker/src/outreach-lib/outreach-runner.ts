@@ -46,16 +46,12 @@ export async function runDemoOutreach(userId: string) {
   // 1. Ensure HVAC leads exist
   const existingLeads = await storage.getLeads({ userId, limit: 100 });
   let hvacLeads = existingLeads.filter(l => 
-    l.metadata && (l.metadata as any).campaign_type === 'hvac_outreach'
+    l.metadata && ((l.metadata as any).campaign_type === 'hvac_outreach' || (l.metadata as any).seeded === true)
   );
 
   if (hvacLeads.length === 0) {
-    console.log('[DemoRunner] Seeding HVAC leads...');
-    await seedHVACLeads(userId);
-    const freshLeads = await storage.getLeads({ userId, limit: 100 });
-    hvacLeads = freshLeads.filter(l => 
-      l.metadata && (l.metadata as any).campaign_type === 'hvac_outreach'
-    ).slice(0, 8);
+    console.log('[DemoRunner] No seeded leads found. Please seed test leads first.');
+    return { summary: { sent: 0, failed: 0, total: 0 }, results: [], error: 'No seeded test leads found' };
   }
 
   // 2. Setup Results tracking
@@ -68,11 +64,24 @@ export async function runDemoOutreach(userId: string) {
     try {
       // Generate personalized email content via AI Service
       const firstName = lead.name.split(' ')[0];
-      const systemPrompt = `You are an expert B2B sales copywriter specializing in HVAC industry solutions. 
-      Generate a personalized cold outreach email for an HVAC company owner.
-      Keep it under 100 words. Industry: HVAC. 
-      Focus on transformative value: AI receptionist that books appointments and Qualifies leads 24/7.
-      End with a clear CTA.`;
+      const systemPrompt = `## IDENTITY
+You are an expert B2B sales copywriter specializing in HVAC industry solutions.
+
+## MISSION
+Generate a personalized cold outreach email for an HVAC company owner. Focus on one specific value: an AI receptionist that books appointments and qualifies leads 24/7.
+
+## 🔒 ANTI-HALLUCINATION RULES
+1. ONLY use the lead name and company provided. Do not invent details about their business.
+2. Do not claim specific results or ROI numbers not provided in context.
+3. Focus exclusively on the HVAC industry and the AI receptionist value proposition given.
+
+## HARD CONSTRAINTS
+1. Keep it under 100 words. Short and punchy.
+2. Industry: HVAC only. Language must resonate with HVAC business owners.
+3. Focus on transformative value — missed calls = missed revenue. That's the pain point.
+4. End with a clear, low-friction CTA (reply-based, not link-based).
+5. Sound like a peer in the industry — not a tech salesperson.
+6. Return ONLY valid JSON with subject and body.`;
       
       const userPrompt = `Lead Name: ${lead.name}, Company: ${lead.company || 'HVAC Company'}.
       Address the pain point: Overwhelmed with calls, missing revenue because calls go to voicemail.
@@ -150,39 +159,7 @@ export async function runDemoOutreach(userId: string) {
   };
 }
 
-async function seedHVACLeads(userId: string) {
-  const hvacLeads = [
-    { name: 'Mike Johnson', email: 'trexndom@gmail.com', company: 'Johnson HVAC Services' },
-    { name: 'Sarah Williams', email: 'team.replyflow@gmail.com', company: 'Williams Heating & Cooling' },
-    { name: 'James Anderson', email: 'iamherebro60@gmail.com', company: 'Anderson Air Solutions' },
-    { name: 'David Martinez', email: 'loopstories1@gmail.com', company: 'Martinez Climate Control' },
-    { name: 'Robert Thompson', email: 'orbieonlms@gmail.com', company: 'Thompson HVAC Pros' },
-    { name: 'Chris Davis', email: 'nevermindthough79@gmail.com', company: 'Davis Air Systems' },
-    { name: 'Kevin Wilson', email: 'somtouchendu9@gmail.com', company: 'Wilson Comfort Systems' },
-    { name: 'Brian Taylor', email: 'c28926695@gmail.com', company: 'Taylor Heating Services' }
-  ];
-
-  for (const lead of hvacLeads) {
-    try {
-      await storage.createLead({
-        userId,
-        name: lead.name,
-        email: lead.email,
-        channel: 'email',
-        status: 'new',
-        company: lead.company,
-        aiPaused: false,
-        metadata: {
-          industry: 'HVAC',
-          campaign_type: 'hvac_outreach',
-          seeded_at: new Date().toISOString()
-        }
-      });
-    } catch (e) {
-      // Ignore duplicates
-    }
-  }
-}
+// seedHVACLeads removed to prevent emailing real addresses. Use scripts/seed-test-leads.ts instead.
 
 
 
