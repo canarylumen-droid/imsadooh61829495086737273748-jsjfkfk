@@ -1331,6 +1331,19 @@ export class OutreachEngine {
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
       console.error(`[OutreachEngine] ❌ Autonomous send failed for ${lead.email || lead.id}: ${errorMsg}`);
+      // Mark lead as failed so it's not stuck in an inconsistent state
+      try {
+        await storage.updateLead(lead.id, {
+          metadata: {
+            ...(lead.metadata as Record<string, any> || {}),
+            outreach_failed: true,
+            outreach_error: errorMsg,
+            outreach_failed_at: new Date().toISOString()
+          }
+        });
+      } catch (updateErr) {
+        console.error(`[OutreachEngine] Failed to update lead ${lead.id} after send failure:`, updateErr);
+      }
       return;
     } finally {
       const { releaseLock } = await import('@shared/lib/redis/redis.js');

@@ -220,7 +220,7 @@ class BounceHandler {
         .set({
           status: 'cold',
           metadata: {
-            ...(lead.metadata as Record<string, unknown>),
+            ...(lead.metadata as Record<string, unknown> || {}),
             hard_bounce: true,
             hard_bounce_date: new Date().toISOString(),
             invalid_reason: 'Email bounced permanently'
@@ -295,7 +295,7 @@ class BounceHandler {
         .set({
           status: 'not_interested',
           metadata: {
-            ...(lead.metadata as Record<string, unknown>),
+            ...(lead.metadata as Record<string, unknown> || {}),
             marked_as_spam: true,
             marked_spam_date: new Date().toISOString(),
             do_not_contact: true

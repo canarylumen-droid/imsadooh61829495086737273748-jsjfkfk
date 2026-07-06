@@ -50,6 +50,10 @@ const RATE_LIMITS: Record<string, SmtpRateLimit> = {
 };
 
 class SmtpAbuseProtection {
+  // NOTE: Rate limit state is purely in-memory. On restart, all tracking is lost.
+  // This means rate limits reset on every deployment. For production resilience,
+  // consider periodic Redis persistence of the sendingTracking map (e.g. via
+  // PUBLISH/SUBSCRIBE or a background save every 60s).
   private sendingTracking = new Map<string, { count: number; timestamp: number }[]>();
 
   /**

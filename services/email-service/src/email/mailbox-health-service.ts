@@ -375,6 +375,7 @@ class MailboxHealthService {
 
     // verify() tests connection + auth
     await transporter.verify();
+    transporter.close();
   }
 
   /**

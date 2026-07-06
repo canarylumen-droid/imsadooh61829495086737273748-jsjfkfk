@@ -343,7 +343,7 @@ async function processEmailForLead(
         try {
           const userObj = await storage.getUserById(userId);
           globalAutoReplyBody = (userObj?.config as any)?.autoReplyBody || null;
-        } catch (e) {}
+        } catch (e) { console.warn('[PagedEmailImporter] Failed to fetch global auto-reply body:', (e as Error)?.message); }
 
         // 1. Run full inbound message analysis FIRST
         const messageForAnalysis = {
@@ -491,7 +491,7 @@ async function processEmailForLead(
                 try {
                   const { learningEngine } = await import('@services/brain-worker/src/ai-lib/engines/learning-engine.js');
                   // We don't await this as it's an background optimization task
-                  learningEngine.extractWinningPattern(userId, lead.id, entry.campaignId).catch(() => {});
+                  learningEngine.extractWinningPattern(userId, lead.id, entry.campaignId).catch(err => console.warn('[PagedEmailImporter] Pattern extraction failed:', err.message));
                 } catch (learnErr) {
                   // Non-critical
                 }

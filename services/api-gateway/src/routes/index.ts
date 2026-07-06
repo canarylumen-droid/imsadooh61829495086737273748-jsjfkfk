@@ -164,6 +164,11 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/health", healthRoutes);
   app.use("/api/unsubscribe", unsubscribeRoutes);
   app.use("/api/sse", sseRouter); // Server-Sent Events for real-time updates
+  // Feature flags: SSE stream + polling + deploy ping
+  const { registerRoutes: registerFeatureFlagRoutes } = await import("@shared/lib/realtime/feature-flags.js");
+  const featureFlagRouter = (await import("express")).Router();
+  registerFeatureFlagRoutes(featureFlagRouter);
+  app.use("/api", featureFlagRouter);
   registerAnalyticsRoutes(app); // Phase 14: KPI & Conversion Analytics
 
   // Create HTTP server

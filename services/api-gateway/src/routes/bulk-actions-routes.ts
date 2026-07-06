@@ -7,6 +7,7 @@ import type { ChannelType, ProviderType, LeadStatus } from '@shared/types.js';
 import { db } from '@shared/lib/db/db.js';
 import { leads } from '@audnix/shared';
 import { inArray, eq } from 'drizzle-orm';
+import { getUserLeadsLimit } from '@shared/plan-utils.js';
 
 const router = Router();
 
@@ -26,6 +27,18 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
       return;
     }
 
+    const user = await storage.getUserById(userId);
+    const existingLeadsCount = await storage.getLeadsCount(userId);
+    const maxLeads = getUserLeadsLimit(user);
+
+    if (existingLeadsCount >= maxLeads) {
+      res.status(400).json({
+        error: `You've reached your plan's limit of ${maxLeads} leads. Delete some leads or upgrade your plan to add more.`,
+        limitReached: true
+      });
+      return;
+    }
+
     const results = {
       leadsImported: 0,
       leadsUpdated: 0,
@@ -40,7 +53,9 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
 
     // Process in chunks to avoid memory bloat and keep dedup accurate at any scale
+    let totalProcessed = existingLeadsCount;
     for (let i = 0; i < leadsData.length; i += BATCH_SIZE) {
+      if (totalProcessed >= maxLeads) break;
       const chunk = leadsData.slice(i, i + BATCH_SIZE);
       const chunkEmails = chunk.map(l => (l.email || '').toLowerCase().trim()).filter(Boolean);
       const existingEmails = chunkEmails.length > 0
@@ -78,10 +93,17 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
           
           batchToInsert.push({
             userId,
-            name: name || 'Unknown',
+            name: name || email?.split('@')[0]?.replace(/[._-]/g, ' ') || 'Unknown',
             email: email || null,
             phone: metadata.phone || leadData.phone || null,
             company: metadata.company || leadData.company || null,
+            website: metadata.website || null,
+            businessName: metadata.businessName || metadata.business_name || null,
+            city: metadata.city || null,
+            country: metadata.country || null,
+            niche: metadata.niche || null,
+            industry: metadata.industry || null,
+            revenue: metadata.revenue || null,
             channel: channel as any,
             integrationId: integrationId || null,
             status: (spamCheck.isTrap || !spamCheck.hasMx) ? 'bouncy' : 'new',
@@ -109,7 +131,8 @@ router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Pr
         const inserted = await storage.createLeadsBatch(batchToInsert, { suppressNotification: true });
         results.leads.push(...inserted);
         results.leadsImported += inserted.length;
-        
+        totalProcessed += inserted.length;
+
         // Phase 1.1: Dispatch background timezone enrichment
         const { aiProcessingQueue } = await import('../core/queues.js');
         if (aiProcessingQueue) {
@@ -627,12 +650,12 @@ router.get('/export-category', requireAuth, async (req: Request, res: Response):
         l.phone || '',
         meta.countryCode || meta.country_code || '',
         l.company || '',
-        meta.businessName || meta.business_name || '',
-        meta.website || '',
+        l.businessName || meta.businessName || meta.business_name || '',
+        l.website || meta.website || '',
         meta.googleMapsUrl || meta.google_maps_url || '',
-        meta.city || '',
-        meta.country || '',
-        meta.niche || '',
+        l.city || meta.city || '',
+        l.country || meta.country || '',
+        l.niche || meta.niche || '',
         meta.review || '',
         l.channel || '',
         l.status || '',

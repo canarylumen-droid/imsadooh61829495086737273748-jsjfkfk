@@ -4,6 +4,7 @@ import { decrypt } from '@shared/lib/crypto/encryption.js';
 import type { Lead, Message } from "@audnix/shared";
 import { EmailVerifier } from "../scraping/email-verifier.js";
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { getUserLeadsLimit } from '@shared/plan-utils.js';
 
 const verifier = new EmailVerifier();
 
@@ -82,7 +83,7 @@ export async function importInstagramLeads(userId: string): Promise<{
   try {
     const user = await storage.getUserById(userId);
     const currentLeadCount = await storage.getLeadsCount(userId);
-    const limit = user?.email === 'team.replyflow@gmail.com' ? 250000 : (user?.plan === 'enterprise' ? 250000 : (user?.plan === 'pro' ? 50000 : 5000));
+    const limit = user?.email === 'team.replyflow@gmail.com' ? 500000 : getUserLeadsLimit(user);
 
     if (currentLeadCount >= limit) {
       results.errors.push(`Lead limit reached (${limit} leads).`);
@@ -107,7 +108,7 @@ export async function importInstagramLeads(userId: string): Promise<{
     const oauth = new InstagramOAuth();
     const conversations = await oauth.getConversations(accessToken);
 
-    const existingLeads = await storage.getLeads({ userId, limit: 10000 });
+    const existingLeads = await storage.getLeads({ userId, limit: 100000 });
 
     for (const conversation of conversations) {
       try {
@@ -164,7 +165,7 @@ export async function importManychatLeads(userId: string): Promise<{
   try {
     const user = await storage.getUserById(userId);
     const existingLeadsCount = await storage.getLeadsCount(userId);
-    const limit = user?.email === 'team.replyflow@gmail.com' ? 250000 : (user?.plan === 'enterprise' ? 250000 : (user?.plan === 'pro' ? 50000 : 5000));
+    const limit = user?.email === 'team.replyflow@gmail.com' ? 500000 : getUserLeadsLimit(user);
 
     const integrations = await storage.getIntegrations(userId);
     const mcIntegration = integrations.find(i => i.provider === 'manychat' && i.connected);
@@ -230,7 +231,7 @@ export async function importManychatLeads(userId: string): Promise<{
           }
         }, { suppressNotification: true });
         results.leadsImported++;
-      } catch (e) { }
+      } catch (e) { console.warn('[LeadImporter] Failed to create lead from ManyChat:', (e as Error)?.message); }
     }
     wsSync.notifyActivityUpdated(userId, { type: 'import_completed', count: results.leadsImported });
     wsSync.broadcastToUser(userId, { type: 'stats_updated', payload: { source: 'manychat_importer' } });
@@ -250,7 +251,7 @@ export async function importGmailLeads(userId: string): Promise<{
   try {
     const user = await storage.getUserById(userId);
     const existingLeadsCount = await storage.getLeadsCount(userId);
-    const limit = user?.email === 'team.replyflow@gmail.com' ? 250000 : (user?.plan === 'enterprise' ? 250000 : (user?.plan === 'pro' ? 50000 : 5000));
+    const limit = user?.email === 'team.replyflow@gmail.com' ? 500000 : getUserLeadsLimit(user);
 
     const { GmailOAuth } = await import('@services/api-gateway/src/oauth/gmail.js');
     const gmailOAuth = new GmailOAuth();

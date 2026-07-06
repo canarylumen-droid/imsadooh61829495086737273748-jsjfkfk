@@ -6,10 +6,18 @@
 import { db } from '@shared/lib/db/db.js';
 import { uploadRateLimit } from "@audnix/shared";
 import { eq } from "drizzle-orm";
+import { getUserUploadLimit } from '@shared/plan-utils.js';
 
 export interface RateLimitConfig {
-  uploadsPerHour: number; // Default: 10 files per hour
-  windowSizeMinutes: number; // Default: 60 minutes
+  uploadsPerHour: number;
+  windowSizeMinutes: number;
+}
+
+function getConfigForUser(user: any): RateLimitConfig {
+  return {
+    uploadsPerHour: getUserUploadLimit(user),
+    windowSizeMinutes: 60,
+  };
 }
 
 const DEFAULT_CONFIG: RateLimitConfig = {
@@ -19,16 +27,16 @@ const DEFAULT_CONFIG: RateLimitConfig = {
 
 export class UploadRateLimiter {
   /**
-   * Check if user can upload
+   * Check if user can upload (supports plan-based limits)
    */
-  static async canUpload(userId: string, config = DEFAULT_CONFIG): Promise<{
+  static async canUpload(userId: string, user?: any): Promise<{
     allowed: boolean;
     remainingUploads: number;
     resetTime: Date;
     message?: string;
   }> {
+    const config = user ? getConfigForUser(user) : DEFAULT_CONFIG;
     try {
-      // Get or create rate limit record
       let record = await db
         .select()
         .from(uploadRateLimit)
@@ -39,7 +47,6 @@ export class UploadRateLimiter {
       let rateLimitRecord = record[0];
 
       if (!rateLimitRecord) {
-        // Create new record
         const newRecord = await db
           .insert(uploadRateLimit)
           .values({
@@ -53,12 +60,10 @@ export class UploadRateLimiter {
         rateLimitRecord = newRecord[0];
       }
 
-      // Check if window has expired
       const lastResetTime = new Date(rateLimitRecord.lastResetAt);
       const minutesSinceReset = (now.getTime() - lastResetTime.getTime()) / (1000 * 60);
 
       if (minutesSinceReset > config.windowSizeMinutes) {
-        // Reset window
         await db
           .update(uploadRateLimit)
           .set({
@@ -74,12 +79,10 @@ export class UploadRateLimiter {
         };
       }
 
-      // Check if within limit
       const remainingUploads = config.uploadsPerHour - rateLimitRecord.uploads;
       const canUpload = remainingUploads > 0;
 
       if (canUpload) {
-        // Increment upload count
         await db
           .update(uploadRateLimit)
           .set({
@@ -102,10 +105,9 @@ export class UploadRateLimiter {
       };
     } catch (error) {
       console.error("Rate limit check error:", error);
-      // On error, allow upload (fail open)
       return {
         allowed: true,
-        remainingUploads: DEFAULT_CONFIG.uploadsPerHour,
+        remainingUploads: config.uploadsPerHour,
         resetTime: new Date(),
       };
     }

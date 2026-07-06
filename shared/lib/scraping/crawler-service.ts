@@ -782,7 +782,7 @@ export class AdvancedCrawler {
                                 const $contact = cheerio.load(contactPage.data);
                                 const contactEmails = this.extractEmails(contactPage.data, $contact);
                                 emails.push(...contactEmails);
-                            } catch (e) { }
+                            } catch (e) { console.warn('[Crawler] Contact page scrape failed:', (e as Error)?.message); }
                         }
                     }
                 }
@@ -1101,7 +1101,7 @@ export class AdvancedCrawler {
                 const query = `site:${platform} "${niche}" ${location} "gmail.com"`;
                 const batch = await this.searchBing(query, "", Math.ceil(limit / platforms.length));
                 results.push(...batch);
-            } catch (e) { }
+            } catch (e) { console.warn('[Crawler] Social platform search failed:', (e as Error)?.message); }
         }
         return results;
     }

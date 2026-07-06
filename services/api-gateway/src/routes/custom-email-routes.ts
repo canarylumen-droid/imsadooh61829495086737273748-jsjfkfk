@@ -97,9 +97,10 @@ router.post('/test', requireAuth, async (req: Request, res: Response) => {
     let dnsHealth = null;
 
     // Test SMTP
+    let transporter: any;
     try {
       const nodemailer = await import('nodemailer');
-      const transporter = nodemailer.createTransport({
+      transporter = nodemailer.createTransport({
         host: smtpHost,
         port: parsedSmtpPort,
         secure: parsedSmtpPort === 465,
@@ -110,8 +111,10 @@ router.post('/test', requireAuth, async (req: Request, res: Response) => {
         greetingTimeout: 10000,
       } as any);
       await transporter.verify();
+      transporter.close();
       smtpVerified = true;
     } catch (err: any) {
+      try { transporter?.close(); } catch {}
       smtpError = err?.message || 'SMTP connection failed';
     }
 
@@ -348,9 +351,10 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
     // ── Verify SMTP credentials before saving ──────────────────────────────
     let smtpVerified = false;
     let smtpVerifyError: string | null = null;
+    let transporter: any;
     try {
       const nodemailer = await import('nodemailer');
-      const transporter = nodemailer.createTransport({
+      transporter = nodemailer.createTransport({
         host: smtpHost,
         port: parsedSmtpPort,
         secure: parsedSmtpPort === 465,
@@ -362,8 +366,10 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
         socketTimeout: 10000,
       } as any);
       await transporter.verify();
+      transporter.close();
       smtpVerified = true;
     } catch (verifyErr: any) {
+      try { transporter?.close(); } catch {}
       smtpVerified = false;
       smtpVerifyError = verifyErr?.message || 'SMTP verification failed';
       console.warn(`[Email Connect] SMTP verify failed for ${email}: ${smtpVerifyError}`);
@@ -681,9 +687,10 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
       // Verify SMTP before saving
       let smtpOk = false;
       let smtpErrMsg: string | null = null;
+      let transporter: any;
       try {
         const nodemailer = await import('nodemailer');
-        const transporter = nodemailer.createTransport({
+        transporter = nodemailer.createTransport({
           host: smtpHost,
           port: smtpPort,
           secure: smtpPort === 465,
@@ -694,8 +701,10 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
           greetingTimeout: 8000,
         } as any);
         await transporter.verify();
+        transporter.close();
         smtpOk = true;
       } catch (verifyErr: any) {
+        try { transporter?.close(); } catch {}
         smtpOk = false;
         smtpErrMsg = verifyErr?.message || 'SMTP verify failed';
       }
@@ -862,8 +871,9 @@ router.post('/test', requireAuth, async (req: Request, res: Response): Promise<v
 
     for (const port of portsToTry) {
       console.log(`[Email Test] Trying port ${port}...`);
+      let transporter: any;
       try {
-        const transporter = nodemailer.createTransport({
+        transporter = nodemailer.createTransport({
           host: smtpHost,
           port: port,
           secure: port === 465,
@@ -881,9 +891,11 @@ router.post('/test', requireAuth, async (req: Request, res: Response): Promise<v
         } as any);
 
         await transporter.verify();
+        transporter.close();
         successfulPort = port;
         break; // Stop trying if successful
       } catch (err: any) {
+        try { transporter?.close(); } catch {}
         lastError = err;
         console.warn(`[Email Test] Port ${port} failed:`, err.message || err);
       }

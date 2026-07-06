@@ -89,7 +89,7 @@ export function startHeartbeat(
   }, 30_000);
 
   // Write immediately on start
-  writeHeartbeat(service, 'healthy', getMetrics ? undefined : undefined).catch(() => {});
+  writeHeartbeat(service, 'healthy', getMetrics ? undefined : undefined).catch(err => console.warn('[Heartbeat] Initial heartbeat write failed:', err.message));
 
   return interval;
 }
@@ -297,7 +297,7 @@ export class HealthMonitor {
     log.info('Health monitor started', { intervalMs, config: this.alertConfig });
     const timer = setInterval(() => this.checkAndAlert(), intervalMs);
     // Run immediately
-    this.checkAndAlert().catch(() => {});
+    this.checkAndAlert().catch(err => console.warn('[Heartbeat] Initial health check failed:', err.message));
     return timer;
   }
 }

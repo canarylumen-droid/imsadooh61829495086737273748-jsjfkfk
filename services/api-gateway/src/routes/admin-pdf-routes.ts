@@ -115,9 +115,11 @@ type DeepMergeObject = Record<string, DeepMergeValue>;
 function deepMerge(target: DeepMergeObject, source: DeepMergeObject): DeepMergeObject {
   const result: DeepMergeObject = { ...target };
 
-  for (const key in source) {
+  Object.keys(source).forEach(key => {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') return;
+
     if (source[key] === null || source[key] === undefined) {
-      continue;
+      return;
     }
 
     if (Array.isArray(source[key])) {
@@ -136,7 +138,7 @@ function deepMerge(target: DeepMergeObject, source: DeepMergeObject): DeepMergeO
     } else {
       result[key] = source[key];
     }
-  }
+  });
 
   return result;
 }
@@ -249,6 +251,7 @@ router.post(
         const user = await storage.getUserById(userId);
         if (!user) {
           res.status(404).json({ error: "User not found" });
+          await releaseLock(lockKey).catch(err => console.warn(`[PDF Upload] Lock release failed for user ${userId}:`, err));
           return;
         }
 
@@ -307,6 +310,7 @@ router.post(
               hasObjections: Object.keys(brandContext.objections || {}).length > 0,
             },
           });
+          await releaseLock(lockKey).catch(err => console.warn(`[PDF Upload] Lock release failed for user ${userId}:`, err));
           return;
         }
       } catch (cacheError) {
@@ -317,6 +321,7 @@ router.post(
       const pdfText: string = pdfTextRaw;
 
       if (!pdfText || pdfText.length < 10) {
+        await releaseLock(lockKey).catch(err => console.warn(`[PDF Upload] Lock release failed for user ${userId}:`, err));
         res.status(400).json({
           error: "PDF appears to be empty or unreadable",
           message: "We couldn't extract text from this PDF. Try a text-based PDF (not scanned images). If the PDF contains text, try converting it to a different format."
@@ -754,50 +759,6 @@ router.delete(
       res.json({ success: true, message: "PDF cache cleared" });
     } catch (error: unknown) {
       console.error("Error clearing PDF cache:", error);
-      res.status(500).json({ error: getErrorMessage(error) });
-    }
-  }
-);
-
-/**
- * GET /api/brand-pdf/context
- * Retrieve the current brand context from user metadata
- */
-router.get(
-  "/context",
-  requireAuth,
-  async (req: Request, res: Response): Promise<void> => {
-    try {
-      const userId = getCurrentUserId(req);
-      if (!userId) {
-        res.status(401).json({ error: "Not authenticated" });
-        return;
-      }
-
-      const user = await storage.getUserById(userId);
-      if (!user) {
-        res.status(404).json({ error: "User not found" });
-        return;
-      }
-
-      // Check if we have cached context in metadata
-      const metadata = user.metadata as any;
-
-      res.json({
-        success: true,
-        companyName: user.businessName || metadata?.companyName,
-        industry: metadata?.industry,
-        uniqueValue: metadata?.uniqueValue,
-        targetAudience: metadata?.targetAudience,
-        tone: metadata?.tone,
-        positioning: metadata?.positioning,
-        offer: metadata?.offer,
-        hasPdf: !!metadata?.brandPdfUploadedAt,
-        uploadedAt: metadata?.brandPdfUploadedAt,
-        fileName: metadata?.brandPdfFileName,
-      });
-    } catch (error: unknown) {
-      console.error("Error fetching brand context:", error);
       res.status(500).json({ error: getErrorMessage(error) });
     }
   }

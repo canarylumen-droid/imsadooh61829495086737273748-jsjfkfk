@@ -5,11 +5,33 @@ import { db } from "@shared/lib/db/db.js";
 import multer from "multer";
 import csvParser from "csv-parser";
 import { Readable } from "stream";
+import path from "path";
 import { storage } from "@shared/lib/storage/storage.js";
 import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
+import { getUserLeadsLimit } from "@shared/plan-utils.js";
 
-const upload = multer({ storage: multer.memoryStorage() });
+const csvFileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedMimes = ['text/csv', 'application/vnd.ms-excel', 'application/csv', 'text/plain'];
+  const allowedExts = ['.csv', '.xlsx', '.xls'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedMimes.includes(file.mimetype) || allowedExts.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only CSV and Excel files (.csv, .xlsx, .xls) are allowed'));
+  }
+};
+
+const pdfFileFilter = (_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+  } else {
+    cb(new Error('Only PDF files are allowed'));
+  }
+};
+
+const upload = multer({ storage: multer.memoryStorage(), fileFilter: csvFileFilter, limits: { fileSize: 100 * 1024 * 1024 } });
+const uploadPdf = multer({ storage: multer.memoryStorage(), fileFilter: pdfFileFilter, limits: { fileSize: 50 * 1024 * 1024 } });
 import {
   generateAIReply,
   generateVoiceScript,
@@ -57,8 +79,8 @@ router.get("/", requireAuth, async (req: Request, res: Response): Promise<void> 
     const { channel, status, limit = "50", offset = "0", search, includeArchived, integrationId, excludeActiveCampaignLeads } = req.query;
 
     const user = await storage.getUser(userId);
-    const isEnterprise = user?.plan === 'enterprise' || user?.plan === 'pro';
-    const MAX_ALLOWED_LIMIT = isEnterprise ? 500000 : 20000;
+    const planLimit = getUserLeadsLimit(user);
+    const MAX_ALLOWED_LIMIT = planLimit;
     const limitNum = Math.min(parseInt(limit as string) || 200, MAX_ALLOWED_LIMIT);
     const offsetNum = parseInt(offset as string) || 0;
 
@@ -85,10 +107,6 @@ router.get("/", requireAuth, async (req: Request, res: Response): Promise<void> 
         channel ? eq(leadsTable.channel, channel as any) : undefined,
         integrationId ? or(eq(leadsTable.integrationId, integrationId as string), isNull(leadsTable.integrationId)) : undefined
       ));
-
-    const planLimit = (user?.subscriptionTier === 'enterprise' || user?.plan === 'enterprise' || user?.email === 'team.replyflow@gmail.com')
-      ? 500000
-      : (user?.subscriptionTier === 'pro' || user?.plan === 'pro' ? 100000 : 10000);
 
     res.json({
       leads: leads,
@@ -308,8 +326,8 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
         if (headerRows.length < 5) {
           headerRows.push(data);
         }
-        // For preview mode, accumulate up to cap
-        if (previewMode && previewRows.length < MAX_PREVIEW_ROWS) {
+        // Accumulate up to cap (for both preview and direct modes)
+        if (previewRows.length < MAX_PREVIEW_ROWS) {
           previewRows.push(data);
         }
       })
@@ -344,24 +362,37 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
       mappingResult = await mapCSVColumnsToSchema(headers, headerRows.slice(0, 3), skipAI);
       mapping = mappingResult.mapping;
 
+      if (!mapping) { res.status(400).json({ error: "Column mapping failed" }); return; }
+      if (!mapping.email && !mapping.name) {
+        if (!res.headersSent) {
+          res.status(400).json({ error: "CSV must contain an 'email' or 'name' column. No identifiable columns found." });
+        }
+        return;
+      }
+
       // 2. Extract leads from preview rows (all rows for preview mode)
       const rowsToProcess = previewMode ? previewRows : [...headerRows, ...previewRows];
       const processedLeads = rowsToProcess.map(row => {
-        const basicLead = extractLeadFromRow(row, mapping!) as { name?: string; email?: string; phone?: string; company?: string; channel?: string; role?: string; bio?: string; replyEmail?: string };
+        const basicLead = extractLeadFromRow(row, mapping!) as { name?: string; email?: string; phone?: string; company?: string; channel?: string; role?: string; bio?: string; replyEmail?: string; website?: string; businessName?: string; city?: string; country?: string; niche?: string; industry?: string; revenue?: string };
         if (!basicLead.name && basicLead.company) basicLead.name = basicLead.company;
-        if (!basicLead.name && !basicLead.email && !basicLead.company) return null;
+        if (!basicLead.name && basicLead.email) basicLead.name = basicLead.email.split('@')[0].replace(/[._-]/g, ' ');
+        if (!basicLead.name && !basicLead.email && !basicLead.company && !basicLead.phone) return null;
 
         const metadata = extractExtraFieldsAsMetadata(row, mapping!);
         if (mappingResult.unmappedColumns.length > 0) {
           metadata._unmapped_cols = mappingResult.unmappedColumns.join(',');
         }
-        if ((basicLead as any).niche) metadata.niche = (basicLead as any).niche;
-        if ((basicLead as any).city) metadata.city = (basicLead as any).city;
         return { ...basicLead, replyEmail: basicLead.replyEmail || basicLead.email || null, metadata };
       }).filter(l => l !== null);
 
       // 3. Preview Mode: return immediately
       if (previewMode) {
+        if (processedLeads.length === 0) {
+          if (!res.headersSent) {
+            res.status(400).json({ error: "No valid leads found in CSV. Ensure at least one row has an email or name." });
+          }
+          return;
+        }
         res.json({
           preview: true,
           total: rowCount, // Report actual total, not just preview cap
@@ -375,43 +406,48 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
       }
 
       // ── DIRECT IMPORT MODE ── Process remaining rows in batches ─────
-      // Re-parse the full CSV for direct import (we avoided holding all in memory above)
-      // Actually, we already have headerRows + previewRows. For files <= our cap,
-      // we need the rest. Re-streaming is the safest approach.
-      const allRows: any[] = [...headerRows];
-      await new Promise<void>((resolve, reject) => {
-        let count = 0;
-        const reStream = Readable.from(file.buffer.toString('utf-8'));
-        reStream.pipe(csvParser())
-          .on('data', (data: any) => {
-            count++;
-            if (count > headerRows.length) {
-              allRows.push(data);
-            }
-          })
-          .on('end', () => resolve())
-          .on('error', (err: any) => reject(err));
-      });
+      // Use already-parsed rows. Only re-stream if file exceeds our accum buffer.
+      let allRows: any[] = [...headerRows, ...previewRows];
+      if (rowCount > previewRows.length) {
+        allRows = [...headerRows];
+        await new Promise<void>((resolve, reject) => {
+          let count = 0;
+          const reStream = Readable.from(file.buffer.toString('utf-8'));
+          reStream.pipe(csvParser())
+            .on('data', (data: any) => {
+              count++;
+              if (count > headerRows.length) {
+                allRows.push(data);
+              }
+            })
+            .on('end', () => resolve())
+            .on('error', (err: any) => reject(err));
+        });
+      }
 
       const fullProcessed = allRows.map(row => {
-        const basicLead = extractLeadFromRow(row, mapping!) as { name?: string; email?: string; phone?: string; company?: string; replyEmail?: string };
+        const basicLead = extractLeadFromRow(row, mapping!) as { name?: string; email?: string; phone?: string; company?: string; replyEmail?: string; website?: string; businessName?: string; city?: string; country?: string; niche?: string; industry?: string; revenue?: string };
         if (!basicLead.name && basicLead.company) basicLead.name = basicLead.company;
-        if (!basicLead.name && !basicLead.email && !basicLead.company) return null;
+        if (!basicLead.name && basicLead.email) basicLead.name = basicLead.email.split('@')[0].replace(/[._-]/g, ' ');
+        if (!basicLead.name && !basicLead.email && !basicLead.company && !basicLead.phone) return null;
         const metadata = extractExtraFieldsAsMetadata(row, mapping!);
         if (mappingResult.unmappedColumns.length > 0) {
           metadata._unmapped_cols = mappingResult.unmappedColumns.join(',');
         }
-        if ((basicLead as any).niche) metadata.niche = (basicLead as any).niche;
-        if ((basicLead as any).city) metadata.city = (basicLead as any).city;
         return { ...basicLead, replyEmail: basicLead.replyEmail || basicLead.email || null, metadata };
       }).filter(l => l !== null);
+
+      if (fullProcessed.length === 0 && !previewMode) {
+        if (!res.headersSent) {
+          res.status(400).json({ error: "No valid leads found in CSV. Ensure at least one row has an email or name." });
+        }
+        return;
+      }
 
       // 4. Enforce Limits
       const user = await storage.getUserById(userId);
       const existingLeadsCount = await storage.getLeadsCount(userId);
-      const limit = (user?.subscriptionTier === 'enterprise' || user?.plan === 'enterprise' || user?.email === 'team.replyflow@gmail.com')
-        ? 500000
-        : (user?.subscriptionTier === 'pro' || user?.plan === 'pro' ? 100000 : 10000);
+      const limit = getUserLeadsLimit(user);
 
       if (existingLeadsCount >= limit) {
         if (!res.headersSent) {
@@ -470,25 +506,34 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
         const skipVerification = req.body.skipVerification === 'true';
         let verifiedChunk;
         try {
-          verifiedChunk = await Promise.all(uniqueChunk.map(async (leadData: any) => {
-            if (leadData.email && !skipVerification) {
-              try {
-                const verifyPromise = verifier.verify(leadData.email);
-                const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000));
-                const vResult: any = await Promise.race([verifyPromise, timeoutPromise]);
-                return {
-                  ...leadData,
-                  verified: vResult.valid,
-                  bouncy: !vResult.valid && vResult.reason.includes('rejected'),
-                  metadata: { ...leadData.metadata, verification_reason: vResult.reason, risk_level: vResult.riskLevel }
-                };
-              } catch (e) {
-                console.warn(`[CSV Import] Verification skipped for ${leadData.email} (timeout or error)`);
-                return { ...leadData, verified: false };
+          const CONCURRENCY = 10;
+          const results: any[] = [];
+          for (let v = 0; v < uniqueChunk.length; v += CONCURRENCY) {
+            const batch = uniqueChunk.slice(v, v + CONCURRENCY);
+            const batchResults = await Promise.allSettled(batch.map(async (leadData: any) => {
+              if (leadData.email && !skipVerification) {
+                try {
+                  const verifyPromise = verifier.verify(leadData.email);
+                  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000));
+                  const vResult: any = await Promise.race([verifyPromise, timeoutPromise]);
+                  return {
+                    ...leadData,
+                    verified: vResult.valid,
+                    bouncy: !vResult.valid && vResult.reason.includes('rejected'),
+                    metadata: { ...leadData.metadata, verification_reason: vResult.reason, risk_level: vResult.riskLevel }
+                  };
+                } catch (e) {
+                  console.warn(`[CSV Import] Verification skipped for ${leadData.email} (timeout or error)`);
+                  return { ...leadData, verified: false };
+                }
               }
+              return { ...leadData, verified: false };
+            }));
+            for (const r of batchResults) {
+              results.push(r.status === 'fulfilled' ? r.value : { ...batch[results.length - results.length % batch.length], verified: false });
             }
-            return { ...leadData, verified: false };
-          }));
+          }
+          verifiedChunk = results;
         } catch (pErr) {
           console.error("[CSV Import] Verified chunk processing failed, falling back to raw data", pErr);
           verifiedChunk = uniqueChunk.map((l: any) => ({ ...l, verified: false }));
@@ -496,11 +541,18 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
 
         const leadsChunk = verifiedChunk.map((leadData: any) => ({
           userId,
-          name: leadData.name || 'Unknown',
+          name: leadData.name || leadData.email?.split('@')[0]?.replace(/[._-]/g, ' ') || 'Unknown',
           email: leadData.email || null,
           replyEmail: leadData.replyEmail || leadData.email || null,
           phone: leadData.phone || null,
           company: leadData.company || null,
+          website: leadData.website || null,
+          businessName: leadData.businessName || null,
+          city: leadData.city || null,
+          country: leadData.country || null,
+          niche: leadData.niche || null,
+          industry: leadData.industry || null,
+          revenue: leadData.revenue || null,
           channel: 'email' as const,
           status: leadData.bouncy ? 'bouncy' as const : 'new' as const,
           aiPaused,
@@ -1085,12 +1137,11 @@ router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Pr
     }
 
     const user = await storage.getUserById(userId);
-    const existingLeads = await storage.getLeads({ userId, limit: 10000 });
-    const currentLeadCount = existingLeads.length;
+    const existingLeadsCount = await storage.getLeadsCount(userId);
 
-    const maxLeads = 1000000; // Unlimited as per request
+    const maxLeads = getUserLeadsLimit(user);
 
-    if (currentLeadCount >= maxLeads) {
+    if (existingLeadsCount >= maxLeads) {
       res.status(400).json({
         error: `You've reached your plan's limit of ${maxLeads} leads. Delete some leads or upgrade your plan to add more.`,
         limitReached: true
@@ -1108,7 +1159,7 @@ router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Pr
       errors: [] as string[]
     };
 
-    const leadsToImportCount = Math.min(leadsData.length, maxLeads - currentLeadCount);
+    const leadsToImportCount = Math.min(leadsData.length, maxLeads - existingLeadsCount);
 
     const newLeadsToInsert: any[] = [];
 
@@ -1549,7 +1600,7 @@ router.post("/brand-info", requireAuth, async (req: Request, res: Response): Pro
  * Import leads from PDF file upload
  * POST /api/leads/import-pdf
  */
-router.post("/import-pdf", requireAuth, upload.single("pdf"), async (req: Request, res: Response): Promise<void> => {
+router.post("/import-pdf", requireAuth, uploadPdf.single("pdf"), async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -1561,19 +1612,11 @@ router.post("/import-pdf", requireAuth, upload.single("pdf"), async (req: Reques
     }
 
     const user = await storage.getUserById(userId);
-    const existingLeads = await storage.getLeads({ userId, limit: 10000 });
-    const currentLeadCount = existingLeads.length;
+    const existingLeadsCount = await storage.getLeadsCount(userId);
 
-    const planLimits: Record<string, number> = {
-      'free': 10000,
-      'trial': 10000,
-      'starter': 25000,
-      'pro': 100000,
-      'enterprise': 500000
-    };
-    const maxLeads = planLimits[user?.subscriptionTier || user?.plan || 'trial'] || 10000;
+    const maxLeads = getUserLeadsLimit(user);
 
-    if (currentLeadCount >= maxLeads) {
+    if (existingLeadsCount >= maxLeads) {
       if (!res.headersSent) {
         res.status(400).json({
           error: `You've reached your plan's limit of ${maxLeads} leads. Delete some leads or upgrade your plan to add more.`,

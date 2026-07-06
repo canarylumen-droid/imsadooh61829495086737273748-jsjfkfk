@@ -330,7 +330,7 @@ export class GoogleCalendarOAuth {
           const decryptedRefToken = await decrypt(tokenData.refreshToken);
           await this.oauth2Client.revokeToken(decryptedRefToken);
         }
-      } catch (e) {}
+      } catch (e) { console.warn('[GoogleCalendar] Refresh token revocation also failed:', (e as Error)?.message); }
     }
 
     // Storage cleanup

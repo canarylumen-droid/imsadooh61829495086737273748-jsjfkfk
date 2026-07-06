@@ -141,7 +141,7 @@ export const startConsumerWorker = () => {
           dailyLimit: batchSize
         };
         // Write PG heartbeat BEFORE Redis so watchdog catches any Redis crash
-        await logJobPending?.(jobKey, 'campaign:send-batch', campaignId, userId, integrationId, null, null, jobData as Record<string, any>, 0).catch(() => {});
+        await logJobPending?.(jobKey, 'campaign:send-batch', campaignId, userId, integrationId, null, null, jobData as Record<string, any>, 0).catch(err => console.warn('[ConsumerDistribution] Job logging failed:', err.message));
         await campaignQueue.add(jobKey, jobData, { jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
       }
 

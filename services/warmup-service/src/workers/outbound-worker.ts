@@ -223,7 +223,7 @@ export function createOutboundWorker(): Worker {
           .where(eq(warmupMailboxes.id, sender[0].id));
 
         if (sender[0].anchorRole === 'seed') {
-          seedFleetManager.incrementSeedSentCount(sender[0].id).catch(() => {});
+          seedFleetManager.incrementSeedSentCount(sender[0].id).catch(err => console.warn('[Warmup][Outbound] Seed sent count increment failed:', err.message));
           resetSeedFailureCount(sender[0].id);
         }
 
@@ -292,7 +292,7 @@ export function createOutboundWorker(): Worker {
 
           if (newFailCount >= 3) {
             console.warn(`[Warmup][Outbound] Seed ${sender[0].email} failed ${newFailCount}x — triggering seed replacement`);
-            seedFleetManager.handleSeedFailure(sender[0].id).catch(() => {});
+            seedFleetManager.handleSeedFailure(sender[0].id).catch(err => console.warn('[Warmup][Outbound] Seed failure handler failed:', err.message));
           }
         }
       }
@@ -307,7 +307,7 @@ function resetSeedFailureCount(mailboxId: string): void {
   db.update(warmupMailboxes)
     .set({ metadata: sql`jsonb_set(${warmupMailboxes.metadata}, '{seedFailCount}', '0'::jsonb)` })
     .where(eq(warmupMailboxes.id, mailboxId))
-    .catch(() => {});
+    .catch(err => console.warn('[Warmup][Outbound] Seed failure count reset failed:', err.message));
 }
 
 function getDefaultSmtpHost(provider: string): string {

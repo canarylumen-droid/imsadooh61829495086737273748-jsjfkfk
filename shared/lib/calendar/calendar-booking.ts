@@ -137,7 +137,7 @@ export async function getAvailableTimeSlots(
         const credentials = JSON.parse(decrypted);
 
         const calendlySlots = await getCalendlySlots(
-          credentials.api_token,
+          credentials.access_token || credentials.api_token,
           daysAhead,
           slotDuration
         );
@@ -297,7 +297,7 @@ export async function bookMeeting(
         const credentials = JSON.parse(decrypted);
 
         const result = await createCalendlyEvent(
-          credentials.api_token,
+          credentials.access_token || credentials.api_token,
           leadEmail,
           leadName,
           slotStart

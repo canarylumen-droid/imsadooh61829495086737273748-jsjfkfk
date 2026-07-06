@@ -649,7 +649,7 @@ export async function runDatabaseMigrations() {
     } finally {
         // Always close the direct pool — migrations are one-shot.
         // Leaving it open leaks connections if this function is triggered repeatedly (e.g., admin panel).
-        await closeDirectDatabase().catch(() => {});
+        await closeDirectDatabase().catch(err => console.warn('[Migrator] Failed to close database after migration:', err.message));
     }
 }
 

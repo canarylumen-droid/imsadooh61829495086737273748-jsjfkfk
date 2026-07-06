@@ -37,6 +37,7 @@ export class CalendlyService {
         return accessToken;
       } catch (err) {
         console.error(`[Calendly] Failed to refresh token for ${userId}:`, err);
+        console.warn(`[Calendly] Token refresh failed for ${userId} — integration needs reconnection`);
         return null;
       }
     }
@@ -57,22 +58,28 @@ export class CalendlyService {
     const eventType = await this.getPreferredEventType(token, params.eventTypeName);
     if (!eventType) throw new Error('No active Calendly event types found');
 
-    // 2. Schedule meeting (This actually requires the Invitees API or a direct booking endpoint)
-    // For now, we simulate success or use the provided logic to track it as 'AI Scheduled'
     console.log(`[Calendly] Scheduling "${eventType.name}" for ${params.email} at ${params.startTime.toISOString()}`);
 
-    // In Calendly API v2, creating a scheduled event is usually done by the invitee.
-    // However, for an AI Agent, we can use the 'Scheduled Events' API to track it
-    // or provide the booking link.
-    // If we want to DIRECTLY BOOK, we'd need another implementation or use a specific trigger.
-    
-    return {
-      success: true,
-      meetingUrl: eventType.scheduling_url,
-      startTime: params.startTime,
-      endTime: params.endTime,
-      id: `cal_${Math.random().toString(36).substr(2, 9)}`
-    };
+    // 2. Actually create the Calendly event via API
+    try {
+      const result = await calendlyOAuth.createEvent({ token, email: params.email, name: params.name, time: params.startTime, eventTypeUri: eventType.uri });
+
+      if (result.success) {
+        console.log(`[Calendly] ✅ Meeting booked for ${params.email} at ${params.startTime.toISOString()}`);
+        return {
+          success: true,
+          meetingUrl: eventType.scheduling_url,
+          startTime: params.startTime,
+          endTime: params.endTime,
+          id: result.eventId || `cal_${Date.now().toString(36)}`
+        };
+      }
+
+      throw new Error(result.error || 'Failed to create Calendly event');
+    } catch (err: any) {
+      console.error(`[Calendly] Failed to actually book meeting for ${params.email}:`, err.message);
+      throw err;
+    }
   }
 
   /**
@@ -128,7 +135,10 @@ export class CalendlyService {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (!response.ok) return [];
+      if (!response.ok) {
+        console.error(`[Calendly] listEventTypes failed with status ${response.status} for user ${userId}`);
+        return [];
+      }
 
       const data: any = await response.json();
       return data.collection || [];
@@ -161,7 +171,10 @@ export class CalendlyService {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (!response.ok) return [];
+      if (!response.ok) {
+        console.error(`[Calendly] listScheduledEvents failed with status ${response.status} for user ${userId}`);
+        return [];
+      }
 
       const data: any = await response.json();
       return data.collection || [];

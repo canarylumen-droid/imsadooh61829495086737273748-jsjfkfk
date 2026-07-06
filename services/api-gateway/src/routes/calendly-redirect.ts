@@ -102,9 +102,17 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     }
 
     // 3. Register Webhook for real-time meetings (Async background task)
-    registerCalendlyWebhook(userId, tokenData.accessToken).catch(err => 
-      console.error('[Calendly Redirect] Failed to register webhook:', err)
-    );
+    registerCalendlyWebhook(userId, tokenData.accessToken).catch(err => {
+      console.error('[Calendly Redirect] Failed to register webhook:', err);
+      (req as any).webhookSetupIssue = true;
+    });
+    
+    // Schedule a delayed check so we can surface webhook setup issues in the session
+    setTimeout(async () => {
+      if ((req as any).webhookSetupIssue && (req as any).session) {
+        (req as any).session.calendlyWebhookWarning = 'Webhook registration failed. Real-time meeting sync may be unavailable. Try reconnecting or upgrading your Calendly plan.';
+      }
+    }, 100);
 
     // 4. Notify frontend
     wsSync.notifySettingsUpdated(userId);

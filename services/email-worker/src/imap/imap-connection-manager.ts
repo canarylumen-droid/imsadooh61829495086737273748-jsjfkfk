@@ -193,14 +193,13 @@ export class ImapConnectionManager {
     this.connections.delete(integrationId);
     imapConnectionsActive.dec({ provider: data.integration.provider });
 
-    await this._redisRelease(integrationId);
-    await this._workerLoadUpdate();
-
     try {
       await data.client.logout();
     } catch {
-      try { data.client.close(); } catch { /* ignore */ }
+      try { data.client.close(); } catch (err) { console.warn('[IMAP] Failed to close client on disconnect:', (err as any)?.message); }
     }
+    await this._redisRelease(integrationId);
+    await this._workerLoadUpdate();
     console.log(`[IMAP] Cleanly disconnected ${integrationId}`);
   }
 

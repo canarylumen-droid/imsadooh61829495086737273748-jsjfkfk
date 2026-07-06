@@ -104,7 +104,7 @@ export async function detectCompetitorMention(message: string): Promise<Competit
           sentiment: parsed.sentiment || 0
         };
       }
-    } catch (e) {}
+    } catch (e) { console.warn('[CompetitorDetection] Failed to detect competitor via AI:', (e as Error)?.message); }
   }
 
   if (!detectedCompetitor || !competitorData) {

@@ -295,7 +295,7 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
               const isListed = result.some(r => r.startsWith('127.'));
               if (isListed) listedOn.push(provider);
             }
-          } catch (e) {}
+          } catch (e) { /* RBL DNS lookup failure is normal for non-listed IPs */ }
         })());
       }
     }
@@ -309,7 +309,7 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
             const isListed = result.some(r => r.startsWith('127.'));
             if (isListed) listedOn.push(provider);
           }
-        } catch (e) {}
+        } catch (e) { /* RBL DNS lookup failure is normal for non-listed domains */ }
       })());
     }
 
@@ -325,7 +325,7 @@ async function checkBlacklist(domain: string): Promise<DnsVerificationResult['bl
               const isListed = result.some(r => r.startsWith('127.'));
               if (isListed) listedOn.push(rbl);
             }
-          } catch (e) {}
+          } catch (e) { /* Public RBL DNS lookup failure is normal for non-listed IPs */ }
         })());
       }
     }

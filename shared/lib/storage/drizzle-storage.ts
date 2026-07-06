@@ -652,11 +652,18 @@ export class DrizzleStorage implements IStorage {
         email: insertLead.email || null,
         replyEmail: insertLead.replyEmail || insertLead.email || null,
         phone: insertLead.phone || null,
+        website: insertLead.website || null,
+        businessName: insertLead.businessName || null,
+        city: insertLead.city || null,
+        country: insertLead.country || null,
+        niche: insertLead.niche || null,
+        industry: insertLead.industry || null,
+        revenue: insertLead.revenue || null,
         status: insertLead.status || "new",
         score: insertLead.score || 0,
         warm: insertLead.warm || false,
         lastMessageAt: insertLead.lastMessageAt || null,
-        aiPaused: insertLead.aiPaused || false,
+        aiPaused: insertLead.aiPaused ?? true,
         verified: insertLead.verified || false,
         verifiedAt: insertLead.verifiedAt || null,
         pdfConfidence: insertLead.pdfConfidence || null,
@@ -1210,11 +1217,18 @@ export class DrizzleStorage implements IStorage {
             email: l.email || null,
             replyEmail: l.replyEmail || l.email || null,
             phone: l.phone || null,
+            website: l.website || null,
+            businessName: l.businessName || null,
+            city: l.city || null,
+            country: l.country || null,
+            niche: l.niche || null,
+            industry: l.industry || null,
+            revenue: l.revenue || null,
             status: l.status || "new",
             score: l.score || 0,
             warm: l.warm || false,
             lastMessageAt: l.lastMessageAt || null,
-            aiPaused: l.aiPaused || false,
+            aiPaused: l.aiPaused ?? true,
             verified: l.verified || false,
             verifiedAt: l.verifiedAt || null,
             metadata: l.metadata || {},
@@ -1241,11 +1255,18 @@ export class DrizzleStorage implements IStorage {
                 email: lead.email || null,
                 replyEmail: lead.replyEmail || lead.email || null,
                 phone: lead.phone || null,
+                website: lead.website || null,
+                businessName: lead.businessName || null,
+                city: lead.city || null,
+                country: lead.country || null,
+                niche: lead.niche || null,
+                industry: lead.industry || null,
+                revenue: lead.revenue || null,
                 status: lead.status || "new",
                 score: lead.score || 0,
                 warm: lead.warm || false,
                 lastMessageAt: lead.lastMessageAt || null,
-                aiPaused: lead.aiPaused || false,
+                aiPaused: lead.aiPaused ?? true,
                 verified: lead.verified || false,
                 verifiedAt: lead.verifiedAt || null,
                 metadata: lead.metadata || {},
@@ -1533,15 +1554,15 @@ export class DrizzleStorage implements IStorage {
     const [integration] = await db.select().from(integrations).where(eq(integrations.id, id)).limit(1);
     
     // Safely unlink constraints from connected entities to allow deletion
-    try { await db.update(leads).set({ integrationId: null as any }).where(eq(leads.integrationId, id)); } catch (e) {}
-    try { await db.update(messages).set({ integrationId: null as any }).where(eq(messages.integrationId, id)); } catch (e) {}
-    try { await db.update(notifications).set({ integrationId: null as any }).where(eq(notifications.integrationId, id)); } catch (e) {}
-    try { await db.update(prospects).set({ integrationId: null as any }).where(eq(prospects.integrationId, id)); } catch (e) {}
-    try { await db.update(emailTracking).set({ integrationId: null as any }).where(eq(emailTracking.integrationId, id)); } catch (e) {}
-    try { await db.update(emailMessages).set({ integrationId: null as any }).where(eq(emailMessages.integrationId, id)); } catch (e) {}
-    try { await db.update(campaignLeads).set({ integrationId: null as any }).where(eq(campaignLeads.integrationId, id)); } catch (e) {}
-    try { await db.delete(bounceTracker).where(eq(bounceTracker.integrationId, id)); } catch (e) {}
-    try { await db.delete(auditTrail).where(eq(auditTrail.integrationId, id)); } catch (e) {}
+    try { await db.update(leads).set({ integrationId: null as any }).where(eq(leads.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to unlink leads:', (e as Error)?.message); }
+    try { await db.update(messages).set({ integrationId: null as any }).where(eq(messages.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to unlink messages:', (e as Error)?.message); }
+    try { await db.update(notifications).set({ integrationId: null as any }).where(eq(notifications.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to unlink notifications:', (e as Error)?.message); }
+    try { await db.update(prospects).set({ integrationId: null as any }).where(eq(prospects.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to unlink prospects:', (e as Error)?.message); }
+    try { await db.update(emailTracking).set({ integrationId: null as any }).where(eq(emailTracking.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to unlink emailTracking:', (e as Error)?.message); }
+    try { await db.update(emailMessages).set({ integrationId: null as any }).where(eq(emailMessages.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to unlink emailMessages:', (e as Error)?.message); }
+    try { await db.update(campaignLeads).set({ integrationId: null as any }).where(eq(campaignLeads.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to unlink campaignLeads:', (e as Error)?.message); }
+    try { await db.delete(bounceTracker).where(eq(bounceTracker.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to delete bounceTracker:', (e as Error)?.message); }
+    try { await db.delete(auditTrail).where(eq(auditTrail.integrationId, id)); } catch (e) { console.warn('[DrizzleStorage] Failed to delete auditTrail:', (e as Error)?.message); }
     
     // Phase 12: Ensure "Full Deletion" of settings for email providers to prevent ghosting
     if (integration && ['custom_email', 'gmail', 'outlook'].includes(integration.provider)) {

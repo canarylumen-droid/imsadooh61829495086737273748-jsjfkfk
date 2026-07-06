@@ -155,37 +155,53 @@ export class LeadScoringEngine {
     const result = await this.calculateScore(lead, messages, lastIntent);
     const previousCategory = (lead.metadata as any)?.scoreCategory;
 
-    await storage.updateLead(leadId, {
-      score: result.score,
-      metadata: {
-        ...lead.metadata,
-        scoreCategory: result.category,
-        scoreReasons: result.reasons,
-        lastScoredAt: new Date().toISOString()
-      }
-    });
+    try {
+      await storage.updateLead(leadId, {
+        score: result.score,
+        metadata: {
+          ...lead.metadata,
+          scoreCategory: result.category,
+          scoreReasons: result.reasons,
+          lastScoredAt: new Date().toISOString()
+        }
+      });
+    } catch (err) {
+      console.error('[LeadScoring] Failed to update lead score:', err);
+    }
 
     // Notify user on any category promotion (D→C, C→B, B→A)
     const categoryRank: Record<LeadScoreCategory, number> = { D: 0, C: 1, B: 2, A: 3 };
     const isPromotion = previousCategory && categoryRank[result.category] > categoryRank[previousCategory as LeadScoreCategory];
 
     if (result.category === 'A' && (!previousCategory || previousCategory !== 'A')) {
-      await storage.createNotification({
-        userId: lead.userId,
-        type: 'conversion',
-        title: '🔥 High-Value Lead!',
-        message: `${lead.name} from ${lead.company || 'their company'} just scored ${result.score}/100 — Category A!`,
-        metadata: { leadId, score: result.score, category: 'A', reasons: result.reasons }
-      });
-      wsSync.notifyStatsUpdated(lead.userId);
+      try {
+        await storage.createNotification({
+          userId: lead.userId,
+          type: 'conversion',
+          title: '🔥 High-Value Lead!',
+          message: `${lead.name} from ${lead.company || 'their company'} just scored ${result.score}/100 — Category A!`,
+          metadata: { leadId, score: result.score, category: 'A', reasons: result.reasons }
+        });
+      } catch (err) {
+        console.error('[LeadScoring] Failed to create notification:', err);
+      }
+      try {
+        wsSync.notifyStatsUpdated(lead.userId);
+      } catch (err) {
+        console.error('[LeadScoring] Failed to notify stats updated:', err);
+      }
     } else if (isPromotion) {
-      await storage.createNotification({
-        userId: lead.userId,
-        type: 'lead_status_change',
-        title: `📈 Lead Upgraded to Category ${result.category}`,
-        message: `${lead.name} moved from ${previousCategory} → ${result.category} (${result.score}/100)`,
-        metadata: { leadId, score: result.score, category: result.category }
-      });
+      try {
+        await storage.createNotification({
+          userId: lead.userId,
+          type: 'lead_status_change',
+          title: `📈 Lead Upgraded to Category ${result.category}`,
+          message: `${lead.name} moved from ${previousCategory} → ${result.category} (${result.score}/100)`,
+          metadata: { leadId, score: result.score, category: result.category }
+        });
+      } catch (err) {
+        console.error('[LeadScoring] Failed to create upgrade notification:', err);
+      }
     }
   }
 }

@@ -104,7 +104,7 @@ export class ReputationManager {
           return userInfoResponse.data.email.split('@')[1];
         }
       }
-    } catch (e) {}
+    } catch (e) { console.warn('[ReputationManager] Failed to extract domain:', (e as Error)?.message); }
 
     return null;
   }

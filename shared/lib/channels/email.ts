@@ -165,15 +165,6 @@ async function sendViaKumoMTA(
   replyTo?: string
 ): Promise<{ messageId: string }> {
   const nodemailer = await import('nodemailer');
-  const transporter = nodemailer.createTransport({
-    host: '127.0.0.1',
-    port: 2525,
-    secure: false,
-    tls: { rejectUnauthorized: false },
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 30000,
-  });
 
   const fromAddress = config.from_name
     ? `"${config.from_name}" <${config.smtp_user}>`
@@ -182,20 +173,45 @@ async function sendViaKumoMTA(
   const headers: Record<string, string> = {};
   if (integrationId) headers['X-Integration-Id'] = integrationId;
 
-  const info = await transporter.sendMail({
-    from: fromAddress,
-    to,
-    subject,
-    [isHtml ? 'html' : 'text']: body,
-    ...(inReplyTo && { inReplyTo }),
-    ...(references && { references }),
-    ...(replyTo && { replyTo }),
-    headers,
-  });
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let transporter: any = null;
+    try {
+      transporter = nodemailer.createTransport({
+        host: '127.0.0.1',
+        port: 2525,
+        secure: false,
+        tls: { rejectUnauthorized: false },
+        connectionTimeout: 15000,
+        greetingTimeout: 15000,
+        socketTimeout: 30000,
+      });
 
-  transporter.close();
+      const info = await transporter.sendMail({
+        from: fromAddress,
+        to,
+        subject,
+        [isHtml ? 'html' : 'text']: body,
+        ...(inReplyTo && { inReplyTo }),
+        ...(references && { references }),
+        ...(replyTo && { replyTo }),
+        headers,
+      });
 
-  return { messageId: info.messageId || `<${Date.now()}@audnixai.com>` };
+      transporter.close();
+      return { messageId: info.messageId || `<${Date.now()}@audnixai.com>` };
+    } catch (err: any) {
+      lastError = err;
+      if (transporter) try { transporter.close(); } catch {}
+      if (attempt < 3) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.warn(`[KumoMTA] Attempt ${attempt}/3 failed for ${to}, retrying in ${delay}ms:`, err.message);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error('KumoMTA send failed after 3 attempts');
 }
 
 /**
@@ -232,7 +248,7 @@ setInterval(() => {
     if (pool.isIdle && pool.isIdle()) {
       pool.verify().catch(() => {
         console.log(`[CustomSMTP] Evicting dead pool ${key} during health check`);
-        try { pool.close(); } catch (e) {}
+        try { pool.close(); } catch (e) { console.warn('[CustomSMTP] Failed to close pool:', (e as Error)?.message); }
         smtpPools.delete(key);
       });
     }

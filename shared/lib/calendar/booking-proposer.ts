@@ -306,7 +306,7 @@ Return JSON: { "matches": ["ISO_STRING"] }`;
     userInput: string,
     conversationHistory: any[],
     lead: { id: string; email: string; name: string }
-  ): Promise<{ booked: boolean; bookedTime?: string; copy?: string; error?: string }> {
+  ): Promise<{ booked: boolean; bookedTime?: string; copy?: string; error?: string; meetingUrl?: string }> {
     try {
       const leadProfile = await getLeadProfile(lead.id);
 
@@ -361,7 +361,7 @@ Return JSON:
             title: '🌙 Late-Night Confirmation',
             message: `${lead.name} booked a call at ${nightHour} local time (${nightWatch.count + 1}/7 night outbounds used).`,
             metadata: { leadId: lead.id, bookedTime: detection.confirmedTimeISO, isNightBooking: true },
-          }).catch(() => {});
+          }).catch(err => console.warn('[BookingProposer] Night booking notification insert failed:', err.message));
 
           socketService.notifyNewNotification(this.userId, {
             type: 'info',
@@ -371,15 +371,15 @@ Return JSON:
         }
       }
 
-      const [settings] = await db
-        .select()
-        .from(calendarSettings)
-        .where(eq(calendarSettings.userId, this.userId))
-        .limit(1);
-
       const [userForLink] = await db.select({ calendarLink: users.calendarLink }).from(users).where(eq(users.id, this.userId)).limit(1);
 
-      if (!settings?.calendlyToken) {
+      const [calIntegration] = await db
+        .select()
+        .from(integrations)
+        .where(and(eq(integrations.userId, this.userId), eq(integrations.provider, 'calendly'), eq(integrations.connected, true)))
+        .limit(1);
+
+      if (!calIntegration?.encryptedMeta) {
         if (userForLink?.calendarLink) {
           return {
             booked: false,
@@ -389,16 +389,23 @@ Return JSON:
         return { booked: false, error: 'No Calendly connected' };
       }
 
+      const { decrypt } = await import('@shared/lib/crypto/encryption.js');
+      const credentials = JSON.parse(await decrypt(calIntegration.encryptedMeta));
+      const calendlyToken = credentials.access_token || credentials.api_token || credentials.token;
+
       const bookingResult = await createCalendlyEvent(
-        settings.calendlyToken,
+        calendlyToken,
         lead.email,
         lead.name,
         new Date(detection.confirmedTimeISO),
-        settings.calendlyEventTypeUri || undefined
       );
 
       if (bookingResult?.success) {
-        return { booked: true, bookedTime: detection.confirmedTimeISO };
+        return {
+          booked: true,
+          bookedTime: detection.confirmedTimeISO,
+          meetingUrl: bookingResult.meetingUrl
+        };
       }
       if (userForLink?.calendarLink) {
         return {
@@ -421,7 +428,7 @@ async function createCalendlyEvent(
   name: string,
   time: Date,
   eventTypeUri?: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; eventId?: string; meetingUrl?: string }> {
   try {
     const { calendlyOAuth } = await import('@services/api-gateway/src/oauth/calendly.js');
     return await (calendlyOAuth as any).createEvent({ token, email, name, time, eventTypeUri });

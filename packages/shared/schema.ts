@@ -138,6 +138,13 @@ export const leads = pgTable("leads", {
   email: text("email"),
   replyEmail: text("reply_email"),
   phone: text("phone"),
+  website: text("website"),
+  businessName: text("business_name"),
+  city: text("city"),
+  country: text("country"),
+  niche: text("niche"),
+  industry: text("industry"),
+  revenue: text("revenue"),
   status: text("status", { enum: ["new", "open", "replied", "converted", "not_interested", "unsubscribed", "no_show", "cold", "hardened", "recovered", "bouncy", "booked", "warm", "qualified", "risky"] }).notNull().default("new"),
   verified: boolean("verified").notNull().default(false),
   verifiedAt: timestamp("verified_at"),
@@ -173,10 +180,13 @@ export const leads = pgTable("leads", {
   leadsEmailIdx: index("leads_email_idx").on(table.email),
   leadsExternalIdIdx: index("leads_external_id_idx").on(table.externalId),
   leadsUserIdChannelIdx: index("leads_user_id_channel_idx").on(table.userId, table.channel),
-  // Phase 15: Composite indices for sub-100ms dashboard queries
   leadsUserStatusIdx: index("leads_user_status_idx").on(table.userId, table.status),
   leadsUserEmailUnique: uniqueIndex("leads_user_email_unique_idx").on(table.userId, table.email),
   leadsLastMsgIdx: index("leads_last_msg_idx").on(table.lastMessageAt),
+  leadsUserCreatedIdx: index("leads_user_created_idx").on(table.userId, table.createdAt),
+  leadsNicheIdx: index("leads_niche_idx").on(table.niche),
+  leadsCityIdx: index("leads_city_idx").on(table.city),
+  leadsIndustryIdx: index("leads_industry_idx").on(table.industry),
 }));
 
 export const domainVerifications = pgTable("domain_verifications", {

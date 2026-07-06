@@ -105,6 +105,24 @@ export function isLimitReached(current: number, limit: number): boolean {
   return current >= limit;
 }
 
+export function getUserLeadsLimit(user: any): number {
+  const planId = getActivePlanId(user);
+  const tier = getPlanTier(planId);
+  if (!tier) return 10000;
+  if (tier.leadsLimit === -1) return 999999999;
+  return tier.leadsLimit;
+}
+
+export function getUserUploadLimit(user: any): number {
+  const planId = getActivePlanId(user);
+  switch (planId) {
+    case 'enterprise': return 1000;
+    case 'pro': return 100;
+    case 'starter': return 25;
+    default: return 10;
+  }
+}
+
 export function shouldShowUpgradePrompt(planId: string, leadCount: number, voiceMinutesUsed: number): boolean {
   const capabilities = getPlanCapabilities(planId);
   const leadsNearLimit = capabilities.leadsLimit !== -1 && capabilities.leadsLimit > 0 && leadCount >= capabilities.leadsLimit * 0.9;

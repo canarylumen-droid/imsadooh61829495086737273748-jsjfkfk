@@ -217,9 +217,9 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
                  const d = email.split('@')[1];
                  activeVerifications = activeVerifications.filter(v => v.domain === d);
              }
-          } catch(e) {}
-       }
-    }
+           } catch(e) { console.warn('[Dashboard] Failed to parse encrypted meta for verification filter:', (e as Error)?.message); }
+        }
+     }
 
     // Deduplicate verifications by domain to only keep the latest check per domain
     const uniqueVerifications = new Map();
@@ -885,7 +885,7 @@ router.get('/integrations/:id/health', requireAuth, async (req: Request, res: Re
         try {
           const dmarcTxt = await resolveTxt(`_dmarc.${domainToCheck}`);
           dmarc = dmarcTxt.flat().join(' ').toLowerCase().includes('v=dmarc1');
-        } catch (e) {}
+        } catch (e) { console.warn('[Dashboard] DMARC lookup failed for domain:', (e as Error)?.message); }
 
         // DKIM: Try common selectors (google, default, selector1, etc.)
         dkim = false;
@@ -897,7 +897,7 @@ router.get('/integrations/:id/health', requireAuth, async (req: Request, res: Re
               dkim = true;
               break;
             }
-          } catch (e) {}
+          } catch (e) { console.warn('[Dashboard] DKIM selector lookup failed:', (e as Error)?.message); }
         }
       } catch (e) {
         console.warn(`DNS lookup failed for ${domainToCheck}:`, e);

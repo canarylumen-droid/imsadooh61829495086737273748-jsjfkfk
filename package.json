@@ -22,6 +22,7 @@
     "db:generate": "cross-env IS_WORKER=false drizzle-kit generate",
     "db:patch-target-url": "tsx scripts/patch-target-url.ts",
     "setup": "npx tsx scripts/setup.ts",
+    "db:reset": "npx tsx scripts/reset-db.ts",
     "verify": "npx tsx scripts/verify-setup.ts",
     "check": "node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit",
     "test": "vitest run",
@@ -53,6 +54,7 @@
     "start:pm2:production": "pm2 start ecosystem.config.cjs --env production",
     "stop:pm2": "pm2 stop ecosystem.config.cjs",
     "restart:pm2": "pm2 restart ecosystem.config.cjs",
+    "deploy": "bash deploy.sh",
     "delete:pm2": "pm2 delete ecosystem.config.cjs",
     "logs:pm2": "pm2 logs",
     "monit:pm2": "pm2 monit"
@@ -95,6 +97,7 @@
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1079.0",
     "@aws-sdk/client-ec2": "^3.1079.0",
+    "@aws-sdk/client-ec2-instance-connect": "^3.1079.0",
     "@aws-sdk/client-lambda": "^3.1079.0",
     "@aws-sdk/client-s3": "^3.1035.0",
     "@aws-sdk/client-sts": "^3.1079.0",

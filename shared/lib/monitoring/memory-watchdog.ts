@@ -20,8 +20,8 @@ export function startMemoryWatchdog(heapLimitMb?: number) {
         // ECS mode: log + let auto-scaling + liveness probe handle it
         console.warn(`[Watchdog] MEMORY HIGH: ${heapUsedMb}MB > ${limit}MB — ECS will scale or restart via liveness probe`);
         import('./system-health-service.js').then(({ SystemHealthService }) => {
-          SystemHealthService.logCritical('system', 'MEMORY_HIGH', `Heap ${heapUsedMb}MB > ${limit}MB on ECS task ${process.env.ECS_TASK_ID || 'unknown'}`).catch(() => {});
-        }).catch(() => {});
+          SystemHealthService.logCritical('system', 'MEMORY_HIGH', `Heap ${heapUsedMb}MB > ${limit}MB on ECS task ${process.env.ECS_TASK_ID || 'unknown'}`).catch(err => console.warn('[Watchdog] SystemHealthService.logCritical failed:', err.message));
+        }).catch(err => console.warn('[Watchdog] Dynamic import of system-health-service failed:', err.message));
         // DO NOT exit — ECS liveness probe + Target Tracking scaling handles this
         return;
       }

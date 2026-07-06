@@ -16,8 +16,13 @@ export const LEADS_SCHEMA = {
     bio: { description: "Brief background or specific info about the lead", required: false },
     channel: { description: "Communication channel (instagram/email)", required: false },
     reply_email: { description: "Alternative email address for replies", required: false },
-    niche: { description: "Business niche or industry category (e.g. Plumbing, SaaS)", required: false },
+    website: { description: "Website or domain URL", required: false },
+    business_name: { description: "Registered business or store name", required: false },
     city: { description: "City or location for timezone and local intelligence", required: false },
+    country: { description: "Country name", required: false },
+    niche: { description: "Business niche or industry category (e.g. Plumbing, SaaS)", required: false },
+    industry: { description: "Industry sector", required: false },
+    revenue: { description: "Annual revenue or sales volume", required: false },
 };
 
 export type LeadColumnMapping = {
@@ -29,11 +34,14 @@ export type LeadColumnMapping = {
     bio?: string;
     channel?: string;
     reply_email?: string;
-    industry?: string;
     website?: string;
-    notes?: string;
-    niche?: string;
+    business_name?: string;
     city?: string;
+    country?: string;
+    niche?: string;
+    industry?: string;
+    revenue?: string;
+    notes?: string;
 };
 
 export interface MappingResult {
@@ -196,8 +204,17 @@ function fallbackMapping(headers: string[]): MappingResult {
         city: [
             /^city$/i, /^town$/i, /^location$/i, /^municipality$/i, /^area$/i, /^suburb$/i, /^geo$/i
         ],
+        country: [
+            /^country$/i, /^nation$/i, /^region$/i
+        ],
         website: [
             /^website$/i, /^url$/i, /^link$/i, /^site$/i, /^domain$/i, /^web[_\s-]?addr/i, /^home[_\s-]?page$/i
+        ],
+        business_name: [
+            /^business[_\s-]?name$/i, /^store[_\s-]?name$/i, /^brand[_\s-]?name$/i, /^shop[_\s-]?name$/i
+        ],
+        revenue: [
+            /^revenue$/i, /^annual[_\s-]?revenue$/i, /^sales[_\s-]?volume$/i, /^turnover$/i, /^income$/i
         ],
         notes: [
             /^notes$/i, /^description$/i, /^info$/i, /^comments$/i, /^about$/i,
@@ -244,7 +261,7 @@ function fallbackMapping(headers: string[]): MappingResult {
 export function extractLeadFromRow(
     row: Record<string, string>,
     mapping: LeadColumnMapping
-): { name?: string; email?: string; phone?: string; company?: string; channel?: string; role?: string; bio?: string; replyEmail?: string; niche?: string; city?: string } {
+): { name?: string; email?: string; phone?: string; company?: string; channel?: string; role?: string; bio?: string; replyEmail?: string; website?: string; businessName?: string; city?: string; country?: string; niche?: string; industry?: string; revenue?: string } {
     let email = mapping.email ? row[mapping.email]?.trim() : undefined;
     
     // Fallback: If no email was mapped, search all columns for an email pattern
@@ -270,8 +287,13 @@ export function extractLeadFromRow(
         bio: mapping.bio ? row[mapping.bio]?.trim() : (mapping.notes ? row[mapping.notes]?.trim() : undefined),
         channel: mapping.channel ? row[mapping.channel]?.trim() : undefined,
         replyEmail: mapping.reply_email ? row[mapping.reply_email]?.trim() : undefined,
-        niche: mapping.niche ? row[mapping.niche]?.trim() : undefined,
+        website: mapping.website ? row[mapping.website]?.trim() : undefined,
+        businessName: mapping.business_name ? row[mapping.business_name]?.trim() : undefined,
         city: mapping.city ? row[mapping.city]?.trim() : undefined,
+        country: mapping.country ? row[mapping.country]?.trim() : undefined,
+        niche: mapping.niche ? row[mapping.niche]?.trim() : undefined,
+        industry: mapping.industry ? row[mapping.industry]?.trim() : undefined,
+        revenue: mapping.revenue ? row[mapping.revenue]?.trim() : undefined,
     };
 }
 

@@ -103,22 +103,60 @@ async function runMigrations() {
 
   app.get("/health", async (_req, res) => {
     try {
+      const checks: Record<string, string> = {};
+      let allHealthy = true;
+
+      // DB check
       if (process.env.DATABASE_URL_POOL || process.env.DATABASE_URL) {
-        await Promise.race([
-          db.execute(sql`SELECT 1`),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('DB Timeout')), 5000))
-        ]);
+        try {
+          await Promise.race([
+            db.execute(sql`SELECT 1`),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('DB Timeout')), 5000))
+          ]);
+          checks.database = 'connected';
+        } catch (e) {
+          checks.database = 'unreachable';
+          allHealthy = false;
+        }
+      } else {
+        checks.database = 'not_configured';
       }
+
+      // Redis check
+      try {
+        const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+        const redis = await getRedisClient();
+        if (redis) {
+          await Promise.race([
+            redis.ping(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 3000))
+          ]);
+          checks.redis = 'connected';
+        } else {
+          checks.redis = 'not_configured';
+        }
+      } catch (e) {
+        checks.redis = 'unreachable';
+        allHealthy = false;
+      }
+
+      // BullMQ queues status
       let queues: Record<string, any> = {};
-      try { queues = await getQueueHealthStatus(); } catch { queues = { error: 'unavailable' }; }
-      res.status(200).json({
-        status: "ok", service: "api-gateway", database: "connected",
-        architecture: "microservices", queues,
-        uptime: Math.floor(process.uptime()), timestamp: new Date().toISOString(),
+      try { queues = await getQueueHealthStatus(); } catch (e) { queues = { error: 'unavailable' }; console.warn('[APIGateway] Queue health check failed:', (e as Error)?.message); }
+
+      const statusCode = allHealthy ? 200 : 503;
+      res.status(statusCode).json({
+        status: allHealthy ? "ok" : "degraded",
+        service: "api-gateway",
+        checks,
+        queues,
+        uptime: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+        version: process.env.npm_package_version || '1.0.0'
       });
     } catch (error) {
       console.error("Health Check Failed:", error);
-      res.status(503).json({ status: "error", message: "Database unreachable" });
+      res.status(503).json({ status: "error", message: "Health check failed" });
     }
   });
 
@@ -199,18 +237,48 @@ async function runMigrations() {
     })();
 
     const shutdown = async (signal: string) => {
-      log(`Received ${signal}. Shutting down gracefully...`);
-      server.close(() => { log("HTTP server closed. Process exiting."); process.exit(0); });
+      log(`Received ${signal}. Starting graceful shutdown...`);
+
+      // 1. Stop accepting new connections (load balancer health check will fail)
+      server.close();
+      log("HTTP server stopped accepting new connections.");
+
+      // 2. Close BullMQ queues so no new jobs are picked up
+      try { const { closeQueues } = await import("@shared/lib/queue.js"); await closeQueues(); } catch {}
+      try { const { campaignWorker } = await import("@shared/lib/queues/campaign-queue.js"); if (campaignWorker) await campaignWorker.close(); } catch {}
+      try { const { aiProcessingQueue } = await import("./src/core/queues.js"); if (aiProcessingQueue) await aiProcessingQueue.close(); } catch {}
+
+      // 3. Stop background workers
       try { const { imapIdleManager } = await import("@services/email-service/src/email/imap-idle-manager.js"); imapIdleManager.stop(); } catch {}
       try { const { mailboxHealthService } = await import("@services/email-service/src/email/mailbox-health-service.js"); mailboxHealthService.stop(); } catch {}
       try { const { instagramSyncWorker } = await import("@services/social-worker/src/social/workers/instagram-sync-worker.js"); instagramSyncWorker.stop(); } catch {}
-      try { const { campaignWorker } = await import("@shared/lib/queues/campaign-queue.js"); if (campaignWorker) await campaignWorker.close(); } catch {}
-      try { const { closeQueues } = await import("@shared/lib/queue.js"); await closeQueues(); } catch {}
-      setTimeout(() => { log("Forceful shutdown triggered"); process.exit(1); }, 10000);
+
+      // 4. Wait for active requests to finish (up to 30s)
+      log("Waiting for active requests to complete (max 30s)...");
+      const drainStart = Date.now();
+      await new Promise<void>((resolve) => {
+        const check = setInterval(() => {
+          server.getConnections((err, count) => {
+            if (err) { clearInterval(check); resolve(); return; }
+            if (count === 0 || Date.now() - drainStart > 30000) {
+              clearInterval(check);
+              if (count > 0) log(`Forcing shutdown with ${count} active connections.`);
+              resolve();
+            }
+          });
+        }, 500);
+      });
+
+      // 5. Deregister from service registry so load balancer stops sending traffic
+      try { await serviceRegistry.deregister(); } catch {}
+
+      log("Graceful shutdown complete. Exiting.");
+      process.exit(0);
     };
 
-    process.on('SIGTERM', async () => { await serviceRegistry.deregister(); shutdown('SIGTERM'); });
-    process.on('SIGINT', async () => { await serviceRegistry.deregister(); shutdown('SIGINT'); });
+    // Docker/Railway sends SIGTERM on deploy
+    process.on('SIGTERM', shutdown.bind(null, 'SIGTERM'));
+    process.on('SIGINT', shutdown.bind(null, 'SIGINT'));
   }
 })();
 

@@ -1,9 +1,8 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { User, Mail, Building2, Phone, MapPin, Globe, Linkedin } from "lucide-react";
+import { MapPin, Globe, Linkedin } from "lucide-react";
 
 interface Lead {
   name: string;
@@ -11,9 +10,13 @@ interface Lead {
   company?: string;
   title?: string;
   phone?: string;
-  location?: string;
-  industry?: string;
   website?: string;
+  businessName?: string;
+  city?: string;
+  country?: string;
+  niche?: string;
+  industry?: string;
+  revenue?: string;
   linkedin?: string;
 }
 
@@ -26,6 +29,69 @@ interface LeadsDisplayModalProps {
   canConfirm?: boolean;
 }
 
+const ROW_HEIGHT = 56;
+const BUFFER = 5;
+
+function useVirtualScroll(itemsLength: number, rowHeight: number, overscan: number) {
+  const [scrollTop, setScrollTop] = useState(0);
+  const [containerHeight, setContainerHeight] = useState(600);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop);
+  }, []);
+
+  const totalHeight = itemsLength * rowHeight;
+  const startIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const endIndex = Math.min(itemsLength, Math.ceil((scrollTop + containerHeight) / rowHeight) + overscan);
+  const offsetY = startIndex * rowHeight;
+
+  return { containerRef, handleScroll, totalHeight, startIndex, endIndex, offsetY, containerHeight };
+}
+
+const renderValue = (val: any, type?: string) => {
+  if (!val) return <span className="text-muted-foreground/30">—</span>;
+
+  const str = val.toString();
+  if (type === 'google_maps' || str.includes('maps.google')) {
+    return (
+      <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
+        <MapPin className="h-3 w-3 shrink-0" />
+        <span className="truncate max-w-[120px]">View Map</span>
+      </a>
+    );
+  }
+  if (type === 'linkedin' || str.includes('linkedin.com')) {
+    return (
+      <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-blue-400 hover:underline">
+        <Linkedin className="h-3 w-3 shrink-0" />
+        <span className="truncate max-w-[120px]">LinkedIn</span>
+      </a>
+    );
+  }
+  if (type === 'website' || /^https?:\/\//i.test(str)) {
+    return (
+      <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
+        <Globe className="h-3 w-3 shrink-0" />
+        <span className="truncate max-w-[120px]">{str.replace(/^https?:\/\//i, '')}</span>
+      </a>
+    );
+  }
+  return <span className="truncate max-w-[150px]">{str}</span>;
+};
+
 export function LeadsDisplayModal({
   isOpen,
   onClose,
@@ -34,55 +100,30 @@ export function LeadsDisplayModal({
   isImporting,
   canConfirm = true
 }: LeadsDisplayModalProps) {
-  const [visibleCount, setVisibleCount] = useState(50);
-  const visibleLeads = leads.slice(0, visibleCount);
-  const hasMore = leads.length > visibleCount;
-
-  const handleShowMore = () => {
-    setVisibleCount(prev => prev + 50);
-  };
-
-  // Identify all unique metadata keys across VISIBLE leads only to prevent freeze on large imports
-  const allMetadataKeys = Array.from(new Set(
-    visibleLeads.flatMap(l => Object.keys((l as any).metadata || {}).filter(k => !k.endsWith('_type') && k !== '_unmapped_cols'))
-  )).sort();
-
-  const renderValue = (val: any, type?: string) => {
-    if (!val) return <span className="text-muted-foreground/30">—</span>;
-    
-    if (type === 'google_maps' || val.toString().includes('maps.google')) {
-      return (
-        <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline group/link">
-          <MapPin className="h-3 w-3" />
-          <span className="truncate max-w-[120px]">View Map</span>
-        </a>
-      );
+  const allMetadataKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (let i = 0; i < Math.min(leads.length, 500); i++) {
+      const meta = (leads[i] as any).metadata;
+      if (meta) {
+        for (const k of Object.keys(meta)) {
+          if (!k.endsWith('_type') && k !== '_unmapped_cols') {
+            keys.add(k);
+          }
+        }
+      }
     }
-    
-    if (type === 'linkedin' || val.toString().includes('linkedin.com')) {
-      return (
-        <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-blue-400 hover:underline">
-          <Linkedin className="h-3 w-3" />
-          <span className="truncate max-w-[120px]">LinkedIn</span>
-        </a>
-      );
-    }
+    return Array.from(keys).sort();
+  }, [leads]);
 
-    if (type === 'website' || /^https?:\/\//i.test(val.toString())) {
-      return (
-        <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
-          <Globe className="h-3 w-3" />
-          <span className="truncate max-w-[120px]">{val.toString().replace(/^https?:\/\//i, '')}</span>
-        </a>
-      );
-    }
+  const { containerRef, handleScroll, totalHeight, startIndex, endIndex, offsetY } = useVirtualScroll(
+    leads.length, ROW_HEIGHT, BUFFER
+  );
 
-    return <span className="truncate max-w-[150px]">{val.toString()}</span>;
-  };
+  const visibleLeads = useMemo(() => leads.slice(startIndex, endIndex), [leads, startIndex, endIndex]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[96vw] sm:max-w-[90vw] md:max-w-7xl h-auto max-h-[90vh] p-0 flex flex-col overflow-hidden border-border/20 bg-card/98 backdrop-blur-2xl rounded-[1rem] sm:rounded-[2rem] shadow-2xl focus:outline-none">
+      <DialogContent className="w-[96vw] sm:max-w-[90vw] md:max-w-7xl h-auto max-h-[90vh] p-0 flex flex-col overflow-hidden border-border/20 bg-card/98 rounded-[1rem] sm:rounded-[2rem] shadow-2xl focus:outline-none">
         <DialogHeader className="p-6 md:p-8 pb-4 shrink-0">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -92,7 +133,7 @@ export function LeadsDisplayModal({
               </DialogDescription>
             </div>
             <div className="flex items-center gap-2">
-               <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold uppercase tracking-widest text-[9px] px-2 py-0.5">
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-bold uppercase tracking-widest text-[9px] px-2 py-0.5">
                 AI MAPPED
               </Badge>
               <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20 font-bold uppercase tracking-widest text-[9px] px-2 py-0.5">
@@ -103,10 +144,10 @@ export function LeadsDisplayModal({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden flex flex-col min-h-0">
-          <ScrollArea className="flex-1 w-full">
+          <div ref={containerRef} onScroll={handleScroll} className="flex-1 overflow-auto w-full">
             <div className="w-full overflow-x-auto pb-4 px-6">
               <table className="w-full text-left border-collapse table-auto">
-                <thead className="sticky top-0 bg-background/95 backdrop-blur-xl z-20 border-b border-border/40">
+                <thead className="sticky top-0 bg-background z-20 border-b border-border/40">
                   <tr>
                     <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50">Identity</th>
                     <th className="px-4 py-4 text-[10px] font-black uppercase tracking-[0.2em] text-muted-foreground/50">Contact</th>
@@ -118,12 +159,13 @@ export function LeadsDisplayModal({
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border/10">
+                <tbody>
+                  <tr style={{ height: offsetY, visibility: 'hidden' }} />
                   {visibleLeads.map((lead: any, idx) => (
-                    <tr key={idx} className="group hover:bg-primary/5 transition-colors border-b border-border/5">
+                    <tr key={lead.id || lead.email || `row-${startIndex + idx}`} className="border-b border-border/5">
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-black">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary text-[10px] font-black shrink-0">
                             {lead.name?.charAt(0) || '?'}
                           </div>
                           <div className="font-bold text-sm tracking-tight truncate max-w-[150px]">{lead.name}</div>
@@ -147,26 +189,15 @@ export function LeadsDisplayModal({
                       ))}
                     </tr>
                   ))}
+                  <tr style={{ height: Math.max(0, totalHeight - offsetY - visibleLeads.length * ROW_HEIGHT), visibility: 'hidden' }} />
                 </tbody>
               </table>
-              {hasMore && (
-                <div className="p-8 text-center bg-muted/5 pb-12">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleShowMore}
-                    className="text-[10px] font-black tracking-widest uppercase text-primary hover:bg-primary/10 h-10 px-8 rounded-xl border border-primary/10"
-                  >
-                    Load More (+{Math.min(50, leads.length - visibleCount)} of {leads.length - visibleCount})
-                  </Button>
-                </div>
-              )}
             </div>
-          </ScrollArea>
+          </div>
         </div>
 
         {onConfirm && (
-          <div className="p-4 md:p-6 border-t border-border/10 bg-card/80 backdrop-blur-lg flex flex-col sm:flex-row justify-end gap-3 shrink-0 z-50">
+          <div className="p-4 md:p-6 border-t border-border/10 bg-card/80 flex flex-col sm:flex-row justify-end gap-3 shrink-0 z-50">
             <Button
               variant="outline"
               onClick={onClose}
@@ -191,7 +222,6 @@ export function LeadsDisplayModal({
             </Button>
           </div>
         )}
-
       </DialogContent>
     </Dialog>
   );

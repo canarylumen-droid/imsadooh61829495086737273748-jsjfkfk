@@ -19,7 +19,7 @@ export function checkContentSafety(text: string): ContentFilterResult {
   // Profanity detection
   const profanityWords = ['fuck', 'shit', 'damn', 'bitch', 'asshole'];
   profanityWords.forEach(word => {
-    if (lowerText.includes(word)) {
+    if (new RegExp(`\\b${word}\\b`, 'i').test(lowerText)) {
       result.flags.push('profanity');
       result.isSafe = false;
       result.severity = 'medium';
@@ -46,7 +46,7 @@ export function checkContentSafety(text: string): ContentFilterResult {
   // Harassment detection
   const harassmentWords = ['kill', 'die', 'hate', 'stupid', 'idiot'];
   harassmentWords.forEach(word => {
-    if (lowerText.includes(word)) {
+    if (new RegExp(`\\b${word}\\b`, 'i').test(lowerText)) {
       result.flags.push('harassment');
       result.isSafe = false;
       result.severity = 'high';
@@ -55,8 +55,8 @@ export function checkContentSafety(text: string): ContentFilterResult {
   
   // Sensitive info detection
   const sensitivePatterns = [
-    /\d{3}-\d{2}-\d{4}/, // SSN
-    /\d{16}/, // Credit card
+    /\b\d{3}-\d{2}-\d{4}\b/, // SSN
+    /\b\d{16}\b/, // Credit card
     /password/i
   ];
   

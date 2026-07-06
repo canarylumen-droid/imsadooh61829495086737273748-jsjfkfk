@@ -13,13 +13,29 @@ export class BounceMonitor {
   private imapConfig: any;
   private imap: Imap | null = null;
   private isRunning: boolean = false;
+  private reconnectAttempts: number = 0;
+  private reconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(config: any) {
     this.imapConfig = config;
   }
 
+  private scheduleReconnect(): void {
+    const delay = Math.min(30000 * Math.pow(2, this.reconnectAttempts), 15 * 60 * 1000);
+    this.reconnectAttempts++;
+    log.info(`[BounceMonitor] Scheduling reconnect in ${Math.round(delay / 1000)}s (attempt ${this.reconnectAttempts})`);
+    this.reconnectTimer = setTimeout(() => {
+      log.info(`[BounceMonitor] Attempting reconnect...`);
+      this.start();
+    }, delay);
+  }
+
   public async start(): Promise<void> {
     if (this.isRunning) return;
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
 
     this.imap = new Imap({
       user: this.imapConfig.user,
@@ -32,6 +48,7 @@ export class BounceMonitor {
 
     this.imap.once('ready', () => {
       this.isRunning = true;
+      this.reconnectAttempts = 0;
       log.info(`[BounceMonitor] Connected to ${this.imapConfig.user}`);
       this.monitorInbox();
     });
@@ -39,11 +56,13 @@ export class BounceMonitor {
     this.imap.once('error', (err: Error) => {
       log.error(`[BounceMonitor] Connection error`, { error: err.message });
       this.isRunning = false;
+      this.scheduleReconnect();
     });
 
     this.imap.once('end', () => {
       log.info(`[BounceMonitor] Connection ended`);
       this.isRunning = false;
+      this.scheduleReconnect();
     });
 
     this.imap.connect();
@@ -87,7 +106,8 @@ export class BounceMonitor {
             const readable = Readable.from(buffer);
             try {
               const parsed = await simpleParser(readable as any);
-              await this.processMessage(parsed, results[0]);
+              const uid = (msg as any).attributes?.uid;
+              if (uid) await this.processMessage(parsed, uid);
             } catch (parseErr) {
               log.warn('[BounceMonitor] Failed to parse email', { error: (parseErr as Error).message });
             }
@@ -236,10 +256,17 @@ export class BounceMonitor {
       log.info(`[BounceMonitor] Bounce record inserted for lead ${lead.id}`);
     } catch (err) {
       log.error(`[BounceMonitor] Error handling bounce for ${recipient}`, { error: (err as Error).message });
+      // Log full bounce details to dead-letter so it can be recovered
+      log.error(`[BounceMonitor] DEAD-LETTER: Bounce data lost - recipient=${recipient}, type=${bounceType}, snippet=${rawBody.substring(0, 200)}`);
+      console.error(`[BounceMonitor] DEAD-LETTER QUEUE: Bounce for ${recipient} (${bounceType}) could not be persisted. Raw body snippet:`, rawBody.substring(0, 200));
     }
   }
 
   public stop(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.imap) {
       this.imap.end();
       this.isRunning = false;

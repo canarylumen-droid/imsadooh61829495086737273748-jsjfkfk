@@ -124,7 +124,7 @@ export async function processPDF(
                     status = 'recovered';
                   }
                 }
-              } catch (e) { }
+              } catch (e) { console.warn('[PDFProcessor] Email recovery verification failed:', (e as Error)?.message); }
             }
 
             if (!verified) {

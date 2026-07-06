@@ -100,10 +100,11 @@ router.post('/:provider/connect', requireAuth, async (req: Request, res: Respons
     }
 
     if (provider === 'custom_email') {
+      let transporter: any;
       try {
         const nodemailer = await import('nodemailer');
         const dns = await import('dns');
-        const transporter = nodemailer.createTransport({
+        transporter = nodemailer.createTransport({
           host: credentials.smtp_host,
           port: parseInt(String(credentials.smtp_port)) || 587,
           secure: parseInt(String(credentials.smtp_port)) === 465,
@@ -119,8 +120,10 @@ router.post('/:provider/connect', requireAuth, async (req: Request, res: Respons
         } as any);
 
         await transporter.verify();
+        transporter.close();
         console.log(`[Integrations] SMTP Handshake successful for ${credentials.smtp_user}`);
       } catch (smtpError: any) {
+        try { transporter?.close(); } catch {};
         console.error('[Integrations] SMTP Handshake failed:', smtpError.message);
         res.status(400).json({ error: 'SMTP Verification Failed', message: smtpError.message });
         return;

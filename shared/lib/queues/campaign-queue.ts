@@ -146,7 +146,9 @@ export class CampaignQueueManager {
       const tier = (userRow?.subscriptionTier || userRow?.plan || 'starter').toLowerCase();
       if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 500;
       else if (tier === 'starter') planDailyDefault = 200;
-    } catch (e) { /* fallback to 50 */ }
+    } catch (e) {
+      console.warn('[CampaignQueue] Failed to get user plan, using fallback limit of 50:', e);
+    }
 
     // Initial send-batch job for EACH mailbox — addBulk() for 1K mailboxes instead of sequential await loop
     // (sequential add at 5ms/call × 1000 mailboxes = 5s blocked; addBulk is a single Redis pipeline)
@@ -193,9 +195,11 @@ export class CampaignQueueManager {
       }
       // Write send-batch jobs directly as fallback so EVERY mailbox has a chain
       // even if consumer-distribution is down. The chain starts in 5s.
-      await campaignQueue.addBulk(bulkJobs).catch((e: any) =>
-        console.warn('[CampaignQueue] addBulk fallback failed (non-fatal):', e.message)
-      );
+      try {
+        await campaignQueue.addBulk(bulkJobs);
+      } catch (err: any) {
+        console.error(`[CampaignQueue] Failed to add jobs: ${err.message}`);
+      }
     }
 
     // ── Consumer Distribution (Any-Available-Worker) ──────────────────────
@@ -268,7 +272,7 @@ export class CampaignQueueManager {
       type: 'campaign:update-stats',
       campaignId: campaign.id,
       userId: campaign.userId,
-    }).catch(() => {});
+    }).catch((err) => console.warn(`[CampaignQueue] processStatsUpdate failed: ${err.message}`));
 
     console.log(`[CampaignQueue] ✅ Campaign "${campaign.name}" fully registered`);
   }
@@ -340,7 +344,7 @@ export class CampaignQueueManager {
     const repeatableJobs = await campaignQueue.getRepeatableJobs();
     for (const job of repeatableJobs) {
       if (job.key.includes(campaignId)) {
-        await campaignQueue.removeRepeatableByKey(job.key).catch(() => {});
+        await campaignQueue.removeRepeatableByKey(job.key).catch((err) => console.warn(`[CampaignQueue] Failed to remove repeatable job: ${err.message}`));
       }
     }
 
@@ -373,7 +377,9 @@ export class CampaignQueueManager {
                     await campaignQueue!.removeJobScheduler(job.name);
                   }
                 }
-              } catch {}
+              } catch (e) {
+                console.warn('[CampaignQueue] Failed to remove paused job (non-fatal):', e);
+              }
             }
           }
         }
@@ -393,7 +399,7 @@ export class CampaignQueueManager {
         let removed = 0;
         for (const job of page) {
           if ((job.data as any)?.campaignId === campaignId) {
-            await job.remove().catch(() => {});
+            await job.remove().catch((err) => console.warn(`[CampaignQueue] Failed to remove failed job: ${err.message}`));
             removed++;
           }
         }
@@ -484,7 +490,7 @@ export class CampaignQueueManager {
     if (campaignQueue) {
       const jobId = `followup-${campaignId}-${campaignLeadId}-step${stepIndex}`;
       // Write PG source-of-truth BEFORE Redis — if Redis crashes mid-add, the Watchdog can recover
-      await logJobPending(jobId, 'campaign:follow-up', campaignId, userId, integrationId, campaignLeadId, stepIndex, { type: 'campaign:follow-up', campaignId, userId, campaignLeadId, integrationId, stepIndex }, delayMs).catch(() => {});
+      await logJobPending(jobId, 'campaign:follow-up', campaignId, userId, integrationId, campaignLeadId, stepIndex, { type: 'campaign:follow-up', campaignId, userId, campaignLeadId, integrationId, stepIndex }, delayMs).catch((err) => console.warn(`[CampaignQueue] logJobPending (follow-up) failed: ${err.message}`));
       await campaignQueue.add(jobId, {
         type: 'campaign:follow-up',
         campaignId,
@@ -544,7 +550,9 @@ export class CampaignQueueManager {
         const ttlSeconds = Math.ceil(delayMs / 1000) + 60; // +60s buffer
         await (redisConnection as any).set(`pending-reply:${integrationId}`, '1', 'EX', ttlSeconds);
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[CampaignQueue] Failed to set Redis pending-reply key:', e);
+    }
 
     if (campaignQueue) {
       const bucket = Math.floor(Date.now() / (5 * 60 * 1000)); // 5-min dedup window: collapses rapid re-triggers, allows new replies later
@@ -558,7 +566,7 @@ export class CampaignQueueManager {
         leadId,
         _jobId: jobId,
       };
-      await logJobPending(jobId, 'campaign:auto-reply', campaignId, userId, integrationId, campaignLeadId, null, jobData, delayMs).catch(() => {});
+      await logJobPending(jobId, 'campaign:auto-reply', campaignId, userId, integrationId, campaignLeadId, null, jobData, delayMs).catch((err) => console.warn(`[CampaignQueue] logJobPending (auto-reply) failed: ${err.message}`));
       await campaignQueue.add(jobId, jobData, {
         delay: delayMs,
         jobId,
@@ -602,7 +610,9 @@ export class CampaignQueueManager {
       const tier = (userRow?.subscriptionTier || userRow?.plan || 'starter').toLowerCase();
       if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 500;
       else if (tier === 'starter') planDailyDefault = 200;
-    } catch (e) { /* fallback */ }
+    } catch (e) {
+      console.warn('[CampaignQueue] Failed to get user plan in refreshMailboxCycle, using fallback:', e);
+    }
 
     if (campaignQueue) {
       const { consumerQueue } = await import('./consumer-distribution.js');
@@ -667,7 +677,7 @@ async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
     integrationId: (data as any).integrationId,
     campaignLeadId: (data as any).campaignLeadId,
     attemptNumber: attemptsMade + 1,
-  }).catch(() => {});
+  }).catch((err) => console.warn(`[CampaignQueue] logJobAttempt (started) failed: ${err.message}`));
 
   try {
     switch (data.type) {
@@ -715,7 +725,7 @@ async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
       integrationId: (data as any).integrationId,
       campaignLeadId: (data as any).campaignLeadId,
       attemptNumber: attemptsMade + 1,
-    }).catch(() => {});
+    }).catch((err) => console.warn(`[CampaignQueue] logJobAttempt (completed) failed: ${err.message}`));
   } catch (err: any) {
     // Log the failure before re-throwing so BullMQ retry sees it in PG
     logJobAttempt(jobId, jobName, 'failed', {
@@ -725,7 +735,7 @@ async function processCampaignJob(job: Job<CampaignJobData>): Promise<void> {
       campaignLeadId: (data as any).campaignLeadId,
       attemptNumber: attemptsMade + 1,
       error: err.message || String(err),
-    }).catch(() => {});
+    }).catch((err) => console.warn(`[CampaignQueue] logJobAttempt (failed) failed: ${err.message}`));
     throw err; // Let BullMQ handle retries as configured
   }
 }
@@ -795,7 +805,8 @@ export async function mailboxHasPendingReply(integrationId: string): Promise<boo
       return val === '1';
     }
     return false;
-  } catch {
+  } catch (err) {
+    console.error(`[CampaignQueue] mailboxHasPendingReply error:`, err);
     return false;
   }
 }
@@ -864,14 +875,19 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?
  * One-shot delayed jobs that don't get re-added are dead permanently.
  */
 async function rescheduleSendBatch(data: SendBatchJobData, delayMs: number): Promise<void> {
-  if (!campaignQueue) return;
+  if (!campaignQueue) {
+    console.warn('[CampaignWorker] campaignQueue is null — cannot reschedule send-batch');
+    return;
+  }
   const { campaignId, integrationId } = data;
   const jobKey = `send-batch_${campaignId}_${integrationId}`;
   // Upsert PG heartbeat BEFORE Redis so watchdog always sees a valid scheduled_at
-  await logJobPending(jobKey, 'campaign:send-batch', campaignId, data.userId, integrationId, null, null, data as Record<string, any>, delayMs).catch(() => {});
-  await campaignQueue.add(jobKey, data, { delay: delayMs, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } }).catch((e: any) => {
-    console.warn(`[CampaignWorker] ⚠️ Failed to reschedule mailbox ${integrationId.slice(-8)}: ${e.message}`);
-  });
+  await logJobPending(jobKey, 'campaign:send-batch', campaignId, data.userId, integrationId, null, null, data as Record<string, any>, delayMs).catch((err) => console.warn(`[CampaignWorker] logJobPending failed: ${err.message}`));
+  try {
+    await campaignQueue.add(jobKey, data, { delay: delayMs, jobId: jobKey, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } });
+  } catch (err: any) {
+    console.error(`[CampaignWorker] Failed to reschedule mailbox ${integrationId.slice(-8)}: ${err.message}`);
+  }
 }
 
 // ─── PostgreSQL Job Lifecycle Helpers (Self-Healing Watchdog) ─────────────────
@@ -984,7 +1000,7 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
 
   const { campaignId, userId, integrationId, dailyLimit } = data;
   // Mark as 'processing' in PG so the Watchdog knows this mailbox chain is active
-  markJobProcessing(`send-batch_${campaignId}_${integrationId}`).catch(() => {});
+  await markJobProcessing(`send-batch_${campaignId}_${integrationId}`).catch((err) => console.warn(`[CampaignWorker] markJobProcessing failed: ${err.message}`));
 
   // 1. Verify campaign is still active
   const [campaign] = await db.select().from(outreachCampaigns)
@@ -1353,7 +1369,7 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
             campaignLeadId: leadEntry.id,
             metadata: { reason: 'campaignEmails already exists', leadId: lead.id, stepIndex: leadEntry.currentStep }
           }
-        ).catch(() => {});
+        ).catch((err) => console.warn(`[CampaignWorker] logJobAttempt (duplicate_skipped) failed: ${err.message}`));
       } else {
         if (lead.channel === 'instagram') {
           await deliverCampaignInstagram(userId, campaign, lead, leadEntry, integrationId);
@@ -1387,9 +1403,9 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
           `stats-${campaignId}`,
           { type: 'campaign:update-stats', campaignId, userId },
           { jobId: `stats-${campaignId}-${bucket}`, delay: 3000, priority: 3, removeOnComplete: true, removeOnFail: { count: 1000 } }
-        ).catch(() => {});
+        ).catch((err) => console.warn(`[CampaignWorker] Failed to queue stats update: ${err.message}`));
       } else {
-        await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
+        await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch((err) => console.warn(`[CampaignWorker] processStatsUpdate (inline) failed: ${err.message}`));
       }
 
       // Schedule follow-up if there's a next step
@@ -1490,7 +1506,7 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
       console.log(`[CampaignWorker] ⚡ Idempotency: ${followupJobId} already sent — skipping.`);
       return;
     }
-    markJobProcessing(followupJobId).catch(() => {});
+    await markJobProcessing(followupJobId).catch((err) => console.warn(`[CampaignWorker] markJobProcessing (follow-up) failed: ${err.message}`));
   }
 
   // 1. Verify campaign is still active
@@ -1658,9 +1674,9 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
     }
 
     // 8. Real-time KPI push
-    markJobSent(followupJobId).catch(() => {});
+    await markJobSent(followupJobId).catch((err) => console.warn(`[CampaignWorker] markJobSent (follow-up) failed: ${err.message}`));
     wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'followup_sent' });
-    await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
+    await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch((err) => console.warn(`[CampaignWorker] processStatsUpdate (follow-up) failed: ${err.message}`));
   } catch (err: any) {
     const errorMsg = err.message || 'Follow-up send failed';
     console.error(`[CampaignWorker] ❌ Follow-up failed for ${lead.email}: ${errorMsg}`);
@@ -1675,7 +1691,7 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
       await withDbRetry(() => db.update(campaignLeads)
         .set({ status: 'failed', error: `Max follow-up failures: ${errorMsg}`, metadata })
         .where(eq(campaignLeads.id, leadEntry.id)));
-      markJobFailed(followupJobId, `Max follow-up failures: ${errorMsg}`).catch(() => {});
+      await markJobFailed(followupJobId, `Max follow-up failures: ${errorMsg}`).catch((err) => console.warn(`[CampaignWorker] markJobFailed failed: ${err.message}`));
       return;
     }
 
@@ -1699,7 +1715,7 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
 
   const { campaignId, userId, campaignLeadId, integrationId, leadId } = data;
   const autoreplyJobId = data._jobId || `autoreply-${campaignId}-${campaignLeadId}-unknown`;
-  markJobProcessing(autoreplyJobId).catch(() => {});
+  await markJobProcessing(autoreplyJobId).catch((err) => console.warn(`[CampaignWorker] markJobProcessing (auto-reply) failed: ${err.message}`));
 
   // 2. Fetch campaign and verify status
   const [campaign] = await db.select().from(outreachCampaigns).where(eq(outreachCampaigns.id, campaignId));
@@ -1908,9 +1924,9 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
     .where(eq(campaignLeads.id, campaignLeadId)));
 
   // Stats
-  await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch(() => {});
+  await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch((err) => console.warn(`[CampaignWorker] processStatsUpdate (auto-reply) failed: ${err.message}`));
 
-  markJobSent(autoreplyJobId).catch(() => {});
+  await markJobSent(autoreplyJobId).catch((err) => console.warn(`[CampaignWorker] markJobSent (auto-reply) failed: ${err.message}`));
   wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'auto_reply_sent' });
   wsSync.notifyCampaignStatsUpdated(userId, campaignId);
   wsSync.notifyStatsUpdated(userId);
@@ -1988,6 +2004,10 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
         .set({ status: 'completed', updatedAt: new Date() })
         .where(eq(outreachCampaigns.id, campaignId)));
 
+      // TOCTOU race: a follow-up or auto-reply job may have been added to Redis
+      // between the check above and this cleanup. A small delay reduces the window.
+      await new Promise(r => setTimeout(r, 2000));
+
       // Full Redis cleanup: removes heartbeat jobs + delayed follow-ups + failed records
       await campaignQueueManager.completeCampaign(campaignId);
 
@@ -1999,7 +2019,7 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
         title: '🏁 Campaign Completed',
         message: `Your campaign has finished processing all ${stats.total} leads.`,
         metadata: { campaignId, activityType: 'campaign_completed' }
-      }).catch(() => {}); // non-blocking
+      }).catch((err) => console.warn(`[CampaignQueue] Notification creation failed: ${err.message}`)); // non-blocking
 
       console.log(`[CampaignWorker] 🏁 Campaign ${campaignId} completed! (${stats.total} total leads)`);
     }
@@ -2071,10 +2091,11 @@ async function deliverCampaignEmail(
           subject = aiContent.subject || subject;
           body = aiContent.body || body;
         }
-        // Increment counter in campaign stats
-        stats.aiGeneratedCount = (stats.aiGeneratedCount || 0) + 1;
+        // Atomic increment of aiGeneratedCount to avoid race conditions
         await withDbRetry(() => db.update(outreachCampaigns)
-          .set({ stats })
+          .set({
+            stats: sql`jsonb_set(COALESCE(stats, '{}'::jsonb), '{aiGeneratedCount}', to_jsonb(COALESCE((stats->>'aiGeneratedCount')::int, 0) + 1))`
+          })
           .where(eq(outreachCampaigns.id, campaign.id)));
       } catch (e) {
         console.warn(`[CampaignWorker] AI generation failed, using template fallback:`, e);
@@ -2229,7 +2250,7 @@ async function deliverCampaignEmail(
           eq(campaignEmails.campaignId, campaign.id),
           eq(campaignEmails.leadId, lead.id),
           eq(campaignEmails.stepIndex, leadEntry.currentStep)
-        ))).catch(() => {});
+        ))).catch((err) => console.warn(`[CampaignWorker] Failed to delete stale sending record: ${err.message}`));
     } else {
       console.log(`[CampaignWorker] ⚡ PG idempotency: lead ${lead.id} step ${leadEntry.currentStep} already sent by another worker — skipping.`);
       return;
@@ -2276,7 +2297,9 @@ async function deliverCampaignEmail(
         LIMIT 1
       `);
       alreadySent = pgDedup.rows.length > 0;
-    } catch {}
+    } catch (err) {
+      console.warn(`[CampaignQueue] Cross-campaign dedup PG check failed:`, err);
+    }
   }
 
   if (alreadySent) {
@@ -2350,7 +2373,7 @@ async function deliverCampaignEmail(
           eq(campaignEmails.campaignId, campaign.id),
           eq(campaignEmails.leadId, lead.id),
           eq(campaignEmails.stepIndex, leadEntry.currentStep)
-        ))).catch(() => {});
+        ))).catch((err) => console.warn(`[CampaignWorker] Failed to delete sending record on error: ${err.message}`));
     }
     throw err;
   }
@@ -2366,7 +2389,9 @@ async function deliverCampaignEmail(
     if (redisClient) {
       await redisClient.set(`lead:last_email:${lead.id}`, Date.now().toString(), { EX: 3600 });
     }
-  } catch {}
+  } catch (err) {
+    console.warn(`[CampaignQueue] Cross-campaign dedup Redis set failed:`, err);
+  }
 
   // Phase 17: Atomic Post-Send Transaction
   // Ensures that message creation, lead status update, and stats all succeed together
@@ -2582,7 +2607,7 @@ async function deliverCampaignInstagram(
           eq(campaignEmails.campaignId, campaign.id),
           eq(campaignEmails.leadId, lead.id),
           eq(campaignEmails.stepIndex, leadEntry.currentStep)
-        ))).catch(() => {});
+        ))).catch((err) => console.warn(`[CampaignWorker] Failed to delete stale IG sending record: ${err.message}`));
     } else {
       console.log(`[CampaignWorker] ⚡ PG idempotency (IG): lead ${lead.id} step ${leadEntry.currentStep} already sent by another worker — skipping.`);
       return;
@@ -2618,7 +2643,7 @@ async function deliverCampaignInstagram(
           eq(campaignEmails.campaignId, campaign.id),
           eq(campaignEmails.leadId, lead.id),
           eq(campaignEmails.stepIndex, leadEntry.currentStep)
-        ))).catch(() => {});
+        ))).catch((err) => console.warn(`[CampaignWorker] Failed to delete IG sending record on error: ${err.message}`));
     }
     throw err;
   }
@@ -2827,8 +2852,8 @@ async function handleAutonomousTesting(
     // Create 3 distinct variants: Curiosity, Result, and a blended approach
     variants = [
       { id: 'v1_curiosity', subject: aiResult.subject, body: aiResult.body },
-      { id: 'v2_result', subject: aiResult.alternatives[0] || aiResult.subject, body: aiResult.body },
-      { id: 'v3_hybrid', subject: aiResult.alternatives[1] || `Question regarding ${lead.company || 'your team'}`, body: aiResult.body }
+      { id: 'v2_result', subject: aiResult.alternatives?.[0] || aiResult.subject, body: aiResult.body },
+      { id: 'v3_hybrid', subject: aiResult.alternatives?.[1] || `Question regarding ${lead.company || 'your team'}`, body: aiResult.body }
     ];
     
     await withDbRetry(() => db.update(outreachCampaigns)
@@ -2984,9 +3009,9 @@ if (campaignWorker) {
           .where(eqCleanup(oCampaigns.id, campaignIdForCleanup))
           .limit(1);
         if (campaignRow?.status === 'completed' || campaignRow?.status === 'aborted') {
-          await job.remove().catch(() => {});
+          await job.remove().catch((err) => console.warn(`[CampaignQueue] Failed to remove completed/aborted job: ${err.message}`));
         }
-      } catch { /* non-fatal — global retention policy still evicts eventually */ }
+      } catch (e) { console.warn('[CampaignQueue] Failed to check/remove completed job (non-fatal):', e); }
     }
   });
 

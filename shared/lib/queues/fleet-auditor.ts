@@ -172,7 +172,7 @@ class FleetAuditor {
       if (totalSwapped > 0) {
         try {
           const { hourlyDistribution } = await import('./hourly-distribution.js');
-          await hourlyDistribution.recalculateAll().catch(() => {});
+          await hourlyDistribution.recalculateAll().catch(err => console.warn('[FleetAuditor] Hourly distribution recalculation failed:', err.message));
         } catch { /* non-critical */ }
       }
 

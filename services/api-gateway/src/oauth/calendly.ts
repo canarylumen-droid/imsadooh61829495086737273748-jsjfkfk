@@ -246,6 +246,61 @@ export class CalendlyOAuth {
   }
 
   /**
+   * Create a scheduled event on Calendly
+   */
+  async createEvent(params: { token: string; email: string; name: string; time: Date; eventTypeUri?: string }): Promise<{ success: boolean; error?: string; eventId?: string; meetingUrl?: string }> {
+    try {
+      let eventTypeUri = params.eventTypeUri;
+      if (!eventTypeUri) {
+        const userInfo = await this.getUserInfo(params.token);
+        if (!userInfo?.uri) throw new Error('Calendly user profile unavailable');
+
+        const etResponse = await fetch(`https://api.calendly.com/event_types?user=${encodeURIComponent(userInfo.uri)}&active=true`, {
+          headers: { Authorization: `Bearer ${params.token}` }
+        });
+        if (etResponse.ok) {
+          const etData: any = await etResponse.json();
+          eventTypeUri = etData.collection?.[0]?.uri;
+        }
+        if (!eventTypeUri) throw new Error('No active event type found for user');
+      }
+
+      const response = await fetch('https://api.calendly.com/scheduled_events', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${params.token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          event_type_uri: eventTypeUri,
+          invitee: {
+            email: params.email,
+            name: params.name,
+            timezone: 'America/New_York'
+          },
+          start_time: params.time.toISOString()
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        console.error(`[CalendlyOAuth] createEvent failed: ${err}`);
+        return { success: false, error: `Calendly API error: ${response.status}` };
+      }
+
+      const eventData: any = await response.json();
+      return {
+        success: true,
+        eventId: eventData.resource?.uri,
+        meetingUrl: eventData.resource?.location?.location || eventData.resource?.uri
+      };
+    } catch (err: any) {
+      console.error('[CalendlyOAuth] createEvent error:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  /**
    * Get available slots for a user's event type
    */
   async getAvailableSlots(userId: string, startTime: string, endTime: string): Promise<any[]> {

@@ -39,10 +39,15 @@ const DEFAULT_PERSONALIZATION_TAGS = [
   { label: "Last Name", value: "{{lastName}}" },
   { label: "Name", value: "{{name}}" },
   { label: "Company", value: "{{company}}" },
+  { label: "Phone", value: "{{phone}}" },
+  { label: "Role", value: "{{role}}" },
+  { label: "Business Name", value: "{{businessName}}" },
   { label: "City", value: "{{city}}" },
+  { label: "Country", value: "{{country}}" },
   { label: "Industry", value: "{{industry}}" },
   { label: "Niche", value: "{{niche}}" },
   { label: "Website", value: "{{website}}" },
+  { label: "Revenue", value: "{{revenue}}" },
 ];
 
 export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, initialLeads = [] }: UnifiedCampaignWizardProps) {
@@ -60,7 +65,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   // State Management
   const [sourceType, setSourceType] = useState<'upload' | 'database'>('upload');
-  const [leads, setLeads] = useState<Array<{ id: string; name?: string; email?: string; metadata?: Record<string, any>; company?: string; city?: string; industry?: string; niche?: string; website?: string }>>(initialLeads);
+  const [leads, setLeads] = useState<Array<{ id: string; name?: string; email?: string; metadata?: Record<string, any>; company?: string; city?: string; industry?: string; niche?: string; website?: string; phone?: string; role?: string; businessName?: string; country?: string; revenue?: string }>>(initialLeads);
   const [importProgress, setImportProgress] = useState(0);
   const [importing, setImporting] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -373,14 +378,26 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     }
   };
 
-  // Dynamic Tags from first lead's metadata
-  const dynamicTags = leads[0]?.metadata ? 
-    Object.keys(leads[0].metadata)
-      .filter(k => !k.endsWith('_type') && k !== '_unmapped_cols')
-      .map(k => ({ label: k.replace(/_/g, ' '), value: `{{${k}}}` })) : 
-    [];
+  // Dynamic Tags aggregated from ALL leads' metadata (not just first)
+  const dynamicTags = useMemo(() => {
+    const keys = new Set<string>();
+    for (let i = 0; i < Math.min(leads.length, 200); i++) {
+      const meta = leads[i]?.metadata;
+      if (meta) {
+        for (const k of Object.keys(meta)) {
+          if (!k.endsWith('_type') && k !== '_unmapped_cols') {
+            keys.add(k);
+          }
+        }
+      }
+    }
+    return Array.from(keys).map(k => ({ label: k.replace(/_/g, ' '), value: `{{${k}}}` }));
+  }, [leads]);
 
-  const allTags = [...DEFAULT_PERSONALIZATION_TAGS, ...dynamicTags.filter(dt => !DEFAULT_PERSONALIZATION_TAGS.some(st => st.value === dt.value))];
+  const allTags = useMemo(() => [
+    ...DEFAULT_PERSONALIZATION_TAGS,
+    ...dynamicTags.filter(dt => !DEFAULT_PERSONALIZATION_TAGS.some(st => st.value === dt.value))
+  ], [dynamicTags]);
 
   const handleGenerateSequence = async () => {
     setIsGeneratingAI(true);
@@ -448,9 +465,15 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     const sampleLead = leads[0] || { 
       name: "Prospect Name", 
       company: "Company Inc.",
+      phone: "+1-555-0100",
+      role: "Founder",
+      businessName: "Acme Corp",
       city: "San Francisco",
+      country: "United States",
       industry: "SaaS",
-      website: "example.com"
+      niche: "B2B Software",
+      website: "example.com",
+      revenue: "$10M ARR"
     };
     const firstName = sampleLead.name?.trim().split(' ')[0] || 'Prospect';
     const lastName = sampleLead.name?.trim().split(' ').slice(1).join(' ') || '';
@@ -463,10 +486,15 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         .replace(/{{name}}/g, fullName)
         .replace(/{{lead_name}}/g, fullName)
         .replace(/{{company}}/g, sampleLead.company || sampleLead.metadata?.company || 'Acme Corp')
+        .replace(/{{phone}}/g, sampleLead.phone || sampleLead.metadata?.phone || '')
+        .replace(/{{role}}/g, sampleLead.role || sampleLead.metadata?.role || '')
+        .replace(/{{businessName}}/g, sampleLead.businessName || sampleLead.metadata?.businessName || sampleLead.metadata?.business_name || '')
         .replace(/{{city}}/g, sampleLead.city || sampleLead.metadata?.city || 'Remote')
+        .replace(/{{country}}/g, sampleLead.country || sampleLead.metadata?.country || '')
         .replace(/{{industry}}/g, sampleLead.industry || sampleLead.metadata?.industry || 'Business')
         .replace(/{{niche}}/g, sampleLead.niche || sampleLead.metadata?.niche || 'Business')
-        .replace(/{{website}}/g, sampleLead.website || sampleLead.metadata?.website || 'your site');
+        .replace(/{{website}}/g, sampleLead.website || sampleLead.metadata?.website || 'your site')
+        .replace(/{{revenue}}/g, sampleLead.revenue || sampleLead.metadata?.revenue || '');
 
       // Process any other dynamic metadata tags
       if (sampleLead.metadata) {

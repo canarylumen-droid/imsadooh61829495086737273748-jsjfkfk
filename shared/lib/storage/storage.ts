@@ -579,6 +579,13 @@ export class MemStorage implements IStorage {
       updatedAt: new Date(),
       verified: insertLead.verified || false,
       verifiedAt: insertLead.verifiedAt || null,
+      website: insertLead.website || null,
+      businessName: insertLead.businessName || null,
+      city: insertLead.city || null,
+      country: insertLead.country || null,
+      niche: insertLead.niche || null,
+      industry: insertLead.industry || null,
+      revenue: insertLead.revenue || null,
       proceduralMemory: {},
     };
     this.leads.set(id, lead);

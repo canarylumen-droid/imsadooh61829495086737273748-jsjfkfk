@@ -258,6 +258,9 @@ export default function LeadImportPage() {
       } else {
         // CSV Preview Mode
         if (result.preview) {
+          if (!result.leads || result.leads.length === 0) {
+            throw new Error("No valid leads found in CSV. Ensure at least one row has an email or name.");
+          }
           setImportResults({
             imported: 0, // Not imported yet
             skipped: 0,
@@ -331,8 +334,13 @@ export default function LeadImportPage() {
             bio: l.bio,
             channel: l.channel,
             replyEmail: l.replyEmail,
-            niche: l.niche,
+            website: l.website,
+            businessName: l.businessName,
             city: l.city,
+            country: l.country,
+            niche: l.niche,
+            industry: l.industry,
+            revenue: l.revenue,
             ...l.metadata
           })),
           channel: 'email',
@@ -350,14 +358,10 @@ export default function LeadImportPage() {
       const result = await response.json();
       setProgress(100);
 
-      // Refetch actual DB leads to get their IDs
-      const leadsRes = await apiRequest("GET", `/api/leads?limit=10000&offset=0`);
-      const allLeads = await leadsRes.json();
-
       setImportResults({
-        imported: result.leadsImported,
-        skipped: result.leadsFiltered || 0,
-        leads: allLeads.leads || [] // Use real DB leads
+        imported: result.leadsImported || result.imported,
+        skipped: result.leadsFiltered || result.skipped || 0,
+        leads: result.leads || []
       });
       refreshLeadStats();
 

@@ -228,6 +228,7 @@ router.post('/smtp/test', requireAuth, async (req: Request, res: Response): Prom
     });
 
     await transporter.verify();
+    transporter.close();
 
     await db.execute(sql`
       UPDATE user_settings 

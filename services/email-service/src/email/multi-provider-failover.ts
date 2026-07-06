@@ -77,13 +77,20 @@ class MultiProviderEmailFailover {
     }
 
     for (const provider of providers) {
-      try {
-        await provider.fn();
-        console.log(`✅ Email sent via ${provider.name}: ${email.to}`);
-        return { success: true, provider: provider.name };
-      } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        console.warn(`⚠️ ${provider.name} failed: ${errorMessage}`);
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await provider.fn();
+          console.log(`✅ Email sent via ${provider.name}: ${email.to}`);
+          return { success: true, provider: provider.name };
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (attempt < 3) {
+            console.warn(`⚠️ ${provider.name} attempt ${attempt} failed: ${errorMessage}. Retrying...`);
+            await new Promise(r => setTimeout(r, attempt * 1000));
+            continue;
+          }
+          console.error(`[Email] All ${attempt} attempts failed for ${provider.name}:`, errorMessage);
+        }
       }
     }
 
@@ -144,13 +151,18 @@ class MultiProviderEmailFailover {
       socketTimeout: 25000
     } as any);
 
-    const result: SentMessageInfo = await transporter.sendMail({
-      from: email.from || smtpConfig.smtp_user,
-      to: email.to,
-      subject: email.subject,
-      html: email.html,
-      replyTo: email.replyTo
-    });
+    let result: SentMessageInfo;
+    try {
+      result = await transporter.sendMail({
+        from: email.from || smtpConfig.smtp_user,
+        to: email.to,
+        subject: email.subject,
+        html: email.html,
+        replyTo: email.replyTo
+      });
+    } finally {
+      transporter.close();
+    }
 
     if (!result.messageId) {
       throw new Error('SMTP send failed - no message ID returned');

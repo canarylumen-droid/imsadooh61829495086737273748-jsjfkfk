@@ -234,7 +234,7 @@ class HourlyDistributionEngine {
 
     try {
       // Remove the existing delayed job and re-add with new delay
-      await campaignQueue.remove(jobKey).catch(() => {});
+      await campaignQueue.remove(jobKey).catch(err => console.warn('[HourlyDistribution] Failed to remove existing job:', err.message));
       await campaignQueue.add(jobKey, {
         type: 'campaign:send-batch' as const,
         campaignId,

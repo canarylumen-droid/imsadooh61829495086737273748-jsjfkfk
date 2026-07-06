@@ -1429,7 +1429,7 @@ export async function generateCampaignTemplateSequence(
       ragContext = ragContextChunks.map(c => c.content).join("\n\n");
     }
   } catch (e) {
-    // Ignore, fallback to default
+    console.warn('[ConversationAI] RAG context fetch failed, using default:', (e as Error)?.message);
   }
 
   // Combine brand config and PDF vector text if available

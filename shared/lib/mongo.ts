@@ -43,7 +43,7 @@ export async function connectMongo(): Promise<typeof mongoose> {
   }
 
   // Probe DNS before connecting to provide better error messages for SRV issues
-  probeMongoDns(uri).catch(() => {});
+  probeMongoDns(uri).catch(err => console.warn('[MongoDB] DNS probe failed:', err.message));
 
   if (!connectionPromise) {
     connectionPromise = mongoose.connect(uri, {

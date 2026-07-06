@@ -80,7 +80,7 @@ async function uploadToLocalStorage(
   } catch (err: any) {
     // Ignore errors in serverless/locked environments where directory creation might fail
   }
-})().catch(() => { });
+})().catch(err => console.warn('[FileUpload] Directory initialization failed:', err.message));
 
 const voiceFileFilter = (
   _req: Request,

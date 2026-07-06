@@ -803,7 +803,9 @@ router.post('/projections', requireAuth, async (req, res) => {
         const { warmupService } = await import('@services/outreach-worker/src/outreach-lib/warmup-service.js');
         const warmup = (warmupService as any).getWarmupStatus?.(mb, limit);
         if (warmup?.isWarmingUp) limit = warmup.dailyLimit;
-      } catch {}
+      } catch (err) {
+        console.error('[Outreach] Failed to load warmup service for mailbox projection:', err);
+      }
       totalDailyLimit += limit;
     }
 

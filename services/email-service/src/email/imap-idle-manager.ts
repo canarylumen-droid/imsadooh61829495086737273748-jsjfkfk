@@ -94,7 +94,7 @@ class ImapIdleManager {
                 this.syncIntervals.delete(integrationId);
             }
             for (const imap of folderMap.values()) {
-                try { imap.end(); closed++; } catch (e) { /* already disconnected */ }
+                try { imap.end(); closed++; } catch (e) { console.warn('[IMAP] Error ending connection in stop:', (e as Error)?.message); }
             }
         }
 
@@ -152,7 +152,7 @@ class ImapIdleManager {
             for (const imap of folderMap.values()) {
                 try {
                     if (imap.state !== 'disconnected') imap.destroy();
-                } catch (e) { /* already gone */ }
+                } catch (e) { console.warn('[IMAP] Error destroying connection in forceDisconnect:', (e as Error)?.message); }
             }
             this.connections.delete(integrationId);
         }
@@ -183,7 +183,7 @@ class ImapIdleManager {
         }
 
         // 5. Release mailbox claim in worker discovery registry
-        this.discoveryRegistry.releaseMailbox(integrationId).catch(() => {});
+        this.discoveryRegistry.releaseMailbox(integrationId).catch((err: any) => console.warn('[IMAP] Failed to release mailbox claim in forceDisconnect:', err?.message));
 
         // 6. Notify frontend in real time so UI updates immediately
         if (userId) {
@@ -231,7 +231,7 @@ class ImapIdleManager {
                     this.connections.delete(integrationId);
                     this.folders.delete(integrationId);
                     // Release mailbox claim so another worker can pick it up
-                    this.discoveryRegistry.releaseMailbox(integrationId).catch(() => {});
+        this.discoveryRegistry.releaseMailbox(integrationId).catch((err: any) => console.warn('[IMAP] Failed to release mailbox claim:', err?.message));
                 }
             }
 
@@ -551,6 +551,7 @@ class ImapIdleManager {
                 try {
                     if (imap.state !== 'disconnected') imap.end();
                 } catch (err) {
+                    console.warn('[IMAP] Error ending connection in setupConnection safeEnd:', (err as Error)?.message);
                 }
             };
 
@@ -860,7 +861,9 @@ class ImapIdleManager {
                                     // NOOP is safer than full fetch for heartbeat unless we actually expect mail signal to be lost
                                     // imap.noop(() => {}); 
                                     this.fetchNewEmails(integrationId, integration.userId, imap, folderName, direction);
-                                } catch (e) {}
+                                } catch (e) {
+                                    console.warn('[IMAP] Error in heartbeat interval fetch for', integrationId, (e as Error)?.message);
+                                }
                             }
                         }
                     }, 5 * 60 * 1000); // 5m is enough with imap keepalive active
@@ -1052,7 +1055,9 @@ class ImapIdleManager {
                                                     hasReply: true,
                                                 }, { priority: 1 });
                                             }
-                                        } catch (_e) {}
+                                        } catch (_e) {
+                                            console.warn('[IMAP] Failed to enqueue reply-detected job for', integrationId);
+                                        }
                                         wsSync.notifyActivityUpdated(userId, {
                                             type: 'reply_detected',
                                             integrationId,
@@ -1225,7 +1230,9 @@ class ImapIdleManager {
                                 wsSync.notifyStatsUpdated(userId);
                                 console.log(`[IMAP] Synced ${toDelete.length} deletions.`);
                             }
-                        } catch (e) {}
+                        } catch (e) {
+                            console.warn('[IMAP] Error syncing deleted messages:', (e as Error)?.message);
+                        }
                         cb(null, null);
                     });
                 });
@@ -1242,7 +1249,7 @@ class ImapIdleManager {
                 try { 
                     if ((imap as any)._idleWaiter) (imap as any).stopIdle();
                     imap.destroy();
-                } catch (e) { /* already disconnected */ }
+                } catch (e) { console.warn('[IMAP] Error destroying connection in cleanupIntegration:', (e as Error)?.message); }
             }
         }
         this.connections.delete(integrationId);
@@ -1527,7 +1534,9 @@ class ImapIdleManager {
                     const cleanup = () => {
                         try {
                             if (appendImap.state !== 'disconnected') appendImap.end();
-                        } catch (e) { }
+                        } catch (e) {
+                            console.warn('[IMAP] Error ending append connection:', (e as Error)?.message);
+                        }
                     };
 
                     appendImap.once('ready', async () => {
@@ -1540,7 +1549,9 @@ class ImapIdleManager {
                                 console.log(`✅ Message mirrored to '${folder}' for integration ${integrationId}`);
                                 appended = true;
                                 break;
-                            } catch (e) { }
+                            } catch (e) {
+                                console.warn(`[IMAP] Failed to append to folder '${folder}':`, (e as Error)?.message);
+                            }
                         }
                         cleanup();
                         resolve();
@@ -1912,7 +1923,7 @@ class ImapIdleManager {
             if (!isOAuth) {
                 if (!integration.encryptedMeta) return [];
                 try { config = JSON.parse(await decrypt(integration.encryptedMeta)) as EmailConfig; }
-                catch { return []; }
+                catch { console.warn('[IMAP] Failed to decrypt config for', integrationId); return []; }
             }
 
             let imapHost = config.imap_host || (config.smtp_host || '').replace('smtp', 'imap');
@@ -1953,7 +1964,7 @@ class ImapIdleManager {
             return await new Promise((resolve) => {
                 const imap = new Imap(imapOptions);
                 const messages: any[] = [];
-                const safeEnd = () => { try { if (imap.state !== 'disconnected') imap.end(); } catch {} };
+                const safeEnd = () => { try { if (imap.state !== 'disconnected') imap.end(); } catch { console.warn('[IMAP] Error in fetchNewMessages safeEnd for', integrationId); } };
 
                 imap.once('ready', () => {
                     imap.openBox('INBOX', true, (err: any, box: any) => {
@@ -1972,15 +1983,17 @@ class ImapIdleManager {
                                 let raw = '';
                                 stream.on('data', (chunk: Buffer) => { raw += chunk.toString('utf8'); });
                                 stream.once('end', async () => {
-                                    try {
-                                        const parsed = await simpleParser(raw);
-                                        item.subject  = parsed.subject || '(no subject)';
-                                        item.from     = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
-                                        item.to       = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
-                                        item.date     = parsed.date?.toISOString() || new Date().toISOString();
-                                        item.snippet  = (parsed.text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-                                    } catch {}
-                                });
+                                        try {
+                                            const parsed = await simpleParser(raw);
+                                            item.subject  = parsed.subject || '(no subject)';
+                                            item.from     = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
+                                            item.to       = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
+                                            item.date     = parsed.date?.toISOString() || new Date().toISOString();
+                                            item.snippet  = (parsed.text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+                                        } catch {
+                                            console.warn('[IMAP] Failed to parse email body during fetchNewMessages');
+                                        }
+                                    });
                             });
 
                             msg.once('attributes', (attrs: any) => {
@@ -2013,7 +2026,9 @@ process.on('SIGTERM', async () => {
     console.log('[ImapIdleManager] SIGTERM received. Cleaning up connections...');
     try {
         await imapIdleManager.releaseAllMailboxClaims();
-    } catch (_e) {}
+    } catch (_e) {
+        console.warn('[ImapIdleManager] Failed to release mailbox claims during shutdown:', (_e as Error)?.message);
+    }
     try {
         await imapIdleManager.stop();
     } catch (err: any) {
