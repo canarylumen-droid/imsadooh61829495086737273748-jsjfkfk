@@ -49,15 +49,6 @@ export class TwilioEmailOTP {
       const otp = crypto.randomInt(100000, 999999).toString();
       const normalizedEmail = email.toLowerCase();
 
-      // Store OTP in database for persistence across serverless invocations
-      await storage.createOtpCode({
-        email: normalizedEmail,
-        code: otp,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-        attempts: 0,
-        verified: false,
-      });
-
       if (!this.isConfigured()) {
         const error = 'Email service not configured. Required: TWILIO_SENDGRID_API_KEY or RESEND_API_KEY';
         console.error(`❌ OTP ERROR: ${error}`);
@@ -89,7 +80,16 @@ export class TwilioEmailOTP {
         return { success: false, error: result.error || 'Failed to send OTP email' };
       }
 
-      console.log(`✅ OTP email sent to ${email}`);
+      // Store OTP in database only after confirming email was sent
+      await storage.createOtpCode({
+        email: normalizedEmail,
+        code: otp,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        attempts: 0,
+        verified: false,
+      });
+
+      console.log(`✅ OTP email sent to ${email} and stored in DB`);
       return { success: true };
     } catch (error: unknown) {
       console.error('Error sending email OTP:', error);
@@ -169,27 +169,6 @@ export class TwilioEmailOTP {
       const otp = crypto.randomInt(100000, 999999).toString();
       const normalizedEmail = email.toLowerCase();
 
-      console.log(`📝 [OTP Store] Creating OTP for ${normalizedEmail}`);
-      console.log(`   - Password hash length: ${passwordHash.length} chars`);
-      console.log(`   - Password hash preview: ${passwordHash.substring(0, 30)}...`);
-
-      // Store OTP with password hash in database for serverless persistence
-      const createdOtp = await storage.createOtpCode({
-        email: normalizedEmail,
-        code: otp,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-        attempts: 0,
-        verified: false,
-        passwordHash: passwordHash,
-        purpose: 'signup',
-      });
-
-      console.log(`✅ [OTP Store] Created OTP record ID: ${createdOtp?.id}`);
-      console.log(`   - Has passwordHash: ${createdOtp?.passwordHash ? '✓ YES' : '✗ NO'}`);
-      if (createdOtp?.passwordHash) {
-        console.log(`   - Stored hash length: ${createdOtp.passwordHash.length} chars`);
-      }
-
       if (!this.isConfigured()) {
         const error = 'Email service not configured. Required: TWILIO_SENDGRID_API_KEY or RESEND_API_KEY';
         console.error(`❌ OTP ERROR: ${error}`);
@@ -221,7 +200,20 @@ export class TwilioEmailOTP {
         return { success: false, error: result.error || 'Failed to send OTP email' };
       }
 
-      console.log(`✅ Signup OTP sent to ${email}`);
+      // Store OTP with password hash in database only after successful send
+      console.log(`📝 [OTP Store] Creating OTP for ${normalizedEmail}`);
+      console.log(`   - Password hash length: ${passwordHash.length} chars`);
+      const createdOtp = await storage.createOtpCode({
+        email: normalizedEmail,
+        code: otp,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        attempts: 0,
+        verified: false,
+        passwordHash: passwordHash,
+        purpose: 'signup',
+      });
+
+      console.log(`✅ Signup OTP sent to ${email} and stored in DB (ID: ${createdOtp?.id})`);
       return { success: true };
     } catch (error: unknown) {
       console.error('Error sending signup OTP:', error);
@@ -376,16 +368,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       const otp = crypto.randomInt(100000, 999999).toString();
       const normalizedEmail = email.toLowerCase();
 
-      // Store OTP with reset_password purpose
-      await storage.createOtpCode({
-        email: normalizedEmail,
-        code: otp,
-        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
-        attempts: 0,
-        verified: false,
-        purpose: 'reset_password'
-      });
-
       if (!this.isConfigured()) {
         const error = 'Email service not configured. Required: TWILIO_SENDGRID_API_KEY or RESEND_API_KEY';
         console.error(`❌ OTP ERROR: ${error}`);
@@ -410,7 +392,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         return { success: false, error: result.error || 'Failed to send reset email' };
       }
 
-      console.log(`✅ Password reset OTP sent to ${email}`);
+      // Store OTP only after successful send
+      await storage.createOtpCode({
+        email: normalizedEmail,
+        code: otp,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+        attempts: 0,
+        verified: false,
+        purpose: 'reset_password'
+      });
+
+      console.log(`✅ Password reset OTP sent to ${email} and stored in DB`);
       return { success: true };
     } catch (error: unknown) {
       console.error('Error sending password reset OTP:', error);

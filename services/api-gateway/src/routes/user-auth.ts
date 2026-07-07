@@ -34,7 +34,8 @@ const avatarUpload = multer({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 20,
+  skipSuccessfulRequests: true,
   message: { error: 'Too many auth attempts' },
 });
 
@@ -94,9 +95,11 @@ router.post('/signup/request-otp', authLimiter, async (req: Request, res: Respon
       if (isTemporaryUsername || !hasCompletedOnboarding) {
         // Allow them to continue - they can login with their password to restore state
         console.log(`ℹ️ [OTP] User ${email} has incomplete account - directing to login`);
-        res.status(400).json({
-          error: 'Account exists but setup incomplete. Please login to continue setup.',
+        res.status(200).json({
+          success: true,
+          message: 'Account exists but setup incomplete. Please login to continue setup.',
           incompleteSetup: true,
+          redirectToLogin: true,
           useLogin: true
         });
         return;
@@ -155,9 +158,10 @@ router.post('/signup/request-otp', authLimiter, async (req: Request, res: Respon
     }
 
     console.log(`✅ [OTP SUCCESS] OTP sent to ${email}`);
+    const emailFrom = process.env.TWILIO_EMAIL_FROM || 'noreply@auth.audnixai.com';
     res.json({
       success: true,
-      message: 'OTP sent to your email from auth@audnixai.com',
+      message: `OTP sent to your email from ${emailFrom}`,
       expiresIn: '10 minutes',
     });
   } catch (error: unknown) {
@@ -167,6 +171,51 @@ router.post('/signup/request-otp', authLimiter, async (req: Request, res: Respon
       error: 'A server error occurred',
       details: 'Please try again later'
     });
+  }
+});
+
+/**
+ * POST /api/user/auth/signup/resend-otp
+ * Resend OTP for signup (doesn't re-hash password, just resends)
+ */
+router.post('/signup/resend-otp', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    if (!req.body) {
+      res.status(400).json({ error: 'Invalid request format' });
+      return;
+    }
+
+    const { email } = req.body as { email?: string };
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: 'Valid email required' });
+      return;
+    }
+
+    if (!twilioEmailOTP.isConfigured()) {
+      res.status(503).json({ error: 'Email service not configured' });
+      return;
+    }
+
+    console.log(`🔄 [OTP Resend] Resending OTP to: ${email}`);
+    const result = await twilioEmailOTP.resendEmailOTP(email);
+
+    if (!result.success) {
+      console.error(`❌ [OTP Resend Failed] ${email} - ${result.error}`);
+      res.status(400).json({ error: result.error || 'Failed to resend OTP' });
+      return;
+    }
+
+    console.log(`✅ [OTP Resend] OTP resent to ${email}`);
+    res.json({
+      success: true,
+      message: 'New OTP sent to your email',
+      expiresIn: '10 minutes',
+    });
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('🚨 [OTP Resend Crash]', errorMessage, error);
+    res.status(500).json({ error: 'Failed to resend OTP' });
   }
 });
 

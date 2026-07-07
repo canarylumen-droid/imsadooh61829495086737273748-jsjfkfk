@@ -540,6 +540,45 @@ export default function AuthPage() {
     }
   };
 
+  // RESEND OTP (separate from initial request - doesn't re-send password)
+  const handleResendOTP = async () => {
+    if (!email) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/user/auth/signup/resend-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+        credentials: 'include',
+      });
+
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok) {
+        setResendCountdown(60);
+        toast({
+          title: "Code Resent",
+          description: "A new verification code has been sent",
+        });
+      } else {
+        toast({
+          title: "Resend Failed",
+          description: data.error || "Could not resend code",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Connection Error",
+        description: "Failed to resend code",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // SIGNUP STEP 2: Verify OTP
   const handleSignupStep2 = async () => {
     if (!otp || otp.length < 6) {
@@ -1021,7 +1060,7 @@ export default function AuthPage() {
                         Verify Code
                       </Button>
                       <button
-                        onClick={handleSignupStep1}
+                        onClick={handleResendOTP}
                         disabled={resendCountdown > 0 || loading}
                         className="w-full text-sm text-primary hover:underline disabled:text-white/40"
                       >
