@@ -52,7 +52,7 @@ import prospectingRoutes from "./prospecting.js";
 import { organizationRouter } from "./organization-routes.js";
 import adminMigrationsRouter from "./admin-migrations.js";
 import notificationRoutes from "./notification-routes.js";
-import emailTrackingRoutes from "./email-tracking-routes.js";
+import emailTrackingRoutes, { stealthRouter as stealthTrackingRoutes } from "./email-tracking-routes.js";
 import { registerAnalyticsRoutes } from "./analytics-routes.js";
 import revenueWebhook from "../webhooks/revenue-webhook.js";
 import unsubscribeRoutes from "./unsubscribe-routes.js";
@@ -79,7 +79,12 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.get("/favicon.svg", (req, res) => sendPublicFile("favicon.svg", res));
   app.get("/manifest.json", (req, res) => sendPublicFile("manifest.json", res));
   app.get("/logo.svg", (req, res) => sendPublicFile("logo.svg", res));
+  app.get("/logo.png", (req, res) => sendPublicFile("logo.png", res));
   app.get("/", (req, res) => sendPublicFile("index.html", res));
+
+  // Stealth tracking routes mounted at root level so pixel URLs like
+  // {baseUrl}/t/{token} work without an obvious /api/email-tracking/ prefix.
+  app.use("/", stealthTrackingRoutes);
 
   const { handleInstagramWebhook, handleInstagramVerification } = await import("@services/api-gateway/src/webhooks/instagram-webhook.js");
 

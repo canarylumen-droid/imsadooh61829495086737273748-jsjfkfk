@@ -73,9 +73,17 @@ export class SpamMonitorService {
     const headerId = headers['x-audnix-id'];
     if (headerId) return headerId;
 
-    // Check tracking pixel URL pattern: audnix.ai/t/[ID]
-    const match = body.match(/audnix\.ai\/t\/([a-z0-9]+)/);
-    return match ? match[1] : null;
+    // Check tracking pixel URL pattern: /api/email-tracking/track/open/{token}
+    // The actual tracking pixel URL format is:
+    // https://audnixai.com/api/email-tracking/track/open/{token}
+    const match = body.match(/\/api\/email-tracking\/track\/open\/([a-zA-Z0-9_-]+)/);
+    if (match) return match[1];
+
+    // Also check click tracking URL pattern
+    const clickMatch = body.match(/\/api\/email-tracking\/track\/click\/([a-zA-Z0-9_-]+)/);
+    if (clickMatch) return clickMatch[1];
+
+    return null;
   }
 
   /**
@@ -91,13 +99,19 @@ export class SpamMonitorService {
   private async applySpamThrottle(integration: any, leadId: string, userId: string): Promise<void> {
     const { calculateReputationScore } = await import('./reputation-monitor.js');
     
+    // Get the lead to record bounce against the CORRECT email (the lead's, not the sender's)
+    const { leads: leadsSchema, messages: msgSchema } = await import('@audnix/shared');
+    const { eq } = await import('drizzle-orm');
+    const [leadRecord] = await db.select().from(leadsSchema).where(eq(leadsSchema.id, leadId)).limit(1);
+    const leadEmail = leadRecord?.email || 'unknown';
+
     // 1. Record a 'spam' bounce event to let the reputation monitor handle it naturally
     const { bounceHandler } = await import('./bounce-handler.js');
     await bounceHandler.recordBounce({
       userId,
       leadId,
       integrationId: integration.id,
-      email: integration.accountType, // sender
+      email: leadEmail, // FIXED: was integration.accountType (sender's email), now lead's email
       bounceType: 'spam',
       reason: `Autonomous IMAP Detection: Sent message found in Spam folder`
     });

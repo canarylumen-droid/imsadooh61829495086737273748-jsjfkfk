@@ -59,6 +59,7 @@ function renderPrompt(template: string, email: RecoveryEmail): string {
       date: email.date?.toISOString() || "",
       lastMessage: email.text || "",
       conversationSummary: `Latest inbound message from ${email.from || "unknown"} about "${email.subject || "no subject"}".`,
+      threadHistory: email.threadHistory || "No prior conversation history available.",
     };
     return values[key] || "";
   });

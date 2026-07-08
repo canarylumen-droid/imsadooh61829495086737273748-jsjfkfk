@@ -28,7 +28,10 @@ export function generateTrackingToken(): string {
 }
 
 export function generateTrackingPixel(baseUrl: string, token: string): string {
-  return `<img src="${baseUrl}/api/email-tracking/track/open/${token}" width="1" height="1" style="display:none;" alt="" />`;
+  // Use a stealth tracking path that looks like a normal image/redirect URL
+  // instead of the obvious /api/email-tracking/track/open/ path.
+  // The short /t/{token} path blends in as a generic URL shortener redirect.
+  return `<img src="${baseUrl}/t/${token}" width="1" height="1" alt="" />`;
 }
 
 export async function wrapLinksWithTracking(html: string, baseUrl: string, messageToken: string): Promise<{ html: string; urls: string[] }> {
@@ -40,12 +43,16 @@ export async function wrapLinksWithTracking(html: string, baseUrl: string, messa
   $('a').each((_: any, el: any) => {
     const $el = $(el);
     const href = $el.attr('href');
-    if (href && !href.startsWith('mailto:') && !href.startsWith('tel:') && !href.includes('/api/email/track/') && !href.includes('/api/email-tracking/track/') && !href.includes('/api/outreach/click/')) {
-      urls.push(href);
-      const encodedUrl = encodeURIComponent(href);
-      const trackingUrl = `${baseUrl}/api/email-tracking/track/click/${messageToken}?url=${encodedUrl}`;
-      $el.attr('href', trackingUrl);
-    }
+    // Skip already-tracked links and non-web links
+    if (!href || href.startsWith('mailto:') || href.startsWith('tel:')) return;
+    if (href.includes('/api/email/track/') || href.includes('/api/email-tracking/track/') || href.includes('/api/outreach/click/')) return;
+    if (href.includes('/t/') || href.includes('/c/')) return; // skip already-stealth-tracked
+
+    urls.push(href);
+    const encodedUrl = encodeURIComponent(href);
+    // Stealth click path: /c/{token} instead of /api/email-tracking/track/click/{token}
+    const trackingUrl = `${baseUrl}/c/${messageToken}?url=${encodedUrl}`;
+    $el.attr('href', trackingUrl);
   });
 
   const outputHtml = isDocument ? $.html() : ($('body').html() || $.html());
@@ -57,17 +64,20 @@ export function wrapPlainTextLinksWithTracking(text: string, baseUrl: string, me
   const urlRegex = /(?<!["'])(https?:\/\/[^\s<]+)/gi;
 
   return text.replace(urlRegex, (url: string) => {
-    if (url.includes('/api/email-tracking/track/')) {
+    if (url.includes('/api/email-tracking/track/') || url.includes('/c/') || url.includes('/t/')) {
       return url;
     }
 
     const encodedUrl = encodeURIComponent(url);
-    return `${baseUrl}/api/email-tracking/track/click/${messageToken}?url=${encodedUrl}`;
+    return `${baseUrl}/c/${messageToken}?url=${encodedUrl}`;
   });
 }
 
 export async function createTrackedEmail(data: EmailTrackingData): Promise<{ token: string; pixelHtml: string }> {
-  const token = generateTrackingToken();
+  // Use the provided messageId as the token if available, so callers can
+  // store the same value in campaign_emails.message_id and correlate events.
+  // If no messageId is provided, generate a new tracking token.
+  const token = data.messageId || generateTrackingToken();
   const baseUrl = (globalThis as any).process?.env?.BASE_URL || 'https://audnixai.com';
 
   try {
@@ -120,6 +130,10 @@ export async function createTrackedEmail(data: EmailTrackingData): Promise<{ tok
     }
   } catch (error) {
     console.error('Failed to create email tracking record (even with fallback):', error);
+    // RE-THROW: Callers must know tracking record creation failed.
+    // Returning a token without a persisted DB record means open/click events
+    // will silently fail with no stats or notifications.
+    throw new Error(`Failed to create tracking record: ${(error as Error).message}`);
   }
 
   const pixelHtml = generateTrackingPixel(baseUrl, token);
@@ -321,21 +335,47 @@ export async function getEmailStats(userId: string, days: number = 30, integrati
   }
 }
 
-export async function injectTrackingIntoEmail(html: string, token: string): Promise<{ html: string; urls: string[] }> {
+export async function injectTrackingIntoEmail(content: string, token: string): Promise<{ html: string; urls: string[] }> {
   const baseUrl = (globalThis as any).process?.env?.BASE_URL || 'https://audnixai.com';
 
-  const { html: trackedHtml, urls } = await wrapLinksWithTracking(html, baseUrl, token);
+  // Check if content is HTML or plain text
+  const isHtml = /<[a-z][\s\S]*>/i.test(content);
 
-  const trackingPixel = generateTrackingPixel(baseUrl, token);
+  if (isHtml) {
+    const { html: trackedHtml, urls } = await wrapLinksWithTracking(content, baseUrl, token);
+    const trackingPixel = generateTrackingPixel(baseUrl, token);
 
-  let finalHtml = trackedHtml;
-  if (finalHtml.includes('</body>')) {
-    finalHtml = finalHtml.replace('</body>', `${trackingPixel}</body>`);
+    let finalHtml = trackedHtml;
+    if (finalHtml.includes('</body>')) {
+      finalHtml = finalHtml.replace('</body>', `${trackingPixel}</body>`);
+    } else {
+      finalHtml += trackingPixel;
+    }
+
+    return { html: finalHtml, urls };
   } else {
-    finalHtml += trackingPixel;
-  }
+    // Plain text: wrap links for tracking, then embed in minimal HTML with tracking pixel
+    const trackedText = wrapPlainTextLinksWithTracking(content, baseUrl, token);
+    const trackingPixel = generateTrackingPixel(baseUrl, token);
 
-  return { html: finalHtml, urls };
+    const finalHtml = `<!DOCTYPE html>
+<html>
+<body>
+  <div style="white-space: pre-wrap; font-family: sans-serif; line-height: 1.5;">
+${trackedText.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')}
+  </div>
+  ${trackingPixel}
+</body>
+</html>`;
+
+    // Extract URLs from the plain text for analytics
+    const urlRegex = /https?:\/\/[^\s<>"']+/gi;
+    const matchingUrls = [...content.matchAll(urlRegex)].map(m => m[0]).filter(u =>
+      !u.includes('/api/email-tracking/track/')
+    );
+
+    return { html: finalHtml, urls: matchingUrls };
+  }
 }
 
 

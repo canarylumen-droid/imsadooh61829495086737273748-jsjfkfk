@@ -1717,9 +1717,11 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
   const autoreplyJobId = data._jobId || `autoreply-${campaignId}-${campaignLeadId}-unknown`;
   await markJobProcessing(autoreplyJobId).catch((err) => console.warn(`[CampaignWorker] markJobProcessing (auto-reply) failed: ${err.message}`));
 
-  // 2. Fetch campaign and verify status
-  const [campaign] = await db.select().from(outreachCampaigns).where(eq(outreachCampaigns.id, campaignId));
-  if (!campaign || campaign.status === 'aborted' || campaign.status === 'paused') return;
+  // 2. Fetch campaign and verify status — must be 'active' to send auto-replies
+  const [campaign] = await db.select().from(outreachCampaigns).where(
+    and(eq(outreachCampaigns.id, campaignId), eq(outreachCampaigns.status, 'active'))
+  );
+  if (!campaign) return;
 
   // 3. Get lead details
   const [lead] = await db.select().from(leads).where(eq(leads.id, leadId));

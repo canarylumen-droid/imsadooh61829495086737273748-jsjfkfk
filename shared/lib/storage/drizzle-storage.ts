@@ -1092,35 +1092,56 @@ export class DrizzleStorage implements IStorage {
       }).catch(err => console.error('[SocketService] Failed to emit thread:update', err));
 
       // --- Campaign Auto-Reply Trigger ---
+      // Only triggers when the campaign is active — paused/completed campaigns
+      // must NOT auto-reply. Also respects aiPaused per-lead.
       if (message.direction === 'inbound') {
-        const { campaignLeads } = await import('@audnix/shared');
-        const campaignLead = await db.select().from(campaignLeads).where(eq(campaignLeads.leadId, message.leadId)).limit(1);
-        if (campaignLead[0] && campaignLead[0].status !== 'replied') {
-          const delayMinutes = 2 + Math.floor(Math.random() * 3); // 2 to 4 minutes
-          const nextActionAt = new Date();
-          nextActionAt.setMinutes(nextActionAt.getMinutes() + delayMinutes);
+        try {
+          const { campaignLeads: cTable, outreachCampaigns: campTable } = await import('@audnix/shared');
+          const cLead = await db.select().from(cTable).where(eq(cTable.leadId, message.leadId)).limit(1);
+          if (cLead[0] && cLead[0].status !== 'replied') {
+            // VERIFY: Campaign must be active for auto-reply to proceed
+            const [campRow] = await db.select({ status: campTable.status })
+              .from(campTable)
+              .where(and(eq(campTable.id, cLead[0].campaignId), eq(campTable.status, 'active')))
+              .limit(1);
 
-          await db.update(campaignLeads)
-            .set({
-              status: 'replied',
-              nextActionAt,
-              metadata: { ...campaignLead[0].metadata, pendingAutoReply: true }
-            })
-            .where(eq(campaignLeads.id, campaignLead[0].id));
+            // VERIFY: Lead must not have aiPaused
+            const [leadRow] = await db.select({ aiPaused: leads.aiPaused })
+              .from(leads)
+              .where(eq(leads.id, message.leadId))
+              .limit(1);
 
-          // Schedule BullMQ auto-reply job for autonomous processing
-          try {
-            const { campaignQueueManager } = await import('../queues/campaign-queue.js');
-            await campaignQueueManager.scheduleAutoReply(
-              campaignLead[0].campaignId,
-              message.userId,
-              campaignLead[0].id,
-              campaignLead[0].integrationId || '',
-              message.leadId
-            );
-          } catch (queueErr) {
-            // Non-critical: fallback to polling if BullMQ unavailable
+            const shouldAutoReply = campRow && !leadRow?.aiPaused;
+
+            if (shouldAutoReply) {
+              const delayMinutes = 2 + Math.floor(Math.random() * 3);
+              const nextActionAt = new Date();
+              nextActionAt.setMinutes(nextActionAt.getMinutes() + delayMinutes);
+
+              await db.update(cTable)
+                .set({
+                  status: 'replied',
+                  nextActionAt,
+                  metadata: { ...cLead[0].metadata, pendingAutoReply: true }
+                })
+                .where(eq(cTable.id, cLead[0].id));
+
+              try {
+                const { campaignQueueManager } = await import('../queues/campaign-queue.js');
+                await campaignQueueManager.scheduleAutoReply(
+                  cLead[0].campaignId,
+                  message.userId,
+                  cLead[0].id,
+                  cLead[0].integrationId || '',
+                  message.leadId
+                );
+              } catch (queueErr) {
+                // Non-critical: fallback to polling if BullMQ unavailable
+              }
+            }
           }
+        } catch (err) {
+          console.error('[AutoReply] Failed to check campaign status:', err);
         }
       }
     }

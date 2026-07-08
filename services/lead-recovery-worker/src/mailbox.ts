@@ -13,6 +13,8 @@ export interface RecoveryEmail {
   text: string;
   html?: string;
   date?: Date;
+  /** Full conversation history (previous messages in thread) for AI context */
+  threadHistory?: string;
 }
 
 interface EmailConfig {

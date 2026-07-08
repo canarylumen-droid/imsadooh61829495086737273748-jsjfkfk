@@ -1,22 +1,22 @@
 
 {
-  "name": "audnixai.com - Lead Management",
-  "short_name": "Audnix",
-  "description": "AI-powered lead management and conversation automation",
+  "name": "Audnix AI - Autonomous Sales Rep",
+  "short_name": "Audnix AI",
+  "description": "The #1 Autonomous AI Sales Rep — closes deals 24/7 with predictive timing and intelligent objection handling.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0f1f",
-  "theme_color": "#00d4ff",
+  "theme_color": "#22d3ee",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/favicon-white.png",
+      "src": "/logo.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/favicon-white.png",
+      "src": "/logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
@@ -28,16 +28,16 @@
     {
       "name": "Dashboard",
       "short_name": "Home",
-      "description": "View your dashboard",
+      "description": "View your sales dashboard",
       "url": "/dashboard",
-      "icons": [{ "src": "/favicon-white.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/logo.png", "sizes": "96x96" }]
     },
     {
       "name": "Conversations",
       "short_name": "Chat",
-      "description": "View conversations",
+      "description": "View lead conversations",
       "url": "/dashboard/conversations",
-      "icons": [{ "src": "/favicon-white.png", "sizes": "96x96" }]
+      "icons": [{ "src": "/logo.png", "sizes": "96x96" }]
     }
   ]
 }

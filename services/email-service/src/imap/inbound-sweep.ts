@@ -272,8 +272,14 @@ class InboundSweepWorker {
                   try {
                     const [campaign] = await db!.select()
                       .from(outreachCampaigns)
-                      .where(eq(outreachCampaigns.id, leadInfo.campaignId))
+                      .where(and(eq(outreachCampaigns.id, leadInfo.campaignId), eq(outreachCampaigns.status, 'active')))
                       .limit(1);
+
+                    if (!campaign) {
+                      // Campaign is not active — skip auto-reply entirely
+                      wsSync.notifyLeadsUpdated(mailbox.userId, { leadId: leadInfo.leadId, action: 'inbound_swept' });
+                      return;
+                    }
 
                     const hasAutoReply = campaign ? !!(campaign.template as any)?.autoReplyBody : false;
                     const isFirstReply = leadInfo.status === 'sent';

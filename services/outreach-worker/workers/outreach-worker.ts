@@ -13,7 +13,6 @@ import { storage } from '@shared/lib/storage/storage.js';
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
 import { sendEmail } from "@shared/lib/channels/email.js";
 import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
-import { createTrackedEmail } from "@services/email-service/src/email/email-tracking.js";
 /**
  * Generate AI-powered cold outreach email based on lead metadata
  * Uses curiosity, FOMO, trust, and punchy triggers
@@ -152,37 +151,66 @@ export class AutonomousOutreachWorker {
     this.pollingInterval = null;
   }
 
-  /**
-   * Start the autonomous outreach worker (BullMQ Mode)
-   */
-  async start(): Promise<void> {
-    if (this.isRunning) {
-      console.log('[AutoOutreach] Worker is already running');
-      return;
-    }
-
-    this.isRunning = true;
-    console.log('✅ Autonomous outreach worker started (BullMQ Mode)');
-
-    const { createWorker } = await import("@shared/lib/worker");
-
-    // Register a worker to process outreach tasks
-    createWorker('outreach-engine', async (job: any) => {
-      if (job.name === 'engine-tick') {
-        console.log('[BullMQ] Processing engine-tick...');
-        await this.checkAndProcessUsers();
-      } else if (job.name.startsWith('outreach-autonomous-')) {
-        const { userId, integrationId, isAutonomous } = job.data;
-        console.log(`[BullMQ] Processing autonomous outreach for user ${userId}...`);
-        await this.processUserOutreach(userId, integrationId, isAutonomous);
-      }
-    }, {
-      concurrency: 5, // Allow processing 5 users/tasks in parallel per node
-    });
-
-    // Initial check
-    this.checkAndProcessUsers();
+/**
+ * Start the autonomous outreach worker (Passive Mode)
+ * 
+ * NOTE: This worker no longer self-triggers on engine-tick or at startup.
+ * Autonomous outreach is exclusively driven by the OutreachEngine.
+ * This class only handles explicitly dispatched autonomous jobs.
+ */
+async start(): Promise<void> {
+  if (this.isRunning) {
+    console.log('[AutoOutreach] Worker is already running');
+    return;
   }
+
+  this.isRunning = true;
+  console.log('✅ Autonomous outreach worker started (Passive Mode — no auto-send)');
+
+  const { createWorker } = await import("@shared/lib/worker");
+
+  // Only handle explicitly dispatched autonomous outreach jobs.
+  // engine-tick is intentionally NOT handled here to prevent double-sends
+  // (the OutreachEngine + outreach-worker/index.ts worker handles ticks).
+  createWorker('outreach-engine', async (job: any) => {
+    if (job.name.startsWith('outreach-autonomous-')) {
+      const { userId, integrationId, isAutonomous } = job.data;
+
+      // SAFETY GUARD: Never process users without active campaigns,
+      // regardless of autonomous mode flag. The campaign must exist.
+      const userHasActiveCampaigns = await this.checkUserHasActiveCampaigns(userId);
+      if (!userHasActiveCampaigns) {
+        console.log(`[AutoOutreach] Skipping user ${userId}: no active campaigns found`);
+        return;
+      }
+
+      console.log(`[BullMQ] Processing autonomous outreach for user ${userId}...`);
+      await this.processUserOutreach(userId, integrationId, isAutonomous);
+    }
+  }, {
+    concurrency: 5,
+  });
+}
+
+/**
+ * Check if a user has any active outreach campaigns
+ */
+private async checkUserHasActiveCampaigns(userId: string): Promise<boolean> {
+  try {
+    const { outreachCampaigns } = await import('@audnix/shared');
+    const { eq, and } = await import('drizzle-orm');
+    const result = await db.select({ id: outreachCampaigns.id })
+      .from(outreachCampaigns)
+      .where(and(
+        eq(outreachCampaigns.userId, userId),
+        eq(outreachCampaigns.status, 'active')
+      ))
+      .limit(1);
+    return result.length > 0;
+  } catch {
+    return false;
+  }
+}
 
   /**
    * Stop the autonomous outreach worker
@@ -244,6 +272,14 @@ export class AutonomousOutreachWorker {
 
       for (const userId of uniqueUserIds) {
         if (this.activeOutreachQueue.has(userId as string)) continue;
+
+        // SAFETY GUARD: Skip users who have no active campaigns
+        // This prevents automatic sending when no campaign was started
+        const hasActiveCampaigns = await this.checkUserHasActiveCampaigns(userId as string);
+        if (!hasActiveCampaigns) {
+          console.log(`[AutoOutreach] Skipping user ${userId}: no active campaigns found`);
+          continue;
+        }
 
         try {
           const leads = await this.getPrioritizedLeads(userId as string);
@@ -321,7 +357,9 @@ export class AutonomousOutreachWorker {
         and(
           eq(leads.userId, userId),
           eq(leads.status, 'new'),
-          eq(leads.aiPaused, false)
+          eq(leads.aiPaused, false),
+          // Strictly honor AI Outreach Consent — leads must explicitly opt-in
+          sql`(${leads.metadata}->>'ai_outreach_consent')::boolean = true`
         )
       ).limit(20);
 
@@ -524,15 +562,8 @@ Provide a 1-sentence strategic directive for the outreach generation.
       body: aiResult.message
     };
 
-    // Generate tracking token
-    const { token } = await createTrackedEmail({
-      userId,
-      leadId: lead.id,
-      recipientEmail: lead.email,
-      subject: emailContent.subject,
-      sentAt: new Date(),
-      messageId: `auto_${Date.now()}`
-    });
+    // Generate a tracking token (sendEmail will create the DB record after successful send)
+    const trackingToken = `auto_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     // Build threading headers from last message for proper reply tracking
     let inReplyTo: string | undefined;
@@ -558,7 +589,7 @@ Provide a 1-sentence strategic directive for the outreach generation.
       console.warn(`[AutoOutreach] Failed to fetch threading headers:`, threadErr);
     }
 
-    // Send the email
+    // Send the email (sendEmail will create tracking record after successful delivery)
     await sendEmail(
       userId,
       lead.email,
@@ -566,7 +597,7 @@ Provide a 1-sentence strategic directive for the outreach generation.
       emailContent.subject,
       { 
         isHtml: true,
-        trackingId: token,
+        trackingId: trackingToken,
         leadId: lead.id,
         inReplyTo,
         references,

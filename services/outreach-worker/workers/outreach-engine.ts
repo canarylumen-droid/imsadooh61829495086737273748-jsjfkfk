@@ -113,7 +113,10 @@ export class OutreachEngine {
       }).from(integrations)
         .innerJoin(users, eq(integrations.userId, users.id))
         .where(
+          and(
+            eq(integrations.connected, true),
             notInArray(integrations.provider, ['google_calendar', 'calendly'])
+          )
         );
 
       // Create a map for quick user configuration lookup during tick()
@@ -122,19 +125,41 @@ export class OutreachEngine {
         uniqueUserMap.set(i.id, i.autonomousMode !== false);
       }
 
+      // Pre-fetch which users have at least one active campaign to avoid
+      // enqueuing autonomous jobs for users who haven't started any campaign.
+      const activeCampaignUserIds = new Set<string>();
+      try {
+        const activeCampaigns = await db.select({ userId: outreachCampaigns.userId })
+          .from(outreachCampaigns)
+          .where(eq(outreachCampaigns.status, 'active'));
+        for (const c of activeCampaigns) {
+          activeCampaignUserIds.add(c.userId);
+        }
+      } catch (e) {
+        console.error('[OutreachEngine] Failed to fetch active campaigns:', e);
+      }
+
       for (const integration of activeIntegrations) {
         // System 9: Auto-Heal stuck/zombie leads for this user
         await this.autonomouslyHealZombieLeads(integration.userId);
 
         const isAutonomous = uniqueUserMap.get(integration.id) ?? true;
-        
+
+        // CRITICAL: Only enqueue tasks if the user has active campaigns.
+        // This is the primary gate that prevents any emails from being sent
+        // without an explicitly started campaign. The isAutonomous flag only
+        // controls whether autonomous outreach runs WITHIN active campaigns.
+        const hasActiveCampaign = activeCampaignUserIds.has(integration.userId);
+        if (!hasActiveCampaign) {
+          continue;
+        }
+
         if (outreachQueue) {
-          // Enqueue ONLY autonomous tasks for the user.
           await outreachQueue.add(`outreach-autonomous-${integration.userId}` as any, { 
             userId: integration.userId, 
             integrationId: integration.id,
             type: 'autonomous',
-            isAutonomous 
+            isAutonomous // Controls autonomous sub-path within active campaigns
           }, {
             jobId: `outreach-autonomous-${integration.id}-${Math.floor(Date.now() / 60000)}`,
             removeOnComplete: true
@@ -229,11 +254,16 @@ export class OutreachEngine {
       if (processedCampaign) return;
 
       // --- PART 2: Autonomous AI Outreach ---
-      // If no campaign was processed, check for individual "new" leads with AI enabled
-      if (isAutonomousMode) {
+      // If no campaign was processed, check for individual "new" leads with AI enabled.
+      // CRITICAL: Only run autonomous outreach if the user has ACTIVE CAMPAIGNS.
+      // This prevents emails from being sent without user action.
+      const hasActiveCampaigns = await this.userHasActiveCampaigns(userId);
+      if (isAutonomousMode && hasActiveCampaigns) {
         await this.tickAutonomousOutreach(userId).catch(err => {
           console.error(`[OutreachEngine] tickAutonomousOutreach failed for ${userId}:`, err.message);
         });
+      } else if (isAutonomousMode && !hasActiveCampaigns) {
+        console.log(`[OutreachEngine] Skipping autonomous outreach for ${userId}: no active campaigns`);
       }
 
       // --- PART 3: [PHASE 46] Self-Healing Reputation Sweep ---
@@ -1204,6 +1234,24 @@ export class OutreachEngine {
       WHERE user_id = ${userId}
       AND (metadata->>'processing_lock_at')::timestamp < ${fifteenMinutesAgo.toISOString()}::timestamp
     `);
+  }
+
+  /**
+   * Check if a user has any active outreach campaigns
+   */
+  private async userHasActiveCampaigns(userId: string): Promise<boolean> {
+    try {
+      const result = await db.select({ id: outreachCampaigns.id })
+        .from(outreachCampaigns)
+        .where(and(
+          eq(outreachCampaigns.userId, userId),
+          eq(outreachCampaigns.status, 'active')
+        ))
+        .limit(1);
+      return result.length > 0;
+    } catch {
+      return false;
+    }
   }
 
   /**

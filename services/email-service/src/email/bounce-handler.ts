@@ -380,11 +380,15 @@ class BounceHandler {
       const totalBounces = row.total;
 
       // Calculate bounce rate against total leads created in last 30 days
-      const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const userLeads = await storage.getLeads({ userId, limit: 10000 });
-      const recentLeads = userLeads.filter((l: any) => new Date(l.createdAt) >= since);
-      const bounceRate = recentLeads.length > 0
-        ? Number(((totalBounces / recentLeads.length) * 100).toFixed(2))
+      // Use SQL COUNT directly instead of loading 10K+ rows into memory
+      const leadCountResult = await db.execute(sql`
+        SELECT COUNT(*) as count FROM leads 
+        WHERE user_id = ${userId} 
+        AND created_at >= NOW() - INTERVAL '30 days'
+      `);
+      const recentLeadCount = Number(leadCountResult.rows[0]?.count || 0);
+      const bounceRate = recentLeadCount > 0
+        ? Number(((totalBounces / recentLeadCount) * 100).toFixed(2))
         : 0;
 
       return {

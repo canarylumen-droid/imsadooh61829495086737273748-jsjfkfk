@@ -174,6 +174,16 @@ router.post("/sync", async (req, res) => {
     );
   }
 
+  // Notify the lead-recovery-worker via Redis Pub/Sub (event-driven, no polling needed)
+  try {
+    const { publish } = await import('@services/event-bus/src/redis-pubsub.js');
+    for (const mb of selectedMailboxes) {
+      await publish('lead-recovery:sync-requested', { tenantId, mailboxId: mb.id }).catch(() => {});
+    }
+  } catch {
+    // Redis unavailable — worker will pick up on restart
+  }
+
   recoveryEvents.emitRecovery({
     tenantId,
     action: "SyncStarted",

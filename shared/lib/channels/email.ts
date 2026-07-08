@@ -851,19 +851,6 @@ export async function sendEmail(
     emailBody = trackingResult.html;
     const firstUrl = trackingResult.urls.length > 0 ? trackingResult.urls.join(',') : null;
 
-    if (!options.isTest) {
-      await createTrackedEmail({
-        userId,
-        leadId: options.leadId || undefined,
-        integrationId: integration.id,
-        recipientEmail,
-        subject,
-        sentAt: new Date(),
-        messageId: trackingId,
-        targetUrl: firstUrl || undefined
-      });
-    }
-
     if (USE_KUMOMTA && integration.id) {
       try {
         const redis = await import('@shared/lib/redis/redis.js').then(m => m.getRedisClient());
@@ -893,6 +880,21 @@ export async function sendEmail(
           options.references,
           options.replyTo
         );
+
+    // Only create tracking record AFTER successful send, so sentAt reflects
+    // actual delivery time and we don't record sends that never happened.
+    if (!options.isTest) {
+      await createTrackedEmail({
+        userId,
+        leadId: options.leadId || undefined,
+        integrationId: integration.id,
+        recipientEmail,
+        subject,
+        sentAt: new Date(),
+        messageId: trackingId,
+        targetUrl: firstUrl || undefined
+      });
+    }
 
     if (result?.messageId && !options.isTest) {
       await storage.createEmailMessage({
@@ -960,20 +962,6 @@ export async function sendEmail(
   emailBody = trackingResult.html;
   const firstUrl = trackingResult.urls.length > 0 ? trackingResult.urls.join(',') : null;
 
-  // Create the tracking record
-  if (!options.isTest) {
-    await createTrackedEmail({
-      userId,
-      leadId: options.leadId || undefined,
-      integrationId: integration.id,
-      recipientEmail,
-      subject: emailSubject,
-      sentAt: new Date(),
-      messageId: trackingId,
-      targetUrl: firstUrl || undefined
-    });
-  }
-
   const { GmailOAuth } = await import('@services/api-gateway/src/oauth/gmail.js');
   const { OutlookOAuth } = await import('@services/api-gateway/src/oauth/outlook.js');
 
@@ -1017,6 +1005,17 @@ export async function sendEmail(
         options.replyTo
       );
       if (result && result.messageId && !options.isTest) {
+        // Create tracking record AFTER successful send (not before)
+        await createTrackedEmail({
+          userId,
+          leadId: options.leadId || undefined,
+          integrationId: integration.id,
+          recipientEmail,
+          subject: emailSubject,
+          sentAt: new Date(),
+          messageId: trackingId,
+          targetUrl: firstUrl || undefined
+        });
         await storage.createEmailMessage({
           userId,
           leadId: options.leadId || null,
@@ -1048,6 +1047,17 @@ export async function sendEmail(
       // Outlook/Microsoft Graph returns HTTP 202 with no messageId — generate one
       const outlookMessageId = result?.messageId || `outlook-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
       if (!options.isTest) {
+        // Create tracking record AFTER successful send (not before)
+        await createTrackedEmail({
+          userId,
+          leadId: options.leadId || undefined,
+          integrationId: integration.id,
+          recipientEmail,
+          subject: emailSubject,
+          sentAt: new Date(),
+          messageId: trackingId,
+          targetUrl: firstUrl || undefined
+        });
         await storage.createEmailMessage({
           userId,
           leadId: options.leadId || null,
@@ -1256,7 +1266,6 @@ function createMimeMessage(
   if (replyTo) {
     headers.push(`Reply-To: ${replyTo}`);
   }
-
   const parts = [
     ...headers,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
