@@ -90,44 +90,8 @@ export async function canSendToProvider(
   isFollowUpOrReply: boolean = false,
   cachedIntegration?: { providerLimits: any; initialOutreachLimit: number | null }
 ): Promise<{ allowed: boolean; reason?: string; remaining?: number }> {
-  if (isFollowUpOrReply) {
-    return { allowed: true, remaining: 999 };
-  }
-
-  let providerLimits: any = {};
-  let globalLimit: number | null = null;
-
-  if (cachedIntegration) {
-    providerLimits = (cachedIntegration.providerLimits || {}) as any;
-    globalLimit = cachedIntegration.initialOutreachLimit;
-  } else {
-    const integration = await db
-      .select({
-        providerLimits: integrations.providerLimits,
-        initialOutreachLimit: integrations.initialOutreachLimit,
-      })
-      .from(integrations)
-      .where(eq(integrations.id, integrationId))
-      .limit(1);
-    if (!integration[0]) return { allowed: true };
-    providerLimits = (integration[0].providerLimits || {}) as any;
-    globalLimit = integration[0].initialOutreachLimit;
-  }
-
-  const group = detectProviderGroup(leadEmail);
-  const state = getProviderState(providerLimits, group);
-  const limit = state.initialOutreachLimit ?? globalLimit ?? CEILING_LIMIT;
-  const sent = state.dailySentCount ?? 0;
-
-  if (sent >= limit && sent >= FLOOR_LIMIT) {
-    return {
-      allowed: false,
-      reason: `${group} cold budget exhausted (${sent}/${limit})`,
-      remaining: 0,
-    };
-  }
-
-  return { allowed: true, remaining: limit - sent };
+  // Domain reputation throttling is disabled per user request
+  return { allowed: true, remaining: 999 };
 }
 
 export async function canSendFollowUpOrReply(

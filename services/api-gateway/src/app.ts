@@ -35,7 +35,7 @@ export function createApp() {
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", "https://www.audnixai.com", "wss://www.audnixai.com"],
+        connectSrc: ["'self'", "https://www.audnixai.com", "wss://www.audnixai.com", "https://audnixai.com", "wss://audnixai.com", "https://54.227.164.241", "ws://54.227.164.241", "http://54.227.164.241"],
       },
     },
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },

@@ -1111,12 +1111,13 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
     const { sendEmail } = await import('@shared/lib/channels/email.js');
 
     // Timeout wrapper - 14s to stay under infrastructure limits
+    // isTest: true stamps metadata so IMAP IDLE / InboundSweep never ingests the reply as a lead.
     const sendPromise = sendEmail(
       userId,
       recipientEmail,
       content || 'This is a test email from Audnix AI to verify your email connection.',
       subject || 'Audnix AI - Test Email',
-      { isHtml: false, isRaw: true, integrationId: integrationId || undefined }
+      { isHtml: false, isRaw: true, integrationId: integrationId || undefined, isTest: true }
     );
 
     const result = await Promise.race([

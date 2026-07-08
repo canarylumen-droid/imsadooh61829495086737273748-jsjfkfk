@@ -7,8 +7,11 @@ services:
     container_name: audnix-nginx
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - ./dist/dist/public:/app/dist/public:ro
     depends_on:
       - api-gateway
     restart: always
@@ -28,6 +31,9 @@ services:
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
       - SESSION_SECRET=${SESSION_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -49,6 +55,11 @@ services:
       - APP_ROLE=email
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -70,6 +81,11 @@ services:
       - APP_ROLE=imap
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -94,6 +110,9 @@ services:
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
       - SESSION_SECRET=${SESSION_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -117,8 +136,11 @@ services:
       - APP_ROLE=ai
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -140,6 +162,11 @@ services:
       - APP_ROLE=outreach
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -167,6 +194,7 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - ZAI_API_KEY=${ZAI_API_KEY}
       - LEAD_RECOVERY_WORKER_POLL_MS=${LEAD_RECOVERY_WORKER_POLL_MS:-300000}
       - LEAD_RECOVERY_MAX_MESSAGES_PER_MAILBOX=${LEAD_RECOVERY_MAX_MESSAGES_PER_MAILBOX:-500}
@@ -193,6 +221,11 @@ services:
       - APP_ROLE=social
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -214,14 +247,19 @@ services:
       - APP_ROLE=billing
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
-      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1024M
     restart: always
 
   # --- Orchestrator Worker ---
@@ -236,6 +274,11 @@ services:
       - APP_ROLE=orchestrator
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -257,7 +300,11 @@ services:
       - APP_ROLE=rag
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -274,11 +321,17 @@ services:
       dockerfile: Dockerfile.production
     image: audnix-ai:latest
     container_name: audnix-vector-db-service
+    env_file: .env
     environment:
       - NODE_ENV=production
       - APP_ROLE=vectordb
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     depends_on:
       - redis
     restart: always
@@ -295,6 +348,11 @@ services:
       - APP_ROLE=audit
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
         condition: service_healthy
@@ -317,6 +375,11 @@ services:
       - QUEUE_AUTOSCALER_ENABLED=true
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
       - RAILWAY_SCALE_WEBHOOK_TOKEN=${RAILWAY_SCALE_WEBHOOK_TOKEN}
       - RAILWAY_SCALE_WEBHOOK_AI=${RAILWAY_SCALE_WEBHOOK_AI}
       - RAILWAY_SCALE_WEBHOOK_SOCIAL=${RAILWAY_SCALE_WEBHOOK_SOCIAL}
@@ -336,7 +399,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 512M
     restart: always
 
   # --- Warmup Worker (24/7 Email Warmup) ---
@@ -351,8 +414,12 @@ services:
       - APP_ROLE=warmup
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD:-devpassword}@redis:6379
+      - SESSION_SECRET=${SESSION_SECRET}
+      - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+      - WARMUP_SEEDS=${WARMUP_SEEDS}
     depends_on:
       redis:
         condition: service_healthy

@@ -11,6 +11,10 @@ import { sql } from 'drizzle-orm';
 /**
  * Health check route for background workers and system status
  */
+router.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'api-gateway', timestamp: new Date().toISOString() });
+});
+
 router.get('/status', async (req, res) => {
   const workers = workerHealthMonitor.getHealthStatus();
   const allWorkersHealthy = workers.every((w: any) => w.status === 'healthy');

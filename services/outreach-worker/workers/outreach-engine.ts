@@ -501,6 +501,11 @@ export class OutreachEngine {
     let activeMailboxes = await this.getAvailableMailboxes(userId);
     if (activeMailboxes.length === 0) return undefined;
 
+    // Fetch user to know if enterprise
+    const user = await storage.getUser(userId);
+    const tier = (user?.subscriptionTier || user?.plan || 'starter').toLowerCase();
+    const isEnterprise = tier === 'enterprise';
+
     // Filter by campaign config if user specifically selected mailboxes
     const allowedMailboxIds = campaign?.config?.mailboxIds;
     if (Array.isArray(allowedMailboxIds) && allowedMailboxIds.length > 0) {
@@ -517,9 +522,9 @@ export class OutreachEngine {
       const idx = (startIndex + i) % activeMailboxes.length;
       const mailbox = activeMailboxes[idx];
 
-      // PHASE 46: Strictly avoid mailboxes with reputation < 65
+      // PHASE 46: Strictly avoid mailboxes with reputation < 65 (unless Enterprise, then < 40)
       const reputation = mailbox.reputationScore ?? null;
-      if (reputation !== null && reputation < 65 && mailbox.warmupStatus !== 'active') {
+      if (reputation !== null && reputation < (isEnterprise ? 40 : 65) && mailbox.warmupStatus !== 'active') {
         continue;
       }
 
@@ -674,10 +679,6 @@ export class OutreachEngine {
         
         // --- PRIORITY PAUSE: Yield to pending auto-replies ---
         const reputationScore = integration.reputationScore ?? null;
-        if (reputationScore !== null && reputationScore < 40) {
-           effectiveLimit = Math.min(5, effectiveLimit);
-           console.log(`[OutreachEngine] ⚠️ LOW REPUTATION (${reputationScore}) for ${integration.id}. Strict volume reduction applied.`);
-        }
       } catch (err) {
         console.error(`[OutreachEngine] Error assessing domain health for limit adaptation:`, err);
         if (!isHighPriority) {
@@ -804,6 +805,17 @@ export class OutreachEngine {
     const template = campaign.template as any;
     let subject = template?.initial?.subject || template?.subject || "Contacting you";
     let body = template?.initial?.body || template?.body;
+
+    // ── ENGINE-LEVEL TEMPLATE GUARD (2nd layer after /start validation) ───────
+    // If this is an initial send (step 0) with no body, block it instead of
+    // silently generating AI content without user knowledge.
+    if (!body && leadEntry.currentStep === 0 && !leadEntry.metadata?.pendingAutoReply) {
+      console.error(`[OutreachEngine] ❌ Campaign "${campaign.name}" (${campaign.id}) has no template body. Marking lead ${lead.id} as failed. Reconfigure the campaign template.`);
+      await db.update(campaignLeads)
+        .set({ status: 'failed', error: 'Campaign template body is empty. Please edit the campaign and set an email body before sending.' })
+        .where(eq(campaignLeads.id, leadEntry.id));
+      return;
+    }
 
     // --- AUTO-REPLY LOGIC ---
     if (leadEntry.metadata?.pendingAutoReply) {

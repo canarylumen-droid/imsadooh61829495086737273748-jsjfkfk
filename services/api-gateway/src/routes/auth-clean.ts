@@ -14,7 +14,8 @@ const OTP_ENABLED = process.env.OTP_ENABLED !== 'false';
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 20,
+  skipSuccessfulRequests: true,
   message: { error: 'Too many auth attempts' },
 });
 
@@ -29,7 +30,7 @@ router.post('/signup/request-otp', authLimiter, async (req: Request, res: Respon
 
     const existing = await storage.getUserByEmail(email);
     if (existing) {
-      res.status(400).json({ error: 'Email already registered. Use login instead.' });
+      res.status(200).json({ success: true, message: 'Account exists. Please login.', redirectToLogin: true });
       return;
     }
 

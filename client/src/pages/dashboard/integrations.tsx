@@ -344,6 +344,7 @@ export default function IntegrationsPage() {
   const [bulkMailboxErrors, setBulkMailboxErrors] = useState<string[]>([]);
   const [mailboxSearch, setMailboxSearch] = useState("");
   const [mailboxPage, setMailboxPage] = useState(0);
+  const [showAllMailboxes, setShowAllMailboxes] = useState(false);
   const MAILBOXES_PER_PAGE = 25;
 
   const [integrationPage, setIntegrationPage] = useState(1);
@@ -482,9 +483,14 @@ export default function IntegrationsPage() {
   }, [allMailboxes, mailboxSearch]);
 
   const totalMailboxPages = Math.ceil(filteredMailboxes.length / MAILBOXES_PER_PAGE);
-  const pagedMailboxes = useMemo(() =>
-    filteredMailboxes.slice(mailboxPage * MAILBOXES_PER_PAGE, (mailboxPage + 1) * MAILBOXES_PER_PAGE)
-  , [filteredMailboxes, mailboxPage]);
+  // Show only first 5 by default; "View More" reveals all (then standard pagination kicks in)
+  const INITIAL_VISIBLE = 5;
+  const pagedMailboxes = useMemo(() => {
+    const base = filteredMailboxes.slice(mailboxPage * MAILBOXES_PER_PAGE, (mailboxPage + 1) * MAILBOXES_PER_PAGE);
+    if (mailboxSearch.trim()) return base; // search overrides compact view
+    if (showAllMailboxes) return base;
+    return base.slice(0, INITIAL_VISIBLE);
+  }, [filteredMailboxes, mailboxPage, showAllMailboxes, mailboxSearch]);
 
   const resetMailboxPagination = useCallback(() => setMailboxPage(0), []);
 
@@ -927,7 +933,6 @@ export default function IntegrationsPage() {
                         className="rounded-xl px-4 py-6 border-border/50 bg-muted/20 text-foreground hover:bg-muted/30 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]"
                         onClick={() => {
                           setCustomEmailConfig({ smtpHost: '', smtpPort: '587', imapHost: '', imapPort: '993', email: '', password: '', fromName: '' });
-                          // Actually we are already in the edit view if we see this, but let's reset form
                         }}
                       >
                         <Plus className="h-5 w-5" />
@@ -1053,16 +1058,15 @@ export default function IntegrationsPage() {
                         />
                       </div>
 
-                      {/* Dynamic App Password Guide */}
-                      <AnimatePresence>
+                      {/* Dynamic App Password Guide — CSS max-height transition (no JS layout measurement = no mobile blink) */}
+                      <div
+                        className={cn(
+                          "md:col-span-2 overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out",
+                          appPasswordGuide ? "max-h-[600px] opacity-100" : "max-h-0 opacity-0"
+                        )}
+                      >
                         {appPasswordGuide && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: "auto", opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            className="md:col-span-2 overflow-hidden"
-                          >
-                            <div className="p-5 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 space-y-4">
+                          <div className="p-5 rounded-2xl bg-indigo-500/5 border border-indigo-500/20 space-y-4">
                               <div className="flex items-start gap-4">
                                 <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-500">
                                   <ShieldCheck className="h-5 w-5" />
@@ -1100,9 +1104,8 @@ export default function IntegrationsPage() {
                                 </div>
                               </div>
                             </div>
-                          </motion.div>
                         )}
-                      </AnimatePresence>
+                      </div>
                     
                     {[
                       { label: "SMTP Host", key: "smtpHost", placeholder: "e.g. smtp.gmail.com" },
@@ -1472,7 +1475,19 @@ export default function IntegrationsPage() {
                       </div>
                     ))}
 
-                    {totalMailboxPages > 1 && (
+                    {/* View More / View Less toggle — shown when there are > 5 mailboxes and no active search */}
+                    {!mailboxSearch.trim() && allMailboxes.length > INITIAL_VISIBLE && (
+                      <button
+                        onClick={() => setShowAllMailboxes(v => !v)}
+                        className="w-full mt-1 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] text-primary/70 hover:text-primary hover:bg-primary/5 transition-all border border-dashed border-primary/20 hover:border-primary/40"
+                      >
+                        {showAllMailboxes
+                          ? `∧  Show fewer mailboxes`
+                          : `∨  View all ${allMailboxes.length} mailboxes (+${allMailboxes.length - INITIAL_VISIBLE} more)`}
+                      </button>
+                    )}
+
+                    {totalMailboxPages > 1 && showAllMailboxes && (
                       <div className="flex items-center justify-between pt-2 border-t border-border/20">
                         <span className="text-[10px] font-bold text-muted-foreground">
                           Showing {mailboxPage * MAILBOXES_PER_PAGE + 1}–{Math.min((mailboxPage + 1) * MAILBOXES_PER_PAGE, filteredMailboxes.length)} of {filteredMailboxes.length}

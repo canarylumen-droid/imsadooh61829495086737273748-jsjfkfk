@@ -109,16 +109,18 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-    const { name, config, template, leads, excludeWeekends } = req.body;
+    const { name, config, template, leads, excludeWeekends, aiAutonomousMode } = req.body;
 
     if (!name || !leads) {
       return res.status(400).json({ error: 'Missing required campaign data' });
     }
 
-    // Default config and template if missing (for the "AI Filter" style calls)
+    // Validate that the user has provided their own template before saving
+    // We do NOT provide a fallback template — users must write their own copy
     const campaignConfig = config || { dailyLimit: 50 };
-    const campaignTemplate: any = template || { subject: 'Re connecting', body: 'Hey {lead_name}, reaching out.' };
+    const campaignTemplate: any = template || {};
 
+    // Normalise nested initial/body structure
     if (campaignTemplate.initial) {
       campaignTemplate.subject ||= campaignTemplate.initial.subject;
       campaignTemplate.body ||= campaignTemplate.initial.body;
@@ -130,6 +132,15 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
       campaignTemplate.followups = campaignTemplate.followups.filter((followup: any) =>
         typeof followup?.body === 'string' && followup.body.trim().length > 0
       );
+    }
+
+    // HARD GUARD: Reject campaign creation if the user hasn't written email copy
+    // This prevents "phantom" campaigns being saved with no real content
+    const hasBody = campaignTemplate?.initial?.body?.trim() || campaignTemplate?.body?.trim();
+    if (!hasBody) {
+      return res.status(400).json({
+        error: 'Campaign has no email body. Please write your initial email copy before saving.'
+      });
     }
 
     if (campaignConfig.dailyLimit) {
@@ -149,7 +160,7 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
     const campaignLimits = getCampaignLimits(planId);
     const selectedMailboxIds = (campaignConfig.mailboxIds || []) as string[];
 
-    if (selectedMailboxIds.length > campaignLimits.maxMailboxesPerCampaign) {
+    if (isFinite(campaignLimits.maxMailboxesPerCampaign) && selectedMailboxIds.length > campaignLimits.maxMailboxesPerCampaign) {
       return res.status(403).json({
         error: `Your ${planId} plan allows up to ${campaignLimits.maxMailboxesPerCampaign} mailboxes per campaign. You selected ${selectedMailboxIds.length}.`,
         limit: campaignLimits.maxMailboxesPerCampaign,
@@ -158,7 +169,7 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
     }
 
     const leadCount = Array.isArray(leads) ? leads.length : 0;
-    if (leadCount > campaignLimits.maxLeadsPerCampaign) {
+    if (isFinite(campaignLimits.maxLeadsPerCampaign) && leadCount > campaignLimits.maxLeadsPerCampaign) {
       return res.status(403).json({
         error: `Your ${planId} plan allows up to ${campaignLimits.maxLeadsPerCampaign} leads per campaign. You added ${leadCount}.`,
         limit: campaignLimits.maxLeadsPerCampaign,
@@ -172,6 +183,7 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
       config: campaignConfig,
       template: campaignTemplate,
       excludeWeekends: !!excludeWeekends,
+      aiAutonomousMode: !!aiAutonomousMode,
       status: 'draft',
       stats: { total: 0, sent: 0, replied: 0, bounced: 0 } // Initialize total as 0, will update after processing
     }).returning();
@@ -459,6 +471,17 @@ router.post('/campaigns/:id/start', requireAuth, async (req, res) => {
     );
     if (connectedMailboxIds.length === 0) {
       return res.status(400).json({ error: 'Selected mailboxes are not connected. Please reconnect them in Settings.' });
+    }
+
+    // ── TEMPLATE VALIDATION ─────────────────────────────────────────────────
+    // Prevent campaigns from firing without a configured email body.
+    // Without this guard, the engine falls into AI-generated mode silently.
+    const tmpl = (campaign.template as any);
+    const hasTemplateBody = tmpl?.initial?.body || tmpl?.body;
+    if (!hasTemplateBody) {
+      return res.status(400).json({
+        error: 'Campaign has no email template. Please complete the campaign wizard (set subject + body) before starting.'
+      });
     }
 
     const [updated] = await db.update(outreachCampaigns)

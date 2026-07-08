@@ -605,6 +605,29 @@ export class DrizzleStorage implements IStorage {
     return result;
   }
 
+  async findLeadBySenderAndIntegration(email: string, integrationId: string): Promise<Lead | undefined> {
+    checkDatabase();
+    const [result] = await db
+      .select()
+      .from(leads)
+      .where(and(sql`LOWER(${leads.email}) = LOWER(${email})`, eq(leads.integrationId, integrationId)))
+      .limit(1);
+    return result;
+  }
+
+  async markLeadReplied(leadId: string): Promise<Lead | undefined> {
+    checkDatabase();
+    const [result] = await db
+      .update(leads)
+      .set({ 
+        status: 'replied', 
+        updatedAt: new Date() 
+      })
+      .where(eq(leads.id, leadId))
+      .returning();
+    return result;
+  }
+
   async getExistingEmails(userId: string, emails: string[]): Promise<string[]> {
     checkDatabase();
     if (emails.length === 0) return [];

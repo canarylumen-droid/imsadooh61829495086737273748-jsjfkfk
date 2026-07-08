@@ -112,6 +112,42 @@ export function startEmailSyncWorker() {
 
               // Save each new message to the DB and push to UI
               for (const msg of newMessages) {
+                // ── TEST-EMAIL SELF-LOOP GUARD ─────────────────────────────────────
+                // If the inbound sender IS the user's own mailbox address it's a bounce
+                // or auto-reply from a test send. Skip saving to DB; only ping the UI.
+                const senderAddr = (msg.from || '').toLowerCase().trim().replace(/.*<([^>]+)>.*/, '$1');
+                let ownAddr = (integration.email || integration.accountType || '').toLowerCase().trim();
+                if (!ownAddr && integration.encryptedMeta) {
+                  try {
+                    const { decrypt } = await import('@shared/lib/crypto/encryption.js');
+                    const meta = JSON.parse(decrypt(integration.encryptedMeta));
+                    ownAddr = (meta.smtp_user || meta.smtpUser || meta.user || meta.email || '').toLowerCase().trim();
+                  } catch { /* non-critical */ }
+                }
+                if (ownAddr && senderAddr === ownAddr) {
+                  wsSync.notifyNewMail(userId, {
+                    integrationId,
+                    messageId: msg.messageId,
+                    subject: msg.subject,
+                    from: msg.from,
+                    snippet: msg.snippet,
+                    date: msg.date,
+                    isNew: false, // not a real lead reply
+                  });
+                  continue;
+                }
+                // [NEW] Warmup Seed Interception
+                const { warmupSeedAccounts } = await import('@audnix/shared');
+                const { db } = await import('@shared/lib/db/db.js');
+                const { eq } = await import('drizzle-orm');
+                const [seedAccount] = await db.select().from(warmupSeedAccounts).where(eq(warmupSeedAccounts.email, senderAddr));
+                const isWarmupSeed = !!seedAccount;
+
+                let lead = null;
+                if (!isWarmupSeed) {
+                  lead = await storage.findLeadBySenderAndIntegration(senderAddr, integrationId);
+                }
+
                 const saved = await storage.createEmailMessage({
                   userId,
                   integrationId,
@@ -123,13 +159,14 @@ export function startEmailSyncWorker() {
                   direction: 'inbound',
                   provider: integration.provider as any,
                   sentAt: msg.date ? new Date(msg.date) : new Date(),
-                  leadId: null,
+                  leadId: lead?.id || null,
                   campaignId: null,
                   metadata: {
                     uid: msg.uid,
                     integrationId,
-                    source: 'imap_idle',
+                    source: isWarmupSeed ? 'warmup_seed' : 'imap_idle',
                   },
+                  ...(isWarmupSeed ? { isWarmup: true } : {})
                 }).catch((err: any) => {
                   console.error(`[EmailSyncQueue] DB save failed for ${integrationId}:`, err.message);
                   return null;
@@ -145,6 +182,28 @@ export function startEmailSyncWorker() {
                   date: msg.date,
                   isNew: true,
                 });
+
+                if (lead) {
+                  console.log(`[EmailSyncQueue] 📨 Found matching lead ${lead.id} for inbound email. Creating message to trigger auto-reply.`);
+                  try {
+                    await storage.createMessage({
+                      userId,
+                      leadId: lead.id,
+                      direction: 'inbound',
+                      body: msg.snippet || '',
+                    });
+                    // Immediately fast-track an AI reply — don't wait for tick
+                    try {
+                      const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
+                      await enqueuePriorityReply({ userId, leadId: lead.id, type: 'autonomous_reply', isAutonomous: true });
+                      console.log(`⚡ [EmailSyncQueue] Fast-track priority reply enqueued for lead ${lead.id}`);
+                    } catch (replyErr: any) {
+                      console.warn(`[EmailSyncQueue] Failed to enqueue priority reply:`, replyErr.message);
+                    }
+                  } catch(e: any) {
+                    console.error(`[EmailSyncQueue] Failed to create message for lead ${lead.id}:`, e.message);
+                  }
+                }
               }
 
               console.log(`[EmailSyncQueue] ✅ New mail processed for ${integrationId}: ${newMessages.length} message(s)`);
@@ -221,4 +280,3 @@ export function startEmailSyncWorker() {
   }
   return emailSyncWorkerModule;
 }
-

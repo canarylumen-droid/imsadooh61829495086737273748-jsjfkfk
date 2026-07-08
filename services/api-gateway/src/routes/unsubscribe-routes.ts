@@ -7,6 +7,10 @@ import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 
 const router = Router();
 
+router.get('/', (req, res) => {
+  res.json({ status: 'ok', message: 'Unsubscribe API is operational. Use GET /api/unsubscribe/:leadId to unsubscribe a lead.' });
+});
+
 /**
  * GET /api/unsubscribe/:leadId
  * Public unsubscribe link for outreach emails.

@@ -84,7 +84,7 @@ export interface CampaignLimits {
 export function getCampaignLimits(planId: string): CampaignLimits {
   switch (planId) {
     case 'enterprise':
-      return { maxMailboxesPerCampaign: 1000, maxLeadsPerCampaign: 500000 };
+      return { maxMailboxesPerCampaign: Infinity, maxLeadsPerCampaign: Infinity };
     case 'pro':
       return { maxMailboxesPerCampaign: 30, maxLeadsPerCampaign: 7000 };
     case 'starter':

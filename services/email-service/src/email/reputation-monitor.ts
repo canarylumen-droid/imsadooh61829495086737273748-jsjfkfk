@@ -180,8 +180,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
       newInitialLimit = Math.max(5, newInitialLimit - 5);
       newWarmupLimit = Math.min(10, newWarmupLimit + 5);
       const throttleDays = 3 + Math.floor(Math.random() * 3); // 3–5 days
-      const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
-      await db.update(integrations).set({ throttleUntil, mailboxPauseUntil: throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      await db.update(integrations).set({ throttleUntil: null, mailboxPauseUntil: null, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
       console.warn(`🔴 [Reputation Monitor] Mailbox ${mailbox.id} CRITICAL (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
     }
   } else if (score < 65) {
@@ -193,8 +192,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
       newInitialLimit = Math.max(10, Math.floor(newInitialLimit * 0.5));
       newWarmupLimit = Math.min(10, newWarmupLimit + 5);
       const throttleDays = 3 + Math.floor(Math.random() * 3);
-      const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
-      await db.update(integrations).set({ throttleUntil, mailboxPauseUntil: throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      await db.update(integrations).set({ throttleUntil: null, mailboxPauseUntil: null, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
       console.warn(`🟠 [Reputation Monitor] Mailbox ${mailbox.id} POOR (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
     }
   } else if (score < 85) {
@@ -206,8 +204,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
       newInitialLimit = Math.max(15, Math.floor(newInitialLimit * 0.8));
       newWarmupLimit = Math.min(10, newWarmupLimit + 3);
       const throttleDays = 3 + Math.floor(Math.random() * 2);
-      const throttleUntil = new Date(Date.now() + throttleDays * 24 * 60 * 60 * 1000);
-      await db.update(integrations).set({ throttleUntil, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
+      await db.update(integrations).set({ throttleUntil: null, mailboxPauseUntil: null, updatedAt: new Date() }).where(eq(integrations.id, integrationId));
       console.warn(`🟡 [Reputation Monitor] Mailbox ${mailbox.id} CAUTIOUS (${score}/100). Initial outreach → ${newInitialLimit}/day, Warmup → ${newWarmupLimit}/day. Cool-off: ${throttleDays}d.`);
     }
   } else {

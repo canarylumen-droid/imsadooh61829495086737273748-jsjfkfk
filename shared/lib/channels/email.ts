@@ -731,6 +731,8 @@ export interface EmailOptions {
   references?: string;
   threadId?: string;
   replyTo?: string;
+  /** When true, this is a test/verification send — never processed as a lead reply */
+  isTest?: boolean;
 }
 
 /**
@@ -849,16 +851,18 @@ export async function sendEmail(
     emailBody = trackingResult.html;
     const firstUrl = trackingResult.urls.length > 0 ? trackingResult.urls.join(',') : null;
 
-    await createTrackedEmail({
-      userId,
-      leadId: options.leadId || undefined,
-      integrationId: integration.id,
-      recipientEmail,
-      subject,
-      sentAt: new Date(),
-      messageId: trackingId,
-      targetUrl: firstUrl || undefined
-    });
+    if (!options.isTest) {
+      await createTrackedEmail({
+        userId,
+        leadId: options.leadId || undefined,
+        integrationId: integration.id,
+        recipientEmail,
+        subject,
+        sentAt: new Date(),
+        messageId: trackingId,
+        targetUrl: firstUrl || undefined
+      });
+    }
 
     if (USE_KUMOMTA && integration.id) {
       try {
@@ -890,7 +894,7 @@ export async function sendEmail(
           options.replyTo
         );
 
-    if (result?.messageId) {
+    if (result?.messageId && !options.isTest) {
       await storage.createEmailMessage({
         userId,
         leadId: options.leadId || null,
@@ -904,7 +908,7 @@ export async function sendEmail(
         provider: 'custom_email',
         sentAt: new Date(),
         targetUrl: firstUrl,
-        metadata: { trackingId, integrationId: integration.id }
+        metadata: { trackingId, integrationId: integration.id, ...(options.isTest ? { isTest: true } : {}) }
       });
     }
     return result;
@@ -957,16 +961,18 @@ export async function sendEmail(
   const firstUrl = trackingResult.urls.length > 0 ? trackingResult.urls.join(',') : null;
 
   // Create the tracking record
-  await createTrackedEmail({
-    userId,
-    leadId: options.leadId || undefined,
-    integrationId: integration.id,
-    recipientEmail,
-    subject: emailSubject,
-    sentAt: new Date(),
-    messageId: trackingId,
-    targetUrl: firstUrl || undefined
-  });
+  if (!options.isTest) {
+    await createTrackedEmail({
+      userId,
+      leadId: options.leadId || undefined,
+      integrationId: integration.id,
+      recipientEmail,
+      subject: emailSubject,
+      sentAt: new Date(),
+      messageId: trackingId,
+      targetUrl: firstUrl || undefined
+    });
+  }
 
   const { GmailOAuth } = await import('@services/api-gateway/src/oauth/gmail.js');
   const { OutlookOAuth } = await import('@services/api-gateway/src/oauth/outlook.js');
@@ -1010,7 +1016,7 @@ export async function sendEmail(
         options.threadId,
         options.replyTo
       );
-      if (result && result.messageId) {
+      if (result && result.messageId && !options.isTest) {
         await storage.createEmailMessage({
           userId,
           leadId: options.leadId || null,
@@ -1024,7 +1030,7 @@ export async function sendEmail(
           provider: 'gmail',
           sentAt: new Date(),
           targetUrl: firstUrl,
-          metadata: { trackingId, integrationId: integration.id }
+          metadata: { trackingId, integrationId: integration.id, ...(options.isTest ? { isTest: true } : {}) }
         });
       }
     } else if (integration.provider === 'outlook') {
@@ -1041,21 +1047,23 @@ export async function sendEmail(
       );
       // Outlook/Microsoft Graph returns HTTP 202 with no messageId — generate one
       const outlookMessageId = result?.messageId || `outlook-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-      await storage.createEmailMessage({
-        userId,
-        leadId: options.leadId || null,
-        campaignId: options.campaignId || null,
-        messageId: outlookMessageId,
-        subject: emailSubject,
-        from: credentials.email || '',
-        to: recipientEmail,
-        body: emailBody,
-        direction: 'outbound',
-        provider: 'outlook',
-        sentAt: new Date(),
-        targetUrl: firstUrl,
-        metadata: { trackingId, integrationId: integration.id }
-      });
+      if (!options.isTest) {
+        await storage.createEmailMessage({
+          userId,
+          leadId: options.leadId || null,
+          campaignId: options.campaignId || null,
+          messageId: outlookMessageId,
+          subject: emailSubject,
+          from: credentials.email || '',
+          to: recipientEmail,
+          body: emailBody,
+          direction: 'outbound',
+          provider: 'outlook',
+          sentAt: new Date(),
+          targetUrl: firstUrl,
+          metadata: { trackingId, integrationId: integration.id, ...(options.isTest ? { isTest: true } : {}) }
+        });
+      }
     } else {
       throw new Error(`Unsupported email provider: ${integration.provider}`);
     }

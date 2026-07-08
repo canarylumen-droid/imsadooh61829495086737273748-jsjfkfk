@@ -93,10 +93,18 @@ export function RecentConversations() {
   useEffect(() => {
     if (!socket) return;
 
+    let timeoutId: number;
+    const debouncedInvalidateLeads = () => {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      }, 300);
+    };
+
     const handleLeadsUpdated = (payload: any) => {
       // If the update targets our currently selected mailbox, or if we're in "all" view
       if (!selectedMailboxId || payload.integrationId === selectedMailboxId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        debouncedInvalidateLeads();
       }
     };
 
@@ -104,8 +112,8 @@ export function RecentConversations() {
       // payload: { leadId, userId, message }
       console.log("[SOCKET] Thread update received:", payload.leadId);
       
-      // Invalidate the leads list to show the new snippet
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      // Invalidate the leads list to show the new snippet (debounced)
+      debouncedInvalidateLeads();
       
       // If we are currently viewing this specific lead, invalidate messages
       if (selectedLead?.id === payload.leadId) {

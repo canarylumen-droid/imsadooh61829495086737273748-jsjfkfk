@@ -68,8 +68,11 @@ export function serveStatic(app: Express) {
   }));
 
   // Explicit route handlers for PWA/Manifest files with strict path validation
-  app.get(['/sw.js', '/manifest.json', '/favicon.ico', '/robots.txt', '/favicon.svg', '/sitemap.xml'], (req, res) => {
-    const safeFiles = ['sw.js', 'manifest.json', 'favicon.ico', 'robots.txt', 'favicon.svg', 'sitemap.xml'];
+  app.get(['/sw.js', '/manifest.json', '/favicon.ico', '/robots.txt', '/favicon.svg', '/sitemap.xml', '/favicon.png', '/logo.png', '/og-image.png', '/apple-touch-icon.png', '/favicon-32x32.png', '/favicon-16x16.png', '/favicon-white.png', '/logo.svg'], (req, res) => {
+    const safeFiles = [
+      'sw.js', 'manifest.json', 'favicon.ico', 'robots.txt', 'favicon.svg', 'sitemap.xml',
+      'favicon.png', 'logo.png', 'og-image.png', 'apple-touch-icon.png', 'favicon-32x32.png', 'favicon-16x16.png', 'favicon-white.png', 'logo.svg'
+    ];
     const fileName = req.path.substring(1);
 
     if (!safeFiles.includes(fileName)) {

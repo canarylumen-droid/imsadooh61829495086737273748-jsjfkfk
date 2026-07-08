@@ -59,6 +59,8 @@ export interface IStorage {
   deleteLead(id: string, userId: string): Promise<void>;
   archiveMultipleLeads(ids: string[], userId: string, archived: boolean): Promise<void>;
   deleteMultipleLeads(ids: string[], userId: string): Promise<void>;
+  findLeadBySenderAndIntegration(email: string, integrationId: string): Promise<Lead | undefined>;
+  markLeadReplied(leadId: string): Promise<Lead | undefined>;
   getTotalLeadsCount(): Promise<number>;
   createAuditLog(data: InsertAuditTrail): Promise<AuditTrail>;
   getAuditLogs(userId: string, options?: { integrationId?: string, daysFilter?: number, limit?: number }): Promise<AuditTrail[]>;

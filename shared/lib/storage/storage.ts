@@ -61,6 +61,7 @@ export interface IStorage {
   getUserById(id: string): Promise<User | undefined>;
   getLeadByUsername(username: string, channel: string): Promise<Lead | undefined>;
   getLeadByEmail(email: string, userId: string): Promise<Lead | undefined>;
+  findLeadBySenderAndIntegration(email: string, integrationId: string): Promise<Lead | undefined>;
   getExistingEmails(userId: string, emails: string[]): Promise<string[]>;
   getLeadsCount(userId: string): Promise<number>;
   getLeadBySocialId(socialId: string, channel: string): Promise<Lead | undefined>;
@@ -531,6 +532,16 @@ export class MemStorage implements IStorage {
   }
   async getLeadByEmail(email: string, userId: string): Promise<Lead | undefined> {
     return Array.from(this.leads.values()).find(l => l.userId === userId && l.email?.toLowerCase() === email.toLowerCase());
+  }
+  async findLeadBySenderAndIntegration(email: string, integrationId: string): Promise<Lead | undefined> {
+    return Array.from(this.leads.values()).find(l => l.integrationId === integrationId && l.email?.toLowerCase() === email.toLowerCase());
+  }
+  async markLeadReplied(leadId: string): Promise<Lead | undefined> {
+    const lead = this.leads.get(leadId);
+    if (!lead) return undefined;
+    const updated = { ...lead, status: 'replied' as const, updatedAt: new Date() };
+    this.leads.set(leadId, updated);
+    return updated;
   }
   async getExistingEmails(userId: string, emails: string[]): Promise<string[]> {
     const existing = Array.from(this.leads.values()).filter(l => l.userId === userId && l.email && emails.includes(l.email));

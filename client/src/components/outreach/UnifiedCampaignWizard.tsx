@@ -199,8 +199,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   // Plan-based campaign limits
   const planId = getActivePlanId(user);
   const campaignLimits = getCampaignLimits(planId);
-  const exceedsMailboxLimit = selectedMailboxes.length > campaignLimits.maxMailboxesPerCampaign;
-  const exceedsLeadLimit = leads.length > campaignLimits.maxLeadsPerCampaign;
+  const exceedsMailboxLimit = isFinite(campaignLimits.maxMailboxesPerCampaign) && selectedMailboxes.length > campaignLimits.maxMailboxesPerCampaign;
+  const exceedsLeadLimit = isFinite(campaignLimits.maxLeadsPerCampaign) && leads.length > campaignLimits.maxLeadsPerCampaign;
 
   const launchIssues = [
     !campaignName.trim() ? "Name your campaign" : null,
@@ -569,7 +569,9 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Connected Inboxes</Label>
                             <div className="flex items-center gap-2">
                               <Badge variant={exceedsMailboxLimit ? 'destructive' : 'secondary'} className="text-[9px] font-bold uppercase">
-                                {selectedMailboxes.length}/{campaignLimits.maxMailboxesPerCampaign} Mailboxes
+                                {isFinite(campaignLimits.maxMailboxesPerCampaign)
+                                  ? `${selectedMailboxes.length}/${campaignLimits.maxMailboxesPerCampaign} Mailboxes`
+                                  : `${selectedMailboxes.length} Mailboxes (Unlimited)`}
                               </Badge>
                               <div className="flex gap-2">
                                 <Button type="button" variant="outline" size="sm" onClick={() => setSelectedMailboxes(availableMailboxes.map((mb: any) => mb.id))} className="h-8 rounded-lg text-[10px] font-bold uppercase">All</Button>

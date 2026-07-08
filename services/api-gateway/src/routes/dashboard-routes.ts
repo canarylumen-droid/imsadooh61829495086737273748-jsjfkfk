@@ -33,6 +33,12 @@ export function invalidateStatsCache(userId: string) {
 
 const router = Router();
 
+router.get('/', requireAuth, async (req: Request, res: Response) => {
+  const userId = req.session?.userId;
+  if (!userId) return res.status(401).json({ error: 'Not authenticated' });
+  res.json({ status: 'ok', userId, message: 'Dashboard API is operational' });
+});
+
 /**
  * POST /api/dns/verify
  * Force a DNS/reputation check for a domain
@@ -261,7 +267,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     .where(
       dAnd(
         dEq(msgSchema.userId, userId),
-        dEq(msgSchema.isWarmup, false)
+        dSql`(${msgSchema.isWarmup} IS NULL OR ${msgSchema.isWarmup} = false)`
       )
     );
 

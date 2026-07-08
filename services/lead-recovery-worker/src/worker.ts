@@ -24,6 +24,8 @@ export class LeadRecoveryWorker {
   private processing = false;
   private promptReady = false;
   private lastMongoWarningAt = 0;
+  private mongoRetryCount = 0;
+  private mongoSkipped = false;
   private readonly mongoWarningIntervalMs = readInt("LEAD_RECOVERY_MONGO_WARNING_INTERVAL_MS", 300_000);
 
   async start() {
@@ -43,10 +45,13 @@ export class LeadRecoveryWorker {
 
   async runOnce() {
     if (!this.running || this.processing) return;
+    if (this.mongoSkipped) return;
     this.processing = true;
     try {
       const ready = await this.ensureMongoReady();
       if (!ready) return;
+
+      this.mongoRetryCount = 0;
 
       const states = await LeadRecoveryState.find({
         isActive: true,
@@ -82,12 +87,19 @@ export class LeadRecoveryWorker {
   }
 
   private warnMongoUnavailable(error: unknown): void {
+    this.mongoRetryCount++;
+    if (this.mongoRetryCount >= 3) {
+      this.mongoSkipped = true;
+      console.error("[LeadRecoveryWorker] MongoDB unavailable after 3 retries — permanently skipping MongoDB work. Update MONGODB_URI or MONGO_URL in .env to re-enable.");
+      return;
+    }
+
     const now = Date.now();
     if (now - this.lastMongoWarningAt < this.mongoWarningIntervalMs) return;
 
     this.lastMongoWarningAt = now;
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    console.error("[LeadRecoveryWorker] MongoDB unavailable; worker will retry", {
+    console.error(`[LeadRecoveryWorker] MongoDB unavailable (attempt ${this.mongoRetryCount}/3); worker will retry`, {
       error: message,
       retryInMs: this.mongoWarningIntervalMs,
     });
