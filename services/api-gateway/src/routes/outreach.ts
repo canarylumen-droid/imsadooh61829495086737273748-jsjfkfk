@@ -25,6 +25,7 @@ const campaignCreateLimiter = rateLimit({
   max: 10,
   keyGenerator: (req) => req.session?.userId || req.ip || 'unknown',
   message: { error: 'Too many campaigns created. Please wait before creating another.' },
+  validate: false,
 });
 
 const router = Router();
