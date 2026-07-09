@@ -57,11 +57,6 @@ export interface DnsVerificationResult {
     isBlacklisted: boolean;
     listedOn: string[];
   };
-  ptr: {
-    found: boolean;
-    valid: boolean;
-    record?: string;
-  };
   overallScore: number;
   overallStatus: 'excellent' | 'good' | 'fair' | 'poor' | 'blacklisted';
   recommendations: string[];
