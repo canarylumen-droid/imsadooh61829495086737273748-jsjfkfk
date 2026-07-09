@@ -146,20 +146,49 @@ export class WarmupScheduler {
 
     if (allMailboxes.length === 0) return;
 
-    const uniqueIds = [...new Set(integrationIds)];
-    const limits = uniqueIds.length > 0
+    const uniqueIntegrationIds = [...new Set(integrationIds)];
+
+    // Batch fetch integration -> userId mapping and active campaign send volumes
+    const integrationUsers = uniqueIntegrationIds.length > 0
       ? await db
-          .select({ id: integrations.id, warmupLimit: integrations.warmupLimit })
+          .select({ id: integrations.id, userId: integrations.userId, warmupLimit: integrations.warmupLimit })
           .from(integrations)
-          .where(inArray(integrations.id, uniqueIds))
+          .where(inArray(integrations.id, uniqueIntegrationIds))
       : [];
-    const limitMap = new Map(limits.map(l => [l.id, l.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT]));
+    const integrationMap = new Map(integrationUsers.map(i => [i.id, { userId: i.userId, warmupLimit: i.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT }]));
+    const userIds = [...new Set(integrationUsers.map(i => i.userId).filter(Boolean))] as string[];
+
+    // Query active campaign daily send volumes per user
+    const campaignVolumes = userIds.length > 0
+      ? await db.execute(sql`
+          SELECT u.id AS user_id, COALESCE(SUM((c.config->>'dailyLimit')::int), 0) AS total_daily
+          FROM users u
+          JOIN outreach_campaigns c ON c.user_id = u.id AND c.status = 'active'
+          WHERE u.id = ANY(${userIds}::uuid[])
+          GROUP BY u.id
+        `)
+      : { rows: [] };
+    const campaignVolumeMap = new Map((campaignVolumes.rows as any[]).map((r: any) => [r.user_id, parseInt(r.total_daily) || 0]));
 
     for (const mb of allMailboxes) {
       const isSeed = mb.anchorRole === 'seed';
       let dynamicLimit = mb.dailyLimit ?? (isSeed ? WARMUP_CONFIG.SEED_DAILY_LIMIT : WARMUP_CONFIG.DAILY_SENT_LIMIT);
       if (!isSeed && mb.integrationId) {
-        dynamicLimit = mb.dailyLimit ?? limitMap.get(mb.integrationId) ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+        dynamicLimit = mb.dailyLimit ?? integrationMap.get(mb.integrationId)?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      }
+
+      // Campaign-aware warmup volume:
+      // - If user has NO active campaigns: baseline 2/day (1 send + 1 reply)
+      // - If user HAS active campaigns: 10% of campaign daily send volume
+      // - Reputation recovery then scales this up if reputation is poor
+      if (!isSeed && mb.integrationId) {
+        const info = integrationMap.get(mb.integrationId);
+        const campaignDaily = campaignVolumeMap.get(info?.userId ?? '') ?? 0;
+        if (campaignDaily <= 0) {
+          dynamicLimit = 2; // Baseline: no active campaigns
+        } else {
+          dynamicLimit = Math.max(2, Math.round(campaignDaily * 0.10)); // 10% of campaign volume
+        }
       }
 
       // Apply ramp schedule for non-seed mailboxes (gradual volume increase)

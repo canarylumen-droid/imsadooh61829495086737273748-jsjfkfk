@@ -134,6 +134,11 @@ export class PairingEngine {
   }
 
   private async getAnchorCandidates(self: WarmupMailbox): Promise<PairingCandidate[]> {
+    const domainConditions: any[] = [];
+    if (self.registeredDomain) {
+      domainConditions.push(not(eq(warmupMailboxes.registeredDomain, self.registeredDomain)));
+    }
+
     const anchors = await db
       .select({
         id: warmupMailboxes.id,
@@ -155,6 +160,7 @@ export class PairingEngine {
         and(
           inArray(warmupMailboxes.anchorRole, ['anchor', 'seed'] as AnchorRole[]),
           eq(warmupMailboxes.status, 'active'),
+          ...domainConditions,
           sql`${warmupMailboxes.dailySentCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_SENT_LIMIT})`,
           sql`${warmupMailboxes.dailyReceivedCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_RECEIVED_LIMIT})`
         )
@@ -178,7 +184,6 @@ export class PairingEngine {
 
   private async getMemberCandidates(self: WarmupMailbox): Promise<PairingCandidate[]> {
     const domain = self.registeredDomain;
-    if (!domain) return [];
 
     const members = await db
       .select({
@@ -199,9 +204,9 @@ export class PairingEngine {
       .leftJoin(integrations, eq(warmupMailboxes.integrationId, integrations.id))
       .where(
         and(
-          eq(warmupMailboxes.registeredDomain, domain),
           eq(warmupMailboxes.status, 'active'),
           not(eq(warmupMailboxes.id, self.id)),
+          ...(domain ? [not(eq(warmupMailboxes.registeredDomain, domain))] : []),
           sql`${warmupMailboxes.dailySentCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_SENT_LIMIT})`,
           sql`${warmupMailboxes.dailyReceivedCount} < COALESCE(${warmupMailboxes.dailyLimit}, ${integrations.warmupLimit}, ${WARMUP_CONFIG.DAILY_RECEIVED_LIMIT})`
         )
