@@ -25,7 +25,7 @@ export const ReputationTrendChart: React.FC<ReputationTrendChartProps> = ({ data
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="h-[140px] w-full">
+        <div className="h-[170px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data}>
               <defs>
