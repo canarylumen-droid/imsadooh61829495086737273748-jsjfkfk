@@ -8,6 +8,7 @@ const CalendarPage = lazy(() => import("./calendar"));
 const IntegrationsPage = lazy(() => import("./integrations"));
 const InsightsPage = lazy(() => import("./insights"));
 const AnalyticsPage = lazy(() => import("./analytics"));
+const PricingPage = lazy(() => import("./pricing"));
 
 // Lazy load pages that might be large or are duplicated in App.tsx
 const SettingsPage = lazy(() => import("./settings"));
@@ -45,6 +46,7 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/integrations" component={IntegrationsPage} />
           <Route path="/dashboard/insights" component={InsightsPage} />
           <Route path="/dashboard/analytics" component={AnalyticsPage} />
+          <Route path="/dashboard/pricing" component={PricingPage} />
 
           <Route path="/dashboard/settings" component={SettingsPage} />
           <Route path="/dashboard/lead-import" component={LeadImportPage} />

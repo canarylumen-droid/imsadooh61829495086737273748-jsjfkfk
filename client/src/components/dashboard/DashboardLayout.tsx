@@ -244,6 +244,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         { label: "Inbox", icon: Inbox, path: "/dashboard/inbox" },
         { label: "Lead Recovery", icon: LifeBuoy, path: "/dashboard/lead-recovery" },
         // { label: "Pending Payments", icon: DollarSign, path: "/dashboard/pending-payments" },
+        { label: "Billing", icon: CreditCard, path: "/dashboard/pricing" },
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
       ],
