@@ -442,7 +442,6 @@ export async function verifyDomainDns(domain: string, dkimSelector?: string, for
     dmarc,
     mx,
     blacklist,
-    ptr,
     overallScore: score,
     overallStatus,
     recommendations,
