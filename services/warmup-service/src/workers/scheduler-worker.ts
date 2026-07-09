@@ -185,9 +185,9 @@ export class WarmupScheduler {
         const info = integrationMap.get(mb.integrationId);
         const campaignDaily = campaignVolumeMap.get(info?.userId ?? '') ?? 0;
         if (campaignDaily <= 0) {
-          dynamicLimit = 2; // Baseline: no active campaigns
+          dynamicLimit = 1; // Baseline: 1 send + 1 reply = 2 total/day
         } else {
-          dynamicLimit = Math.max(2, Math.round(campaignDaily * 0.10)); // 10% of campaign volume
+          dynamicLimit = Math.max(1, Math.round(campaignDaily * 0.10 / 2)); // 10% of campaign volume total (send + reply combined)
         }
       }
 
