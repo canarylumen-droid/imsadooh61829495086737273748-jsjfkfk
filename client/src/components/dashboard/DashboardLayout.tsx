@@ -325,8 +325,9 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
 
   const handleNavigate = useCallback((path: string) => {
     setLocation(path);
-    setSidebarCollapsed(true);
     setMobileMenuOpen(false);
+    // Note: sidebarCollapsed is intentionally NOT reset here.
+    // The user controls the sidebar via the toggle button — navigation should not auto-collapse it.
   }, [setLocation]);
 
   const isPathActive = (path: string) => {
