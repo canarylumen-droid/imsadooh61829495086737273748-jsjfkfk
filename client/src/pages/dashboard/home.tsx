@@ -574,7 +574,7 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-3">
             <Card className="border-border/50 rounded-lg bg-muted/20">
               <CardHeader>
                 <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
@@ -601,16 +601,17 @@ export default function DashboardHome() {
               </CardContent>
             </Card>
 
-            <ReputationCard 
-              score={stats?.health?.score !== undefined ? stats.health.score : null}
-              status={(stats?.health?.status || 'healthy') as any}
-              bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
-              dns={stats?.health?.dns}
-              isLoading={statsLoading}
-              hasIntegrations={isSmtpConnected}
-            />
-
-            <ReputationTrendChart data={stats?.reputationTrend || []} />
+            <div className="space-y-0.5">
+              <ReputationCard 
+                score={stats?.health?.score !== undefined ? stats.health.score : null}
+                status={(stats?.health?.status || 'healthy') as any}
+                bounces={stats?.health?.bounces ?? { hard: 0, soft: 0, spam: 0, total: 0 }}
+                dns={stats?.health?.dns}
+                isLoading={statsLoading}
+                hasIntegrations={isSmtpConnected}
+              />
+              <ReputationTrendChart data={stats?.reputationTrend || []} />
+            </div>
 
             <Card className="border-border/50 rounded-lg">
               <CardHeader className="pb-3 border-b border-border/40">
