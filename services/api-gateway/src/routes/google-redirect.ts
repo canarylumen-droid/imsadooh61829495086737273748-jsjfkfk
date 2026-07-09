@@ -120,16 +120,22 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
       });
     } else {
       console.log(`[Google Redirect] Creating new Gmail integration for: ${emailAddress}`);
-      await storage.createIntegration({
-        userId,
-        provider: 'gmail' as const,
-        accountType: emailAddress,
-        encryptedMeta: integrationMeta,
-        connected: true,
-        lastSync: new Date(),
-        healthStatus: 'connected' as const,
-        dailyLimit: 50,
-      });
+      try {
+        await storage.createIntegration({
+          userId,
+          provider: 'gmail' as const,
+          accountType: emailAddress,
+          encryptedMeta: integrationMeta,
+          connected: true,
+          lastSync: new Date(),
+          healthStatus: 'connected' as const,
+          dailyLimit: 50,
+        });
+      } catch (err: any) {
+        console.error(`[Google Redirect] Failed to create integration: ${err.message}`);
+        res.redirect(`/dashboard/integrations?error=${encodeURIComponent(err.message)}`);
+        return;
+      }
     }
 
     // 9. Notify frontend to refresh integration state via WebSocket

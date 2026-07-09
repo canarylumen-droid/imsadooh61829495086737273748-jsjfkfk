@@ -1436,6 +1436,28 @@ export class DrizzleStorage implements IStorage {
   ): Promise<Integration> {
     checkDatabase();
 
+    // Cross-user uniqueness check: Prevent the same email from being connected by multiple users.
+    // This checks across ALL users — if the mailbox email is already connected by someone else,
+    // we reject the connection with a clear message.
+    if (integration.accountType) {
+      const existingAcrossUsers = await db
+        .select({ id: integrations.id, userId: integrations.userId })
+        .from(integrations)
+        .where(
+          and(
+            eq(integrations.accountType, integration.accountType),
+            eq(integrations.connected, true)
+          )
+        )
+        .limit(1);
+
+      if (existingAcrossUsers[0] && existingAcrossUsers[0].userId !== integration.userId) {
+        throw new Error(
+          `This mailbox (${integration.accountType}) is already connected by another account. Please ask the current owner to disconnect it first before reconnecting.`
+        );
+      }
+    }
+
     // Upsert logic: Check if an integration for this user, provider, and account already exists
     // accountType is used to distinguish between different accounts of the same provider (e.g. gmail addresses)
     const existing = await db

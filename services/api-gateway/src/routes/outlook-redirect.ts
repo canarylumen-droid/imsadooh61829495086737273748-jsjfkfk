@@ -111,15 +111,21 @@ router.get('/outlook/callback', async (req: Request, res: Response): Promise<voi
       });
     } else {
       console.log(`[Outlook Redirect] Creating new Outlook integration`);
-      await storage.createIntegration({
-        userId,
-        provider: 'outlook' as const,
-        accountType: emailAddress,
-        encryptedMeta: integrationMeta,
-        connected: true,
-        lastSync: new Date(),
-        healthStatus: 'connected' as const,
-      });
+      try {
+        await storage.createIntegration({
+          userId,
+          provider: 'outlook' as const,
+          accountType: emailAddress,
+          encryptedMeta: integrationMeta,
+          connected: true,
+          lastSync: new Date(),
+          healthStatus: 'connected' as const,
+        });
+      } catch (err: any) {
+        console.error(`[Outlook Redirect] Failed to create integration: ${err.message}`);
+        res.redirect(`/dashboard/integrations?error=${encodeURIComponent(err.message)}`);
+        return;
+      }
     }
 
     // 9. Notify frontend
