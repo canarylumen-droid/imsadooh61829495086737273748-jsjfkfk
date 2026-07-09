@@ -1435,22 +1435,10 @@ export default function IntegrationsPage() {
                                     : "Init..."}
                                 </span>
                               </div>
-                              <div className="flex flex-col justify-center border-l border-border/40 pl-3 min-w-[110px]">
-                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Daily Limit</span>
-                                <Slider
-                                  value={[localLimits[mailbox.id] ?? mailbox.dailyLimit ?? 50]}
-                                  onValueChange={async (v) => {
-                                    setLocalLimits(prev => ({ ...prev, [mailbox.id]: v[0] }));
-                                    try {
-                                      await apiRequest('PATCH', `/api/integrations/${mailbox.id}/daily-limit`, { dailyLimit: v[0] });
-                                      queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
-                                    } catch (e) { console.error('Failed to update daily limit', e); }
-                                  }}
-                                  min={10} max={500} step={5}
-                                  className="w-24 sm:w-28 py-1 mt-1"
-                                />
-                                <span className="text-xs font-black text-primary tabular-nums">
-                                  {(localLimits[mailbox.id] ?? mailbox.dailyLimit) || 50}/d
+                              <div className="flex flex-col justify-center border-l border-border/40 pl-3 min-w-[90px]">
+                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status</span>
+                                <span className="text-xs font-black text-emerald-400 tabular-nums">
+                                  {mailbox.connected ? "Active" : "Inactive"}
                                 </span>
                               </div>
                             </div>
