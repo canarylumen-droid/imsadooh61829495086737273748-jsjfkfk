@@ -412,37 +412,6 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Default Checkout Link</Label>
-                    <Input
-                      value={formData.defaultPaymentLink}
-                      onChange={e => handleFieldChange('defaultPaymentLink', e.target.value)}
-                      placeholder="Enter Your Payment link (e.g. Stripe)"
-                      className="rounded-xl h-11 border-primary/30 focus-visible:ring-primary"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Used autonomously when a lead explicitly asks for an invoice or agrees to buy on call.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Offer Description</Label>
-                    <Input
-                      value={formData.offerDescription}
-                      onChange={e => handleFieldChange('offerDescription', e.target.value)}
-                      placeholder="e.g. Done-for-you leads at $3,000/month"
-                      className="rounded-xl h-11 border-primary/30 focus-visible:ring-primary"
-                    />
-                    <p className="text-[10px] text-muted-foreground">AI will use this exact offer description instead of guessing.</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Default Deal Value ($)</Label>
-                    <Input
-                      type="number"
-                      value={formData.offerValue}
-                      onChange={e => handleFieldChange('offerValue', parseFloat(e.target.value) || 0)}
-                      placeholder="e.g. 5000"
-                      className="rounded-xl h-11 border-primary/30 focus-visible:ring-primary"
-                    />
-                    <p className="text-[10px] text-muted-foreground">Used as the baseline monetary value for new won deals.</p>
-                  </div>
-                  <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Timezone</Label>
                     <Select value={formData.timezone} onValueChange={v => handleFieldChange('timezone', v)}>
                       <SelectTrigger className="rounded-xl h-11">
@@ -460,44 +429,7 @@ export default function SettingsPage() {
                   </div>
                 </ResponsiveGrid>
 
-                <div className="space-y-6 pt-6 border-t border-border/40">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold uppercase tracking-widest px-3 h-6 flex items-center">Double Offer System</Badge>
-                      <p className="text-[10px] text-muted-foreground font-medium uppercase tracking-wider">Enable fallback offers for hesitant leads</p>
-                    </div>
-                    <Switch 
-                      checked={formData.doubleOfferEnabled}
-                      onCheckedChange={c => handleFieldChange('doubleOfferEnabled', c)}
-                    />
-                  </div>
-                  
-                  {formData.doubleOfferEnabled && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top-2 duration-300 bg-primary/5 p-6 rounded-2xl border border-primary/10">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Secondary Offer Description</Label>
-                        <Input
-                          value={formData.offerDescription2}
-                          onChange={e => handleFieldChange('offerDescription2', e.target.value)}
-                          placeholder="e.g. Lite version at $1,500/month"
-                          className="rounded-xl h-11 border-primary/20 focus-visible:ring-primary bg-background"
-                        />
-                        <p className="text-[10px] text-muted-foreground">Used autonomously as a downsell when a lead rejects the primary offer.</p>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Secondary Deal Value ($)</Label>
-                        <Input
-                          type="number"
-                          value={formData.offerValue2}
-                          onChange={e => handleFieldChange('offerValue2', parseFloat(e.target.value) || 0)}
-                          placeholder="e.g. 1500"
-                          className="rounded-xl h-11 border-primary/20 focus-visible:ring-primary bg-background"
-                        />
-                        <p className="text-[10px] text-muted-foreground">Monetary baseline for the downsell offer.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
+
               </CardContent>
             </Card>
           </ResponsiveGrid>

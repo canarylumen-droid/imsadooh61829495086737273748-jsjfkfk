@@ -581,7 +581,7 @@ export default function DashboardHome() {
               <CardContent className="space-y-3">
                 {[
                   { label: "Import Prospects", icon: Users, path: "/dashboard/lead-import" },
-                  { label: "Create Automation", icon: Zap, path: "/dashboard/video-automation" },
+
                   { label: "Connect Channels", icon: Mail, path: "/dashboard/integrations" },
                 ].map((action) => (
                   <Button

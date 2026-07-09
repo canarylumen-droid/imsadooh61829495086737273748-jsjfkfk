@@ -10,7 +10,6 @@ const InsightsPage = lazy(() => import("./insights"));
 const AnalyticsPage = lazy(() => import("./analytics"));
 const PricingPage = lazy(() => import("./pricing"));
 
-// Lazy load pages that might be large or are duplicated in App.tsx
 const SettingsPage = lazy(() => import("./settings"));
 const LeadImportPage = lazy(() => import("./lead-import"));
 const VideoAutomationPage = lazy(() => import("./video-automation"));
@@ -19,7 +18,6 @@ const SalesAssistant = lazy(() => import("./sales-assistant"));
 const ContentLibraryPage = lazy(() => import("./content-library"));
 const AIDecisionsPage = lazy(() => import("./ai-decisions"));
 const ObjectionsLibraryPage = lazy(() => import("./objections-library"));
-// const CustomKnowledgePage = lazy(() => import("./custom-knowledge"));
 const SandboxPage = lazy(() => import("./sandbox"));
 const ProspectingPage = lazy(() => import("./prospecting"));
 const LeadProfilePage = lazy(() => import("./lead-profile"));
@@ -40,14 +38,12 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/inbox" component={InboxPage} />
           <Route path="/dashboard/inbox/:id" component={InboxPage} />
           <Route path="/dashboard/leads/:id" component={LeadProfilePage} />
-          {/* ... other routes ... */}
           <Route path="/dashboard/deals" component={DealsPage} />
           <Route path="/dashboard/calendar" component={CalendarPage} />
           <Route path="/dashboard/integrations" component={IntegrationsPage} />
           <Route path="/dashboard/insights" component={InsightsPage} />
           <Route path="/dashboard/analytics" component={AnalyticsPage} />
           <Route path="/dashboard/pricing" component={PricingPage} />
-
           <Route path="/dashboard/settings" component={SettingsPage} />
           <Route path="/dashboard/lead-import" component={LeadImportPage} />
           <Route path="/dashboard/video-automation" component={VideoAutomationPage} />
@@ -56,10 +52,8 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/content-library" component={ContentLibraryPage} />
           <Route path="/dashboard/ai-decisions" component={AIDecisionsPage} />
           <Route path="/dashboard/objections" component={ObjectionsLibraryPage} />
-          {/* <Route path="/dashboard/custom-knowledge" component={CustomKnowledgePage} /> */}
           <Route path="/dashboard/sandbox" component={SandboxPage} />
           <Route path="/dashboard/prospecting" component={ProspectingPage} />
-
           <Route path="/dashboard/lead-recovery" component={LeadRecoveryPage} />
           <Route path="/dashboard/ai-analytics" component={AIAnalyticsPage} />
           <Route path="/dashboard/deliverability" component={DeliverabilityPage} />
