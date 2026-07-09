@@ -5,7 +5,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -649,23 +648,7 @@ export default function SettingsPage() {
               </div>
 
 
-              <div className="p-6 bg-muted/30 rounded-xl border border-border">
-                <div className="flex justify-between mb-4">
-                  <h4 className="font-bold text-sm">Response Accuracy Threshold</h4>
-                  <span className="text-sm font-bold text-primary">{formData.pdfConfidenceThreshold}%</span>
-                </div>
-                <Slider
-                  value={[formData.pdfConfidenceThreshold]}
-                  min={50}
-                  max={100}
-                  step={1}
-                  onValueChange={(val) => handleFieldChange('pdfConfidenceThreshold', val[0])}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground mt-3">
-                  Minimum confidence score required for the system to reply without human review.
-                </p>
-              </div>
+
             </CardContent>
           </Card>
         </TabsContent>
