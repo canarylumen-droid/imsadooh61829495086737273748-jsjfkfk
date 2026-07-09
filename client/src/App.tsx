@@ -126,7 +126,14 @@ function Router() {
         )}
       </Route>
       {/* All dashboard routes handled by DashboardRoutes with layout */}
-      {/* Single route — :rest* matches both /dashboard (empty) and /dashboard/* paths */}
+      {/* Two routes inside Switch — first matches /dashboard exactly, second matches sub-pages */}
+      <Route path="/dashboard">
+        {() => (
+          <AuthGuard>
+            <DashboardRoutes />
+          </AuthGuard>
+        )}
+      </Route>
       <Route path="/dashboard/:rest*">
         {() => (
           <AuthGuard>
