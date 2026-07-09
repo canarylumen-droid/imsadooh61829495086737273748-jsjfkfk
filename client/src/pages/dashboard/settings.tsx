@@ -19,7 +19,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { User, Loader2, Upload, Mic, Settings, Save, ShieldCheck, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check, Download, Construction } from "lucide-react";
+import { User, Loader2, Upload, Mic, Settings, Save, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check, Download, Construction } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -67,21 +67,6 @@ export default function SettingsPage() {
   const { data: smtpData } = useQuery<any[]>({ queryKey: ["/api/smtp/settings"] });
   const { data: customEmailStatus } = useQuery<any>({ queryKey: ["/api/custom-email/status"] });
   const { canAccess: canAccessVoiceNotes } = useCanAccessVoiceNotes();
-
-  const emailDomain = customEmailStatus?.integrations?.[0]?.email?.split('@')[1];
-  const { data: dnsVerification, isLoading: dnsLoading } = useQuery({
-    queryKey: ["/api/dns/verify", emailDomain],
-    queryFn: () => emailDomain ? apiRequest("POST", "/api/dns/verify", { domain: emailDomain }).then(r => r.json()) : null,
-    enabled: !!emailDomain,
-    staleTime: 300000,
-  });
-
-  const dnsRecords = dnsVerification ? [
-    { label: 'SPF Record', value: dnsVerification.spf?.record || null, status: dnsVerification.spf?.found ? 'found' : 'missing', color: 'text-emerald-500', desc: 'Authorizes which servers can send email for your domain.' },
-    { label: 'DKIM Record', value: dnsVerification.dkim?.record || null, status: dnsVerification.dkim?.found ? 'found' : 'missing', color: 'text-blue-500', desc: 'Cryptographic signature that verifies email integrity.' },
-    { label: 'DMARC Record', value: dnsVerification.dmarc?.record || null, status: dnsVerification.dmarc?.found ? 'found' : 'missing', color: 'text-purple-500', desc: 'Policy that tells receivers how to handle unauthenticated mail.' },
-    { label: 'MX Record', value: dnsVerification.mx?.records?.[0] ? `${dnsVerification.mx.records[0].exchange} (priority ${dnsVerification.mx.records[0].priority})` : null, status: dnsVerification.mx?.found ? 'found' : 'missing', color: 'text-amber-500', desc: 'Mail exchange server that receives inbound email for your domain.' },
-  ].filter(Boolean) : [];
 
   const [formData, setFormData] = useState({
     name: "",
@@ -326,9 +311,7 @@ export default function SettingsPage() {
           <TabsTrigger value="profile" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Profile</TabsTrigger>
           <TabsTrigger value="brand" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Intelligence Memory</TabsTrigger>
           <TabsTrigger value="ai" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Automation</TabsTrigger>
-          <TabsTrigger value="dns" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap flex items-center gap-2">
-            <ShieldCheck className="h-3 w-3" /> DNS Setup
-          </TabsTrigger>
+
           <TabsTrigger value="voice" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap flex items-center gap-2">
             <Mic className="h-3 w-3" /> Voice AI
             {!canAccessVoiceNotes && <Lock className="h-3 w-3 opacity-60" />}
@@ -453,45 +436,7 @@ export default function SettingsPage() {
           <BrandKnowledgeBase embedded={true} />
         </TabsContent>
 
-        <TabsContent value="dns" className="space-y-6">
-          <Card className="border-border/50 shadow-sm rounded-2xl">
-            <CardHeader>
-              <CardTitle className="text-xl">DNS Configuration</CardTitle>
-              <CardDescription>DNS records detected for your connected mail domain.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {dnsRecords.length === 0 ? (
-                <div className="text-center py-8">
-                  <p className="text-muted-foreground">No domain detected. Connect a mailbox first.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {dnsRecords.map(({ label, value, status, color, desc }) => (
-                    <div key={label} className="p-4 bg-muted/30 rounded-xl border border-border/50">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <ShieldCheck className={`w-5 h-5 ${status === 'found' ? color : 'text-muted-foreground'}`} />
-                          <h4 className="font-bold text-sm">{label}</h4>
-                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${status === 'found' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/10' : 'text-amber-500 border-amber-500/20 bg-amber-500/10'}`}>
-                            {status === 'found' ? 'Found' : 'Not Found'}
-                          </span>
-                        </div>
-                        {value && (
-                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-medium" onClick={() => handleCopyToClipboard(value, label)}>
-                            {copiedField === label ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
-                            {copiedField === label ? 'Copied' : 'Copy'}
-                          </Button>
-                        )}
-                      </div>
-                      {value && <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">{value}</div>}
-                      <p className="text-xs text-muted-foreground mt-2">{desc}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+
 
         <TabsContent value="ai" className="space-y-6">
           <Card className="border-border/50 shadow-sm rounded-2xl">
