@@ -16,16 +16,16 @@ interface ReputationTrendChartProps {
 export const ReputationTrendChart: React.FC<ReputationTrendChartProps> = ({ data }) => {
   return (
     <Card className="border-none bg-slate-900/40 backdrop-blur-xl ring-1 ring-white/10 shadow-2xl overflow-hidden">
-      <CardHeader className="pb-1 pt-3">
-        <div className="flex items-center gap-1.5">
-          <Activity className="w-3 h-3 text-emerald-400" />
-          <CardTitle className="text-[10px] font-bold uppercase tracking-widest text-slate-200">
+      <CardHeader className="pb-2 pt-3">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-emerald-400" />
+          <CardTitle className="text-xs font-bold uppercase tracking-widest text-slate-200">
             Reputation Trend
           </CardTitle>
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <div className="h-[100px] w-full">
+        <div className="h-[140px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={data}>
               <defs>

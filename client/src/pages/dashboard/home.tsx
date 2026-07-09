@@ -574,7 +574,7 @@ export default function DashboardHome() {
             </div>
           </div>
 
-          <div className="space-y-5">
+          <div className="space-y-3">
             <Card className="border-border/50 rounded-lg bg-muted/20">
               <CardHeader>
                 <CardTitle className="text-sm font-semibold">Quick Actions</CardTitle>
