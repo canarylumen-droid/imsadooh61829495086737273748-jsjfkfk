@@ -180,12 +180,12 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
           ))}
         </div>
 
-        <div className="p-2.5 rounded-lg bg-primary/5 border border-primary/10">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <Zap className="w-3 h-3 text-primary" />
-            <p className="text-[9px] font-bold text-primary uppercase tracking-[0.1em]">Advisory</p>
+        <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+          <div className="flex items-center gap-2 mb-1">
+            <Zap className="w-4 h-4 text-primary" />
+            <p className="text-xs font-bold text-primary uppercase tracking-[0.12em]">Advisory</p>
           </div>
-          <p className="text-[10px] text-muted-foreground/80 leading-snug">
+          <p className="text-sm text-foreground/90 leading-relaxed">
             {isPending
               ? "Domain reputation assessment is currently underway."
               : (score! >= 90 ? "Reputation is solid. Max safe volume." 
