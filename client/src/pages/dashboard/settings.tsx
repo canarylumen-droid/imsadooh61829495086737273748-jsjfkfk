@@ -68,6 +68,21 @@ export default function SettingsPage() {
   const { data: customEmailStatus } = useQuery<any>({ queryKey: ["/api/custom-email/status"] });
   const { canAccess: canAccessVoiceNotes } = useCanAccessVoiceNotes();
 
+  const emailDomain = customEmailStatus?.integrations?.[0]?.email?.split('@')[1];
+  const { data: dnsVerification, isLoading: dnsLoading } = useQuery({
+    queryKey: ["/api/dns/verify", emailDomain],
+    queryFn: () => emailDomain ? apiRequest("POST", "/api/dns/verify", { domain: emailDomain }).then(r => r.json()) : null,
+    enabled: !!emailDomain,
+    staleTime: 300000,
+  });
+
+  const dnsRecords = dnsVerification ? [
+    { label: 'SPF Record', value: dnsVerification.spf?.record || null, status: dnsVerification.spf?.found ? 'found' : 'missing', color: 'text-emerald-500', desc: 'Authorizes which servers can send email for your domain.' },
+    { label: 'DKIM Record', value: dnsVerification.dkim?.record || null, status: dnsVerification.dkim?.found ? 'found' : 'missing', color: 'text-blue-500', desc: 'Cryptographic signature that verifies email integrity.' },
+    { label: 'DMARC Record', value: dnsVerification.dmarc?.record || null, status: dnsVerification.dmarc?.found ? 'found' : 'missing', color: 'text-purple-500', desc: 'Policy that tells receivers how to handle unauthenticated mail.' },
+    { label: 'MX Record', value: dnsVerification.mx?.records?.[0] ? `${dnsVerification.mx.records[0].exchange} (priority ${dnsVerification.mx.records[0].priority})` : null, status: dnsVerification.mx?.found ? 'found' : 'missing', color: 'text-amber-500', desc: 'Mail exchange server that receives inbound email for your domain.' },
+  ].filter(Boolean) : [];
+
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -442,76 +457,38 @@ export default function SettingsPage() {
           <Card className="border-border/50 shadow-sm rounded-2xl">
             <CardHeader>
               <CardTitle className="text-xl">DNS Configuration</CardTitle>
-              <CardDescription>Add these TXT records to your DNS provider to ensure optimal email deliverability.</CardDescription>
+              <CardDescription>DNS records detected for your connected mail domain.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-emerald-500" />
-                      <h4 className="font-bold text-sm">SPF Record</h4>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-3 text-xs font-medium"
-                      onClick={() => handleCopyToClipboard('v=spf1 include:_spf.google.com ~all', 'SPF Record')}
-                    >
-                      {copiedField === 'SPF Record' ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
-                      {copiedField === 'SPF Record' ? 'Copied' : 'Copy'}
-                    </Button>
-                  </div>
-                  <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">
-                    v=spf1 include:_spf.google.com ~all
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">Add this as a TXT record for your domain to authorize Gmail to send emails on your behalf.</p>
+              {dnsRecords.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">No domain detected. Connect a mailbox first.</p>
                 </div>
-
-                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-blue-500" />
-                      <h4 className="font-bold text-sm">DKIM Record</h4>
+              ) : (
+                <div className="space-y-4">
+                  {dnsRecords.map(({ label, value, status, color, desc }) => (
+                    <div key={label} className="p-4 bg-muted/30 rounded-xl border border-border/50">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className={`w-5 h-5 ${status === 'found' ? color : 'text-muted-foreground'}`} />
+                          <h4 className="font-bold text-sm">{label}</h4>
+                          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${status === 'found' ? 'text-emerald-500 border-emerald-500/20 bg-emerald-500/10' : 'text-amber-500 border-amber-500/20 bg-amber-500/10'}`}>
+                            {status === 'found' ? 'Found' : 'Not Found'}
+                          </span>
+                        </div>
+                        {value && (
+                          <Button variant="ghost" size="sm" className="h-8 px-3 text-xs font-medium" onClick={() => handleCopyToClipboard(value, label)}>
+                            {copiedField === label ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+                            {copiedField === label ? 'Copied' : 'Copy'}
+                          </Button>
+                        )}
+                      </div>
+                      {value && <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">{value}</div>}
+                      <p className="text-xs text-muted-foreground mt-2">{desc}</p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-3 text-xs font-medium"
-                      onClick={() => handleCopyToClipboard('v=DKIM1; k=rsa; p=YOUR_PUBLIC_KEY', 'DKIM Record')}
-                    >
-                      {copiedField === 'DKIM Record' ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
-                      {copiedField === 'DKIM Record' ? 'Copied' : 'Copy'}
-                    </Button>
-                  </div>
-                  <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">
-                    v=DKIM1; k=rsa; p=YOUR_PUBLIC_KEY
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">Add this as a TXT record for selector._domainkey.yourdomain.com. Replace YOUR_PUBLIC_KEY with your actual DKIM key from Gmail.</p>
+                  ))}
                 </div>
-
-                <div className="p-4 bg-muted/30 rounded-xl border border-border/50">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-5 h-5 text-purple-500" />
-                      <h4 className="font-bold text-sm">DMARC Record</h4>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-3 text-xs font-medium"
-                      onClick={() => handleCopyToClipboard('v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com', 'DMARC Record')}
-                    >
-                      {copiedField === 'DMARC Record' ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
-                      {copiedField === 'DMARC Record' ? 'Copied' : 'Copy'}
-                    </Button>
-                  </div>
-                  <div className="bg-background border border-border rounded-lg p-3 font-mono text-xs text-muted-foreground break-all">
-                    v=DMARC1; p=quarantine; rua=mailto:dmarc@yourdomain.com
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">Add this as a TXT record for _dmarc.yourdomain.com to enable DMARC policy reporting.</p>
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
