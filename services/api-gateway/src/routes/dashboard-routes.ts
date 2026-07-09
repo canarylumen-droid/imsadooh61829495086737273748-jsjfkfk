@@ -315,12 +315,11 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
 
     // Aggregate DNS results for the UI
     const dnsStatus = {
-      spf: mappedVerifications.some(v => v.result?.spf?.valid),
-      dkim: mappedVerifications.some(v => v.result?.dkim?.valid),
-      dmarc: mappedVerifications.some(v => v.result?.dmarc?.valid),
-      mx: mappedVerifications.some(v => v.result?.mx?.found),
-      ptr: mappedVerifications.some(v => v.result?.ptr?.valid),
-      blacklist: mappedVerifications.some(v => v.result?.blacklist?.isBlacklisted)
+        spf: mappedVerifications.some(v => v.result?.spf?.valid),
+        dkim: mappedVerifications.some(v => v.result?.dkim?.valid),
+        dmarc: mappedVerifications.some(v => v.result?.dmarc?.valid),
+        mx: mappedVerifications.some(v => v.result?.mx?.found),
+        blacklist: mappedVerifications.some(v => v.result?.blacklist?.isBlacklisted)
     };
 
     const responseData = {

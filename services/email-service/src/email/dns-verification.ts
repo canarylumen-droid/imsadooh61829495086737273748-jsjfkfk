@@ -393,7 +393,6 @@ export async function verifyDomainDns(domain: string, dkimSelector?: string, for
     dmarc,
     mx,
     blacklist,
-    ptr,
     overallScore: 0,
     overallStatus: 'fair',
     recommendations: []
@@ -404,32 +403,28 @@ export async function verifyDomainDns(domain: string, dkimSelector?: string, for
 
   // ── Percentage-based scoring (0–100) ──────────────────────────────────────
   // Each record contributes its weight. Blacklist applies a penalty multiplier.
-  // Weights: SPF=25, DKIM=25, DMARC=25, MX=15, PTR=10 → total 100
+  // Weights: SPF=28, DKIM=28, DMARC=27, MX=17 → total 100. PTR removed (not commonly used).
 
-  if (spf.found && spf.valid) earnedScore += 25;
-  else if (spf.found) earnedScore += 15;
+  if (spf.found && spf.valid) earnedScore += 28;
+  else if (spf.found) earnedScore += 16;
   else recommendations.push('Add SPF record to authorize email senders');
 
-  if (dkim.found && dkim.valid) earnedScore += 25;
-  else if (dkim.found) earnedScore += 15;
+  if (dkim.found && dkim.valid) earnedScore += 28;
+  else if (dkim.found) earnedScore += 16;
   else recommendations.push('Set up DKIM signing for email authentication');
 
   if (dmarc.found && dmarc.valid) {
-    if (dmarc.policy === 'reject') earnedScore += 25;
-    else if (dmarc.policy === 'quarantine') earnedScore += 22;
-    else earnedScore += 18;
+    if (dmarc.policy === 'reject') earnedScore += 27;
+    else if (dmarc.policy === 'quarantine') earnedScore += 24;
+    else earnedScore += 20;
   } else if (dmarc.found) {
-    earnedScore += 10;
+    earnedScore += 12;
   } else {
     recommendations.push('Add DMARC policy to prevent email spoofing');
   }
 
-  if (mx.found) earnedScore += 15;
+  if (mx.found) earnedScore += 17;
   else recommendations.push('No MX records found - email delivery may fail');
-
-  if (ptr.found && ptr.valid) earnedScore += 10;
-  else if (ptr.found) recommendations.push('PTR record does not match domain');
-  else recommendations.push('Missing PTR record (Reverse DNS)');
 
   if (blacklist.isBlacklisted) {
     earnedScore = Math.round(earnedScore * 0.7);

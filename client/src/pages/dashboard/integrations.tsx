@@ -1624,11 +1624,11 @@ export default function IntegrationsPage() {
                         <span className="break-words">
                           {!(customEmailStatus?.integrations && customEmailStatus.integrations.length > 0) ? "Please connect a mailbox to initiate domain health monitoring." :
                            reputationNum === null ? "AI is initiating a health checkpoint for your domain." :
-                             reputationNum >= 70
-                               ? "Your domain parameters are within safe limits. AI is managing 1-by-1 sending autonomously."
-                               : reputationNum >= 40
-                               ? "Warning: Reputation drops detected. Sending speed is reduced to protect deliverability."
-                               : "Critical: Low reputation detected. Sending speed drastically throttled to 5 per day to prevent blocklisting."}
+                           reputationNum >= 70
+                                ? "Your domain parameters are within safe limits."
+                                : reputationNum >= 40
+                                ? "Advisory: Minor reputation dip detected. Warmup volume adjusted to protect domain health."
+                                : "Critical: Low reputation detected. Warmup volume reduced to minimum."}
                         </span>
                       </div>
 
@@ -1649,7 +1649,7 @@ export default function IntegrationsPage() {
                                 </div>
                                 {v.result && (
                                   <div className="grid grid-cols-3 sm:grid-cols-6 gap-1">
-                                    {['SPF', 'DKIM', 'DMARC', 'MX', 'PTR', 'BLACKLIST'].map(record => {
+                                    {['SPF', 'DKIM', 'DMARC', 'MX', 'BLACKLIST'].map(record => {
                                       const key = record === 'BLACKLIST' ? 'blacklist' : record.toLowerCase();
                                       const rec = v.result[key];
                                       if (record === 'BLACKLIST') {

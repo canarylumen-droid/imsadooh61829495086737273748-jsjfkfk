@@ -30,7 +30,6 @@ interface ReputationCardProps {
     dkim: boolean;
     dmarc: boolean;
     mx: boolean;
-    ptr: boolean;
     blacklist: boolean;
   };
   isLoading?: boolean;
@@ -149,7 +148,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5 pt-0.5">
-          {['SPF', 'DKIM', 'DMARC', 'MX', 'PTR', 'BL'].map((type) => {
+          {['SPF', 'DKIM', 'DMARC', 'MX', 'BL'].map((type) => {
             const key = type === 'BL' ? 'blacklist' : type.toLowerCase();
             const val = dns ? (dns as any)[key] : undefined;
             const isGood = val === true && key !== 'blacklist';

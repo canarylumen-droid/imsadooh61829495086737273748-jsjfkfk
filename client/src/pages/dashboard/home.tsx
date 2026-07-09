@@ -102,14 +102,13 @@ interface DashboardStats {
       spam: number;
       total: number;
     };
-    dns?: {
-      spf: boolean;
-      dkim: boolean;
-      dmarc: boolean;
-      mx: boolean;
-      ptr: boolean;
-      blacklist: boolean;
-    };
+  dns?: {
+    spf: boolean;
+    dkim: boolean;
+    dmarc: boolean;
+    mx: boolean;
+    blacklist: boolean;
+  };
   };
   benchmarks?: {
     avgLeadScore: number;
