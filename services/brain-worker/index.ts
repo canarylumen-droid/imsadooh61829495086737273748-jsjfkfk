@@ -104,14 +104,14 @@ async function startAIService() {
     import('@services/billing-service/src/billing/workers/checkout-worker.js').catch(e => { console.error('[BrainWorker] Checkout worker import failed:', e.message); return { checkoutWorker: null }; }),
   ]);
 
-  await startWorker('Lead Enrichment',    () => leadEnrichmentWorker.start());
-  await startWorker('Autonomous Closing', () => closingWorker.start());
-  await startWorker('Cold Re-engagement', () => reEngagementWorker.start());
-  await startWorker('Post-mortem',        () => postMortemWorker.start());
-  await startWorker('Follow-up',          () => followUpWorker.start());
-  await startWorker('Video Comment',      () => startVideoCommentMonitoring());
-  await startWorker('AI Budget Monitor',  () => aiBudgetWorker.start());
-  await startWorker('Billing Dispatch',   () => checkoutWorker.start());
+  await startWorker('Lead Enrichment',    () => leadEnrichmentWorker?.start());
+  await startWorker('Autonomous Closing', () => closingWorker?.start());
+  await startWorker('Cold Re-engagement', () => reEngagementWorker?.start());
+  await startWorker('Post-mortem',        () => postMortemWorker?.start());
+  await startWorker('Follow-up',          () => followUpWorker?.start());
+  await startWorker('Video Comment',      () => startVideoCommentMonitoring?.());
+  await startWorker('AI Budget Monitor',  () => aiBudgetWorker?.start());
+  await startWorker('Billing Dispatch',   () => checkoutWorker?.start());
 
   let fathomWorker: Worker | null = null;
   let calendlyWorker: Worker | null = null;
@@ -158,7 +158,7 @@ async function startAIService() {
         'audnix-billing',
         async (job: Job) => {
           const { type, paymentId } = job.data;
-          if (type === 'pending-payment' && paymentId) await checkoutWorker.processPendingPayment(paymentId);
+          if (type === 'pending-payment' && paymentId) await checkoutWorker?.processPendingPayment(paymentId);
         },
         { 
           connection: createFreshConnection() as any, 
@@ -180,11 +180,11 @@ async function startAIService() {
   const shutdown = async (signal: string) => {
     log.info(`🛑 ${signal} — shutting down AI Agent service...`);
     try { await serviceRegistry.deregister(); } catch (_e) {}
-    try { leadEnrichmentWorker.stop(); } catch (_e) {}
-    try { reEngagementWorker.stop(); }   catch (_e) {}
-    try { postMortemWorker.stop(); }     catch (_e) {}
-    try { followUpWorker.stop(); }       catch (_e) {}
-    try { ragWorker.stop(); }           catch (_e) {}
+    try { leadEnrichmentWorker?.stop(); } catch (_e) {}
+    try { reEngagementWorker?.stop(); }   catch (_e) {}
+    try { postMortemWorker?.stop?.(); }     catch (_e) {}
+    try { followUpWorker?.stop?.(); }       catch (_e) {}
+    try { ragWorker?.stop?.(); }           catch (_e) {}
     if (fathomWorker) await fathomWorker.close().catch(err => console.error('[Brain Worker] Fathom worker shutdown failed:', err));
     if (calendlyWorker) await calendlyWorker.close().catch(err => console.error('[Brain Worker] Calendly worker shutdown failed:', err));
     if (billingWorker) await billingWorker.close().catch(err => console.error('[Brain Worker] Billing worker shutdown failed:', err));
