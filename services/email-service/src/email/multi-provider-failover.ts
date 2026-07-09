@@ -262,8 +262,13 @@ class MultiProviderEmailFailover {
     }
 
     const { decrypt } = await import('@shared/lib/crypto/encryption.js');
-    const decrypted = await decrypt(outlookIntegration.encryptedMeta);
-    const credentials = JSON.parse(decrypted) as OAuthCredentials;
+    let credentials: OAuthCredentials;
+    try {
+      const decrypted = await decrypt(outlookIntegration.encryptedMeta);
+      credentials = JSON.parse(decrypted) as OAuthCredentials;
+    } catch {
+      throw new Error('Failed to decrypt Outlook credentials');
+    }
 
     const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
       method: 'POST',

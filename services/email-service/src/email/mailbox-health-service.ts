@@ -341,8 +341,14 @@ class MailboxHealthService {
    * Test SMTP connection for custom_email mailbox
    */
   private async testSmtpConnection(integration: any): Promise<void> {
-    const credentialsStr = await decrypt(integration.encryptedMeta);
-    const config = JSON.parse(credentialsStr);
+    let config: any = {};
+    try {
+      const credentialsStr = await decrypt(integration.encryptedMeta);
+      config = JSON.parse(credentialsStr);
+    } catch {
+      console.error(`[MailboxHealth] Failed to decrypt credentials for ${integration.id}`);
+      return;
+    }
 
     const nodemailer = await import('nodemailer');
     const dns = await import('dns');

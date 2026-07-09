@@ -93,15 +93,15 @@ async function startAIService() {
     { ragWorker },
     { checkoutWorker },
   ] = await Promise.all([
-    import('./workers/lead-enrichment-worker.js'),
-    import('./workers/closing-worker.js'),
-    import('./workers/post-mortem-worker.js'),
-    import('./workers/re-engagement-worker.js'),
-    import('@services/brain-worker/src/ai-lib/core/follow-up-worker.js'),
-    import('@services/brain-worker/src/ai-lib/specialized/video-comment-monitor.js'),
-    import('./workers/ai-budget-worker.js'),
-    import('./workers/rag-worker.js'),
-    import('@services/billing-service/src/billing/workers/checkout-worker.js'),
+    import('./workers/lead-enrichment-worker.js').catch(e => { console.error('[BrainWorker] Lead enrichment import failed:', e.message); return { leadEnrichmentWorker: null }; }),
+    import('./workers/closing-worker.js').catch(e => { console.error('[BrainWorker] Closing worker import failed:', e.message); return { closingWorker: null }; }),
+    import('./workers/post-mortem-worker.js').catch(e => { console.error('[BrainWorker] Post-mortem import failed:', e.message); return { postMortemWorker: null }; }),
+    import('./workers/re-engagement-worker.js').catch(e => { console.error('[BrainWorker] Re-engagement import failed:', e.message); return { reEngagementWorker: null }; }),
+    import('@services/brain-worker/src/ai-lib/core/follow-up-worker.js').catch(e => { console.error('[BrainWorker] Follow-up import failed:', e.message); return { followUpWorker: null }; }),
+    import('@services/brain-worker/src/ai-lib/specialized/video-comment-monitor.js').catch(e => { console.error('[BrainWorker] Video comment import failed:', e.message); return { startVideoCommentMonitoring: null }; }),
+    import('./workers/ai-budget-worker.js').catch(e => { console.error('[BrainWorker] AI budget import failed:', e.message); return { aiBudgetWorker: null }; }),
+    import('./workers/rag-worker.js').catch(e => { console.error('[BrainWorker] RAG worker import failed:', e.message); return { ragWorker: null }; }),
+    import('@services/billing-service/src/billing/workers/checkout-worker.js').catch(e => { console.error('[BrainWorker] Checkout worker import failed:', e.message); return { checkoutWorker: null }; }),
   ]);
 
   await startWorker('Lead Enrichment',    () => leadEnrichmentWorker.start());
