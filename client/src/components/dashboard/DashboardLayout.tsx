@@ -243,7 +243,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
       items: [
         { label: "Inbox", icon: Inbox, path: "/dashboard/inbox" },
         { label: "Lead Recovery", icon: LifeBuoy, path: "/dashboard/lead-recovery" },
-        { label: "Pending Payments", icon: DollarSign, path: "/dashboard/pending-payments" },
+        // { label: "Pending Payments", icon: DollarSign, path: "/dashboard/pending-payments" },
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
       ],
@@ -636,10 +636,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                       <User className="mr-3 h-4 w-4" />
                       Profile Settings
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleNavigate('/dashboard/pricing')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
-                      <CreditCard className="mr-3 h-4 w-4" />
-                      Subscription
-                    </DropdownMenuItem>
+
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator className="my-1 mx-2" />
                   <DropdownMenuGroup>

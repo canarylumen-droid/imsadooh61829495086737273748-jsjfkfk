@@ -10,7 +10,6 @@ const InsightsPage = lazy(() => import("./insights"));
 const AnalyticsPage = lazy(() => import("./analytics"));
 
 // Lazy load pages that might be large or are duplicated in App.tsx
-const PricingPage = lazy(() => import("./pricing"));
 const SettingsPage = lazy(() => import("./settings"));
 const LeadImportPage = lazy(() => import("./lead-import"));
 const VideoAutomationPage = lazy(() => import("./video-automation"));
@@ -23,7 +22,6 @@ const ObjectionsLibraryPage = lazy(() => import("./objections-library"));
 const SandboxPage = lazy(() => import("./sandbox"));
 const ProspectingPage = lazy(() => import("./prospecting"));
 const LeadProfilePage = lazy(() => import("./lead-profile"));
-const PendingPaymentsPage = lazy(() => import("./pending-payments"));
 const LeadRecoveryPage = lazy(() => import("./lead-recovery"));
 const AIAnalyticsPage = lazy(() => import("./ai-analytics"));
 const DeliverabilityPage = lazy(() => import("./deliverability"));
@@ -47,7 +45,7 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/integrations" component={IntegrationsPage} />
           <Route path="/dashboard/insights" component={InsightsPage} />
           <Route path="/dashboard/analytics" component={AnalyticsPage} />
-          <Route path="/dashboard/pricing" component={PricingPage} />
+
           <Route path="/dashboard/settings" component={SettingsPage} />
           <Route path="/dashboard/lead-import" component={LeadImportPage} />
           <Route path="/dashboard/video-automation" component={VideoAutomationPage} />
@@ -59,7 +57,7 @@ export default function DashboardRoutes() {
           {/* <Route path="/dashboard/custom-knowledge" component={CustomKnowledgePage} /> */}
           <Route path="/dashboard/sandbox" component={SandboxPage} />
           <Route path="/dashboard/prospecting" component={ProspectingPage} />
-          <Route path="/dashboard/pending-payments" component={PendingPaymentsPage} />
+
           <Route path="/dashboard/lead-recovery" component={LeadRecoveryPage} />
           <Route path="/dashboard/ai-analytics" component={AIAnalyticsPage} />
           <Route path="/dashboard/deliverability" component={DeliverabilityPage} />
