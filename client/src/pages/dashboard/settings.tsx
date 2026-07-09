@@ -422,7 +422,7 @@ export default function SettingsPage() {
                     <p className="text-[10px] text-muted-foreground">Used autonomously when a lead explicitly asks for an invoice or agrees to buy on call.</p>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Offer Description / Pricing</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Offer Description</Label>
                     <Input
                       value={formData.offerDescription}
                       onChange={e => handleFieldChange('offerDescription', e.target.value)}
