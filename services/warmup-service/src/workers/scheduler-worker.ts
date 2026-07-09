@@ -259,7 +259,7 @@ export class WarmupScheduler {
 
       if (!recipient[0] || recipient[0].status !== 'active') continue;
 
-      const recipientLimit = recipient[0].dailyLimit ?? limitMap.get(recipient[0].integrationId ?? '') ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      const recipientLimit = recipient[0].dailyLimit ?? integrationMap.get(recipient[0].integrationId ?? '')?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
       const effectiveRecipientLimit = reputationRecovery.getEffectiveLimit(recipient[0], recipientLimit);
       if (
         recipient[0].dailySentCount >= effectiveRecipientLimit ||
