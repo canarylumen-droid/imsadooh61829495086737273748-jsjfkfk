@@ -1,5 +1,8 @@
 import { storage } from '@shared/lib/storage/storage.js';
-import type { Lead, Message } from '@audnix/shared';
+import { db } from '@shared/lib/db/db.js';
+import { messages, leads } from '@audnix/shared';
+import { sql, eq, and, inArray } from 'drizzle-orm';
+import type { Lead } from '@audnix/shared';
 
 export interface AnalyticsInsights {
   period: string;
@@ -20,87 +23,89 @@ export interface AnalyticsInsights {
   };
 }
 
-/**
- * Generate advanced analytics insights
- */
 export async function generateAnalyticsInsights(
   userId: string,
-  period: string = '30d'
+  period: string = '30d',
+  integrationId?: string
 ): Promise<AnalyticsInsights> {
   const daysBack = period === '7d' ? 7 : period === '30d' ? 30 : 90;
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - daysBack);
 
-  const allLeads = await storage.getLeads({ userId, limit: 10000 });
-  const leads = allLeads.filter(l => new Date(l.createdAt) >= startDate);
+  const leadOptions: any = { userId, limit: 10000 };
+  if (integrationId) leadOptions.integrationId = integrationId;
+  const allLeads = await storage.getLeads(leadOptions);
+  const leadsList = allLeads.filter(l => new Date(l.createdAt) >= startDate);
 
-  if (leads.length === 0 && allLeads.length === 0) {
+  if (leadsList.length === 0 && allLeads.length === 0) {
     return {
       period,
       trends: { leadGrowth: 0, conversionGrowth: 0, engagementGrowth: 0 },
       predictions: { expectedConversions: 0, projectedRevenue: 0, riskLeads: [] },
-      recommendations: ['👋 Welcome to Audnix! Connect your mailbox to see real-time lead sync and AI outreach in action.'],
+      recommendations: ['Connect your mailbox to see real-time lead sync and AI outreach in action.'],
       topPerformers: { channels: [], times: [] }
     };
   }
 
-  // Calculate trends
-  const trends = await calculateTrends(userId, daysBack);
+  const trends = await calculateTrends(userId, daysBack, integrationId);
+  const predictions = await generatePredictions(leadsList);
+  const recommendations = await generateRecommendations(leadsList, trends);
+  const topPerformers = await findTopPerformers(leadsList);
 
-  // Generate predictions
-  const predictions = await generatePredictions(leads);
-
-  // Generate recommendations
-  const recommendations = await generateRecommendations(leads, trends);
-
-  // Find top performers
-  const topPerformers = await findTopPerformers(leads);
-
-  return {
-    period,
-    trends,
-    predictions,
-    recommendations,
-    topPerformers
-  };
+  return { period, trends, predictions, recommendations, topPerformers };
 }
 
-async function calculateTrends(userId: string, daysBack: number) {
+async function calculateTrends(userId: string, daysBack: number, integrationId?: string) {
   const previousPeriodStart = new Date();
   previousPeriodStart.setDate(previousPeriodStart.getDate() - (daysBack * 2));
   const currentPeriodStart = new Date();
   currentPeriodStart.setDate(currentPeriodStart.getDate() - daysBack);
 
-  const allLeads = await storage.getLeads({ userId, limit: 10000 });
+  const leadOptions: any = { userId, limit: 10000 };
+  if (integrationId) leadOptions.integrationId = integrationId;
+  const allLeads = await storage.getLeads(leadOptions);
 
   const previousLeads = allLeads.filter(l => {
     const date = new Date(l.createdAt);
     return date >= previousPeriodStart && date < currentPeriodStart;
   });
 
-  const currentLeads = allLeads.filter(l => {
+  const currentLeadsList = allLeads.filter(l => {
     const date = new Date(l.createdAt);
     return date >= currentPeriodStart;
   });
 
-  const leadGrowth = calculateGrowth(previousLeads.length, currentLeads.length);
+  const leadGrowth = calculateGrowth(previousLeads.length, currentLeadsList.length);
   const conversionGrowth = calculateGrowth(
     previousLeads.filter(l => l.status === 'converted').length,
-    currentLeads.filter(l => l.status === 'converted').length
+    currentLeadsList.filter(l => l.status === 'converted').length
   );
 
-  // Calculate engagement (messages per lead)
-  const previousEngagement = previousLeads.length > 0 ?
-    await getAverageMessageCount(previousLeads.map(l => l.id)) : 0;
-  const currentEngagement = currentLeads.length > 0 ?
-    await getAverageMessageCount(currentLeads.map(l => l.id)) : 0;
+  // Use batched SQL query instead of N+1 per-lead message fetches
+  const previousEngagement = previousLeads.length > 0
+    ? await getBatchedAverageMessageCount(previousLeads.map(l => l.id)) : 0;
+  const currentEngagement = currentLeadsList.length > 0
+    ? await getBatchedAverageMessageCount(currentLeadsList.map(l => l.id)) : 0;
   const engagementGrowth = calculateGrowth(previousEngagement, currentEngagement);
 
-  return {
-    leadGrowth,
-    conversionGrowth,
-    engagementGrowth
-  };
+  return { leadGrowth, conversionGrowth, engagementGrowth };
+}
+
+async function getBatchedAverageMessageCount(leadIds: string[]): Promise<number> {
+  if (leadIds.length === 0 || !db) return 0;
+  try {
+    const result = await db.execute(sql`
+      SELECT lead_id, COUNT(*) as msg_count
+      FROM messages
+      WHERE lead_id = ANY(${leadIds}::uuid[])
+      GROUP BY lead_id
+    `);
+    const rows = result.rows as Array<{ lead_id: string; msg_count: string }>;
+    const totalMessages = rows.reduce((sum, row) => sum + Number(row.msg_count), 0);
+    return totalMessages / leadIds.length;
+  } catch {
+    return 0;
+  }
 }
 
 function calculateGrowth(previous: number, current: number): number {
@@ -109,32 +114,16 @@ function calculateGrowth(previous: number, current: number): number {
   return Math.round(((current - previous) / previous) * 100);
 }
 
-async function getAverageMessageCount(leadIds: string[]): Promise<number> {
-  if (leadIds.length === 0) return 0;
+async function generatePredictions(leadsList: Lead[]) {
+  const hotLeads = leadsList.filter(l => l.metadata?.temperature === 'hot');
+  const warmLeads = leadsList.filter(l => l.metadata?.temperature === 'warm');
 
-  let totalMessages = 0;
-  for (const leadId of leadIds) {
-    const messages = await storage.getMessagesByLeadId(leadId);
-    totalMessages += messages.length;
-  }
-
-  return totalMessages / leadIds.length;
-}
-
-async function generatePredictions(leads: Lead[]) {
-  const hotLeads = leads.filter(l => l.metadata?.temperature === 'hot');
-  const warmLeads = leads.filter(l => l.metadata?.temperature === 'warm');
-
-  // Predict conversions (hot: 60%, warm: 30%)
   const expectedConversions = Math.round(
     (hotLeads.length * 0.6) + (warmLeads.length * 0.3)
   );
 
-  // Project revenue (assuming average deal size)
-  const avgDealSize = 500; // This could be configurable
-  const projectedRevenue = expectedConversions * avgDealSize;
+  const projectedRevenue = expectedConversions * 500;
 
-  // Identify at-risk leads (warm/hot but no recent activity)
   const oneDayAgo = new Date();
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
 
@@ -146,36 +135,28 @@ async function generatePredictions(leads: Lead[]) {
     .map(l => l.id)
     .slice(0, 10);
 
-  return {
-    expectedConversions,
-    projectedRevenue,
-    riskLeads
-  };
+  return { expectedConversions, projectedRevenue, riskLeads };
 }
 
-async function generateRecommendations(leads: Lead[], trends: any): Promise<string[]> {
+async function generateRecommendations(leadsList: Lead[], trends: any): Promise<string[]> {
   const recommendations: string[] = [];
 
-  if (leads.length === 0) {
-    recommendations.push('👋 Welcome to Audnix! Connect your mailbox to see real-time lead sync and AI outreach in action.');
-    recommendations.push('💡 Tip: Upload a Brand PDF to help the AI understand your messaging style.');
+  if (leadsList.length === 0) {
+    recommendations.push('Connect your mailbox to see real-time lead sync and AI outreach in action.');
     return recommendations;
   }
 
-  // Lead growth recommendation
   if (trends.leadGrowth < 0) {
-    recommendations.push('📉 Lead generation is declining. Consider increasing marketing efforts or checking integration connections.');
+    recommendations.push('Lead generation is declining. Consider increasing marketing efforts or checking integration connections.');
   } else if (trends.leadGrowth > 50) {
-    recommendations.push('📈 Lead growth is strong! Ensure you have enough follow-up capacity.');
+    recommendations.push('Lead growth is strong! Ensure you have enough follow-up capacity.');
   }
 
-  // Conversion recommendation
   if (trends.conversionGrowth < -10) {
-    recommendations.push('⚠️ Conversion rate dropping. Review AI responses and consider adjusting messaging.');
+    recommendations.push('Conversion rate dropping. Review AI responses and consider adjusting messaging.');
   }
 
-  // Channel recommendations
-  const byChannel = leads.reduce((acc: any, lead) => {
+  const byChannel = leadsList.reduce((acc: any, lead) => {
     acc[lead.channel] = acc[lead.channel] || { total: 0, converted: 0 };
     acc[lead.channel].total++;
     if (lead.status === 'converted') acc[lead.channel].converted++;
@@ -190,23 +171,21 @@ async function generateRecommendations(leads: Lead[], trends: any): Promise<stri
     .sort((a, b) => b.rate - a.rate)[0];
 
   if (bestChannel && bestChannel.rate > 0) {
-    recommendations.push(`🎯 ${bestChannel.channel} has the highest conversion rate (${bestChannel.rate.toFixed(1)}%). Focus more efforts here.`);
-  } else if (leads.length > 0) {
-    recommendations.push('📊 No conversions detected yet. Try A/B testing different messaging scripts in the Command Center.');
+    recommendations.push(`${bestChannel.channel} has the highest conversion rate (${bestChannel.rate.toFixed(1)}%). Focus more efforts here.`);
+  } else if (leadsList.length > 0) {
+    recommendations.push('No conversions detected yet. Try A/B testing different messaging scripts.');
   }
 
-  // Engagement recommendation
-  const coldLeads = leads.filter(l => l.status === 'cold').length;
-  if (coldLeads > leads.length * 0.3) {
-    recommendations.push(`❄️ ${coldLeads} leads went cold. Consider re-engagement campaigns with fresh angles.`);
+  const coldLeads = leadsList.filter(l => l.status === 'cold').length;
+  if (coldLeads > leadsList.length * 0.3) {
+    recommendations.push(`${coldLeads} leads went cold. Consider re-engagement campaigns with fresh angles.`);
   }
 
   return recommendations;
 }
 
-async function findTopPerformers(leads: Lead[]) {
-  // Channel performance
-  const byChannel = leads.reduce((acc: any, lead) => {
+async function findTopPerformers(leadsList: Lead[]) {
+  const byChannel = leadsList.reduce((acc: any, lead) => {
     acc[lead.channel] = acc[lead.channel] || { total: 0, converted: 0 };
     acc[lead.channel].total++;
     if (lead.status === 'converted') acc[lead.channel].converted++;
@@ -220,13 +199,11 @@ async function findTopPerformers(leads: Lead[]) {
     }))
     .sort((a, b) => b.performance - a.performance);
 
-  // Time-based performance (best hours for conversions)
   const times: Array<{ hour: number; conversions: number }> = [];
   for (let hour = 0; hour < 24; hour++) {
-    const conversions = leads.filter(l => {
+    const conversions = leadsList.filter(l => {
       if (l.status !== 'converted' || !l.lastMessageAt) return false;
-      const messageHour = new Date(l.lastMessageAt).getHours();
-      return messageHour === hour;
+      return new Date(l.lastMessageAt).getHours() === hour;
     }).length;
     times.push({ hour, conversions });
   }
@@ -238,28 +215,47 @@ async function findTopPerformers(leads: Lead[]) {
   };
 }
 
-export async function calculateAvgResponseTime(userId: string): Promise<string> {
-  const leads = await storage.getLeads({ userId, limit: 100 });
-  let totalDiff = 0;
-  let count = 0;
+export async function calculateAvgResponseTime(userId: string, integrationId?: string): Promise<string> {
+  if (!db) return "No data";
+  try {
+    const conditions = [eq(messages.userId, userId)];
+    if (integrationId) conditions.push(eq(messages.integrationId, integrationId));
 
-  for (const lead of leads) {
-    const messages = await storage.getMessagesByLeadId(lead.id);
-    const sorted = messages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    const rows = await db.select({
+      leadId: messages.leadId,
+      direction: messages.direction,
+      createdAt: messages.createdAt,
+    })
+      .from(messages)
+      .where(and(...conditions))
+      .orderBy(messages.leadId, messages.createdAt)
+      .limit(5000);
 
-    for (let i = 0; i < sorted.length - 1; i++) {
-      if (sorted[i].direction === 'inbound' && sorted[i + 1].direction === 'outbound') {
-        const diff = new Date(sorted[i + 1].createdAt).getTime() - new Date(sorted[i].createdAt).getTime();
-        totalDiff += diff;
-        count++;
+    if (rows.length === 0) return "No data";
+
+    const byLead: Record<string, Array<{ direction: string; createdAt: Date }>> = {};
+    for (const row of rows) {
+      if (!row.leadId) continue;
+      if (!byLead[row.leadId]) byLead[row.leadId] = [];
+      byLead[row.leadId].push({ direction: row.direction, createdAt: row.createdAt as unknown as Date });
+    }
+
+    let totalDiff = 0;
+    let count = 0;
+
+    for (const msgs of Object.values(byLead)) {
+      msgs.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      for (let i = 0; i < msgs.length - 1; i++) {
+        if (msgs[i].direction === 'inbound' && msgs[i + 1].direction === 'outbound') {
+          totalDiff += msgs[i + 1].createdAt.getTime() - msgs[i].createdAt.getTime();
+          count++;
+        }
       }
     }
+
+    if (count === 0) return "No data";
+    return `${Math.round(totalDiff / count / 60000)} minutes`;
+  } catch {
+    return "No data";
   }
-
-  if (count === 0) return "No data";
-  const avgMinutes = Math.round(totalDiff / count / 60000);
-  return `${avgMinutes} minutes`;
 }
-
-
-

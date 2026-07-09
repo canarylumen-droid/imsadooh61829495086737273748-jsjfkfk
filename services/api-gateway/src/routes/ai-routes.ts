@@ -127,13 +127,14 @@ router.get("/", requireAuth, async (req: Request, res: Response): Promise<void> 
  */
 router.get("/insights", requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = getCurrentUserId(req)!;
-    const { period = '30d' } = req.query;
+    const userId = req.session?.userId;
+    if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
+    const { period = '30d', integrationId } = req.query;
     const periodStr = period as string;
 
-    const insights = await generateAnalyticsInsights(userId, periodStr);
+    const insights = await generateAnalyticsInsights(userId, periodStr, integrationId as string | undefined);
 
-    // Template-based summarization fallback (works without AI)
     const summary = generateTemplateSummary(insights, period as string);
 
     res.json({ ...insights, summary });
@@ -192,8 +193,10 @@ function generateTemplateSummary(insights: any, period: string): string | null {
  */
 router.get("/analytics", requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = getCurrentUserId(req)!;
-    const { period = '30d' } = req.query;
+    const userId = req.session?.userId;
+    if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
+    const { period = '30d', integrationId } = req.query;
     const periodStr = period as string;
 
     const daysBack = periodStr === '7d' ? 7 : periodStr === '30d' ? 30 : 90;
@@ -201,8 +204,9 @@ router.get("/analytics", requireAuth, async (req: Request, res: Response): Promi
     startDate.setDate(startDate.getDate() - daysBack);
     startDate.setHours(0, 0, 0, 0);
 
-    // Use SQL-level aggregations via storage
-    const analytics = await storage.getAnalyticsSummary(userId, startDate);
+    const analytics = await storage.getAnalyticsSummary(userId, startDate, integrationId as string | undefined);
+
+    const avgResponseTime = await (await import('@services/brain-worker/src/ai-lib/engines/analytics-engine.js')).calculateAvgResponseTime(userId, integrationId as string | undefined);
 
     res.json({
       period,
@@ -212,7 +216,7 @@ router.get("/analytics", requireAuth, async (req: Request, res: Response): Promi
         replyRate: analytics.summary.totalLeads > 0
           ? ((analytics.summary.leadsReplied / analytics.summary.totalLeads) * 100).toFixed(2)
           : '0',
-        avgResponseTime: await (await import('@services/brain-worker/src/ai-lib/engines/analytics-engine.js')).calculateAvgResponseTime(userId),
+        avgResponseTime,
         positiveSentimentRate: analytics.positiveSentimentRate
       }
     });

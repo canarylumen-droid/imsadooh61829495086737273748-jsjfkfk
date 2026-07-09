@@ -456,12 +456,21 @@ router.get('/activity', requireAuth, async (req: Request, res: Response): Promis
  */
 router.get('/ai-actions', requireAuth, async (req: Request, res: Response) => {
   try {
-    const userId = req.session?.userId!;
+    const userId = req.session?.userId;
+    if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
     const { db } = await import('@shared/lib/db/db.js');
     const { aiActionLogs, leads } = await import('@audnix/shared');
-    const { desc, eq } = await import('drizzle-orm');
+    const { desc, eq, and, sql } = await import('drizzle-orm');
 
-    const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+    const integrationId = req.query.integrationId as string | undefined;
+
+    const conditions = [eq(aiActionLogs.userId, userId)];
+    if (integrationId) {
+      conditions.push(sql`${leads.integrationId} = ${integrationId}::uuid`);
+    }
 
     const logs = await db.select({
       id: aiActionLogs.id,
@@ -478,9 +487,10 @@ router.get('/ai-actions', requireAuth, async (req: Request, res: Response) => {
     })
     .from(aiActionLogs)
     .leftJoin(leads, eq(aiActionLogs.leadId, leads.id))
-    .where(eq(aiActionLogs.userId, userId))
+    .where(and(...conditions))
     .orderBy(desc(aiActionLogs.createdAt))
-    .limit(limit);
+    .limit(limit)
+    .offset(offset);
 
     res.json(logs);
   } catch (error) {
