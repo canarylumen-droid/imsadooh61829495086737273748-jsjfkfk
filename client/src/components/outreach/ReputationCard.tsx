@@ -88,7 +88,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
           </Badge>
         </CardHeader>
 
-        <CardContent className="space-y-4 flex flex-col justify-center items-center text-center py-6">
+        <CardContent className="space-y-3 flex flex-col justify-center items-center text-center py-5">
           <div className="p-3 rounded-full bg-rose-500/10 border border-rose-500/25">
             <ShieldAlert className="w-6 h-6 text-rose-400 animate-pulse" />
           </div>
@@ -125,7 +125,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
         </Badge>
       </CardHeader>
 
-      <CardContent className="pt-4 space-y-3">
+      <CardContent className="pt-4 pb-3 space-y-3">
         <div className="flex justify-between items-end">
           <div>
             <p className="text-[9px] font-bold text-muted-foreground/40 uppercase tracking-widest">Global Health Score</p>
