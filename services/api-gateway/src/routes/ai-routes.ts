@@ -318,7 +318,9 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
       csvBuffer = csvBuffer.subarray(3);
     }
     const stream = Readable.from(csvBuffer.toString('utf-8'));
-    const parser = csvParser();
+    const parser = csvParser({
+      mapHeaders: ({ header }) => header.trim(),
+    });
 
     let streamEnded = false;
     let streamError: any = null;
@@ -360,7 +362,7 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
       }
 
       // 1. Map Columns using first 5 rows
-      const headers = Object.keys(headerRows[0] || previewRows[0] || {});
+      const headers = Object.keys(headerRows[0] || previewRows[0] || {}).map(h => h.trim());
       const aiKeysAvailable = !!(process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY);
       const skipAI = !aiKeysAvailable || aiPaused;
       mappingResult = await mapCSVColumnsToSchema(headers, headerRows.slice(0, 3), skipAI);
@@ -416,8 +418,10 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
         allRows = [...headerRows];
         await new Promise<void>((resolve, reject) => {
           let count = 0;
-          const reStream = Readable.from(file.buffer.toString('utf-8'));
-          reStream.pipe(csvParser())
+          const reStream = Readable.from(csvBuffer.toString('utf-8'));
+          reStream.pipe(csvParser({
+            mapHeaders: ({ header }) => header.trim(),
+          }))
             .on('data', (data: any) => {
               count++;
               if (count > headerRows.length) {
