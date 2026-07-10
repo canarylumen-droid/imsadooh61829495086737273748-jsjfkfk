@@ -441,7 +441,7 @@ export class OutreachEngine {
 
     // Get leads with status 'new', channel 'email', and AI explicitly enabled
     // Autonomous outreach MUST NOT start automatically just because a lead is 'new'
-    const userLeads = await db
+    let userLeads = await db
       .select()
       .from(leads)
       .where(
@@ -455,6 +455,18 @@ export class OutreachEngine {
         )
       )
       .limit(50); // Increased batch for autonomous outreach scalability
+
+    // Filter out excluded leads before processing
+    try {
+      const { exclusionEngine } = await import('@shared/lib/exclusion/exclusion-engine.js');
+      const leadIds = userLeads.map(l => l.id);
+      if (leadIds.length > 0) {
+        const allowedIds = new Set(await exclusionEngine.filterExcluded(leadIds, userId));
+        userLeads = userLeads.filter(l => allowedIds.has(l.id));
+      }
+    } catch (exclErr) {
+      console.warn(`[OutreachEngine] Exclusion filter failed for autonomous outreach:`, exclErr);
+    }
 
     let sentInThisTick = 0;
     const MAX_AUTONOMOUS_PER_TICK = 50; // Increased for 50k+ lead bulk catch-up
@@ -1631,6 +1643,7 @@ export class OutreachEngine {
         // Stranded campaign leads with status 'pending'/'queued'/'processing'
         // assigned to an unhealthy mailbox are freed back to the pool so
         // healthy mailboxes can pick them up via consumer-distribution.
+        // EXCLUDED leads are NOT returned to the pool — they stay aborted.
         const campaignLeadsToHeal = await db.execute(sql`
           UPDATE campaign_leads
           SET integration_id = NULL,
@@ -1640,6 +1653,11 @@ export class OutreachEngine {
             AND (status = 'pending' OR status = 'queued' OR status = 'processing')
             AND lead_id IN (
               SELECT id FROM leads WHERE user_id = ${userId}::uuid
+            )
+            AND lead_id NOT IN (
+              SELECT lead_id FROM lead_campaign_outcomes
+              WHERE user_id = ${userId}::uuid
+                AND (excluded_until IS NULL OR excluded_until > NOW())
             )
           RETURNING id
         `);

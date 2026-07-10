@@ -17,6 +17,7 @@ import { AuditTrailService } from '@shared/lib/monitoring/audit-trail-service.js
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import { isNull } from 'drizzle-orm';
 import validator from 'validator';
+import { exclusionEngine } from '@shared/lib/exclusion/exclusion-engine.js';
 
 // Rate limiter: max 10 campaign creations per user per minute
 import { rateLimit } from 'express-rate-limit';
@@ -314,6 +315,18 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
           const before = finalLeadIds.length;
           finalLeadIds = finalLeadIds.filter(id => !blockedSet.has(id));
           console.log(`[Campaign] Cross-campaign guard blocked ${before - finalLeadIds.length} leads already in active/paused campaigns.`);
+        }
+      }
+
+      // ── LEAD EXCLUSION GUARD ─────────────────────────────────────────
+      // Prevent leads with active exclusions (converted, not_interested,
+      // ghosted, unsubscribed, etc.) from being added to ANY new campaign.
+      if (finalLeadIds.length > 0) {
+        const before = finalLeadIds.length;
+        finalLeadIds = await exclusionEngine.filterExcluded(finalLeadIds, userId);
+        const blocked = before - finalLeadIds.length;
+        if (blocked > 0) {
+          console.log(`[Campaign] Exclusion guard blocked ${blocked} leads with active exclusions.`);
         }
       }
 

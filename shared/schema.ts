@@ -1891,6 +1891,67 @@ export const warmupSeedAccounts = pgTable("warmup_seed_accounts", {
   wsaStatusIdx: index("wsa_status_idx").on(table.status),
 }));
 
+export const leadCampaignOutcomes = pgTable("lead_campaign_outcomes", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  leadId: uuid("lead_id").notNull().references(() => leads.id, { onDelete: "cascade" }),
+  campaignId: uuid("campaign_id").notNull().references(() => outreachCampaigns.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  outcome: text("outcome", {
+    enum: [
+      "converted", "not_interested", "ghosted", "bounced",
+      "unsubscribed", "booked", "replied_no_convert",
+      "completed_no_response", "spam_complaint",
+      "hard_bounce", "soft_bounce",
+    ]
+  }).notNull(),
+  detectedBy: text("detected_by", {
+    enum: ["ai_sentiment", "manual", "auto_rule", "reply_analysis", "bounce_detection", "ghost_detection", "system"]
+  }).notNull().default("system"),
+  exclusionPeriodDays: integer("exclusion_period_days"),
+  excludedUntil: timestamp("excluded_until"),
+  reasonDetail: text("reason_detail"),
+  metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  lcoLeadCampaignIdx: uniqueIndex("lco_lead_campaign_idx").on(table.leadId, table.campaignId),
+  lcoUserOutcomeIdx: index("lco_user_outcome_idx").on(table.userId, table.outcome),
+  lcoLeadExcludeIdx: index("lco_lead_exclude_idx").on(table.leadId, table.excludedUntil),
+  lcoUserExcludedUntilIdx: index("lco_user_excluded_until_idx").on(table.userId, table.leadId, table.excludedUntil),
+}));
+
+export const leadExclusionRules = pgTable("lead_exclusion_rules", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  ruleType: text("rule_type", {
+    enum: ["outcome_based", "time_based", "domain_based", "fatigue_based", "status_based"]
+  }).notNull(),
+  config: jsonb("config").$type<{
+    outcomes?: string[];
+    minLeadScore?: number;
+    maxLeadScore?: number;
+    exclusionDays?: number;
+    permanent?: boolean;
+    domainPattern?: string;
+    maxCampaignsInDays?: number;
+    campaignWindowDays?: number;
+    leadStatuses?: string[];
+    minMessagesSent?: number;
+    maxFollowUpSteps?: number;
+    noReplyDays?: number;
+    cooldownDays?: number;
+    exponentialBackoff?: boolean;
+    backoffMultiplier?: number;
+    maxBackoffDays?: number;
+  }>().notNull().default(sql`'{}'::jsonb`),
+  priority: integer("priority").notNull().default(0),
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => ({
+  lerUserIdActiveIdx: index("ler_user_id_active_idx").on(table.userId, table.isActive),
+}));
+
 export const warmupMailboxesSelect = createSelectSchema(warmupMailboxes);
 export const warmupMailboxesInsert = createInsertSchema(warmupMailboxes);
 export const warmupThreadsSelect = createSelectSchema(warmupThreads);
@@ -1903,6 +1964,16 @@ export const warmupDomainClustersSelect = createSelectSchema(warmupDomainCluster
 export const warmupDomainClustersInsert = createInsertSchema(warmupDomainClusters);
 export const warmupSeedAccountsSelect = createSelectSchema(warmupSeedAccounts);
 export const warmupSeedAccountsInsert = createInsertSchema(warmupSeedAccounts);
+
+export const leadCampaignOutcomesSelect = createSelectSchema(leadCampaignOutcomes);
+export const leadCampaignOutcomesInsert = createInsertSchema(leadCampaignOutcomes);
+export const leadExclusionRulesSelect = createSelectSchema(leadExclusionRules);
+export const leadExclusionRulesInsert = createInsertSchema(leadExclusionRules);
+
+export type LeadCampaignOutcome = z.infer<typeof leadCampaignOutcomesSelect>;
+export type InsertLeadCampaignOutcome = z.infer<typeof leadCampaignOutcomesInsert>;
+export type LeadExclusionRule = z.infer<typeof leadExclusionRulesSelect>;
+export type InsertLeadExclusionRule = z.infer<typeof leadExclusionRulesInsert>;
 
 export type WarmupMailbox = z.infer<typeof warmupMailboxesSelect>;
 export type InsertWarmupMailbox = z.infer<typeof warmupMailboxesInsert>;

@@ -1303,6 +1303,24 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
       }
     }
 
+    // ── LEAD EXCLUSION SEND-TIME GUARD ──────────────────────────────
+    // Double-check even if the lead made it through campaign creation.
+    // A lead could have been marked excluded (unsubscribed, converted, etc.)
+    // between the time it was added to the campaign and now.
+    try {
+      const { exclusionEngine } = await import('@shared/lib/exclusion/exclusion-engine.js');
+      const exclResult = await exclusionEngine.isExcluded(lead.id, userId);
+      if (exclResult.excluded) {
+        console.log(`[CampaignWorker] 🚫 Lead ${lead.id.slice(-8)} excluded at send-time: ${exclResult.reason}. Releasing.`);
+        await withDbRetry(() => db.update(campaignLeads)
+          .set({ status: 'aborted', error: `Excluded: ${exclResult.reason}` })
+          .where(eq(campaignLeads.id, leadEntry.id)));
+        continue;
+      }
+    } catch (exclErr) {
+      console.warn(`[CampaignWorker] Exclusion check failed for lead ${lead.id.slice(-8)}:`, exclErr);
+    }
+
     // --- PHASE 50: INTELLIGENT SCHEDULING GATE ---
     const tzProfile = await getLeadProfile(lead.id);
     const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
