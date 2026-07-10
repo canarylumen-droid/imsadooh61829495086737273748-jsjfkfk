@@ -632,10 +632,15 @@ export class DrizzleStorage implements IStorage {
     checkDatabase();
     if (emails.length === 0) return [];
     const lowerEmails = emails.map(e => e.toLowerCase());
+    // Use ANY with a properly formatted array literal to avoid drizzle's parameter expansion issue
+    const emailList = lowerEmails.map(e => `'${e.replace(/'/g, "''")}'`).join(',');
     const results = await db
       .select({ email: leads.email })
       .from(leads)
-      .where(and(eq(leads.userId, userId), sql`LOWER(${leads.email}) = ANY(${lowerEmails}::text[])`));
+      .where(and(
+        eq(leads.userId, userId),
+        sql`LOWER(${leads.email}) = ANY(ARRAY[${sql.raw(emailList)}]::text[])`
+      ));
     return results.map((r: { email: string | null }) => r.email).filter((e: string | null): e is string => !!e);
   }
 
@@ -2974,16 +2979,13 @@ export class DrizzleStorage implements IStorage {
         .from(leads)
         .where(eq(leads.integrationId, opts.integrationId));
       
-      const sharedLeadIdsSubquery = db
-        .select({ leadId: leads.id })
-        .from(leads)
-        .where(inArray(leads.integrationId, opts.integrationId as any));
-
+      // Subquery: find leads that share this integration
+      const metadataLeadId = sql`${notifications.metadata}->>'leadId'`;
       conditions.push(
         or(
           eq(notifications.integrationId, opts.integrationId),
           isNull(notifications.integrationId),
-          inArray(sql`${notifications.metadata}->>'leadId'`, sharedLeadIdsSubquery)
+          inArray(metadataLeadId, db.select({ id: leads.id }).from(leads).where(eq(leads.integrationId, opts.integrationId)))
         ) as any
       );
     }
