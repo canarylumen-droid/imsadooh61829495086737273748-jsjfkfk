@@ -3003,6 +3003,34 @@ export async function initializeCampaignWorker(): Promise<void> {
       removeOnComplete: true,
       removeOnFail: { count: 1000 },
     }).catch(err => console.error('Failed to schedule payment cleanup:', err.message));
+
+    // Auto-resume active campaigns: re-add send-batch jobs for any active campaign
+    // This prevents campaigns from getting stuck when the worker restarts.
+    try {
+      const activeCampaigns = await db.select().from(outreachCampaigns)
+        .where(eq(outreachCampaigns.status, 'active'));
+      for (const c of activeCampaigns) {
+        const cfg = (c.config || {}) as any;
+        const mailboxIds: string[] = cfg.mailboxIds || [];
+        if (mailboxIds.length > 0) {
+          const bulkJobs = mailboxIds.map(mbId => ({
+            name: `send-batch-${c.id}-${mbId}`,
+            data: {
+              type: 'campaign:send-batch' as const,
+              campaignId: c.id,
+              userId: c.userId,
+              integrationId: mbId,
+              dailyLimit: (cfg.mailboxLimits as any)?.[mbId] || 45,
+            },
+            opts: { delay: 5000, priority: 2, removeOnComplete: true, removeOnFail: { count: 1000 } },
+          }));
+          await campaignQueue.addBulk(bulkJobs);
+          console.log(`[CampaignQueue] 🔄 Auto-resumed campaign ${c.id.slice(-8)} with ${mailboxIds.length} mailbox(es)`);
+        }
+      }
+    } catch (err) {
+      console.warn('[CampaignQueue] Auto-resume scan failed (non-fatal):', err);
+    }
   }
 }
 
