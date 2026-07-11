@@ -721,7 +721,7 @@ export default function InboxPage() {
     if (!replyMessage || isPolishing) return;
     setIsPolishing(true);
     try {
-        const res = await fetch("/api/ai/magic-pencil", {
+        const res = await fetch("/api/leads/magic-pencil", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -747,7 +747,7 @@ export default function InboxPage() {
     setIsGenerating(true);
     setTypedText("");
     try {
-      const res = await apiRequest("POST", `/api/ai/draft-reply/${leadId}`);
+      const res = await apiRequest("POST", `/api/leads/draft-reply/${leadId}`);
       const data = await res.json();
       const aiSuggestion = data.draft || data.aiSuggestion || data.content || "";
 
@@ -952,7 +952,7 @@ export default function InboxPage() {
 
   const bookCallMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", `/api/ai/calendar/${leadId}`, { sendMessage: true });
+      return apiRequest("POST", `/api/leads/calendar/${leadId}`, { sendMessage: true });
     },
     onSuccess: () => {
       toast({ title: "Booking link sent!", description: `Calendar invite sent to ${activeLead?.name}` });
