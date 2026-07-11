@@ -220,10 +220,9 @@ export default function DashboardHome() {
   });
 
   const { data: statsData, isLoading: statsLoading, isFetching: statsFetching } = useQuery<DashboardStats>({
-    queryKey: ["/api/dashboard/stats", { integrationId: selectedIntegrationId }],
+    queryKey: ["/api/dashboard/stats"],
     queryFn: async () => {
       const url = new URL("/api/dashboard/stats", window.location.origin);
-      if (selectedIntegrationId) url.searchParams.set("integrationId", selectedIntegrationId);
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
@@ -234,10 +233,9 @@ export default function DashboardHome() {
   });
 
   const { data: previousStats } = useQuery<PreviousDashboardStats>({
-    queryKey: ["/api/dashboard/stats/previous", { integrationId: selectedIntegrationId }],
+    queryKey: ["/api/dashboard/stats/previous"],
     queryFn: async () => {
       const url = new URL("/api/dashboard/stats/previous", window.location.origin);
-      if (selectedIntegrationId) url.searchParams.set("integrationId", selectedIntegrationId);
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch previous stats");
       return res.json();
