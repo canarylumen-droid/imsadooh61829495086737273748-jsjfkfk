@@ -1,6 +1,7 @@
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "@shared/lib/storage/storage.js";
 import type { User } from "@audnix/shared";
+import { SESSION_COOKIE_NAME } from "../config/session.js";
 
 // Extend Express session to include our custom fields
 declare module "express-session" {
@@ -31,7 +32,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
 
   if (!userId) {
     const cookies = req.headers.cookie || '';
-    const sidCookie = cookies.split(';').find(c => c.trim().startsWith('audnix.sid='));
+    const sidCookie = cookies.split(';').find(c => c.trim().startsWith(`${SESSION_COOKIE_NAME}=`));
     
     // Silenced verbose auth rejection logging to prevent log pollution on unauthenticated endpoints (like /status or /user/profile checks)
     // console.debug(`[AUTH] Rejected 401: No userId for ${req.method} ${req.path}`);

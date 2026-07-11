@@ -172,7 +172,6 @@ async function boot() {
         console.error(`[Boot] Failed to enqueue orphan reconnect for ${integration.id}:`, err.message)
       );
     } else {
-      // Autonomous scaler now runs via BullMQ repeatable job (see autonomous-scaler queue).{
       // No Redis → connect directly
       connectionManager.connectMailbox(integration.id).catch((err: any) =>
         console.error(`[Boot] Direct connect failed for ${integration.id}:`, err.message)
@@ -180,6 +179,36 @@ async function boot() {
     }
 
     claimed++;
+  }
+
+  // 5. Drain the imap:orphans list — integrations pushed here by the global watchdog
+  //    (from dead workers) or by _signalCapReached (capacity signals).
+  if (redis) {
+    let orphanEntry: string | null;
+    let orphansFromList = 0;
+    while ((orphanEntry = await redis.lPop(IMAP_KEYS.orphans()).catch(() => null)) !== null) {
+      try {
+        const parsed = JSON.parse(orphanEntry!);
+        const orphanId = parsed.integrationId;
+        if (!orphanId) continue;
+        if (!isResponsibleFor(orphanId)) continue;
+
+        if (imapTaskQueue) {
+          await imapTaskQueue.add('CONNECT_MAILBOX', {
+            type: 'CONNECT_MAILBOX',
+            integrationId: orphanId,
+          }, { priority: 1 });
+        } else {
+          connectionManager.connectMailbox(orphanId);
+        }
+        orphansFromList++;
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+    if (orphansFromList > 0) {
+      console.log(`[Boot] Processed ${orphansFromList} orphans from imap:orphans list.`);
+    }
   }
 
   console.log(`[Boot] Replica ${REPLICA_ID}: ${claimed} mailboxes claimed, ${orphaned} orphans re-queued.`);
@@ -194,6 +223,7 @@ app.listen(port, () => {
 /**
  * Watchdog — Periodically scans for dead shards or missing connections
  * and enqueues reconnections for orphans assigned to THIS replica.
+ * Also drains the imap:orphans list from the global watchdog.
  */
 async function watchdog() {
   try {
@@ -217,6 +247,30 @@ async function watchdog() {
             integrationId: integration.id,
             reason: 'watchdog_orphan_detected'
           }, { priority: 2 });
+        }
+      }
+    }
+
+    // Drain the imap:orphans list from the global watchdog
+    if (redis) {
+      let orphanEntry: string | null;
+      let orphansFromList = 0;
+      while ((orphanEntry = await redis.lPop(IMAP_KEYS.orphans()).catch(() => null)) !== null) {
+        try {
+          const parsed = JSON.parse(orphanEntry!);
+          const orphanId = parsed.integrationId;
+          if (!orphanId) continue;
+          if (!isResponsibleFor(orphanId)) continue;
+
+          if (imapTaskQueue) {
+            await imapTaskQueue.add('CONNECT_MAILBOX', {
+              type: 'CONNECT_MAILBOX',
+              integrationId: orphanId,
+            }, { priority: 2 });
+          }
+          reclaims++;
+        } catch {
+          // Ignore malformed entries
         }
       }
     }

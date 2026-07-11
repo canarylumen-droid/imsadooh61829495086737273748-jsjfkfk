@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { twilioEmailOTP } from '@services/api-gateway/src/auth/twilio-email-otp.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { rateLimit } from 'express-rate-limit';
+import { SESSION_COOKIE_NAME } from '../config/session.js';
 
 const router = Router();
 
@@ -263,7 +264,7 @@ router.post(['/logout', '/signout'], (req: Request, res: Response): void => {
       res.status(500).json({ error: 'Logout failed' });
       return;
     }
-    res.clearCookie('connect.sid'); // Explicitly clear cookie
+    res.clearCookie(SESSION_COOKIE_NAME);
     res.json({ success: true, message: 'Logged out successfully' });
   });
 });

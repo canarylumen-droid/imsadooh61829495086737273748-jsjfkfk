@@ -1096,6 +1096,9 @@ export const campaignEmails = pgTable("campaign_emails", {
   integrationId: uuid("integration_id").references(() => integrations.id, { onDelete: "set null" }),
   targetUrl: text("target_url"),
   isWarmup: boolean("is_warmup").notNull().default(false),
+  openedAt: timestamp("opened_at"),
+  clickedAt: timestamp("clicked_at"),
+  repliedAt: timestamp("replied_at"),
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
 }, (table) => ({
   // PG-level idempotency guard — prevents duplicate sends at the database layer

@@ -665,17 +665,22 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
     }
 
     // Regenerate session ID for security (prevents session fixation)
-    await new Promise<void>((resolve, reject) => {
-      req.session.regenerate((err) => {
-        if (err) {
-          console.error('Session regenerate error:', err);
-          reject(err);
-        } else {
-          console.log('✅ Session regenerated for login');
-          resolve();
-        }
+    try {
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((err) => {
+          if (err) {
+            console.error('Session regenerate error:', err);
+            reject(err);
+          } else {
+            console.log('✅ Session regenerated for login');
+            resolve();
+          }
+        });
       });
-    });
+    } catch {
+      // If regeneration fails (e.g., stale cookie after logout), continue without regeneration
+      console.warn('[Login] Session regeneration failed, proceeding with existing session');
+    }
 
     // Set session data after regeneration
     req.session.userId = user.id;

@@ -286,8 +286,9 @@ export class ImapConnectionManager {
 
         // ── Phase 2: Cross-pod orphan detection ────────────────────────────
         // Scan all workers in the load sorted set. If a worker's last update
-        // is older than 10 minutes, scan its integration set for stale entries.
-        const DEAD_WORKER_THRESHOLD_MS = 10 * 60 * 1000; // 10 min
+        // is older than the threshold, scan its integration set for stale entries,
+        // delete the stale Redis keys, and enqueue the orphans for reassignment.
+        const DEAD_WORKER_THRESHOLD_MS = 3 * 60 * 1000; // 3 min (was 10 min — reduced for faster failover)
         const workers = await redis.zRangeWithScores(IMAP_KEYS.workerLoad(), 0, -1);
         for (const { value: otherWorkerId } of workers) {
           if (otherWorkerId === WORKER_ID) continue;
@@ -308,7 +309,14 @@ export class ImapConnectionManager {
 
             // If heartbeat is stale AND the key is still marked as owned by the dead worker
             if ((now - lastHB) > DEAD_WORKER_THRESHOLD_MS && workerId === otherWorkerId) {
-              // True orphan — push to reclaim list
+              // Delete stale Redis keys so the next Lua claim attempt succeeds
+              await Promise.allSettled([
+                redis.del(IMAP_KEYS.active(integrationId)),
+                redis.del(`lock:imap:conn:${integrationId}`),
+                redis.del(IMAP_KEYS.integrationState(integrationId)),
+              ]);
+
+              // Push to reclaim list
               await redis.lPush(IMAP_KEYS.orphans(), JSON.stringify({
                 integrationId,
                 sourceWorker: otherWorkerId,
@@ -738,13 +746,38 @@ export class ImapConnectionManager {
 
       const activeKey = IMAP_KEYS.active(integration.id);
       const workerSetKey = IMAP_KEYS.workerSet(WORKER_ID);
+      const legacyLockKey = `lock:imap:conn:${integration.id}`;
       const now = Date.now().toString();
+
+      // ── Stale claim reaping ────────────────────────────────────────────────
+      // If the imap:active key exists but has a stale heartbeat (>5 min),
+      // the owning worker is likely dead. Delete the stale keys so the
+      // atomic Lua claim below can succeed.
+      const STALE_HEARTBEAT_MS = 5 * 60 * 1000;
+      try {
+        const existingState = await redis.hGetAll(activeKey);
+        if (existingState && Object.keys(existingState).length > 0) {
+          const lastHB = parseInt(existingState.lastHeartbeat || '0', 10);
+          const ownerWorker = existingState.workerId || '';
+          if (ownerWorker && (Date.now() - lastHB) > STALE_HEARTBEAT_MS) {
+            console.log(`[IMAP] Reaping stale claim on ${integration.id} from worker ${ownerWorker} (last heartbeat ${Math.round((Date.now() - lastHB) / 1000)}s ago)`);
+            await Promise.allSettled([
+              redis.del(activeKey),
+              redis.sRem(IMAP_KEYS.workerSet(ownerWorker), integration.id),
+              redis.del(legacyLockKey),
+              redis.del(IMAP_KEYS.integrationState(integration.id)),
+            ]);
+          }
+        }
+      } catch {
+        // Non-critical — the Lua script below will still do the right thing
+      }
 
       // Evaluate Lua script atomically
       const result = await (redis as any).eval(
         LUA_CLAIM,
         {
-          keys: [activeKey, workerSetKey, `lock:imap:conn:${integration.id}`],
+          keys: [activeKey, workerSetKey, legacyLockKey],
           arguments: [WORKER_ID, integration.userId, host, now, integration.id],
         }
       );

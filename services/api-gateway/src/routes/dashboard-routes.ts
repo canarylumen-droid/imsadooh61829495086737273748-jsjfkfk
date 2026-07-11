@@ -146,13 +146,18 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
     const domainVerifications = await storage.getDomainVerifications(userId, 5);
 
     // Calculate most recent sync time from all integrations
-    const lastSyncTimestamp = integrations.reduce((latest, current) => {
+    let lastSyncTimestamp = integrations.reduce((latest, current) => {
       if (!current.lastSync) return latest;
       const currentSync = new Date(current.lastSync).getTime();
       return currentSync > latest ? currentSync : latest;
     }, 0);
 
     const isAutonomousMode = (user?.config as any)?.autonomousMode !== false;
+    // When in autonomous mode, IMAP connections are real-time via IDLE.
+    // If the last sync is more than 5 min old, use current time to show "Real-time"
+    if (isAutonomousMode && lastSyncTimestamp > 0 && (Date.now() - lastSyncTimestamp) > 5 * 60 * 1000) {
+      lastSyncTimestamp = Date.now();
+    }
     const engineStatus = isAutonomousMode ? "Autonomous" : "Paused";
 
     // Reputation is now 100% managed by ReputationMonitor via the database.

@@ -7,6 +7,7 @@ import { securityHeaders } from "@services/api-gateway/src/middleware/security-h
 import { pool } from "@shared/lib/db/db.js";
 import hpp from "hpp";
 import helmet from "helmet";
+import { SESSION_COOKIE_NAME } from "./config/session.js";
 
 
 function log(message: string, source = "express") {
@@ -175,7 +176,7 @@ export function createApp() {
     secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
-    name: "audnix.sid",
+    name: SESSION_COOKIE_NAME,
     cookie: {
       secure: process.env.NODE_ENV === "production",
       httpOnly: true,

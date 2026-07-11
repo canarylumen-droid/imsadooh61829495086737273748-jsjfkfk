@@ -2980,7 +2980,8 @@ export class DrizzleStorage implements IStorage {
         .where(eq(leads.integrationId, opts.integrationId));
       
       // Subquery: find leads that share this integration
-      const metadataLeadId = sql`${notifications.metadata}->>'leadId'`;
+      // Cast the JSONB-extracted text to UUID to avoid `operator does not exist: text = uuid`
+      const metadataLeadId = sql`(${notifications.metadata}->>'leadId')::uuid`;
       conditions.push(
         or(
           eq(notifications.integrationId, opts.integrationId),

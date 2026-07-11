@@ -1426,6 +1426,8 @@ ${ragContext || "No specific knowledge base fragments found."}
 2. **NO FAKE METRICS**: Never claim specific results unless they appear in the brand context.
 3. **NO INVENTED COMPETITORS**: Only name competitors explicitly listed above.
 4. **NO MADE-UP CONTEXT**: Do not describe use cases not present in the offer or knowledge base.
+5. **NO BRACKET PLACEHOLDERS**: Never output square brackets `[...]` or angle brackets `<...>` in the final email. The examples below use `[...]` as placeholders for demonstration only — you must replace them with REAL, SPECIFIC content or omit them entirely.
+6. **NO TEMPLATE LEAKS**: If you don't know a specific detail, skip it. Do NOT leave `[placeholder]` or `[unknown]`.
 
 ## COPYWRITING DIRECTIVES
 1. **PEER-TO-PEER**: Speak as an equal to ${leadRole}s — confident, not salesy.
@@ -1514,9 +1516,25 @@ Industry: ${industry}
     };
   } catch (error: any) {
     const isQuotaError = error?.message?.includes('quota') || error?.status === 429;
+    const isNga1Violation = error?.message?.includes('NGA-1') || error?.message?.includes('placeholder');
+
+    if (isNga1Violation && !(lead as any)?._retried) {
+      // Retry once with a stricter prompt — the AI leaked placeholders
+      console.warn(`[ExpertOutreach] NGA-1 violation for ${lead.name}, retrying with strict anti-placeholder prompt...`);
+      (lead as any)._retried = true;
+      return generateExpertOutreach(lead, offer, industry, leadRole, {
+        ...ck,
+        customInstructions: `${ck.customInstructions || ''}
+
+STRICT INSTRUCTION: You MUST NOT use ANY square brackets [ ] in your output. 
+Replace all [placeholders] with real, specific content based on the lead's profile.
+If you don't know a specific detail, simply omit it. Never leave brackets.`
+      });
+    }
+
     if (isQuotaError) {
       console.error("🚀 [AI Quota Alert] Provider limit reached. Activating Elite Fallback Engine.");
-    } else {
+    } else if (!isNga1Violation) {
       console.error("Expert Outreach Error (Switching to Elite Fallback):", error);
     }
 
@@ -1527,7 +1545,7 @@ Industry: ${industry}
     const leadTarget = leadRole === 'Founder' || leadRole === 'CEO' ? 'roadmap' : 'workflow';
 
     return {
-      subject: `The ${leadRole} gap in ${industry} implementation ([Live Context])`,
+      subject: `The ${leadRole} gap in ${industry} implementation`,
       body: `<p>Hey ${leadName},</p><p>I noticed a specific friction point in how ${leadCompany} is scaling its ${industry} operations. Most teams in your space miss the 20% shift that drives 80% of the conversion velocity.</p><p>I have a theory on how ${usp} maps to your current ${leadTarget}. Is efficiency a core focus for the team this quarter?</p>`,
       alternatives: [
         `Disruptive question for ${lead.company || "the team"}`,

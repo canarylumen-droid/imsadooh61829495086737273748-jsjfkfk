@@ -317,7 +317,7 @@ export default function DashboardHome() {
     const diffHours = Math.floor(diffMs / 3600000);
     const diffDays = Math.floor(diffMs / 86400000);
 
-    if (diffMins < 1) return "Just now";
+    if (diffMins < 2) return "Real-time";
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     return `${diffDays}d ago`;
@@ -449,17 +449,24 @@ export default function DashboardHome() {
                 queryClient.invalidateQueries({ queryKey: ["/api/dashboard/activity"] });
               }}
             >
-              <RefreshCw className="mr-2 h-3.5 w-3.5" /> Refresh Data
+              <RefreshCw className={`mr-2 h-3.5 w-3.5 ${statsFetching || activityFetching ? 'animate-spin' : ''}`} />
+              {statsFetching || activityFetching ? 'Refreshing...' : 'Refresh Data'}
             </Button>
             <MailboxSwitcher
               value={selectedIntegrationId}
               onValueChange={setSelectedIntegrationId}
               className="flex w-full md:w-auto"
             />
-            {stats?.sync?.lastSync && (
+            {stats?.sync?.isAutonomous && (
+              <Badge variant="outline" className="px-3 py-1.5 bg-green-500/10 text-green-500 border-green-500/20 rounded-lg font-bold text-[11px] animate-pulse">
+                <span className="w-2 h-2 mr-2 bg-green-500 rounded-full inline-block" />
+                Live
+              </Badge>
+            )}
+            {stats?.sync?.lastSync && !stats?.sync?.isAutonomous && (
               <Badge variant="outline" className="px-3 py-1.5 bg-muted/30 text-muted-foreground border-border/40 rounded-lg font-bold text-[11px]">
                 <RefreshCw className="w-3 h-3 mr-2 opacity-50" />
-                Synced {formatTimeAgo(stats.sync!.lastSync)}
+                Synced {formatTimeAgo(stats.sync.lastSync)}
               </Badge>
             )}
             {trialDaysLeft > 0 && (
