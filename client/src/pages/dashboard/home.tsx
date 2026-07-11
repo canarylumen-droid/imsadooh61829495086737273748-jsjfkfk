@@ -228,7 +228,8 @@ export default function DashboardHome() {
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
     },
-    // Removed refetchInterval: Sockets will invalidate the query automatically
+    refetchOnMount: true,
+    refetchInterval: 30_000,
     placeholderData: (previousData) => previousData,
   });
 

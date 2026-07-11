@@ -1321,33 +1321,6 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
       console.warn(`[CampaignWorker] Exclusion check failed for lead ${lead.id.slice(-8)}:`, exclErr);
     }
 
-    // --- PHASE 50: INTELLIGENT SCHEDULING GATE ---
-    const tzProfile = await getLeadProfile(lead.id);
-    const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
-    
-    if (tzProfile && !isActivelyEngaged) {
-      const probability = await getOptimalSendProbability(new Date(), tzProfile, userId);
-      
-      if (probability === 0) {
-        console.log(`[CampaignWorker] 😴 Lead ${lead.id.slice(-8)} is outside business window. Rescheduling.`);
-        const nextCheck = new Date(Date.now() + 60 * 60 * 1000);
-        await withDbRetry(() => db.update(campaignLeads)
-          .set({ nextActionAt: nextCheck, status: 'queued' })
-          .where(eq(campaignLeads.id, leadEntry.id)));
-        continue; 
-      }
-
-      const diceRoll = Math.random();
-      if (diceRoll > probability) {
-        console.log(`[CampaignWorker] 🎲 Dice roll (${diceRoll.toFixed(2)}) > Prob (${probability}) for lead ${lead.id.slice(-8)}. Yielding.`);
-        const retryAt = new Date(Date.now() + (15 + Math.random() * 15) * 60 * 1000);
-        await withDbRetry(() => db.update(campaignLeads)
-          .set({ nextActionAt: retryAt, status: 'queued' })
-          .where(eq(campaignLeads.id, leadEntry.id)));
-        continue;
-      }
-    }
-
     // --- MID-BATCH COLLISION CHECK ---
     // If an auto-reply appeared while we were iterating leads, yield so the reply lands first.
     if (await mailboxHasPendingReply(integrationId)) {
@@ -1554,26 +1527,6 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
       30 * 60 * 1000 // Retry in 30 minutes (pushes back until pause expires)
     );
     return;
-  }
-
-  // --- PHASE 50: TIMEZONE INTELLIGENCE GATE (FOLLOW-UP) ---
-  const tzProfile = await getLeadProfile(lead.id);
-  const isActivelyEngaged = lead.status === 'replied' || lead.status === 'warm';
-
-  if (tzProfile && !isActivelyEngaged) {
-    const probability = await getOptimalSendProbability(new Date(), tzProfile, userId);
-    if (probability === 0) {
-      console.log(`[CampaignWorker] 😴 Follow-up for ${lead.id.slice(-8)} outside window. Delaying 1hr.`);
-      await campaignQueueManager.scheduleFollowUp(
-        campaignId,
-        userId,
-        campaignLeadId,
-        integrationId,
-        stepIndex,
-        60 * 60 * 1000 // 1 hour jitter
-      );
-      return;
-    }
   }
 
   // --- REPLY GATE: Follow-ups must yield to any pending auto-reply ---
@@ -2922,29 +2875,37 @@ async function processPaymentCleanup(): Promise<void> {
   }
 }
 
-export const campaignWorker = hasRedis ? new Worker<CampaignJobData>(
-  'campaign-engine',
-  processCampaignJob,
-  {
-    connection: createFreshConnection(), // dedicated connection — never shares socket with queues or other workers
-    concurrency: parseInt(process.env.CAMPAIGN_CONCURRENCY || '50', 10),  // 50 slots — tuned for 1M+ scale (override via env)
-    lockDuration:    parseInt(process.env.CAMPAIGN_LOCK_DURATION_MS    || '120000',  10), // 2min — AI generation + SMTP can take >30s
-    stalledInterval: parseInt(process.env.CAMPAIGN_STALLED_INTERVAL_MS || '300000',  10), // 5min — prevents false duplicate-send retries
-    maxStalledCount: parseInt(process.env.CAMPAIGN_MAX_STALLED_COUNT   || '3',       10), // tolerate 3 stalls before hard-failing job
-    limiter: {
-      // Prevents thundering-herd when 100+ mailbox jobs come due simultaneously on restart.
-      // Set well above concurrency so normal operation is never throttled.
-      max: parseInt(process.env.CAMPAIGN_RATE_MAX || '15', 10),  // throttled for small instances
-      duration: 1000,
-    },
-    removeOnComplete: true,   // successful jobs are purged from Redis instantly — zero RAM spent on them
-    removeOnFail: { count: 1000 },
-  } as any
-) : null;
+export let campaignWorker: Worker<CampaignJobData> | null = null;
 
-if (campaignWorker) {
+/**
+ * Initialize the BullMQ campaign worker and related services.
+ * Call this ONLY from the outreach-worker process — NOT from the API gateway.
+ */
+export async function initializeCampaignWorker(): Promise<void> {
+  if (!hasRedis) {
+    console.warn('⚠️ BullMQ Campaign Queue Worker disabled (No Redis) — using setInterval fallback');
+    return;
+  }
+
+  campaignWorker = new Worker<CampaignJobData>(
+    'campaign-engine',
+    processCampaignJob,
+    {
+      connection: createFreshConnection(),
+      concurrency: parseInt(process.env.CAMPAIGN_CONCURRENCY || '50', 10),
+      lockDuration:    parseInt(process.env.CAMPAIGN_LOCK_DURATION_MS    || '120000',  10),
+      stalledInterval: parseInt(process.env.CAMPAIGN_STALLED_INTERVAL_MS || '300000',  10),
+      maxStalledCount: parseInt(process.env.CAMPAIGN_MAX_STALLED_COUNT   || '3',       10),
+      limiter: {
+        max: parseInt(process.env.CAMPAIGN_RATE_MAX || '15', 10),
+        duration: 1000,
+      },
+      removeOnComplete: true,
+      removeOnFail: { count: 1000 },
+    } as any
+  );
+
   campaignWorker.on('completed', (job) => {
-    // Quiet logging — only for non-stats jobs to reduce noise
     if (job.data.type !== 'campaign:update-stats') {
       console.log(`[CampaignWorker] ✓ ${job.data.type} completed (${job.id})`);
     }
@@ -2955,8 +2916,6 @@ if (campaignWorker) {
     const jobId = job?.id;
     console.error(`[CampaignWorker] ✗ ${jobType} failed (${jobId}):`, err.message);
     
-    // M5 Fix: Structured audit logging for every job failure.
-    // This ensures failures are never silent — they are always traceable.
     try {
       const userId = (job?.data as any)?.userId;
       const campaignId = (job?.data as any)?.campaignId;
@@ -2978,24 +2937,18 @@ if (campaignWorker) {
         }).onConflictDoNothing();
       }
     } catch (auditErr: any) {
-      // Audit failure must NEVER crash the worker error handler
       console.error('[CampaignWorker] Audit log failed (non-fatal):', auditErr.message);
     }
 
-    // Pre-compute retry exhaustion status (needed by both state safety and cleanup)
     const attemptsMade  = job?.attemptsMade ?? 0;
     const maxAttempts   = (job?.opts as any)?.attempts ?? 3;
     const isPermanentlyFailed = attemptsMade >= maxAttempts;
     const campaignIdForCleanup = (job?.data as any)?.campaignId;
 
-    // Circuit Breaker: Increment campaign failure count
     if (jobType === 'campaign:send-batch' && campaignIdForCleanup) {
       await handleCampaignFailure(campaignIdForCleanup);
     }
 
-    // ── STATE SAFETY: Reconcile campaignLeads.status on permanent failure ──
-    // If a job bubbles up an unhandled error, Postgres must still reflect the
-    // terminal state. This ensures no lead stays 'pending' when it is dead.
     if (isPermanentlyFailed) {
       const leadId = (job?.data as any)?.campaignLeadId;
       if (leadId && campaignIdForCleanup && db) {
@@ -3013,10 +2966,6 @@ if (campaignWorker) {
         }
       }
     }
-
-    // Late-retry cleanup: if this job has exhausted ALL attempts and the campaign is already
-    // completed, purge the failed record from Redis immediately.
-    // This closes the gap where completeCampaign() ran before these retries finished.
 
     if (isPermanentlyFailed && campaignIdForCleanup && job) {
       try {
@@ -3037,20 +2986,16 @@ if (campaignWorker) {
 
   console.log(`✅ BullMQ Campaign Queue Worker initialized (concurrency: ${parseInt(process.env.CAMPAIGN_CONCURRENCY || '50', 10)})`);
 
-  // Initialize Autonomous Scaler (Daily Optimization Cycle)
-  // Using dynamic import with a safer relative path for the worker context
   const scalerPath = '../../../services/outreach-worker/src/outreach-lib/autonomous-scaler.js';
   import(scalerPath).then(({ AutonomousScalerService }) => {
-    // Run immediately on start, then every 24 hours
     AutonomousScalerService.runOptimizationCycle().catch((err: any) => console.error('Initial Scaler Cycle failed:', err.message));
     setInterval(() => {
       AutonomousScalerService.runOptimizationCycle().catch((err: any) => console.error('Daily Scaler Cycle failed:', err.message));
-    }, 12 * 60 * 60 * 1000); 
+    }, 12 * 60 * 60 * 1000);
   }).catch((err: any) => {
     console.error('Failed to load AutonomousScalerService:', err.message);
   });
-  
-  // Schedule Global Cleanup Job (Daily at 2 AM UTC)
+
   if (campaignQueue) {
     campaignQueue.add('global-payment-cleanup', { type: 'system:cleanup-payments' }, {
       repeat: { pattern: '0 2 * * *' },
@@ -3059,8 +3004,5 @@ if (campaignWorker) {
       removeOnFail: { count: 1000 },
     }).catch(err => console.error('Failed to schedule payment cleanup:', err.message));
   }
-
-} else {
-  console.warn('⚠️ BullMQ Campaign Queue Worker disabled (No Redis) — using setInterval fallback');
 }
 
