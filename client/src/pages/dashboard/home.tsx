@@ -21,6 +21,7 @@ import {
   Download,
   ShieldCheck,
   AlertCircle,
+  AlertTriangle,
   Activity,
   RefreshCw,
   Sparkles,
@@ -377,12 +378,29 @@ export default function DashboardHome() {
       suffix: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "" : "%",
       icon: AlertCircle,
       percentage: calculatePercentageChange(stats?.globalBounceRate || 0, previousStats ? (previousStats as any).globalBounceRate : undefined),
-      // Lower bounce rate is good — invert trend color logic
       trend: (previousStats && (previousStats as any).globalBounceRate !== undefined)
         ? ((stats?.globalBounceRate || 0) < ((previousStats as any).globalBounceRate || 0) ? "up" : (stats?.globalBounceRate || 0) > ((previousStats as any).globalBounceRate || 0) ? "down" : "neutral")
         : "neutral",
       color: "text-amber-500",
       glow: "group-hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]"
+    },
+    {
+      label: "QUEUED",
+      value: stats?.queuedLeads ?? 0,
+      icon: Clock,
+      percentage: "—",
+      trend: "neutral",
+      color: "text-sky-500",
+      glow: "group-hover:shadow-[0_0_20px_rgba(14,165,233,0.15)]"
+    },
+    {
+      label: "FAILED",
+      value: (stats?.bouncyLeads ?? 0) + (stats?.undeliveredLeads ?? 0),
+      icon: AlertTriangle,
+      percentage: "—",
+      trend: "neutral",
+      color: (stats?.bouncyLeads ?? 0) > 0 ? "text-red-500" : "text-muted-foreground",
+      glow: "group-hover:shadow-[0_0_20px_rgba(239,68,68,0.15)]"
     },
     {
       label: "REVENUE",
