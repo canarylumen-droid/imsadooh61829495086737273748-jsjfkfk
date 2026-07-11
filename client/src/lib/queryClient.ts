@@ -1,13 +1,20 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+let authRedirectPending = false;
+
 async function throwIfResNotOk(res: Response) {
   if (res.status === 401) {
-    // If we're on a dashboard page and get a 401, redirect to login
+    // Only redirect after 2 failed attempts within 5s to avoid flaky redirects
     if (window.location.pathname.startsWith('/dashboard')) {
-      console.warn('Unauthorized access detected, redirecting to auth...');
-      localStorage.removeItem('userId');
-      localStorage.removeItem('user');
-      window.location.href = '/auth';
+      if (authRedirectPending) {
+        console.warn('Unauthorized twice — redirecting to auth...');
+        localStorage.removeItem('userId');
+        localStorage.removeItem('user');
+        window.location.href = '/auth';
+        return;
+      }
+      authRedirectPending = true;
+      setTimeout(() => { authRedirectPending = false; }, 5000);
     }
   }
 
