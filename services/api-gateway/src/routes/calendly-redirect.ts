@@ -54,7 +54,14 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     console.log(`[Calendly Redirect] Exchanging code for tokens for user: ${userId}`);
     const tokenData = await calendlyOAuth.exchangeCodeForToken(code as string);
 
-    // 2. Encrypt and persist
+    // 2. Remove any existing Calendly integration first — prevents duplicate records
+    //    when users reconnect via OAuth without manually disconnecting first.
+    const existingIntegration = await storage.getIntegration(userId, 'calendly');
+    if (existingIntegration) {
+      await storage.deleteIntegrationById(existingIntegration.id);
+    }
+
+    // 2.5 Encrypt and persist
     const encryptedMeta = encrypt(JSON.stringify({
       access_token: tokenData.accessToken,
       refresh_token: tokenData.refreshToken,
@@ -64,41 +71,36 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     await storage.createIntegration({
       userId: userId,
       provider: 'calendly',
-      accountType: 'calendly',
+      accountType: tokenData.user?.name || 'calendly',
       encryptedMeta: encryptedMeta,
       connected: true,
       lastSync: new Date(),
     });
 
-    // 2.5 Save Calendly User Info and Timezone
+    // 3. Save Calendly User Info and Timezone — fresh clean slate
     if (tokenData.user) {
       console.log(`[Calendly Redirect] Saving timezone (${tokenData.user.timezone}) and URI for user: ${userId}`);
       
-      // Update User table
+      // Update User table — always overwrite with fresh data
       await db.update(users).set({
         timezone: tokenData.user.timezone || "America/New_York",
         calendlyUserUri: tokenData.user.uri,
-        // BUG #3 FIX: Auto-save scheduling link from OAuth profile if missing
-        calendarLink: tokenData.user.schedulingUrl || undefined
+        calendarLink: tokenData.user.schedulingUrl || undefined,
+        calendlyAccessToken: "oauth_connected",
       }).where(eq(users.id, userId));
 
-      // Upsert Calendar Settings
-      const existingSettings = await db.query.calendarSettings.findFirst({
-        where: eq(calendarSettings.userId, userId)
+      // Upsert Calendar Settings — fresh clean state
+      await db.insert(calendarSettings).values({
+        userId,
+        timezone: tokenData.user.timezone || "America/New_York",
+        calendlyEnabled: true,
+      }).onConflictDoUpdate({
+        target: calendarSettings.userId,
+        set: {
+          timezone: tokenData.user.timezone || "America/New_York",
+          calendlyEnabled: true,
+        },
       });
-      
-      if (existingSettings) {
-        await db.update(calendarSettings).set({
-          timezone: tokenData.user.timezone || "America/New_York",
-          calendlyEnabled: true
-        }).where(eq(calendarSettings.userId, userId));
-      } else {
-        await db.insert(calendarSettings).values({
-          userId: userId,
-          timezone: tokenData.user.timezone || "America/New_York",
-          calendlyEnabled: true
-        });
-      }
     }
 
     // 3. Register Webhook for real-time meetings (Async background task)

@@ -23,7 +23,7 @@ export class SafetyGuard {
     const matches = body.match(placeholderRegex) || [];
     
     // We allow standard variables like {{firstName}}, but flag others
-    const allowedVariables = ['{{firstName}}', '{{lastName}}', '{{name}}', '{{lead_name}}', '{{company}}', '{{business_name}}', '{{city}}', '{{industry}}', '{{niche}}', '{{website}}', '{{unsubscribe}}'];
+    const allowedVariables = ['{{firstName}}', '{{lastName}}', '{{name}}', '{{lead_name}}', '{{company}}', '{{business_name}}', '{{city}}', '{{industry}}', '{{niche}}', '{{website}}', '{{sender_name}}', '{{unsubscribe}}'];
     const illegalPlaceholders = matches.filter(m => !allowedVariables.includes(m));
 
     if (illegalPlaceholders.length > 0) {

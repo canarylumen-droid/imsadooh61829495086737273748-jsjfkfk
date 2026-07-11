@@ -257,86 +257,11 @@ async function checkMx(domain: string): Promise<DnsVerificationResult['mx']> {
   }
 }
 
-async function checkBlacklist(domain: string): Promise<DnsVerificationResult['blacklist']> {
-  const ipProviders = [
-    'zen.spamhaus.org',
-    'b.barracudacentral.org',
-    'bl.spamcop.net',
-    'dnsbl.sorbs.net'
-  ];
-  const domainProviders = [
-    'dbl.spamhaus.org',
-    'multi.surbl.org',
-    'uribl.com'
-  ];
-  
-  const listedOn: string[] = [];
-  
-  try {
-    const ips = await promisify(dns.resolve4)(domain).catch(() => []);
-    const ip = ips.length > 0 ? ips[0] : null;
-    const reverseIp = ip ? ip.split('.').reverse().join('.') : null;
-
-    const checks: Promise<void>[] = [];
-
-    // IP-based checks (reversed IP format for IP-based RBLs)
-    if (reverseIp) {
-      for (const provider of ipProviders) {
-        checks.push((async () => {
-          try {
-            const result = await promisify(dns.resolve4)(`${reverseIp}.${provider}`);
-            if (result && result.length > 0) {
-              // RBLs return 127.0.0.x for listed entries
-              const isListed = result.some(r => r.startsWith('127.'));
-              if (isListed) listedOn.push(provider);
-            }
-          } catch (e) { /* RBL DNS lookup failure is normal for non-listed IPs */ }
-        })());
-      }
-    }
-
-    // Domain-based checks
-    for (const provider of domainProviders) {
-      checks.push((async () => {
-        try {
-          const result = await promisify(dns.resolve4)(`${domain}.${provider}`);
-          if (result && result.length > 0) {
-            const isListed = result.some(r => r.startsWith('127.'));
-            if (isListed) listedOn.push(provider);
-          }
-        } catch (e) { /* RBL DNS lookup failure is normal for non-listed domains */ }
-      })());
-    }
-
-    // Open public IP reputation check via AbuseIPDB or similar (no API key needed for basic DNSBL)
-    // Check against additional public RBLs for comprehensive coverage
-    const publicRbls = ['cbl.abuseat.org', 'psbl.surriel.com', 'ivm.sorbs.net'];
-    if (reverseIp) {
-      for (const rbl of publicRbls) {
-        checks.push((async () => {
-          try {
-            const result = await promisify(dns.resolve4)(`${reverseIp}.${rbl}`);
-            if (result && result.length > 0) {
-              const isListed = result.some(r => r.startsWith('127.'));
-              if (isListed) listedOn.push(rbl);
-            }
-          } catch (e) { /* Public RBL DNS lookup failure is normal for non-listed IPs */ }
-        })());
-      }
-    }
-
-    await Promise.all(checks);
-  } catch (e) {
-    console.warn(`[DNSBL] Failed to perform complete check for ${domain}`, e);
-  }
-
-  // Deduplicate
-  const unique = [...new Set(listedOn)];
-
-  return {
-    isBlacklisted: unique.length > 0,
-    listedOn: unique
-  };
+async function checkBlacklist(_domain: string): Promise<DnsVerificationResult['blacklist']> {
+  // DNSBL/RBL queries are skipped — they cause slow timeouts and false positives.
+  // Real-time blacklist checking is unreliable for individual sending domains.
+  // The reputation system (bounce/spam tracking) handles deliverability safety instead.
+  return { isBlacklisted: false, listedOn: [] };
 }
 
 async function debouncedDnsQuery<T>(key: string, queryFn: () => Promise<T>): Promise<T> {

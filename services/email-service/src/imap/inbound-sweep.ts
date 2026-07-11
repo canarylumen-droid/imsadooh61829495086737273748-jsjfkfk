@@ -283,9 +283,10 @@ class InboundSweepWorker {
 
                     const hasAutoReply = campaign ? !!(campaign.template as any)?.autoReplyBody : false;
                     const isFirstReply = leadInfo.status === 'sent';
+                    const isAIActive = campaign.aiAutonomousMode;
 
-                    if (hasAutoReply && isFirstReply) {
-                      // Campaign auto-reply template for first-time replies
+                    if (!isAIActive && hasAutoReply && isFirstReply) {
+                      // Campaign auto-reply template for first-time replies (only when AI mode is OFF)
                       const { campaignQueueManager } = await import('@shared/lib/queues/campaign-queue.js');
                       await campaignQueueManager.scheduleAutoReply(
                         leadInfo.campaignId,

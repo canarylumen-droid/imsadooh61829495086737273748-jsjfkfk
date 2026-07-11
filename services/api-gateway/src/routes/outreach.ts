@@ -420,7 +420,7 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
     const durationDays = campaignConfig.durationDays || 30;
     const totalLeadsForCalc = addedCount || 0;
     const averagePerDay = totalLeadsForCalc > 0 && durationDays > 0
-      ? Math.ceil(dailyLimit / durationDays)
+      ? Math.ceil(totalLeadsForCalc / Math.max(1, durationDays))
       : 0;
 
     // Notify UI of new campaign

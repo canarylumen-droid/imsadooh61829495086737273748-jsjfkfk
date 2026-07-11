@@ -22,7 +22,23 @@ router.get('/:leadId', async (req, res) => {
     const [lead] = await db.select().from(leads).where(eq(leads.id, leadId)).limit(1);
     
     if (!lead) {
-      return res.status(404).send('<h1>Lead not found</h1><p>We could not find your subscription record.</p>');
+      return res.status(200).send(`
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 100px auto; text-align: center; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);">
+          <div style="font-size: 48px; margin-bottom: 16px;">🔍</div>
+          <h1 style="color: #1a1a2e; font-size: 24px; margin: 0 0 8px;">Already Unsubscribed</h1>
+          <p style="color: #666; line-height: 1.6; margin: 0;">You're already removed from our list. No further action needed.</p>
+        </div>
+      `);
+    }
+
+    if (lead.status === 'unsubscribed') {
+      return res.send(`
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 100px auto; text-align: center; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);">
+          <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+          <h1 style="color: #1a1a2e; font-size: 24px; margin: 0 0 8px;">Already Unsubscribed</h1>
+          <p style="color: #666; line-height: 1.6; margin: 0;">You're already removed from <strong>${lead.name}</strong>'s list.</p>
+        </div>
+      `);
     }
 
     // Update lead status to unsubscribed
@@ -39,11 +55,12 @@ router.get('/:leadId', async (req, res) => {
     wsSync.notifyLeadsUpdated(lead.userId, { leadId, status: 'unsubscribed' });
 
     res.send(`
-      <div style="font-family: sans-serif; max-width: 500px; margin: 100px auto; text-align: center; border: 1px solid #eee; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
-        <h1 style="color: #333;">Unsubscribed successfully</h1>
-        <p style="color: #666; line-height: 1.6;">You have been removed from our outreach list for <strong>${lead.name}</strong>. You will no longer receive automated messages from us.</p>
-        <hr style="margin: 30px 0; border: 0; border-top: 1px solid #eee;">
-        <p style="font-size: 12px; color: #999;">Audnix Autonomous Intelligence Outreach</p>
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 100px auto; text-align: center; padding: 40px; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.06);">
+        <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+        <h1 style="color: #1a1a2e; font-size: 24px; margin: 0 0 8px;">Unsubscribed</h1>
+        <p style="color: #666; line-height: 1.6; margin: 0 0 24px;">You've been removed from <strong>${lead.name}</strong>'s outreach list. No more automated messages.</p>
+        <hr style="margin: 24px 0; border: 0; border-top: 1px solid #eee;">
+        <p style="font-size: 12px; color: #999;">✨ Audnix AI — Autonomous Intelligence Outreach</p>
       </div>
     `);
   } catch (error) {

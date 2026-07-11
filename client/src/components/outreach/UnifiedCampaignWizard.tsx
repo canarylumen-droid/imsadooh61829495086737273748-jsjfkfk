@@ -35,6 +35,7 @@ interface UnifiedCampaignWizardProps {
 
 // Default tags if no leads are present
 const DEFAULT_PERSONALIZATION_TAGS = [
+  { label: "Sender Name", value: "{{sender_name}}" },
   { label: "First Name", value: "{{firstName}}" },
   { label: "Last Name", value: "{{lastName}}" },
   { label: "Name", value: "{{name}}" },
@@ -57,6 +58,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [step, setStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [activeTab, setActiveTab] = useState("S1");
   const [previewDevice, setPreviewDevice] = useState<"ios" | "android">("ios");
   const [viewMode, setViewMode] = useState<"edit" | "preview">("edit");
   const [cleanMode, setCleanMode] = useState(false);
@@ -78,22 +80,19 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [mailboxMaxMultipliers, setMailboxMaxMultipliers] = useState<Record<string, number>>({});
 
   const [campaignName, setCampaignName] = useState("");
-  const [targetDays, setTargetDays] = useState(10); // User-configurable target days
+  const [targetDays, setTargetDays] = useState(10);
   const [excludeWeekends, setExcludeWeekends] = useState(false);
   const [aiAutonomousMode, setAiAutonomousMode] = useState(true);
   const [aiAdjustCopy, setAiAdjustCopy] = useState(false);
   const [threadFollowUp, setThreadFollowUp] = useState(true);
   const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState("");
-
+  
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  
-  // Dynamic Follow-ups
-  const [followups, setFollowups] = useState<Array<{ subject: string, body: string, delayDays: string, isBreakup?: boolean }>>([
-    { delayDays: "3", subject: "", body: "", isBreakup: false },
-    { delayDays: "7", subject: "", body: "", isBreakup: true } // Default last one to breakup
-  ]);
+
+  const [enableFollowups, setEnableFollowups] = useState(false);
+  const [followups, setFollowups] = useState<Array<{ subject: string, body: string, delayDays: string, isBreakup?: boolean }>>([]);
 
   const [autoReplyBody, setAutoReplyBody] = useState("");
 
@@ -163,7 +162,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   useEffect(() => { setMailboxRenderLimit(30); }, [mailboxSearch]);
 
   // Forecast & Scaling Intelligence
-  const activeFollowups = followups.filter(f => f.body.trim());
+  const activeFollowups = enableFollowups ? followups.filter(f => f.body.trim()) : [];
   const totalEmailsPerLead = 1 + activeFollowups.length;
   const totalCampaignVolume = leads.length * totalEmailsPerLead;
   
@@ -174,8 +173,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const calendarDayMultiplier = excludeWeekends ? 7 / 5 : 1;
   const estimatedSendingDays = leads.length > 0 && totalDailyVolume > 0 ? Math.ceil(leads.length / totalDailyVolume) : 0;
   const estimatedDays = Math.ceil(estimatedSendingDays * calendarDayMultiplier);
-  const isExtendedTimeline = estimatedDays > targetDays;
-  const requiredDailyVolume = targetDays > 0 ? Math.ceil(leads.length / Math.max(1, targetDays / calendarDayMultiplier)) : 0;
+  const isExtendedTimeline = enableFollowups && targetDays > 0 ? estimatedDays > targetDays : false;
+  const requiredDailyVolume = enableFollowups && targetDays > 0 ? Math.ceil(leads.length / Math.max(1, targetDays / calendarDayMultiplier)) : 0;
   const mailboxesNeeded = isExtendedTimeline ? Math.max(0, Math.ceil((requiredDailyVolume - totalDailyVolume) / 50)) : 0;
 
   // Reputation cap: keep autonomous pacing under provider-safe defaults.
@@ -188,7 +187,22 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   // The total timeline including follow-up delays
   const lastFollowUp = activeFollowups[activeFollowups.length - 1];
-  const totalTimelineDays = estimatedDaysToFinish + (lastFollowUp ? parseInt(lastFollowUp.delayDays || "0") : 0);
+  const maxFollowUpDelay = lastFollowUp ? parseInt(lastFollowUp.delayDays || "0") : 0;
+  const totalTimelineDays = enableFollowups
+    ? estimatedDaysToFinish + maxFollowUpDelay
+    : estimatedDaysToFinish;
+  // Human-readable delay summary for the forecast card
+  const delaySummary = enableFollowups && activeFollowups.length > 0
+    ? activeFollowups.map((f, i) => `${f.delayDays}d`).join(' → ')
+    : '';
+
+  // Preview content follows the active tab
+  const previewSubject = activeTab === "S1" ? subject
+    : activeTab === "Auto" ? `Re: ${subject}`
+    : followups[parseInt(activeTab.replace('S', '')) - 2]?.subject || subject;
+  const previewBody = activeTab === "S1" ? body
+    : activeTab === "Auto" ? autoReplyBody
+    : followups[parseInt(activeTab.replace('S', '')) - 2]?.body || body;
 
   const hasUnsafeMailbox = selectedMailboxes.some(id => {
     const mailbox = availableMailboxes.find((mb: any) => mb.id === id);
@@ -204,6 +218,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   const launchIssues = [
     !campaignName.trim() ? "Name your campaign" : null,
+    !subject.trim() ? "Write a subject line" : null,
     leads.length === 0 ? "Add leads" : null,
     selectedMailboxes.length === 0 ? "Select at least one inbox" : null,
     hasUnsafeMailbox ? "Lower unsafe mailbox limits" : null,
@@ -219,13 +234,13 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         if (data.campaignName) setCampaignName(data.campaignName);
         if (data.subject) setSubject(data.subject);
         if (data.body) setBody(data.body);
-        if (data.followups) setFollowups(data.followups);
-        else if (data.followUpBody) {
-          // Migration from old draft
-          setFollowups([
-            { subject: data.followUpSubject || "", body: data.followUpBody || "", delayDays: data.followUp1Days || "3" },
-            { subject: data.followUpSubject2 || "", body: data.followUpBody2 || "", delayDays: data.followUp2Days || "7" }
-          ]);
+        if (data.enableFollowups) {
+          setEnableFollowups(true);
+          if (data.followups && data.followups.length > 0) {
+            setFollowups(data.followups);
+          } else {
+            setFollowups([{ delayDays: "3", subject: "", body: "", isBreakup: false }]);
+          }
         }
         if (data.autoReplyBody) setAutoReplyBody(data.autoReplyBody);
         if (data.threadFollowUp !== undefined) setThreadFollowUp(data.threadFollowUp);
@@ -235,7 +250,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   useEffect(() => {
     if (isOpen) {
-      const draft = { campaignName, subject, body, followups, autoReplyBody, totalDailyVolume, targetDays, excludeWeekends, threadFollowUp };
+      const draft = { campaignName, subject, body, followups, autoReplyBody, totalDailyVolume, targetDays, excludeWeekends, threadFollowUp, enableFollowups };
       localStorage.setItem("campaign_draft", JSON.stringify(draft));
     }
   }, [campaignName, subject, body, followups, autoReplyBody, totalDailyVolume, targetDays, excludeWeekends, isOpen]);
@@ -338,14 +353,14 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
           subject,
           body,
           initial: { subject, body },
-          followups: activeFollowups.map(f => ({
+          followups: enableFollowups ? activeFollowups.map(f => ({
             subject: f.subject || subject,
             body: f.body,
             delayDays: parseInt(f.delayDays),
             isBreakup: f.isBreakup
-          })),
-          autoReply: { body: autoReplyBody },
-          autoReplyBody
+          })) : [],
+          autoReply: { body: aiAutonomousMode ? '' : autoReplyBody },
+          autoReplyBody: aiAutonomousMode ? '' : autoReplyBody
         }
       });
 
@@ -402,16 +417,17 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const handleGenerateSequence = async () => {
     setIsGeneratingAI(true);
     try {
+      const followupCount = enableFollowups ? followups.length : 0;
       const res = await apiRequest("POST", "/api/outreach/generate-template", { 
         focus: "high-conversion",
-        count: followups.length,
-        delayDays: followups.map(f => parseInt(f.delayDays) || 3)
+        count: followupCount,
+        delayDays: enableFollowups ? followups.map(f => parseInt(f.delayDays) || 3) : []
       });
       const { sequence } = await res.json();
       if (sequence) {
         setSubject(sequence.subject || "");
         setBody(sequence.body || "");
-        if (sequence.followups && Array.isArray(sequence.followups)) {
+        if (enableFollowups && sequence.followups && Array.isArray(sequence.followups)) {
           setFollowups(sequence.followups.map((f: any) => ({
             subject: f.subject || "",
             body: f.body || "",
@@ -419,7 +435,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
           })));
         }
         setAutoReplyBody(sequence.autoReplyBody || "");
-        toast({ title: "Sequence Generated!", description: `AI drafted your ${followups.length}-step sequence.` });
+        toast({ title: "Sequence Generated!", description: `AI drafted your ${followupCount > 0 ? followupCount + 1 + '-step' : 'initial'} sequence.` });
       }
     } catch (err: any) {
       toast({ title: "Generation failed", description: err.message, variant: "destructive" });
@@ -785,16 +801,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                              </div>
                            )}
 
-                          <div className="space-y-4 pt-4 border-t border-primary/5">
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                              <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Campaign Duration Goal: {targetDays} Days</Label>
-                              <Badge className="bg-primary/10 text-primary text-[8px] font-black w-fit">{minimumDaysAtCurrentCapacity || 0}d minimum now</Badge>
-                            </div>
-                            <Slider value={[targetDays]} onValueChange={v => setTargetDays(v[0])} min={1} max={90} step={1} className="py-2" />
-                            <p className="text-[10px] text-muted-foreground/60">Set the ideal completion timeline. Launch stays blocked when selected mailbox limits exceed safety ceilings.</p>
-                          </div>
-                          
-                          {(isExtendedTimeline || leads.length > 5000) && (
+                           {(isExtendedTimeline || leads.length > 5000) && (
                             <div className={cn(
                               "p-4 sm:p-5 rounded-xl animate-in fade-in zoom-in-95 mt-4 transition-all",
                               isExtendedTimeline ? "bg-amber-500/5 border border-amber-500/20" : "bg-primary/5 border border-primary/10"
@@ -821,7 +828,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                   {step === 2 && (
                     <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-6 border-b border-border/10">
-                        <Label className="text-xs font-black uppercase tracking-[0.2em] opacity-40">Sequence Designer ({1 + followups.length} Steps)</Label>
+                        <Label className="text-xs font-black uppercase tracking-[0.2em] opacity-40">Sequence Designer ({1 + (enableFollowups ? followups.length : 0)} {enableFollowups ? 'Steps' : 'Email'})</Label>
                         <Button onClick={handleGenerateSequence} disabled={isGeneratingAI} className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-3 font-bold uppercase tracking-wider text-xs px-6 h-11 w-full sm:w-auto">
                           {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} AI Wizard Generate
                         </Button>
@@ -860,6 +867,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 space-y-3">
                            <Label className="text-[9px] font-black uppercase opacity-40">Reply-To Routing</Label>
                            <Input value={replyTo} onChange={e => setReplyTo(e.target.value)} placeholder="alias@domain.com" className="bg-background border-border/20 font-semibold text-xs h-11 rounded-xl" />
+                           <p className="text-[8px] text-muted-foreground/70 font-bold leading-relaxed">When leads reply, their response goes to this address instead of your sending mailbox. Leave empty to use the default sender address.</p>
                         </div>
                         <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 flex items-center justify-between gap-4">
                            <div>
@@ -882,6 +890,27 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         </div>
                       </div>
 
+                        {/* Enable Follow-ups toggle */}
+                        <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-[10px] font-black uppercase">Enable Follow-up Sequence</p>
+                            <p className="text-[9px] opacity-40 mt-1">Add automated follow-up emails after the initial send</p>
+                          </div>
+                          <Switch
+                            checked={enableFollowups}
+                            onCheckedChange={v => {
+                              setEnableFollowups(v);
+                              if (v && followups.length === 0) {
+                                setFollowups([{ delayDays: "3", subject: "", body: "", isBreakup: false }]);
+                              }
+                              if (!v) {
+                                setFollowups([]);
+                              }
+                            }}
+                            className="scale-110"
+                          />
+                        </div>
+
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Forecast</div>
@@ -891,67 +920,87 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Batch Completion</div>
                             <div className="text-lg font-bold tracking-tight">{estimatedDaysToFinish} <span className="text-[10px] opacity-40 font-normal">DAYS</span></div>
                           </div>
-                          <div className={cn("p-4 rounded-2xl border transition-all", totalTimelineDays > 28 ? "bg-orange-500/10 border-orange-500/20" : "bg-primary/5 border-primary/10")}>
-                            <div className="text-[10px] font-black uppercase opacity-40 mb-1">Full Sequence</div>
-                            <div className="text-lg font-bold tracking-tight">{totalTimelineDays} <span className="text-[10px] opacity-40 font-normal">DAYS</span></div>
-                          </div>
+                           <div className={cn("p-4 rounded-2xl border transition-all", enableFollowups && totalTimelineDays > 28 ? "bg-orange-500/10 border-orange-500/20" : "bg-primary/5 border-primary/10")}>
+                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Full Sequence</div>
+                             <div className="text-lg font-bold tracking-tight">{totalTimelineDays} <span className="text-[10px] opacity-40 font-normal">{enableFollowups ? "DAYS" : "DAYS (INITIAL ONLY)"}</span></div>
+                             {enableFollowups && delaySummary && (
+                               <div className="text-[8px] text-muted-foreground/60 font-bold mt-1 uppercase tracking-wider">Initial → {delaySummary}</div>
+                             )}
+                           </div>
                         </div>
-                        {totalTimelineDays > 28 && (
+                        {enableFollowups && totalTimelineDays > 28 && (
                            <div className="text-[10px] font-bold text-orange-500 bg-orange-500/5 p-3 rounded-xl border border-orange-500/10">
                              Sequence exceeds 28 days. Add more mailboxes or adjust safe limits to speed up.
                            </div>
+                        )}
+                        {enableFollowups && (
+                          <div className="space-y-3 pt-2 pb-4 border-b border-border/10">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Sequence Duration Goal: {targetDays} Days</Label>
+                              <Badge className="bg-primary/10 text-primary text-[8px] font-black w-fit">{minimumDaysAtCurrentCapacity || 0}d minimum</Badge>
+                            </div>
+                            <Slider value={[targetDays]} onValueChange={v => setTargetDays(v[0])} min={1} max={90} step={1} className="py-2" />
+                            <p className="text-[10px] text-muted-foreground/60">Set your target timeline. Follow-up delays and mailbox capacity determine the actual pace.</p>
+                          </div>
                         )}
                         <div className="p-4 bg-blue-500/5 rounded-xl border border-blue-500/10 text-[10px] leading-relaxed opacity-80">
                            Routing and pacing run continuously, including when new selected mailboxes are connected mid-campaign.
                         </div>
 
-                      <Tabs defaultValue="S1" className="w-full">
+                      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                         <div className="flex items-center gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
                           <TabsList className="h-16 flex-1 bg-muted/20 p-2 rounded-2xl border border-border/10 flex gap-3 min-w-max">
-                            <TabsTrigger value="S1" className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">S1 Initial</TabsTrigger>
-                            {followups.map((_, i) => (
+                            <TabsTrigger value="S1" className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">Initial Email</TabsTrigger>
+                            {enableFollowups && followups.map((_, i) => (
                               <TabsTrigger key={`S${i+2}`} value={`S${i+2}`} className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">{`S${i+2}`}</TabsTrigger>
                             ))}
-                            <TabsTrigger value="Auto" className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">Auto Reply</TabsTrigger>
+                            {!aiAutonomousMode && (
+                              <TabsTrigger value="Auto" className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">Auto Reply</TabsTrigger>
+                            )}
                           </TabsList>
                           
-                          <div className="flex gap-2">
-                            <Button 
-                              variant="outline" 
-                              size="icon" 
-                              onClick={() => {
-                                if (followups.length < 10) {
-                                  setFollowups([...followups, { delayDays: "3", subject: "", body: "" }]);
-                                }
-                              }}
-                              className="h-16 w-16 rounded-2xl border-dashed border-primary/20 hover:border-primary/50 hover:bg-primary/5 transition-all group"
-                              title="Add Follow-up Step"
-                            >
-                              <Plus className="w-5 h-5 text-primary group-hover:scale-110 transition-transform" />
-                            </Button>
-                            {followups.length > 0 && (
-                               <div className="flex gap-2">
-                                 <Button 
-                                   variant="outline" 
-                                   size="icon" 
-                                   onClick={() => setFollowups(followups.slice(0, -1))}
-                                   className="h-16 w-16 rounded-2xl border-dashed border-red-500/20 hover:border-red-500/50 hover:bg-red-500/5 transition-all group"
-                                   title="Remove Last Step"
-                                 >
-                                   <Plus className="w-5 h-5 text-red-500 group-hover:scale-110 transition-transform rotate-45" />
-                                 </Button>
-                                 <Button 
-                                   variant="outline" 
-                                   size="icon" 
-                                   onClick={() => setFollowups([])}
-                                   className="h-16 w-16 rounded-2xl border-dashed border-red-500/20 hover:border-red-500/50 hover:bg-red-500/5 transition-all group"
-                                   title="Clear All Follow-ups"
-                                 >
-                                   <Trash2 className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
-                                 </Button>
-                               </div>
-                            )}
-                          </div>
+                          {enableFollowups && (
+                            <div className="flex gap-2">
+                              <Button 
+                                variant="outline" 
+                                size="icon" 
+                                onClick={() => {
+                                  if (followups.length < 10) {
+                                    setFollowups([...followups, { delayDays: "3", subject: "", body: "", isBreakup: false }]);
+                                  }
+                                }}
+                                className="h-16 w-16 rounded-2xl border-dashed border-primary/20 hover:border-primary/50 hover:bg-primary/5 transition-all group"
+                                title="Add Follow-up Step"
+                              >
+                                <Plus className="w-5 h-5 text-primary group-hover:scale-110 transition-transform" />
+                              </Button>
+                               {followups.length > 0 && (
+                                  <div className="flex gap-2">
+                                    <Button 
+                                      variant="outline" 
+                                      size="icon" 
+                                      onClick={() => setFollowups(followups.slice(0, -1))}
+                                      className="h-16 w-16 rounded-2xl border-dashed border-orange-500/20 hover:border-orange-500/50 hover:bg-orange-500/5 transition-all group"
+                                      title="Remove last follow-up step"
+                                    >
+                                      <span className="text-[18px] text-orange-500 font-black leading-none">&#8722;</span>
+                                    </Button>
+                                    <Button 
+                                      variant="outline" 
+                                      size="icon" 
+                                      onClick={() => {
+                                        setFollowups([]);
+                                        setEnableFollowups(false);
+                                      }}
+                                      className="h-16 w-16 rounded-2xl border-dashed border-red-500/20 hover:border-red-500/50 hover:bg-red-500/5 transition-all group"
+                                      title="Remove all follow-ups and disable sequence"
+                                    >
+                                      <Trash2 className="w-4 h-4 text-red-500 group-hover:scale-110 transition-transform" />
+                                    </Button>
+                                  </div>
+                               )}
+                            </div>
+                          )}
                         </div>
 
                         <TabsContent value="S1" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
@@ -967,38 +1016,56 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
                         {followups.map((f, i) => (
                           <TabsContent key={`S${i+2}`} value={`S${i+2}`} className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                             <div className="flex justify-between items-center mb-4">
-                               <div className="text-[10px] font-black uppercase tracking-widest opacity-40">Delay from Initial Sent Date</div>
-                               <div className="flex items-center gap-4">
-                                 <div className="flex items-center gap-2">
-                                   <Label className="text-[9px] font-black uppercase tracking-widest opacity-40">Breakup Strategy</Label>
-                                   <Switch 
-                                     checked={f.isBreakup} 
-                                     onCheckedChange={v => {
-                                       const newF = [...followups];
-                                       newF[i].isBreakup = v;
-                                       setFollowups(newF);
-                                     }}
-                                     className="scale-75"
-                                   />
-                                 </div>
-                                 <Select 
-                                   value={f.delayDays} 
-                                   onValueChange={v => {
-                                     const newF = [...followups];
-                                     newF[i].delayDays = v;
-                                     setFollowups(newF);
-                                   }}
-                                 >
-                                   <SelectTrigger className="w-[120px] h-8 text-[10px] uppercase font-black"><SelectValue /></SelectTrigger>
-                                   <SelectContent>
-                                     {[1, 2, 3, 4, 5, 7, 10, 14, 21, 30].map(d => (
-                                       <SelectItem key={d} value={d.toString()}>{d} {d === 1 ? 'Day' : 'Days'}</SelectItem>
-                                     ))}
-                                   </SelectContent>
-                                 </Select>
-                               </div>
+                              <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-3">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                      const newF = followups.filter((_, idx) => idx !== i);
+                                      if (newF.length === 0) setEnableFollowups(false);
+                                      setFollowups(newF);
+                                    }}
+                                    className="w-6 h-6 rounded-full hover:bg-destructive/10 hover:text-destructive"
+                                    title="Remove this step"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="w-3 h-3 text-primary/60" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-primary/80">Sends after</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <Select 
+                                    value={String(f.delayDays || "3")} 
+                                    onValueChange={v => {
+                                      const newF = [...followups];
+                                      newF[i].delayDays = v;
+                                      setFollowups(newF);
+                                    }}
+                                  >
+                                    <SelectTrigger className="w-[130px] h-9 text-[11px] uppercase font-black border-primary/20 bg-primary/5"><SelectValue /></SelectTrigger>
+                                    <SelectContent>
+                                      {Array.from({ length: 30 }, (_, index) => index + 1).map(d => (
+                                        <SelectItem key={d} value={d.toString()}>{d} {d === 1 ? 'Day' : 'Days'}</SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-[9px] font-black uppercase tracking-widest opacity-40">Breakup</Label>
+                                    <Switch 
+                                      checked={f.isBreakup} 
+                                      onCheckedChange={v => {
+                                        const newF = [...followups];
+                                        newF[i].isBreakup = v;
+                                        setFollowups(newF);
+                                      }}
+                                      className="scale-75"
+                                    />
+                                  </div>
                              </div>
+                           </div>
                               <div className="space-y-2">
                                 {renderTagBar(`fs${i}`)}
                                 <div className="relative">
@@ -1043,13 +1110,15 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                           </TabsContent>
                         ))}
 
+                        {!aiAutonomousMode && (
                         <TabsContent value="Auto" className="space-y-6">
-                           <div className="p-4 bg-primary/5 border border-primary/10 rounded-2xl text-[10px] font-bold">Dynamic AI Responder: Sends within 3 minutes of any reply.</div>
-                           <div className="space-y-2">
-                             {renderTagBar("auto")}
-                             <Textarea value={autoReplyBody} onChange={e => setAutoReplyBody(e.target.value)} className="min-h-[250px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans" placeholder="Thanks for reaching out! We'll be with you soon..." />
-                           </div>
+                             <div className="p-4 bg-muted/10 border border-border/10 rounded-2xl text-[10px] font-bold">Static Auto-Reply: Sent when a lead first replies (only used when AI mode is off).</div>
+                             <div className="space-y-2">
+                               {renderTagBar("auto")}
+                               <Textarea value={autoReplyBody} onChange={e => setAutoReplyBody(e.target.value)} className="min-h-[250px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans" placeholder="Thanks for reaching out! We'll be with you soon..." />
+                             </div>
                         </TabsContent>
+                        )}
                       </Tabs>
                     </motion.div>
                   )}
@@ -1092,7 +1161,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
             <div className="absolute top-10 left-1/2 -translate-x-1/2 w-full px-10 text-center">
                <p className="text-[10px] font-bold uppercase tracking-[0.3em] opacity-30">Live Mobile Engagement Simulation</p>
             </div>
-            {renderPreview(viewMode === 'edit' ? subject : (step === 2 ? subject : ""), viewMode === 'edit' ? body : (step === 2 ? body : ""))}
+             {renderPreview(previewSubject, previewBody)}
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex gap-4 bg-background/50 backdrop-blur-xl border border-border/20 p-2 rounded-full shadow-2xl scale-90">
                <Button onClick={() => setPreviewDevice('ios')} variant={previewDevice === 'ios' ? 'default' : 'ghost'} size="icon" className="rounded-full w-10 h-10"><Smartphone className="w-4 h-4" /></Button>
                <Button onClick={() => setPreviewDevice('android')} variant={previewDevice === 'android' ? 'default' : 'ghost'} size="icon" className="rounded-full w-10 h-10"><Monitor className="w-4 h-4" /></Button>

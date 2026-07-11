@@ -299,9 +299,12 @@ function selectBest(
   lead: LeadInfo,
   mailboxes: MailboxInfo[]
 ): { mb: MailboxInfo; score: number; matchType: MatchType } | null {
+  // Shuffle mailboxes so ties are broken randomly — prevents the first mailbox
+  // from getting all leads when all have equal scores (same domain, same capacity).
+  const shuffled = [...mailboxes].sort(() => Math.random() - 0.5);
   let best: { mb: MailboxInfo; score: number; matchType: MatchType } | null = null;
 
-  for (const mb of mailboxes) {
+  for (const mb of shuffled) {
     if (mb.capacity <= 0) continue;
     const { score, matchType } = computeScore(lead, mb);
     if (!best || score > best.score) {

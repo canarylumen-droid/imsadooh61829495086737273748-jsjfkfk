@@ -5,7 +5,7 @@ services:
     ports:
       - "2525:2525"
     volumes:
-      - ./kumomta:/opt/kumomta/policy
+      - ./kumomta/init.lua:/opt/kumomta/etc/policy/init.lua
     environment:
       - REDIS_URL=redis://redis:6379
     depends_on:

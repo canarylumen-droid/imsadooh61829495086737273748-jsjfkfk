@@ -58,6 +58,7 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/ai-analytics" component={AIAnalyticsPage} />
           <Route path="/dashboard/deliverability" component={DeliverabilityPage} />
           <Route path="/dashboard/bulk-actions" component={BulkActionsPage} />
+          <Route path="/dashboard/*" component={InboxPage} />
         </Switch>
       </Suspense>
     </DashboardLayout>

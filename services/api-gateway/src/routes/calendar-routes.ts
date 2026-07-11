@@ -9,7 +9,7 @@ import {
 import { validateCalendlyToken } from '@shared/lib/calendar/calendly.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
-import { calendarSettings, calendarBookings, aiActionLogs } from '@audnix/shared';
+import { users, calendarSettings, calendarBookings, aiActionLogs } from '@audnix/shared';
 import { eq, desc } from 'drizzle-orm';
 import type { ChannelType } from '@shared/types.js';
 
@@ -215,6 +215,7 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
     await storage.updateUser(userId, {
       calendlyUserUri: validation.userUri,
       ...(validation.schedulingUrl && { calendarLink: validation.schedulingUrl }),
+      calendlyAccessToken: "manual_connected",
       updatedAt: new Date()
     });
 
@@ -252,11 +253,32 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
 
 /**
  * Disconnect Calendly
+ * Cleans up ALL Calendly traces across users, integrations, and calendar_settings.
  */
 router.post('/disconnect-calendly', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     await storage.deleteIntegration(userId, 'calendly');
+
+    // Clear user-level Calendly fields so frontend checks like
+    // `user.calendlyAccessToken` immediately reflect the disconnected state.
+    await db.update(users).set({
+      calendlyAccessToken: null as any,
+      calendlyRefreshToken: null as any,
+      calendlyExpiresAt: null as any,
+      calendlyUserUri: null as any,
+      calendarLink: null as any,
+    }).where(eq(users.id, userId));
+
+    // Disable calendar settings so GET /api/calendar/settings
+    // and GET /api/calendar/status return the correct state.
+    await db.update(calendarSettings).set({
+      calendlyEnabled: false,
+      calendlyToken: null as any,
+      calendlyUsername: null as any,
+      calendlyEventTypeUri: null as any,
+    }).where(eq(calendarSettings.userId, userId));
+
     res.json({ success: true });
   } catch (error: any) {
     console.error('Error disconnecting Calendly:', error.message);

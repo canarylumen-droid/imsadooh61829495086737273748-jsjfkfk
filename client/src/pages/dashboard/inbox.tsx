@@ -27,6 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { useParams, useLocation } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import DOMPurify from "dompurify";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
@@ -133,8 +134,13 @@ const statusStyles = {
 };
 
 export default function InboxPage() {
-  const { id: leadId } = useParams();
-  const [, setLocation] = useLocation();
+  let { id: leadId } = useParams();
+  const [location, setLocation] = useLocation();
+  // Fallback: extract leadId from URL path if useParams doesn't match
+  if (!leadId) {
+    const match = location.match(/\/dashboard\/inbox\/(.+)/);
+    if (match) leadId = match[1];
+  }
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { selectedMailboxId } = useMailbox();
@@ -416,6 +422,7 @@ export default function InboxPage() {
     }],
     placeholderData: (prev: any) => prev,
     staleTime: 15_000,
+    refetchOnMount: true,
   });
 
   const { data: messagesData, isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<any>({
@@ -454,7 +461,13 @@ export default function InboxPage() {
     if (Array.isArray(leadsData?.leads)) {
       hasLoadedLeadsRef.current = true;
       setTypingLeadId(null);
-      setAllLeads(leadsData.leads);
+      setAllLeads(prev => {
+        // If page is 0, replace entirely. If page > 0, append new leads (deduplicated).
+        if (page === 0) return leadsData.leads;
+        const existingIds = new Set(prev.map(l => l.id));
+        const newOnes = leadsData.leads.filter((l: any) => !existingIds.has(l.id));
+        return [...prev, ...newOnes];
+      });
     }
   }, [leadsData]);
 
@@ -560,7 +573,7 @@ export default function InboxPage() {
       if (filterStatus === "inventory") {
         matchesMailbox = !lead.integrationId;
       } else if (selectedMailboxId) {
-        matchesMailbox = lead.integrationId === selectedMailboxId;
+        matchesMailbox = !lead.integrationId || lead.integrationId === selectedMailboxId;
       } else {
         // "All Chats" view with no mailbox filter: show all for visibility
         matchesMailbox = true;
@@ -579,6 +592,9 @@ export default function InboxPage() {
       return timeB - timeA;
     });
   }, [allLeads, searchQuery, filterChannel, filterStatus, showArchived, localDrafts, selectedMailboxId]);
+
+  // Detect if a message body contains HTML
+  const isHtml = (text: string) => /<[a-z][\s\S]*>/i.test(text);
 
   // Highlighting helper
   const HighlightText = useCallback(({ text, query }: { text: string, query: string }) => {
@@ -1149,7 +1165,7 @@ export default function InboxPage() {
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
-            ) : filteredLeads.length === 0 && !leadsFetching ? (
+            ) : filteredLeads.length === 0 && !leadsFetching && hasLoadedLeadsRef.current ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
                 {/* Only show "Connect Sources" if loading is DONE and ABSOLUTELY no channels are connected AND no leads exist */}
                 {!channelsLoading && hasAnyChannel === false && allLeads.length === 0 ? (
@@ -1180,8 +1196,10 @@ export default function InboxPage() {
                     <p className="text-[10px] text-muted-foreground font-semibold mt-2 uppercase">
                       {searchQuery ? "Try adjusting your search" :
                         filterStatus !== 'all' ? `No ${filterStatus} conversations` :
-                          showArchived ? "No archived conversations" :
-                            "Wait for new leads to arrive"}
+                          selectedMailboxId ? "No conversations for this mailbox" :
+                            showArchived ? "No archived conversations" :
+                              allLeads.length > 0 ? "Leads are unassigned — start a campaign to see them here" :
+                                "Import leads to get started"}
                     </p>
                   </div>
                 )}
@@ -1702,7 +1720,11 @@ export default function InboxPage() {
                           : "bg-primary text-primary-foreground rounded-tr-none shadow-md shadow-primary/20"
                       )}>
                         <div className="whitespace-pre-wrap break-words break-all leading-relaxed overflow-hidden">
-                          <HighlightText text={msg.body} query={searchQuery} />
+                          {isHtml(msg.body) ? (
+                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.body) }} className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1" />
+                          ) : (
+                            <HighlightText text={msg.body} query={searchQuery} />
+                          )}
                         </div>
                         {msg.metadata?.disclaimer && (
                           <div className="mt-3 pt-3 border-t border-current/10 text-[10px] opacity-60 italic font-medium">

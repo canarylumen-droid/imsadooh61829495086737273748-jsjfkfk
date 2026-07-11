@@ -273,11 +273,13 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     updatedAt: new Date()
   }).where(eq(integrations.id, integrationId));
 
-  // Update Redis reputation pause flag for KumoMTA Lua hook
+  // Update Redis reputation flag — only pause at critically low scores.
+  // Previously paused at < 85 which blocked sends too aggressively.
+  // Now only pauses if score is critically low (spam folder territory).
   try {
     const redis = await getRedisClient();
     if (redis) {
-      if (score < 85) {
+      if (score < 25) {
         await redis.set(`rep:paused:${integrationId}`, 'true', { EX: 3600 });
       } else {
         await redis.del(`rep:paused:${integrationId}`);

@@ -74,7 +74,7 @@ export function CalendlyConnectUI() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ apiToken: token })
+        body: JSON.stringify({ token })
       });
 
       if (res.ok) {

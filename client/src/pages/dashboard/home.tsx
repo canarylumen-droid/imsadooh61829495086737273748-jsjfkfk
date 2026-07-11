@@ -42,7 +42,6 @@ import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { AutonomousActionFeed } from "@/components/outreach/AutonomousActionFeed";
 import { ReputationCard } from "@/components/outreach/ReputationCard";
 import { ReputationTrendChart } from "@/components/outreach/ReputationTrendChart";
-import { CampaignHealthDashboard } from "@/components/outreach/CampaignHealthDashboard";
 import { RecentConversations } from "@/components/dashboard/RecentConversations";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
@@ -308,9 +307,11 @@ export default function DashboardHome() {
 
   const trialDaysLeft = getTrialDaysLeft();
 
-  const formatTimeAgo = (date: string | Date) => {
+  const formatTimeAgo = (date: string | Date | null | undefined) => {
+    if (!date) return "Unknown";
     const now = new Date();
     const then = new Date(date);
+    if (isNaN(then.getTime())) return "Unknown";
     const diffMs = now.getTime() - then.getTime();
     const diffMins = Math.floor(diffMs / 60000);
     const diffHours = Math.floor(diffMs / 3600000);
@@ -394,22 +395,7 @@ export default function DashboardHome() {
       color: "text-primary",
       glow: "hover:shadow-[0_0_20px_rgba(var(--primary),0.15)]"
     },
-    {
-      label: "TIME SAVED",
-      value: (() => {
-        const seconds = stats?.timeSaved || 0;
-        if (seconds < 60) return `${Math.round(seconds)}s`;
-        const minutes = seconds / 60;
-        if (minutes < 60) return `${Math.floor(minutes)}m`;
-        const hours = minutes / 60;
-        return `${Math.floor(hours)}h ${Math.round(minutes % 60)}m`;
-      })(),
-      icon: Clock,
-      percentage: "—",
-      trend: "up",
-      color: "text-emerald-500",
-      glow: "group-hover:shadow-[0_0_20px_rgba(16,185,129,0.15)]"
-    },
+
   ];
 
   // Strict Render Guard: Block the entire tree if loading, to prevent flickering.
@@ -561,9 +547,7 @@ export default function DashboardHome() {
               </motion.div>
             )}
             {activeCampaign && (
-              <div className="space-y-4">
-                <CampaignHealthDashboard campaignId={activeCampaign.id} />
-              </div>
+              <div className="space-y-4" />
             )}
             <div className="h-[480px]">
               <RecentConversations />

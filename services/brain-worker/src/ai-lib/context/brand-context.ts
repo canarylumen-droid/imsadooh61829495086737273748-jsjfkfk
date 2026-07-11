@@ -70,7 +70,7 @@ export async function getBrandContext(userId: string, personaId?: string): Promi
         avoid: [],
       },
       // Auto-send links from brand PDF or User Settings
-      meetingLink: user.calendarLink || metadata.meeting_link || metadata.calendly_link || metadata.booking_link || null,
+      meetingLink: user.calendarLink || metadata.meeting_link || metadata.calendly_link || metadata.calendarLink || metadata.booking_link || null,
       paymentLink: user.defaultPaymentLink || metadata.payment_link || metadata.stripe_link || metadata.bank_details || null,
       appLink: metadata.app_link || metadata.signup_link || metadata.download_link || null,
       contactEmail: metadata.contact_email || user.email || null,

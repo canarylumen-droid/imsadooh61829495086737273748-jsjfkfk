@@ -590,6 +590,9 @@ router.get('/user/profile', requireAuth, async (req: Request, res: Response): Pr
       aiStickerFollowupsEnabled: user.aiStickerFollowupsEnabled ?? true,
       // autonomousMode lives inside config JSONB — expose it explicitly so the UI toggle reads correctly
       autonomousMode: !!(user.config as any)?.autonomousMode,
+      calendlyAccessToken: user.calendlyAccessToken,
+      calendlyUserUri: user.calendlyUserUri,
+      calendarLink: user.calendarLink,
       metadata: {
         ...(metadata || {}),
         onboardingCompleted: hasCompletedOnboarding,

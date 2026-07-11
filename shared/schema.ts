@@ -331,7 +331,7 @@ export const integrations = pgTable("integrations", {
   dailyLimit: integer("daily_limit").notNull().default(50),
   spamRiskScore: real("spam_risk_score").notNull().default(0),
   aiAutonomousMode: boolean("ai_autonomous_mode").notNull().default(false),
-  reputationScore: integer("reputation_score").notNull().default(50),
+  reputationScore: real("reputation_score").notNull().default(50),
   healthLevel: text("health_level", { enum: ["healthy", "cautious", "poor", "critical"] }).notNull().default("healthy"),
   lastReputationCheck: timestamp("last_reputation_check"),
   sourceOfScore: text("source_of_score", { enum: ["local", "postmaster", "fbl"] }),

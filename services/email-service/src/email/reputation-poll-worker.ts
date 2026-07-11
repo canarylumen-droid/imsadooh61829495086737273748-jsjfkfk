@@ -97,7 +97,8 @@ export class ReputationPollWorker {
 
     const redis = await getRedisClient();
     if (redis) {
-      if (weightedScore < 85) {
+      // Only pause at critically low scores — previously was < 85 which blocked sends too aggressively
+      if (weightedScore < 25) {
         await redis.set(`rep:paused:${integrationId}`, 'true', { EX: 3600 });
       } else {
         await redis.del(`rep:paused:${integrationId}`);

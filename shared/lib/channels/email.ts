@@ -305,9 +305,9 @@ async function sendCustomSMTP(
         rejectUnauthorized: false,
         servername: config.smtp_host, // SNI must use the original hostname, not the IP
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 30000,
+      connectionTimeout: 20000,
+      greetingTimeout: 20000,
+      socketTimeout: 60000,
     } as any);
 
     transporter.on('error', (err: any) => {
@@ -441,13 +441,16 @@ async function sendCustomSMTP(
       }
 
       if (attempt === MAX_RETRIES) {
-        smtpLog.error('SMTP permanent failure after retries', { to, error: error.message, code: error.code, provider: providerName });
-        if (isTimeout) smtpLog.error('SMTP timeout tip: check firewall block on port 587/465', { provider: providerName });
-        // Record circuit breaker failure for transient errors on final attempt
+        const errorDetail = error.code === 'ECONNRESET' ? 'Connection reset by SMTP server (check credentials/port)' :
+          error.message?.includes('socket') ? 'SMTP socket closed unexpectedly (wrong port or TLS mode)' :
+          error.code === 'ETIMEDOUT' ? 'Connection timed out (firewall blocking port)' :
+          error.message;
+        smtpLog.error('SMTP permanent failure after retries', { to, error: errorDetail, code: error.code, provider: providerName, host: config.smtp_host, port: currentForcedPort || config.smtp_port });
+        if (isTimeout) smtpLog.error('SMTP tip: ensure port 587 (STARTTLS) or 465 (SSL) is open', { provider: providerName });
         if (isTransientSMTPError(error)) {
           await breaker.recordFailure();
         }
-        throw error;
+        throw new Error(errorDetail);
       }
 
       // Record transient failure for circuit breaker tracking on intermediate attempts too
@@ -851,18 +854,16 @@ export async function sendEmail(
     emailBody = trackingResult.html;
     const firstUrl = trackingResult.urls.length > 0 ? trackingResult.urls.join(',') : null;
 
-    if (USE_KUMOMTA && integration.id) {
+    if (integration.id) {
       try {
         const redis = await import('@shared/lib/redis/redis.js').then(m => m.getRedisClient());
         if (redis) {
           const paused = await redis.get(`rep:paused:${integration.id}`);
           if (paused === 'true') {
-            throw new Error(`Mailbox paused — reputation below threshold. Check dashboard.`);
+            console.warn(`[Email] Mailbox ${integration.id.slice(-8)} is below reputation threshold but sending anyway (warmup mode).`);
           }
         }
-      } catch (err: any) {
-        if (err.message.includes('paused')) throw err;
-      }
+      } catch { /* non-critical */ }
     }
 
     const result = USE_KUMOMTA

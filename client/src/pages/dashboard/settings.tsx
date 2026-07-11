@@ -63,7 +63,11 @@ export default function SettingsPage() {
   const [hasChanges, setHasChanges] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const { data: user, isLoading } = useQuery<UserProfile | null>({ queryKey: ["/api/user/profile"] });
+  const { data: user, isLoading } = useQuery<UserProfile | null>({
+    queryKey: ["/api/user/profile"],
+    refetchOnMount: true,
+    staleTime: 0,
+  });
   const { data: smtpData } = useQuery<any[]>({ queryKey: ["/api/smtp/settings"] });
   const { data: customEmailStatus } = useQuery<any>({ queryKey: ["/api/custom-email/status"] });
   const { canAccess: canAccessVoiceNotes } = useCanAccessVoiceNotes();

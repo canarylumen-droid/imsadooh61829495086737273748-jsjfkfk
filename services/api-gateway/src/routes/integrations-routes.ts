@@ -2,6 +2,9 @@ import { Router, Request, Response } from 'express';
 import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { encrypt } from '@shared/lib/crypto/encryption.js';
+import { db } from '@shared/lib/db/db.js';
+import { users, calendarSettings } from '@audnix/shared';
+import { eq } from 'drizzle-orm';
 
 const router = Router();
 
@@ -256,6 +259,25 @@ router.post('/:provider/disconnect', requireAuth, async (req: Request, res: Resp
     } else {
       console.log(`[Integrations] Performing bulk disconnect for ${provider} for user: ${userId}`);
       await storage.disconnectIntegration(userId, provider);
+    }
+
+    // If Calendly is being disconnected, also clear user-level fields so
+    // frontend checks like `user.calendlyAccessToken` reflect the correct state.
+    if (provider === 'calendly') {
+      await db.update(users).set({
+        calendlyAccessToken: null as any,
+        calendlyRefreshToken: null as any,
+        calendlyExpiresAt: null as any,
+        calendlyUserUri: null as any,
+        calendarLink: null as any,
+      }).where(eq(users.id, userId));
+
+      await db.update(calendarSettings).set({
+        calendlyEnabled: false,
+        calendlyToken: null as any,
+        calendlyUsername: null as any,
+        calendlyEventTypeUri: null as any,
+      }).where(eq(calendarSettings.userId, userId));
     }
 
     // --- Step 4: Notify frontend and cleanup real-time connections ---

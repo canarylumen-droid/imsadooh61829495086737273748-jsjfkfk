@@ -134,7 +134,7 @@ function Router() {
           </AuthGuard>
         )}
       </Route>
-      <Route path="/dashboard/:rest*">
+      <Route path="/dashboard/*">
         {() => (
           <AuthGuard>
             <DashboardRoutes />
