@@ -7,6 +7,7 @@ import { Check, Shield, Lock, Eye, EyeOff, Mail, Loader2, ArrowRight, User as Us
 import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useUser } from "@/hooks/use-user";
+import { queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { VisuallyHidden } from "@/components/ui/visually-hidden";
 import { useToast } from "@/hooks/use-toast";
@@ -443,6 +444,9 @@ export default function AuthPage() {
       }
 
       localStorage.setItem('auth_last_active', Date.now().toString());
+
+      // Invalidate user cache so dashboard's AuthGuard sees the logged-in user
+      queryClient.invalidateQueries({ queryKey: ['user'] });
 
       toast({
         title: "Welcome back!",
