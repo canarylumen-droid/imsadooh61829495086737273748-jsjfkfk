@@ -365,6 +365,7 @@ export default function IntegrationsPage() {
     queryKey,
     placeholderData: (prev: any) => prev,
     staleTime: 30_000,
+    refetchOnMount: true,
   });
   const { data: customEmailStatus, refetch: refetchStatus } = useQuery<{
     connected: boolean;
