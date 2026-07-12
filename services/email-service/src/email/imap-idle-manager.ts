@@ -1133,14 +1133,57 @@ class ImapIdleManager {
                                                     });
                                                     
                                                     if (analysis?.shouldAutoReply) {
-                                                        const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
-                                                        await enqueuePriorityReply({
-                                                            userId,
-                                                            leadId: lead.id,
-                                                            type: 'autonomous_reply',
-                                                            isAutonomous: true
-                                                        });
-                                                        console.log(`⚡ [Fast-Track] Enqueued priority AI reply for lead ${lead.id}`);
+                                                        // Look up active campaign for this lead to schedule proper auto-reply
+                                                        try {
+                                                            const { db } = await import('@shared/lib/db/db.js');
+                                                            const { campaignLeads, outreachCampaigns } = await import('@audnix/shared');
+                                                            const { eq, and } = await import('drizzle-orm');
+
+                                                            const [activeEntry] = await db.select({
+                                                                campaignId: campaignLeads.campaignId,
+                                                                campaignLeadId: campaignLeads.id,
+                                                                integrationId: campaignLeads.integrationId,
+                                                            })
+                                                            .from(campaignLeads)
+                                                            .innerJoin(outreachCampaigns, eq(campaignLeads.campaignId, outreachCampaigns.id))
+                                                            .where(and(
+                                                                eq(campaignLeads.leadId, lead.id),
+                                                                eq(outreachCampaigns.userId, userId),
+                                                                eq(outreachCampaigns.status, 'active')
+                                                            ))
+                                                            .limit(1);
+
+                                                            if (activeEntry) {
+                                                                const { campaignQueueManager } = await import('@shared/lib/queues/campaign-queue.js');
+                                                                await campaignQueueManager.scheduleAutoReply(
+                                                                    activeEntry.campaignId,
+                                                                    userId,
+                                                                    activeEntry.campaignLeadId,
+                                                                    activeEntry.integrationId || '',
+                                                                    lead.id
+                                                                );
+                                                                console.log(`⚡ [Fast-Track] Scheduled campaign auto-reply for lead ${lead.id}`);
+                                                            } else {
+                                                                // No active campaign — enqueue priority reply for AI handling
+                                                                const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
+                                                                await enqueuePriorityReply({
+                                                                    userId,
+                                                                    leadId: lead.id,
+                                                                    type: 'autonomous_reply',
+                                                                    isAutonomous: true,
+                                                                });
+                                                                console.log(`⚡ [Fast-Track] Enqueued priority AI reply for lead ${lead.id} (no campaign)`);
+                                                            }
+                                                        } catch (campaignErr) {
+                                                            console.warn(`[Fast-Track] Campaign lookup failed, falling back to priority reply:`, campaignErr);
+                                                            const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
+                                                            await enqueuePriorityReply({
+                                                                userId,
+                                                                leadId: lead.id,
+                                                                type: 'autonomous_reply',
+                                                                isAutonomous: true,
+                                                            });
+                                                        }
                                                     }
                                                 }
                                             }

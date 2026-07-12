@@ -20,6 +20,70 @@ process.on('uncaughtException', (err: Error) => {
   process.exit(1);
 });
 
+/**
+ * Handle a priority reply: generate AI reply and send to lead.
+ * This runs when a lead replies and the fast-track analyzer says shouldAutoReply.
+ */
+async function handlePriorityReply(data: any): Promise<void> {
+  const { userId, leadId } = data;
+  if (!userId || !leadId) return;
+
+  try {
+    // Get the last inbound message for context
+    const { storage } = await import('@shared/lib/storage/storage.js');
+    const { generateAIReply } = await import('@services/brain-worker/src/ai-lib/core/conversation-ai.js');
+
+    const lead = await storage.getLeadById(leadId);
+    if (!lead?.email) return;
+
+    const messages = await storage.getMessagesByLeadId(leadId);
+    const recentMessages = messages.slice(-5);
+
+    const conversationHistory = recentMessages.map((m: any) =>
+      `${m.direction.toUpperCase()}: ${m.body?.substring(0, 500)}`
+    ).join('\n\n');
+
+    // Use generateAIReply from campaign-queue's processAutoReply path
+    const aiReply = await generateAIReply(lead, userId, conversationHistory, 'email');
+    const replyBody = aiReply.body || aiReply.text || '';
+
+    if (!replyBody) {
+      console.warn(`[PriorityReply] AI generated empty reply for lead ${leadId}`);
+      return;
+    }
+
+    // Send the reply via sendEmail
+    const { sendEmail } = await import('@shared/lib/channels/email.js');
+    await sendEmail(userId, lead.email, replyBody, `Re: ${recentMessages[recentMessages.length - 1]?.subject || 'Your message'}`, {
+      isRaw: true,
+      isHtml: false,
+      leadId,
+      isPriorityReply: true,
+    });
+
+    // Save to messages table
+    await storage.createMessage({
+      userId,
+      leadId,
+      provider: 'email',
+      direction: 'outbound',
+      subject: `Re: ${recentMessages[recentMessages.length - 1]?.subject || 'Your message'}`,
+      body: replyBody,
+      metadata: { aiGenerated: true, source: 'priority_reply' },
+    });
+
+    // Notify UI
+    const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+    wsSync.notifyMessagesUpdated(userId, { leadId, direction: 'outbound' });
+    wsSync.notifyLeadsUpdated(userId, { leadId, status: 'replied' });
+    wsSync.notifyStatsUpdated(userId);
+
+    console.log(`✅ [PriorityReply] AI auto-reply sent to ${lead.email}`);
+  } catch (err: any) {
+    console.error(`❌ [PriorityReply] Failed for lead ${leadId}:`, err.message);
+  }
+}
+
 async function startOutreachService() {
   const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'outreach-worker');
   await serviceRegistry.register({
@@ -137,6 +201,8 @@ eventScheduler('autonomous-scaler', async () => {
           await outreachEngine.tick();
           break;
         case 'priority-reply':
+          await handlePriorityReply(job.data);
+          break;
         case 'standard-send':
         case 'high-priority-send':
           await outreachEngine.processJob(job);
