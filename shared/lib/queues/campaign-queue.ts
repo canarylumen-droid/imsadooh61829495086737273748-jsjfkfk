@@ -855,25 +855,27 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?
   // Clamp: min 10 min (6/hr max), max 2 hours (0.5/hr min)
 
   let intervalMs = Math.round(86_400_000 / Math.max(1, effectiveDailyLimit));
-  intervalMs = Math.min(7_200_000, Math.max(600_000, intervalMs));
+  // Clamp: min 10min (prevents bursts), max 6hr (prevents starvation for low limits)
+  intervalMs = Math.min(21_600_000, Math.max(600_000, intervalMs));
 
-  // Δ Sent: If we're behind schedule (sent fewer than expected by this hour),
-  // slightly increase pace. If ahead, slightly decrease pace.
-  const expectedByNow = Math.round((effectiveDailyLimit / 24) * (currentHour + 1));
+  // Δ Sent: If behind/ahead schedule, gently adjust
+  // At hour 0 (midnight) we expect 0 sends. At hour 12 we expect ~50%.
+  const hoursElapsed = Math.max(1, currentHour);
+  const expectedByNow = Math.round((effectiveDailyLimit / 24) * hoursElapsed);
   const behindBy = expectedByNow - sentToday;
-  if (behindBy > 2) {
-    // Catch up: reduce interval by up to 30%
-    const catchupFactor = Math.max(0.7, 1 - (behindBy / effectiveDailyLimit));
+  // Only adjust if significantly behind (>20% of daily) or ahead
+  const threshold = Math.max(3, Math.round(effectiveDailyLimit * 0.2));
+  if (behindBy > threshold) {
+    const catchupFactor = Math.max(0.75, 1 - (behindBy / effectiveDailyLimit));
     intervalMs = Math.round(intervalMs * catchupFactor);
-  } else if (behindBy < -2) {
-    // Ahead: increase interval by up to 30%
-    const coastFactor = Math.min(1.3, 1 + (Math.abs(behindBy) / effectiveDailyLimit));
+  } else if (behindBy < -threshold) {
+    const coastFactor = Math.min(1.25, 1 + (Math.abs(behindBy) / effectiveDailyLimit));
     intervalMs = Math.round(intervalMs * coastFactor);
   }
 
   // Night Watch: double interval (half speed)
   if (isNightWatch) {
-    intervalMs = Math.min(7_200_000, Math.round(intervalMs * 2));
+    intervalMs = Math.min(21_600_000, Math.round(intervalMs * 2));
     console.log(`[CampaignWorker] 🌙 Night Watch active (Hour: ${currentHour}): interval → ${Math.round(intervalMs / 60000)}m`);
   }
 
@@ -889,7 +891,7 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?
     intervalMs = nextMinuteStart - nowMs + Math.floor(Math.random() * 10000);
   }
 
-  intervalMs = Math.min(7_200_000, Math.max(60000, intervalMs));
+  intervalMs = Math.min(21_600_000, Math.max(60000, intervalMs));
 
   console.log(`[CampaignWorker] ⏱️ Pacing: ${sentToday}/${effectiveDailyLimit} sent. Next send in ${Math.round(intervalMs / 60000)}m (${Math.round(intervalMs / 1000)}s)`);
   return intervalMs;
