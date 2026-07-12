@@ -276,9 +276,12 @@ class InboundSweepWorker {
                       .limit(1);
 
                     if (!campaign) {
-                      // Campaign is not active — skip auto-reply entirely
-                      wsSync.notifyLeadsUpdated(mailbox.userId, { leadId: leadInfo.leadId, action: 'inbound_swept' });
-                      return;
+                      // Campaign is not active — skip auto-reply but still notify UI
+                  wsSync.notifyLeadsUpdated(mailbox.userId, { leadId: leadInfo.leadId, action: 'inbound_swept' });
+                  wsSync.notifyMessagesUpdated(mailbox.userId, { leadId: leadInfo.leadId, direction: 'inbound' });
+                  wsSync.notifyStatsUpdated(mailbox.userId, { integrationId: mailbox.id, type: 'reply' });
+                      wsSync.notifyMessagesUpdated(mailbox.userId, { leadId: leadInfo.leadId, direction: 'inbound' });
+                      continue;
                     }
 
                     const hasAutoReply = campaign ? !!(campaign.template as any)?.autoReplyBody : false;
