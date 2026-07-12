@@ -1269,7 +1269,21 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
   // doesn't stall the entire mailbox queue.
   let didSend = false;
   let batchSentCount = 0;
+
+  // Calculate inter-send pacing: spread remaining sends across remaining day hours
+  const now = new Date();
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+  const remainingDayMs = Math.max(1, endOfDay.getTime() - now.getTime());
+  const remainingBudget = Math.max(1, effectiveLimit - initialSentToday);
+  const interSendDelayMs = Math.max(60_000, Math.round(remainingDayMs / remainingBudget));
+
   for (const row of nextLeadResult) {
+    // Inter-send pacing: wait between emails to spread across the day
+    if (batchSentCount > 0) {
+      await new Promise(resolve => setTimeout(resolve, interSendDelayMs));
+    }
+
     // Mid-batch budget check: re-check daily limit after each send
     if (batchSentCount > 0) {
       const updatedSentToday = await getMailboxSentCount(userId, integrationId);
