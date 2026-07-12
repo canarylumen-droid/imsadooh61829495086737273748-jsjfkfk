@@ -32,6 +32,57 @@ export const consumerQueue = hasRedis ? new Queue<ConsumerJobData>('consumer-dis
 export async function pullLeadsForMailbox(campaignId: string, integrationId: string, limit: number = 50) {
   if (!db) throw new Error("DB not available");
 
+  // Get count of active mailboxes for this campaign to calculate fair share
+  const mailboxCountResult = await db.execute(sql`
+    SELECT COUNT(DISTINCT integration_id) as count FROM campaign_leads 
+    WHERE campaign_id = ${campaignId} 
+      AND integration_id IS NOT NULL
+      AND integration_id != ''
+  `);
+  const activeMailboxCount = Math.max(1, Number(mailboxCountResult.rows[0]?.count || 1));
+
+  // Also redistribute: if a mailbox has significantly more leads than fair share,
+  // release some back to the pool for other mailboxes
+  const fairShareCheck = await db.execute(sql`
+    SELECT integration_id, COUNT(*) as count FROM campaign_leads 
+    WHERE campaign_id = ${campaignId} 
+      AND status = 'pending'
+      AND integration_id IS NOT NULL
+    GROUP BY integration_id
+    HAVING COUNT(*) > ${limit * 2}
+  `);
+  for (const row of fairShareCheck.rows as any[]) {
+    // Release excess leads back to unassigned pool
+    const excessId = row.integration_id;
+    const excessCount = Number(row.count);
+    const releaseCount = excessCount - limit;
+    await db.execute(sql`
+      UPDATE campaign_leads
+      SET integration_id = NULL, updated_at = NOW()
+      WHERE id IN (
+        SELECT id FROM campaign_leads 
+        WHERE campaign_id = ${campaignId}
+          AND status = 'pending'
+          AND integration_id = ${excessId}
+        ORDER BY created_at ASC
+        LIMIT ${releaseCount}
+        FOR UPDATE SKIP LOCKED
+      )
+    `);
+    console.log(`[ConsumerEngine] 🔄 Redistributed ${releaseCount} leads from ${excessId} back to pool`);
+  }
+
+  // Calculate fair share: limit should be total unassigned / active mailboxes
+  const totalUnassigned = await db.execute(sql`
+    SELECT COUNT(*) as count FROM campaign_leads 
+    WHERE campaign_id = ${campaignId} 
+      AND (status = 'pending' OR status = 'queued')
+      AND integration_id IS NULL
+  `);
+  const unassignedCount = Number(totalUnassigned.rows[0]?.count || 0);
+  const fairShare = Math.max(1, Math.ceil(unassignedCount / activeMailboxCount));
+  const cappedLimit = Math.min(limit, Math.max(fairShare, Math.ceil(unassignedCount * 0.3)));
+
   const result = await db.execute(sql`
     UPDATE campaign_leads
     SET 
@@ -45,7 +96,7 @@ export async function pullLeadsForMailbox(campaignId: string, integrationId: str
         AND integration_id IS NULL
       ORDER BY created_at ASC
       FOR UPDATE SKIP LOCKED
-      LIMIT ${limit}
+      LIMIT ${cappedLimit}
     )
     RETURNING id, lead_id;
   `);

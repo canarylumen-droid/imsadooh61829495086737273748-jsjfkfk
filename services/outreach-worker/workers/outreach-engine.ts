@@ -960,42 +960,25 @@ export class OutreachEngine {
       }
     }
 
-    // Variable replacement fallback (Expanded for safety)
-    const rawLeadName = lead.name?.trim();
-    const cleanName = rawLeadName === 'Unknown' ? undefined : rawLeadName;
-    const firstName = cleanName?.split(' ')[0] || 'there';
-    const lastName = cleanName?.split(' ').slice(1).join(' ') || 'there';
-    const fullName = cleanName || firstName;
-    const company = lead.company?.trim() || 'your company';
-    const meta = (lead as any).metadata || {};
-    const city = meta.city || lead.city || '';
-    const industry = meta.industry || '';
-    const niche = meta.niche || '';
-    const website = meta.website || '';
-    body = body
-      .replace(/{{firstName}}/g, firstName)
-      .replace(/{{lastName}}/g, lastName)
-      .replace(/{{name}}/g, fullName)
-      .replace(/{{lead_name}}/g, fullName)
-      .replace(/{{company}}/g, company)
-      .replace(/{{business_name}}/g, company)
-      .replace(/{{city}}/g, city)
-      .replace(/{{industry}}/g, industry)
-      .replace(/{{niche}}/g, niche)
-      .replace(/{{website}}/g, website);
+    // Variable replacement — use shared utility + sender info
+    let senderName = 'there';
+    let senderEmail = '';
+    try {
+      const [integration] = await db.select({ name: integrations.name, email: integrations.email })
+        .from(integrations)
+        .where(eq(integrations.id, integrationId))
+        .limit(1);
+      if (integration) {
+        senderName = integration.name?.trim() || integration.email?.split('@')[0] || 'there';
+        senderEmail = integration.email?.trim() || '';
+      }
+    } catch {
+      // non-critical — fall through with defaults
+    }
 
-    // Subject variable replacement
-    subject = subject
-      .replace(/{{firstName}}/g, firstName)
-      .replace(/{{lastName}}/g, lastName)
-      .replace(/{{name}}/g, fullName)
-      .replace(/{{lead_name}}/g, fullName)
-      .replace(/{{company}}/g, company)
-      .replace(/{{business_name}}/g, company)
-      .replace(/{{city}}/g, city)
-      .replace(/{{industry}}/g, industry)
-      .replace(/{{niche}}/g, niche)
-      .replace(/{{website}}/g, website);
+    const { resolveTemplateVars } = await import('@shared/lib/template-variables.js');
+    body = resolveTemplateVars(body, lead, { name: senderName, email: senderEmail });
+    subject = resolveTemplateVars(subject, lead, { name: senderName, email: senderEmail });
 
     // SYSTEM 8: Duplicate Send Guard
     const { DuplicateSendGuard } = await import('@shared/lib/guards/duplicate-send-guard.js');
@@ -1066,6 +1049,15 @@ export class OutreachEngine {
         console.warn(`[OutreachEngine] Failed to fetch threading headers for lead ${lead.id}:`, threadErr);
       }
 
+      // Unsubscribe handling — replace variables and ensure opt-out footer
+      const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
+      body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
+      body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
+      const lowerBody = body.toLowerCase();
+      if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
+        body += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
+      }
+
       await sendEmail(userId, lead.email, body, subject, {
         isRaw: true,
         isHtml: true, // Force HTML for tracking pixel/links
@@ -1112,10 +1104,28 @@ export class OutreachEngine {
           .where(eq(campaignLeads.id, leadEntry.id));
         console.warn(`[OutreachEngine] 🔄 Lead ${lead.email} re-queued after mailbox failure`);
       } else {
-        // Hard non-recoverable error (e.g. invalid recipient) — mark as failed
-        await db.update(campaignLeads)
-          .set({ status: 'failed', error: errorMsg })
-          .where(eq(campaignLeads.id, leadEntry.id));
+        // Universal retry: every failure gets retried with exponential backoff
+        const currentRetry = (leadEntry.retryCount || 0) + 1;
+        const MAX_RETRIES = 5;
+        if (currentRetry < MAX_RETRIES) {
+          const backoffMinutes = Math.min(30 * Math.pow(2, currentRetry - 1), 480); // 30min, 1hr, 2hr, 4hr, max 8hr
+          const backoffAt = new Date(Date.now() + backoffMinutes * 60 * 1000);
+          await db.update(campaignLeads)
+            .set({
+              status: 'pending',
+              nextActionAt: backoffAt,
+              error: `[Retry ${currentRetry}/${MAX_RETRIES}] ${errorMsg}`,
+              retryCount: sql`${campaignLeads.retryCount} + 1`
+            })
+            .where(eq(campaignLeads.id, leadEntry.id));
+          console.warn(`[OutreachEngine] 🔁 Lead ${lead.email} failed (retry ${currentRetry}/${MAX_RETRIES}). Backing off ${backoffMinutes}m.`);
+        } else {
+          // Exhausted all retries — permanent failure
+          await db.update(campaignLeads)
+            .set({ status: 'failed', error: `[Exhausted ${MAX_RETRIES} retries] ${errorMsg}` })
+            .where(eq(campaignLeads.id, leadEntry.id));
+          console.warn(`[OutreachEngine] ❌ Lead ${lead.email} permanently failed after ${MAX_RETRIES} retries.`);
+        }
       }
       return; // Stop processing this lead
     }
@@ -1388,6 +1398,15 @@ export class OutreachEngine {
           }
         } catch (threadErr) {
           console.warn(`[OutreachEngine] Failed to fetch threading headers:`, threadErr);
+        }
+
+        // Unsubscribe handling
+        const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
+        body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
+        body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
+        const lowerBody = body.toLowerCase();
+        if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
+          body += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
         }
 
         await sendEmail(userId, lead.email, body, subject, {

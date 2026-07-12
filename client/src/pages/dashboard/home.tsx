@@ -31,8 +31,10 @@ import {
   Plus,
   FileText,
   Loader2,
-  Clock
+  Clock,
+  Info
 } from "lucide-react";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Link, useLocation } from "wouter";
 import { useReducedMotion } from "@/lib/animation-utils";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -75,6 +77,7 @@ interface DashboardStats {
   activeLeads?: number;
   convertedLeads?: number;
   totalMessages?: number;
+  outreachedLeads?: number;
   hardenedLeads?: number;
   bouncyLeads?: number;
   recoveredLeads?: number;
@@ -335,10 +338,10 @@ export default function DashboardHome() {
   const summaryMetrics = [
     {
       label: "TOTAL SENT",
-      value: stats?.totalMessages || 0,
+      value: stats?.outreachedLeads ?? stats?.totalMessages ?? 0,
       icon: Send,
-      percentage: calculatePercentageChange(stats?.totalMessages || 0, previousStats?.messages),
-      trend: previousStats ? ((stats?.totalMessages || 0) > (previousStats?.messages || 0) ? "up" : (stats?.totalMessages || 0) < (previousStats?.messages || 0) ? "down" : "neutral") : "neutral",
+      percentage: calculatePercentageChange(stats?.outreachedLeads ?? stats?.totalMessages ?? 0, previousStats?.messages),
+      trend: previousStats ? ((stats?.outreachedLeads ?? stats?.totalMessages ?? 0) > (previousStats?.messages || 0) ? "up" : (stats?.outreachedLeads ?? stats?.totalMessages ?? 0) < (previousStats?.messages || 0) ? "down" : "neutral") : "neutral",
       color: "text-indigo-500",
       glow: "hover:shadow-[0_0_20px_rgba(99,102,241,0.15)]"
     },
@@ -376,6 +379,7 @@ export default function DashboardHome() {
       label: "BOUNCE RATE",
       value: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "Calculating" : (stats.globalBounceRate * 100).toFixed(2),
       suffix: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "" : "%",
+      description: "Includes invalid emails detected during import & campaign sends",
       icon: AlertCircle,
       percentage: calculatePercentageChange(stats?.globalBounceRate || 0, previousStats ? (previousStats as any).globalBounceRate : undefined),
       trend: (previousStats && (previousStats as any).globalBounceRate !== undefined)
@@ -539,8 +543,18 @@ export default function DashboardHome() {
                   <div className={cn("p-1.5 rounded-md", metric.bgColor, metric.borderColor)}>
                     <Icon className={cn("h-3.5 w-3.5", metric.color)} />
                   </div>
-                  <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  <span className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground/70 flex items-center gap-1">
                     {metric.label}
+                    {metric.description && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3 w-3 cursor-help text-muted-foreground/40 hover:text-muted-foreground/70 transition-colors" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[220px] text-[11px] font-medium">
+                          {metric.description}
+                        </TooltipContent>
+                      </Tooltip>
+                    )}
                   </span>
                 </div>
                 <div className="text-xl font-bold text-foreground">
@@ -576,9 +590,11 @@ export default function DashboardHome() {
             <div className="h-[480px]">
               <RecentConversations />
             </div>
-            <div className="mt-6">
-              <AutonomousActionFeed logs={statsData?.aiActionLogs || []} />
-            </div>
+            {statsData?.aiActionLogs?.length > 0 && (
+              <div className="mt-6">
+                <AutonomousActionFeed logs={statsData?.aiActionLogs || []} />
+              </div>
+            )}
           </div>
 
           <div className="space-y-3">

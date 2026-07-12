@@ -151,8 +151,12 @@ export function RecentConversations() {
   const leads = (leadsData as any)?.leads || [];
   const messages = (messagesData as any)?.messages || [];
 
+  const isValidDate = (d: Date) => d instanceof Date && !isNaN(d.getTime()) && d.getFullYear() > 2000;
+
   const formatTime = (dateString: string) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
+    if (!isValidDate(date)) return '';
     const now = new Date();
     const diff = now.getTime() - date.getTime();
     const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -166,7 +170,9 @@ export function RecentConversations() {
   };
 
   const formatFullTime = (dateString: string) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
+    if (!isValidDate(date)) return '';
     return date.toLocaleString("en-US", {
       month: "short",
       day: "numeric",

@@ -169,7 +169,7 @@ export class VerificationRoutingManager {
           if (status !== 'invalid') {
             jobs.push({ queueFn: () => this.enqueueRouting(campaignLeadId, emailNorm, campaignId, userId, status as any) });
           } else {
-            await this.markLeadInvalid(campaignLeadId, 'Cached: invalid email');
+            jobs.push({ queueFn: () => this.enqueueRouting(campaignLeadId, emailNorm, campaignId, userId, 'risky' as any) });
           }
           continue;
         }
@@ -299,15 +299,12 @@ async function processVerification(data: VerifyEmailJobData): Promise<void> {
     payload: { action: 'verification-update', campaignLeadId, status }
   });
 
+  // Hand off to routing queue (even 'invalid' gets a send attempt — outreach engine handles retries)
   if (status === 'invalid') {
-    await db.update(campaignLeads)
-      .set({ status: 'failed', error: 'Email failed verification: invalid' })
-      .where(eq(campaignLeads.id, campaignLeadId));
-    console.log(`[VerifyWorker] ❌ Skipped invalid email: ${email}`);
-    return;
+    console.log(`[VerifyWorker] ⚠️ Verification flagged as invalid for ${email}, handing off to routing for send attempt`);
+    status = 'risky';
   }
 
-  // Hand off to routing queue
   await verificationRoutingManager.enqueueRouting(campaignLeadId, email, campaignId, userId, status);
 }
 

@@ -2566,6 +2566,7 @@ export class DrizzleStorage implements IStorage {
     recoveredLeads: number;
     positiveIntents: number;
     totalMessages: number;
+    outreachedLeads: number;
     messagesToday: number;
     messagesYesterday: number;
     aiReplies: number;
@@ -2654,11 +2655,11 @@ export class DrizzleStorage implements IStorage {
       hardenedLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND verified = true)`,
       bouncyLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'bouncy')`,
       recoveredLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'recovered')`,
-      repliedLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'replied')`,
+      repliedLeads: sql<number>`(SELECT count(DISTINCT lead_id) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (${messages.metadata}->>'subject' NOT LIKE '%Undelivered%' OR ${messages.metadata}->>'subject' IS NULL))`,
       queuedLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'new' AND ai_paused = false)`,
       totalSent: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'outbound')`,
       opened: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'outbound' AND opened_at IS NOT NULL)`,
-      replied: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound')`,
+      replied: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (${messages.metadata}->>'subject' NOT LIKE '%Undelivered%' OR ${messages.metadata}->>'subject' IS NULL))`,
       messagesToday: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND ${messages.createdAt} >= ${todayStart} AND direction = 'outbound')`,
       messagesYesterday: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND ${messages.createdAt} >= ${yesterdayStart} AND ${messages.createdAt} < ${todayStart} AND direction = 'outbound')`,
       positiveIntents: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (lower(body) LIKE '%yes%' OR lower(body) LIKE '%book%' OR lower(body) LIKE '%interested%' OR lower(body) LIKE '%call%' OR lower(body) LIKE '%meeting%'))`,
@@ -2708,6 +2709,7 @@ export class DrizzleStorage implements IStorage {
       recoveredLeads: Number(combinedStats.recoveredLeads || 0),
       positiveIntents: Number(combinedStats.positiveIntents || 0),
       totalMessages: Number(combinedStats.totalSent || 0),
+      outreachedLeads: Number(combinedStats.outreachedLeads || 0),
       messagesToday: Number(combinedStats.messagesToday || 0),
       messagesYesterday: Number(combinedStats.messagesYesterday || 0),
       aiReplies: Number(combinedStats.aiReplies || 0),

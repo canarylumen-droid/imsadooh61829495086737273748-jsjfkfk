@@ -640,15 +640,21 @@ function StatCard({ label, value, icon: Icon, trend, isUp, color, index }: any) 
                                 <span className="text-[8px] sm:text-[10px] font-semibold">{trend}</span>
                             </div>
                         )}
-                        {trend === "—" && (
-                            <div className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0 w-fit mt-0.5 sm:mt-0">
-                                <span className="text-[8px] sm:text-[10px] font-semibold">STABLE</span>
+                        {trend && trend !== "—" && (
+                            <div className={cn(
+                                "flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 w-fit mt-0.5 sm:mt-0",
+                                isUp ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                            )}>
+                                {isUp ? <ArrowUpRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> : <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 rotate-180" />}
+                                <span className="text-[8px] sm:text-[10px] font-semibold">{trend}</span>
                             </div>
                         )}
                     </div>
-                    <p className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-2 sm:mt-4">
-                      {trend && trend !== "—" ? (isUp ? "Improving" : "Declining") : "No prior data"}
-                    </p>
+                    {trend && trend !== "—" && (
+                      <p className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-2 sm:mt-4">
+                        {isUp ? "Improving" : "Declining"}
+                      </p>
+                    )}
 
                     <div className={cn("absolute -bottom-10 -right-10 w-32 h-32 blur-[80px] opacity-10 rounded-full", color.replace('text-', 'bg-'))} />
                 </CardContent>

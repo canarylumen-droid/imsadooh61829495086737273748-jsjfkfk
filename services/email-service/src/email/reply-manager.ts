@@ -1,6 +1,6 @@
 import { db } from '@shared/lib/db/db.js';
 import { eq, and, sql, desc } from 'drizzle-orm';
-import { leads, campaignLeads, messages, integrations, outreachCampaigns } from '@audnix/shared';
+import { leads, campaignLeads, messages, campaignEmails, integrations, outreachCampaigns } from '@audnix/shared';
 import { sendEmail } from '@shared/lib/channels/email.js';
 import { generateAiReply } from './ai-reply-generator.js';
 import { recordIncomingReply, resolvePendingReply } from './mailbox-coordinator.js';
@@ -97,6 +97,36 @@ export class ReplyManager {
 
     recordIncomingReply(integrationId);
     this.replyCounts.set(key, replyCount + 1);
+
+    // ── REPLY STATUS UPDATE ────────────────────────────────────────────
+    // Update lead status to 'replied' and notify UI/KPIs
+    try {
+      await db.update(leads)
+        .set({ status: 'replied', updatedAt: new Date() })
+        .where(eq(leads.id, lead[0].id));
+
+      await db.update(campaignLeads)
+        .set({ status: 'replied', repliedAt: new Date() })
+        .where(eq(campaignLeads.leadId, lead[0].id));
+
+      // Update campaign_emails for the last sent email to replied
+      await db.update(campaignEmails)
+        .set({ status: 'replied' })
+        .where(and(
+          eq(campaignEmails.campaignId, campaignId),
+          eq(campaignEmails.leadId, lead[0].id),
+          eq(campaignEmails.status, 'sent')
+        ));
+
+      // Notify UI updates
+      const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+      wsSync.notifyLeadsUpdated(userId, { leadId: lead[0].id, status: 'replied', action: 'replied' });
+      wsSync.notifyMessagesUpdated(userId, { leadId: lead[0].id, direction: 'inbound' });
+      wsSync.notifyStatsUpdated(userId, { integrationId, type: 'reply' });
+      wsSync.notifyCampaignStatsUpdated(userId, campaignId);
+    } catch (err) {
+      console.error(`[ReplyManager] Failed to update reply status:`, err);
+    }
 
     const pending: PendingReply = {
       leadId: lead[0].id,

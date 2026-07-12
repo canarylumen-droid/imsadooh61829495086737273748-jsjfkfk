@@ -1594,7 +1594,27 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
     return;
   }
 
-  // 6. Deliver the follow-up email
+  // 6. PREVIOUS-STEP VERIFICATION — ensure the previous step was actually sent
+  if (stepIndex > 0) {
+    const prevStep = await db.select({ status: campaignEmails.status })
+      .from(campaignEmails)
+      .where(and(
+        eq(campaignEmails.campaignId, campaignId),
+        eq(campaignEmails.leadId, leadEntry.leadId),
+        eq(campaignEmails.stepIndex, stepIndex - 1)
+      ))
+      .limit(1);
+    if (prevStep.length === 0 || prevStep[0].status !== 'sent') {
+      console.log(`[CampaignWorker] ⏳ Follow-up step ${stepIndex} deferred — step ${stepIndex - 1} not yet sent for lead ${lead.id?.slice(-8)}. Rescheduling.`);
+      await campaignQueueManager.scheduleFollowUp(
+        campaignId, userId, campaignLeadId, integrationId, stepIndex,
+        10 * 60 * 1000 // retry in 10 minutes
+      );
+      return;
+    }
+  }
+
+  // 7. Deliver the follow-up email
   try {
     // ── PG-LEVEL IDEMPOTENCY GUARD ─────────────────────────────────────────
     const alreadySent = await db.select({ id: campaignEmails.id })
@@ -2112,41 +2132,25 @@ async function deliverCampaignEmail(
   }
 
 
-  // Variable replacement
-  const rawLeadName = lead.name?.trim();
-  const cleanName = rawLeadName === 'Unknown' ? undefined : rawLeadName;
-  const firstName = cleanName?.split(' ')[0] || 'there';
-  const lastName = cleanName?.split(' ').slice(1).join(' ') || 'there';
-  const fullName = cleanName || firstName;
-  const company = (lead as any).company?.trim() || 'your company';
-  const meta = (lead as any).metadata || {};
-  const city = meta.city || (lead as any).city || '';
-  const industry = meta.industry || '';
-  const niche = meta.niche || '';
-  const website = meta.website || '';
-  body = body
-    .replace(/{{firstName}}/g, firstName)
-    .replace(/{{lastName}}/g, lastName)
-    .replace(/{{name}}/g, fullName)
-    .replace(/{{lead_name}}/g, fullName)
-    .replace(/{{company}}/g, company)
-    .replace(/{{business_name}}/g, company)
-    .replace(/{{city}}/g, city)
-    .replace(/{{industry}}/g, industry)
-    .replace(/{{niche}}/g, niche)
-    .replace(/{{website}}/g, website);
+  // Variable replacement — use shared utility + sender info
+  let senderName = 'there';
+  let senderEmail = '';
+  try {
+    const [integration] = await db!.select({ name: integrations.name, email: integrations.email })
+      .from(integrations)
+      .where(eq(integrations.id, integrationId))
+      .limit(1);
+    if (integration) {
+      senderName = integration.name?.trim() || integration.email?.split('@')[0] || 'there';
+      senderEmail = integration.email?.trim() || '';
+    }
+  } catch {
+    // non-critical — fall through with defaults
+  }
 
-  subject = subject
-    .replace(/{{firstName}}/g, firstName)
-    .replace(/{{lastName}}/g, lastName)
-    .replace(/{{name}}/g, fullName)
-    .replace(/{{lead_name}}/g, fullName)
-    .replace(/{{company}}/g, company)
-    .replace(/{{business_name}}/g, company)
-    .replace(/{{city}}/g, city)
-    .replace(/{{industry}}/g, industry)
-    .replace(/{{niche}}/g, niche)
-    .replace(/{{website}}/g, website);
+  const { resolveTemplateVars } = await import('@shared/lib/template-variables.js');
+  body = resolveTemplateVars(body, lead, { name: senderName, email: senderEmail });
+  subject = resolveTemplateVars(subject, lead, { name: senderName, email: senderEmail });
 
   // --- PHASE 51: AUTONOMOUS COMPLIANCE GUARD ---
   // Universal SafetyGuard: Catch hallucinations, placeholders, and tone issues in ALL outreach
@@ -2164,9 +2168,11 @@ async function deliverCampaignEmail(
   }
 
   // Ensure we always have a professional opt-out to prevent 'marked as spam' blocks
+  const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
+  body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
+  body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
   const lowerBody = body.toLowerCase();
   if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
-    const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
     body += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
   }
 
@@ -2318,6 +2324,22 @@ async function deliverCampaignEmail(
       } catch (threadErr) {
         console.warn(`[CampaignWorker] Failed to fetch threading headers for lead ${lead.id}:`, threadErr);
       }
+    }
+
+    // MX validation check — skip if domain has no MX records
+    try {
+      const { dnsValidationEngine } = await import('@services/email-service/src/email/dns-validation-engine.js');
+      const domain = lead.email?.split('@')[1];
+      if (domain) {
+        const mxResult = await dnsValidationEngine.validateMX(domain);
+        if (!mxResult.valid) {
+          console.warn(`[CampaignWorker] Skipping ${lead.email}: no MX records for ${domain}`);
+          await releaseLock(lockKey);
+          return;
+        }
+      }
+    } catch {
+      // DNS failure — allow send to proceed (defensive)
     }
 
     await sendEmail(userId, lead.email, body, subject, {

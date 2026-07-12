@@ -10,11 +10,17 @@ export interface LeadTemplateContext {
   metadata?: Record<string, any> | null;
 }
 
+export interface SenderTemplateContext {
+  name?: string | null;
+  email?: string | null;
+}
+
 const PLACEHOLDER_NAME = 'Unknown';
 
 export function resolveTemplateVars(
   text: string,
-  lead: LeadTemplateContext
+  lead: LeadTemplateContext,
+  sender?: SenderTemplateContext
 ): string {
   const rawName = lead.name?.trim();
   const cleanName = rawName === PLACEHOLDER_NAME ? undefined : rawName;
@@ -27,8 +33,10 @@ export function resolveTemplateVars(
   const industry = meta.industry || '';
   const niche = meta.niche || '';
   const website = meta.website || '';
+  const senderName = sender?.name?.trim() || 'there';
+  const senderEmail = sender?.email?.trim() || '';
 
-  return text
+  let result = text
     .replace(/{{firstName}}/g, firstName)
     .replace(/{{lastName}}/g, lastName)
     .replace(/{{name}}/g, fullName)
@@ -38,16 +46,23 @@ export function resolveTemplateVars(
     .replace(/{{city}}/g, city)
     .replace(/{{industry}}/g, industry)
     .replace(/{{niche}}/g, niche)
-    .replace(/{{website}}/g, website);
+    .replace(/{{website}}/g, website)
+    .replace(/{{sender_name}}/g, senderName)
+    .replace(/{{senderName}}/g, senderName)
+    .replace(/{{sender\.name}}/g, senderName)
+    .replace(/{{sender_email}}/g, senderEmail);
+
+  return result;
 }
 
 export function resolveTemplateVarsWithSubject(
   body: string,
   subject: string,
-  lead: LeadTemplateContext
+  lead: LeadTemplateContext,
+  sender?: SenderTemplateContext
 ): { body: string; subject: string } {
   return {
-    body: resolveTemplateVars(body, lead),
-    subject: resolveTemplateVars(subject, lead),
+    body: resolveTemplateVars(body, lead, sender),
+    subject: resolveTemplateVars(subject, lead, sender),
   };
 }

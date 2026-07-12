@@ -1275,7 +1275,10 @@ export default function InboxPage() {
                                 <Brain className="h-4 w-4" />
                               </Button>
                               <span className="text-[10px] text-muted-foreground/50 font-medium uppercase tracking-wider shrink-0 mt-0.5">
-                                {new Date(lead.lastMessageAt || lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                                {(() => {
+                                  const d = new Date(lead.lastMessageAt || lead.createdAt);
+                                  return d.getFullYear() > 2000 ? d.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+                                })()}
                               </span>
                             </div>
                           </div>
@@ -1306,6 +1309,7 @@ export default function InboxPage() {
                           </div>
                         </div>
                       </div>
+                    </div>
                     </div>
                   ))}
                   {leadsData?.hasMore && (
@@ -1711,21 +1715,36 @@ export default function InboxPage() {
                       <div className="flex justify-end"><Skeleton className="h-16 w-64 rounded-2xl rounded-tr-none" /></div>
                       <div className="flex justify-start"><Skeleton className="h-12 w-48 rounded-2xl rounded-tl-none" /></div>
                     </div>
-                  ) : messagesData?.messages?.map((msg: any) => (
-                    <div key={msg.id} className={cn("flex w-full min-w-0", msg.direction === 'inbound' ? "justify-start" : "justify-end")}>
+                  ) : [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map((msg: any, _idx: number) => {
+                    const prevMsg = _idx > 0 ? [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[_idx - 1] : null;
+                    const showHeader = !prevMsg || prevMsg.subject !== msg.subject;
+                    return (
+                    <div key={msg.id} className="flex flex-col w-full">
+                      {msg.subject && showHeader && (
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 px-1 mb-2 mt-2">
+                          {msg.subject.replace(/^Re:\s*/i, '').replace(/\{\{[^}]+\}\}/g, '')}
+                        </div>
+                      )}
+                      <div className={cn("flex w-full min-w-0", msg.direction === 'inbound' ? "justify-start" : "justify-end")}>
                       <div className={cn(
                         "max-w-[90%] md:max-w-[75%] lg:max-w-[65%] p-4 rounded-2xl text-sm shadow-sm relative group transition-all hover:shadow-md min-w-0",
                         msg.direction === 'inbound'
                           ? "bg-white text-black rounded-tl-none border border-border/50 shadow-sm"
                           : "bg-primary text-primary-foreground rounded-tr-none shadow-md shadow-primary/20"
                       )}>
-                        <div className="whitespace-pre-wrap break-words break-all leading-relaxed overflow-hidden">
-                          {isHtml(msg.body) ? (
-                            <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(msg.body) }} className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1" />
-                          ) : (
-                            <HighlightText text={msg.body} query={searchQuery} />
-                          )}
-                        </div>
+                          <div className="whitespace-pre-wrap break-words break-all leading-relaxed overflow-hidden">
+                            {(() => {
+                              let displayText = msg.body || '';
+                              // Strip unresolved variables {{...}}
+                              displayText = displayText.replace(/\{\{[^}]+\}\}/g, '');
+                              // Strip raw HTML if detected
+                              const isHtmlContent = isHtml(displayText);
+                              if (isHtmlContent) {
+                                return <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(displayText, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br', 'ul', 'ol', 'li', 'span', 'div'] }) }} className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1" />;
+                              }
+                              return <HighlightText text={displayText} query={searchQuery} />;
+                            })()}
+                          </div>
                         {msg.metadata?.disclaimer && (
                           <div className="mt-3 pt-3 border-t border-current/10 text-[10px] opacity-60 italic font-medium">
                             {msg.metadata.disclaimer}
