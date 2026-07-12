@@ -69,7 +69,7 @@ function getClientIp(req: Request): string {
   return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
-router.post('/auth/check-email', async (req: Request, res: Response): Promise<void> => {
+router.post('/check-email', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body as EmailRequestBody;
     const ip = getClientIp(req);
@@ -119,7 +119,7 @@ router.post('/auth/check-email', async (req: Request, res: Response): Promise<vo
   }
 });
 
-router.post('/auth/request-otp', async (req: Request, res: Response): Promise<void> => {
+router.post('/request-otp', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body as EmailRequestBody;
     const ip = getClientIp(req);
@@ -181,7 +181,7 @@ router.post('/auth/request-otp', async (req: Request, res: Response): Promise<vo
   }
 });
 
-router.post('/auth/verify-otp', async (req: Request, res: Response): Promise<void> => {
+router.post('/verify-otp', async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, otp } = req.body as VerifyOTPBody;
     const ip = getClientIp(req);
@@ -267,7 +267,7 @@ router.post('/auth/verify-otp', async (req: Request, res: Response): Promise<voi
   }
 });
 
-router.get('/auth/status', async (req: Request, res: Response): Promise<void> => {
+router.get('/status', async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
 

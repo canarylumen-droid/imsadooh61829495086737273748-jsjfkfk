@@ -1381,6 +1381,11 @@ Custom Instructions: ${ck.customInstructions || "N/A"}
 ${ck.faqs && ck.faqs.length > 0 ? `Frequently Asked Questions:\n${ck.faqs.map((f: any) => `- Q: "${f.question}"\n  A: "${f.answer}"`).join('\n')}` : ''}`;
     }
   }
+  // Append extra instructions for retry (e.g., stricter anti-placeholder rules)
+  const extraInstructions = (lead as any)?._extraInstructions;
+  if (extraInstructions) {
+    customKnowledgeContext += `\n${extraInstructions}`;
+  }
   const customObjectionsPrompt = await objectionService.formatCustomObjectionsForPrompt(userId).catch(() => '');
 
   try {
@@ -1426,8 +1431,8 @@ ${ragContext || "No specific knowledge base fragments found."}
 2. **NO FAKE METRICS**: Never claim specific results unless they appear in the brand context.
 3. **NO INVENTED COMPETITORS**: Only name competitors explicitly listed above.
 4. **NO MADE-UP CONTEXT**: Do not describe use cases not present in the offer or knowledge base.
-5. **NO BRACKET PLACEHOLDERS**: Never output square brackets `[...]` or angle brackets `<...>` in the final email. The examples below use `[...]` as placeholders for demonstration only — you must replace them with REAL, SPECIFIC content or omit them entirely.
-6. **NO TEMPLATE LEAKS**: If you don't know a specific detail, skip it. Do NOT leave `[placeholder]` or `[unknown]`.
+5. **NO BRACKET PLACEHOLDERS**: Never output square brackets like [example] or angle brackets in the final email. The examples below use brackets as placeholders for demonstration only — you must replace them with REAL, SPECIFIC content or omit them entirely.
+6. **NO TEMPLATE LEAKS**: If you don't know a specific detail, skip it. Do NOT leave bracket placeholders like [placeholder] or [unknown].
 
 ## COPYWRITING DIRECTIVES
 1. **PEER-TO-PEER**: Speak as an equal to ${leadRole}s — confident, not salesy.
@@ -1522,14 +1527,12 @@ Industry: ${industry}
       // Retry once with a stricter prompt — the AI leaked placeholders
       console.warn(`[ExpertOutreach] NGA-1 violation for ${lead.name}, retrying with strict anti-placeholder prompt...`);
       (lead as any)._retried = true;
-      return generateExpertOutreach(lead, offer, industry, leadRole, {
-        ...ck,
-        customInstructions: `${ck.customInstructions || ''}
+      (lead as any)._extraInstructions = `
 
-STRICT INSTRUCTION: You MUST NOT use ANY square brackets [ ] in your output. 
-Replace all [placeholders] with real, specific content based on the lead's profile.
-If you don't know a specific detail, simply omit it. Never leave brackets.`
-      });
+STRICT INSTRUCTION: You MUST NOT use ANY square brackets [ ] or angle brackets in your output. 
+Replace all placeholders with real, specific content based on the lead's profile.
+If you don't know a specific detail, simply omit it. Never leave brackets.`;
+      return generateExpertOutreach(lead, userId);
     }
 
     if (isQuotaError) {

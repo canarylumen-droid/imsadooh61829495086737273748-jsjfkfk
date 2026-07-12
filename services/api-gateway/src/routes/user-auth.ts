@@ -664,7 +664,10 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
       return;
     }
 
-    // Regenerate session ID for security (prevents session fixation)
+    // Regenerate session ID for security (prevents session fixation).
+    // If regeneration fails (e.g., stale cookie referencing a destroyed session),
+    // we proceed anyway with the existing session — the subsequent save will
+    // send a fresh Set-Cookie to the browser, overwriting any stale cookie.
     try {
       await new Promise<void>((resolve, reject) => {
         req.session.regenerate((err) => {
@@ -677,12 +680,11 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
           }
         });
       });
-    } catch {
-      // If regeneration fails (e.g., stale cookie after logout), continue without regeneration
-      console.warn('[Login] Session regeneration failed, proceeding with existing session');
+    } catch (regErr: any) {
+      console.warn('[Login] Session regeneration failed, continuing with current session:', regErr?.message);
     }
 
-    // Set session data after regeneration
+    // Set session data
     req.session.userId = user.id;
     req.session.email = email;
     req.session.isAdmin = false;
@@ -787,6 +789,18 @@ router.post('/refresh-session', async (req: Request, res: Response): Promise<voi
     if (req.session.cookie) {
       req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000;
     }
+
+    // Persist the session changes so the extended maxAge is saved to the store
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          console.warn('[RefreshSession] Save failed:', err);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
 
     res.json({
       success: true,
