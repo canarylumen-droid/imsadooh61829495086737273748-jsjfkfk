@@ -12,12 +12,12 @@ interface ReputationSource {
 }
 
 export class ReputationPollWorker {
-  private readonly POLL_INTERVAL = 15 * 60 * 1000;
+  private readonly POLL_INTERVAL = 2 * 60 * 1000;
   private timer: NodeJS.Timeout | null = null;
 
   start(): void {
     if (this.timer) return;
-    console.log('[ReputationPoll] Starting 15-min polling cycle...');
+    console.log('[ReputationPoll] Starting 2-min polling cycle...');
     this.pollAll().catch(e => console.error('[ReputationPoll] Initial poll failed:', e));
     this.timer = setInterval(() => this.pollAll(), this.POLL_INTERVAL);
   }
@@ -67,8 +67,8 @@ export class ReputationPollWorker {
     }
 
     const totalWeight = sources.reduce((s, src) => s + src.weight, 0);
-    const weightedScore = Math.round(
-      sources.reduce((s, src) => s + src.score * (src.weight / totalWeight), 0)
+    const weightedScore = Number(
+      sources.reduce((s, src) => s + src.score * (src.weight / totalWeight), 0).toFixed(2)
     );
 
     const details: Record<string, any> = {};

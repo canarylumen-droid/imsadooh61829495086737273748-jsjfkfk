@@ -17,17 +17,18 @@ interface WarmupStatus {
 
 class WarmupService {
   /**
-   * Professional tiered warmup schedule:
-   * 1-2   Days -> 25  emails / day
-   * 3-5   Days -> 75  emails / day
-   * 6-10  Days -> 150 emails / day
-   * 11-14 Days -> 300 emails / day
+   * Warmup = 10% of daily outreach limit, scaled progressively:
+   * 1-2   Days -> 10% of providerMax
+   * 3-5   Days -> 25% of providerMax
+   * 6-10  Days -> 50% of providerMax
+   * 11-14 Days -> 75% of providerMax
+   * 15+   Days -> 100% (warmup complete)
    */
-  private readonly WARMUP_STAGES: Array<{ maxDays: number; limit: number }> = [
-    { maxDays: 2,  limit: 25  },
-    { maxDays: 5,  limit: 75  },
-    { maxDays: 10, limit: 150 },
-    { maxDays: 14, limit: 300 },
+  private readonly WARMUP_STAGES: Array<{ maxDays: number; percent: number }> = [
+    { maxDays: 2,  percent: 0.10 },
+    { maxDays: 5,  percent: 0.25 },
+    { maxDays: 10, percent: 0.50 },
+    { maxDays: 14, percent: 0.75 },
   ];
 
   private readonly FULL_WARMUP_DAYS = 14;
@@ -36,7 +37,6 @@ class WarmupService {
    * Returns the effective daily send limit for a mailbox integration based on age.
    */
   getWarmupStatus(integration: Integration, providerMax: number): WarmupStatus {
-    // Treat null/undefined createdAt as "now" (Day 0)
     const createdAt = integration.createdAt
       ? new Date(integration.createdAt)
       : new Date();
@@ -44,19 +44,19 @@ class WarmupService {
     const diffTime = Date.now() - createdAt.getTime();
     const daysSinceConnected = Math.max(0, Math.floor(diffTime / (1000 * 60 * 60 * 24)));
 
-    // Find the current stage
+    // Calculate warmup limit as percentage of providerMax
     for (const stage of this.WARMUP_STAGES) {
       if (daysSinceConnected <= stage.maxDays) {
+        const warmupLimit = Math.max(1, Math.round(providerMax * stage.percent));
         return {
           isWarmingUp: true,
-          dailyLimit: stage.limit,
+          dailyLimit: warmupLimit,
           daysSinceConnected,
-          reason: `Warmup Day ${daysSinceConnected + 1}/${this.FULL_WARMUP_DAYS} – limit capped at ${stage.limit}/day to protect sender reputation`,
+          reason: `Warmup Day ${daysSinceConnected + 1}/${this.FULL_WARMUP_DAYS} – limit capped at ${warmupLimit}/day (${Math.round(stage.percent * 100)}% of ${providerMax}) to protect sender reputation`,
         };
       }
     }
 
-    // Past warmup – use normal provider limits
     return {
       isWarmingUp: false,
       dailyLimit: providerMax,

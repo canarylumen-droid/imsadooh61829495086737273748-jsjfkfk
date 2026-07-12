@@ -263,10 +263,14 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     newInitialLimit = Math.max(5, newInitialLimit - overflow);
   }
 
+  // Store with 2 decimal precision
+  const preciseScore = Number(score.toFixed(2));
+  const preciseSpamRisk = Number(currentSpamRisk.toFixed(4));
+
   await db.update(integrations).set({
-    reputationScore: score,
+    reputationScore: preciseScore,
     healthLevel,
-    spamRiskScore: currentSpamRisk,
+    spamRiskScore: preciseSpamRisk,
     initialOutreachLimit: newInitialLimit,
     warmupLimit: newWarmupLimit,
     dailyLimit: newInitialLimit + newWarmupLimit,
@@ -303,7 +307,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
     warmupLimit: newWarmupLimit
   });
 
-  return score;
+  return preciseScore;
 }
 
 /**
