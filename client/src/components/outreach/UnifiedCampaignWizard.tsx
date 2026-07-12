@@ -78,6 +78,21 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
   const [mailboxLimits, setMailboxLimits] = useState<Record<string, number>>({});
   const [mailboxMaxMultipliers, setMailboxMaxMultipliers] = useState<Record<string, number>>({});
+  const [totalDailyLimit, setTotalDailyLimit] = useState<number>(35);
+  const [useTotalLimit, setUseTotalLimit] = useState(true);
+
+  // Auto-distribute total limit across selected mailboxes when total or selection changes
+  useEffect(() => {
+    if (!useTotalLimit || selectedMailboxes.length === 0) return;
+    const perMailbox = Math.max(5, Math.floor(totalDailyLimit / selectedMailboxes.length));
+    setMailboxLimits(prev => {
+      const next = { ...prev };
+      for (const id of selectedMailboxes) {
+        next[id] = perMailbox;
+      }
+      return next;
+    });
+  }, [totalDailyLimit, selectedMailboxes, useTotalLimit]);
 
   const [campaignName, setCampaignName] = useState("");
   const [targetDays, setTargetDays] = useState(10);
@@ -338,8 +353,9 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         excludeWeekends,
         aiAutonomousMode,
         config: {
-          dailyLimit: totalDailyVolume,
-          mailboxLimits: Object.fromEntries(selectedMailboxes.map(id => [id, mailboxLimits[id] || 50])),
+          dailyLimit: useTotalLimit ? totalDailyLimit : totalDailyVolume,
+          totalDailyLimit: useTotalLimit ? totalDailyLimit : undefined,
+          mailboxLimits: Object.fromEntries(selectedMailboxes.map(id => [id, mailboxLimits[id] || 35])),
           mailboxMaxMultipliers,
           mailboxIds: selectedMailboxes,
           targetDays,
@@ -611,6 +627,50 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                               />
                             </div>
                           )}
+                          <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 mb-4">
+                            <div className="flex items-center justify-between gap-4">
+                              <div className="flex-1">
+                                <Label className="text-[10px] font-black uppercase tracking-widest opacity-60">Total Daily Limit (all mailboxes)</Label>
+                                <div className="flex items-center gap-3 mt-2">
+                                  <Input
+                                    type="number"
+                                    value={totalDailyLimit}
+                                    onChange={e => setTotalDailyLimit(Math.max(5, parseInt(e.target.value) || 35))}
+                                    min={5}
+                                    className="w-24 h-8 text-sm font-bold bg-muted/20 border-border/40 rounded-lg text-center"
+                                  />
+                                  <span className="text-[10px] text-muted-foreground/60">
+                                    / day across {selectedMailboxes.length || 1} mailbox{selectedMailboxes.length !== 1 ? 'es' : ''}
+                                    {selectedMailboxes.length > 0 && (
+                                      <span className="text-primary font-bold ml-1">
+                                        → {Math.max(5, Math.floor(totalDailyLimit / selectedMailboxes.length))}/ea
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-bold uppercase text-muted-foreground/60">Auto</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setUseTotalLimit(!useTotalLimit)}
+                                  className={cn(
+                                    "w-8 h-4 rounded-full transition-colors relative",
+                                    useTotalLimit ? "bg-primary" : "bg-muted"
+                                  )}
+                                >
+                                  <div className={cn(
+                                    "absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform",
+                                    useTotalLimit ? "translate-x-4" : "translate-x-0.5"
+                                  )} />
+                                </button>
+                              </div>
+                            </div>
+                            {!useTotalLimit && (
+                              <p className="text-[9px] text-amber-500/80 mt-2">Manual mode — each mailbox's slider below applies individually.</p>
+                            )}
+                          </div>
+
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-[10px] font-bold uppercase text-muted-foreground/60">{selectedMailboxes.length} of {availableMailboxes.length} selected</span>
                             <div className="flex gap-2">

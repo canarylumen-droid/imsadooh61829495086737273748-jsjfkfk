@@ -150,11 +150,17 @@ export class CampaignQueueManager {
       console.warn('[CampaignQueue] Failed to get user plan, using fallback limit of 50:', e);
     }
 
+    // If totalDailyLimit is set, distribute equally across all mailboxes
+    const totalLimit = config.totalDailyLimit || 0;
+    const effectivePerMailbox = totalLimit > 0
+      ? Math.max(5, Math.floor(totalLimit / mailboxIds.length))
+      : 0;
+
     // Initial send-batch job for EACH mailbox — addBulk() for 1K mailboxes instead of sequential await loop
     // (sequential add at 5ms/call × 1000 mailboxes = 5s blocked; addBulk is a single Redis pipeline)
     if (campaignQueue) {
       const bulkJobs = mailboxIds.map(mbId => {
-        const dailyLimit = mailboxLimits[mbId] || planDailyDefault;
+        const dailyLimit = effectivePerMailbox > 0 ? effectivePerMailbox : (mailboxLimits[mbId] || planDailyDefault);
         const jobKey = `send-batch_${campaign.id}_${mbId}`;
         return {
           name: jobKey,
@@ -600,8 +606,13 @@ export class CampaignQueueManager {
    * Called when new leads are added after the campaign has already started.
    * Ensures every mailbox has a chance to pick up the new leads.
    */
-  async refreshCampaignMailboxes(campaignId: string, userId: string, mailboxIds: string[], mailboxLimits: Record<string, number> = {}): Promise<void> {
+  async refreshCampaignMailboxes(campaignId: string, userId: string, mailboxIds: string[], mailboxLimits: Record<string, number> = {}, totalDailyLimit?: number): Promise<void> {
     console.log(`[CampaignQueue] 🔄 Refreshing ${mailboxIds.length} mailbox(es) for campaign ${campaignId}`);
+
+    // Use totalDailyLimit if set — distribute equally
+    const effectivePerMailbox = totalDailyLimit && totalDailyLimit > 0
+      ? Math.max(5, Math.floor(totalDailyLimit / mailboxIds.length))
+      : 0;
 
     let planDailyDefault = 35;
     try {
@@ -618,7 +629,7 @@ export class CampaignQueueManager {
       const { consumerQueue } = await import('./consumer-distribution.js');
       if (consumerQueue) {
         const bulkJobs = mailboxIds.map(mbId => {
-          const batchSize = mailboxLimits[mbId] || planDailyDefault;
+          const batchSize = effectivePerMailbox > 0 ? effectivePerMailbox : (mailboxLimits[mbId] || planDailyDefault);
           const jobKey = `consumer-pull_${campaignId}_${mbId}_refresh_${Date.now()}`;
           return {
             name: jobKey,
