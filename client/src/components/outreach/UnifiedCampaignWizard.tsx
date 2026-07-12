@@ -611,6 +611,25 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                               />
                             </div>
                           )}
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-[10px] font-bold uppercase text-muted-foreground/60">{selectedMailboxes.length} of {availableMailboxes.length} selected</span>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMailboxes(availableMailboxes.map(m => m.id))}
+                                className="text-[9px] font-bold uppercase text-primary hover:text-primary/80 transition-colors"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedMailboxes([])}
+                                className="text-[9px] font-bold uppercase text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                Clear
+                              </button>
+                            </div>
+                          </div>
                           <div className="space-y-3 max-h-[360px] overflow-y-auto pr-2 custom-scrollbar">
                             {filteredWizardMailboxes.length === 0 && mailboxSearch && (
                               <p className="text-xs text-muted-foreground text-center py-4">No mailboxes match "{mailboxSearch}"</p>
@@ -627,22 +646,30 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                       onClick={() => isSelected ? setSelectedMailboxes(selectedMailboxes.filter(id => id !== mb.id)) : setSelectedMailboxes([...selectedMailboxes, mb.id])}
                                       className="flex min-w-0 items-center gap-2 text-left"
                                     >
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => {}}
+                                        className="w-3.5 h-3.5 rounded border-border accent-primary"
+                                      />
                                       <Mail className="w-3 h-3 shrink-0" />
                                       <span className="truncate">{getMailboxAddress(mb)}</span>
                                     </button>
                                     <div className="flex shrink-0 items-center gap-2">
                                       <Badge variant="outline" className="text-[9px] uppercase">{mb.provider === 'custom_email' ? 'SMTP' : mb.provider}</Badge>
-                                      {isSelected && <CheckCircle2 className="w-4 h-4 text-primary" />}
                                     </div>
                                   </div>
                                   {isSelected && (
                                     <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-1" onClick={e => e.stopPropagation()}>
                                       <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
-                                        <span className="opacity-40">Daily Sends</span>
-                                        <span className="text-primary">{mailboxLimits[mb.id]}/day</span>
+                                        <span className="opacity-40">Max per Day (initial + follow-ups)</span>
+                                        <span className="text-primary">{mailboxLimits[mb.id] || 35}/day</span>
+                                      </div>
+                                      <div className="text-[9px] text-muted-foreground/60 italic mb-2">
+                                        Max emails per day (initial + follow-ups, excludes replies). Emails are spread evenly across 24h.
                                       </div>
                                       <Slider 
-                                        value={[mailboxLimits[mb.id] || 30]} 
+                                        value={[mailboxLimits[mb.id] || 35]} 
                                         onValueChange={v => {
                                           setMailboxLimits(prev => ({ ...prev, [mb.id]: v[0] }));
                                           // Persist to DB so this becomes the new default for this mailbox
@@ -652,11 +679,9 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                         max={safeCeiling} 
                                         step={5} 
                                       />
-                                      <div className="p-3 bg-amber-500/5 rounded-lg border border-amber-500/10">
-                                        <div className="flex justify-between text-[9px] font-black uppercase text-amber-600">
-                                          <span>Safety Ceiling</span>
-                                          <span>{safeCeiling}/day</span>
-                                        </div>
+                                      <div className="flex justify-between text-[9px] font-black tracking-wider mt-1">
+                                        <span className="text-muted-foreground/60">~{Math.round((mailboxLimits[mb.id] || 35) / 24)}/hr (1 every {Math.round(1440 / (mailboxLimits[mb.id] || 35))}min)</span>
+                                        <span className="text-primary">{mailboxLimits[mb.id] || 35}/day max</span>
                                       </div>
                                     </div>
                                   )}

@@ -138,14 +138,14 @@ export class CampaignQueueManager {
 
     console.log(`[CampaignQueue] 🚀 Starting campaign "${campaign.name}" with ${mailboxIds.length} mailbox(es)`);
 
-    // Plan-aware default limits for 50k+ lead scalability
-    let planDailyDefault = 50;
+    // Plan-aware default limits — safe pacing to avoid spam
+    let planDailyDefault = 35;
     try {
       const [userRow] = await db.select({ plan: users.plan, subscriptionTier: users.subscriptionTier })
         .from(users).where(eq(users.id, campaign.userId)).limit(1);
       const tier = (userRow?.subscriptionTier || userRow?.plan || 'starter').toLowerCase();
-      if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 500;
-      else if (tier === 'starter') planDailyDefault = 200;
+      if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 120;
+      else if (tier === 'starter') planDailyDefault = 60;
     } catch (e) {
       console.warn('[CampaignQueue] Failed to get user plan, using fallback limit of 50:', e);
     }
@@ -603,13 +603,13 @@ export class CampaignQueueManager {
   async refreshCampaignMailboxes(campaignId: string, userId: string, mailboxIds: string[], mailboxLimits: Record<string, number> = {}): Promise<void> {
     console.log(`[CampaignQueue] 🔄 Refreshing ${mailboxIds.length} mailbox(es) for campaign ${campaignId}`);
 
-    let planDailyDefault = 50;
+    let planDailyDefault = 35;
     try {
       const [userRow] = await db.select({ plan: users.plan, subscriptionTier: users.subscriptionTier })
         .from(users).where(eq(users.id, userId)).limit(1);
       const tier = (userRow?.subscriptionTier || userRow?.plan || 'starter').toLowerCase();
-      if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 500;
-      else if (tier === 'starter') planDailyDefault = 200;
+      if (tier === 'enterprise' || tier === 'pro') planDailyDefault = 120;
+      else if (tier === 'starter') planDailyDefault = 60;
     } catch (e) {
       console.warn('[CampaignQueue] Failed to get user plan in refreshMailboxCycle, using fallback:', e);
     }
@@ -823,13 +823,12 @@ export async function mailboxHasPendingReply(integrationId: string): Promise<boo
 function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?: any): number {
   let effectiveDailyLimit = dailyLimit;
 
-  // Neural Brain Smart Capping (applied to interval calculation) — plan-aware for 50k+ scale
+  // Plan-aware smart capping
   if (integration) {
     const tier = (integration.tier || 'starter').toLowerCase();
     if (tier !== 'enterprise') {
       const createdAt = new Date(integration.createdAt || Date.now());
       const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
-      // Plan-aware caps: starter 200, pro 500 (was hard-capped at 60 for all non-enterprise)
       const smartCap = tier === 'pro'
         ? (isWarmed ? 500 : 300)
         : (isWarmed ? 200 : 100);
@@ -838,35 +837,61 @@ function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?
   }
 
   const now = new Date();
-  const currentHour = now.getUTCHours(); // UTC time for consistent global behavior
-  
-  // Detect Night Watch (10 PM to 6 AM UTC)
+  const currentHour = now.getUTCHours();
   const isNightWatch = currentHour >= 22 || currentHour < 6;
 
-  const endOfDay = new Date(now);
-  endOfDay.setHours(23, 59, 59, 999);
-  const remainingHours = Math.max(0.25, (endOfDay.getTime() - now.getTime()) / (3600 * 1000));
+  // ── PRECISE HOURLY PACING ───────────────────────────────────────────
+  // Formula: dailyLimit / 24 = emails per hour
+  // Interval: (24 * 60 * 60 * 1000) / dailyLimit = ms between each send
+  // This ensures emails are spread perfectly across 24h regardless of batch timing.
+  //
+  // Examples:
+  //   35/day → 1.46/hr → 1 email every 41 min
+  //   48/day → 2/hr    → 1 email every 30 min
+  //   20/day → 0.83/hr → 1 email every 72 min (~1/hr)
+  //   60/day → 2.5/hr  → 1 email every 24 min
+  //  120/day → 5/hr    → 1 email every 12 min
+  //
+  // Clamp: min 10 min (6/hr max), max 2 hours (0.5/hr min)
 
-  const remainingSends = Math.max(1, effectiveDailyLimit - sentToday);
-  let baseIntervalMs = (remainingHours * 3600 * 1000) / remainingSends;
+  let intervalMs = Math.round(86_400_000 / Math.max(1, effectiveDailyLimit));
+  intervalMs = Math.min(7_200_000, Math.max(600_000, intervalMs));
 
-  // Apply Night Watch multiplier if active
-  if (isNightWatch) {
-    // Increase delay to at least 45 minutes during night watch
-    // (approx 10-11 sends per 8hr night window max)
-    const nightDelay = Math.max(baseIntervalMs, 45 * 60_000);
-    console.log(`[CampaignWorker] 🌙 Night Watch active (Hour: ${currentHour}): Throttling mailbox to ${Math.round(nightDelay / 60000)}m intervals`);
-    baseIntervalMs = nightDelay;
+  // Δ Sent: If we're behind schedule (sent fewer than expected by this hour),
+  // slightly increase pace. If ahead, slightly decrease pace.
+  const expectedByNow = Math.round((effectiveDailyLimit / 24) * (currentHour + 1));
+  const behindBy = expectedByNow - sentToday;
+  if (behindBy > 2) {
+    // Catch up: reduce interval by up to 30%
+    const catchupFactor = Math.max(0.7, 1 - (behindBy / effectiveDailyLimit));
+    intervalMs = Math.round(intervalMs * catchupFactor);
+  } else if (behindBy < -2) {
+    // Ahead: increase interval by up to 30%
+    const coastFactor = Math.min(1.3, 1 + (Math.abs(behindBy) / effectiveDailyLimit));
+    intervalMs = Math.round(intervalMs * coastFactor);
   }
 
-  // Clamp: at least 30s, at most 60 minutes for better 24/7 distribution
-  const clamped = Math.min(60 * 60_000, Math.max(30_000, baseIntervalMs));
+  // Night Watch: double interval (half speed)
+  if (isNightWatch) {
+    intervalMs = Math.min(7_200_000, Math.round(intervalMs * 2));
+    console.log(`[CampaignWorker] 🌙 Night Watch active (Hour: ${currentHour}): interval → ${Math.round(intervalMs / 60000)}m`);
+  }
 
-  // 30–90s micro-delay to perfectly mimic human behavior (not ±15% which can be huge)
-  const microDelayMs = 30_000 + Math.floor(Math.random() * 60_000); // 30s–90s
-  const intervalMs = Math.round(clamped + microDelayMs);
+  // Human-like jitter: ±25% random so no two intervals are identical
+  const jitter = 0.75 + Math.random() * 0.5;
+  intervalMs = Math.round(intervalMs * jitter);
 
-  console.log(`[CampaignWorker] ⏱️ Hourly plan: ${sentToday}/${effectiveDailyLimit} sent. Next slot in ${Math.round(intervalMs / 60000)}m (${Math.round(microDelayMs / 1000)}s micro-delay)`);
+  // NEVER send 2 emails in the same minute
+  const nowMs = Date.now();
+  const currentMinute = Math.floor(nowMs / 60000);
+  const nextMinuteStart = (currentMinute + 1) * 60000;
+  if (nowMs + intervalMs < nextMinuteStart) {
+    intervalMs = nextMinuteStart - nowMs + Math.floor(Math.random() * 10000);
+  }
+
+  intervalMs = Math.min(7_200_000, Math.max(60000, intervalMs));
+
+  console.log(`[CampaignWorker] ⏱️ Pacing: ${sentToday}/${effectiveDailyLimit} sent. Next send in ${Math.round(intervalMs / 60000)}m (${Math.round(intervalMs / 1000)}s)`);
   return intervalMs;
 }
 
@@ -1270,13 +1295,8 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
   let didSend = false;
   let batchSentCount = 0;
 
-  // Calculate inter-send pacing: spread remaining sends across remaining day hours
-  const now = new Date();
-  const endOfDay = new Date(now);
-  endOfDay.setHours(23, 59, 59, 999);
-  const remainingDayMs = Math.max(1, endOfDay.getTime() - now.getTime());
-  const remainingBudget = Math.max(1, effectiveLimit - initialSentToday);
-  const interSendDelayMs = Math.max(60_000, Math.round(remainingDayMs / remainingBudget));
+  // Calculate inter-send pacing using same formula as calcMailboxInterval
+  const interSendDelayMs = calcMailboxInterval(initialSentToday, effectiveLimit, currentIntegration);
 
   for (const row of nextLeadResult) {
     // Inter-send pacing: wait between emails to spread across the day
