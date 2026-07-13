@@ -1,0 +1,26 @@
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.env
+.env.local
+.env.*.local
+*.log
+# Keep Replit config files in repo for environment setup
+
+coverage/
+
+# WhatsApp session files (sensitive)
+.wwebjs_auth/
+.wwebjs_cache/
+.wwebjs_auth.json
+
+# Temporary and Scratch files
+*.txt
+*.log
+scratch/
+.gemini/
+ts_*.txt
+tsc_*.txt

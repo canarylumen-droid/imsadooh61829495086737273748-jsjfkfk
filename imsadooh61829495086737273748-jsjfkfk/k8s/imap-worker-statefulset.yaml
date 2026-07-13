@@ -1,0 +1,132 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: audnix-imap-worker
+  labels:
+    app: audnix-imap-worker
+spec:
+  clusterIP: None  # Headless — pods need stable network identity
+  selector:
+    app: audnix-imap-worker
+  ports:
+    - name: metrics
+      port: 3001
+      targetPort: 3001
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: audnix-imap-worker
+spec:
+  serviceName: audnix-imap-worker
+  replicas: 5          # Start with 5 pods = 250 mailboxes. HPA will adjust.
+  podManagementPolicy: Parallel  # Boot all pods simultaneously for fast claim
+  selector:
+    matchLabels:
+      app: audnix-imap-worker
+  template:
+    metadata:
+      labels:
+        app: audnix-imap-worker
+    spec:
+      terminationGracePeriodSeconds: 60
+      # Spread pods across different nodes so one node crash doesn't kill all IMAP
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - audnix-imap-worker
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: imap-worker
+          image: audnix-ai:latest
+          imagePullPolicy: Always
+          command: ["node", "--max-old-space-size=1536", "--import", "tsx", "--import", "./instrument.ts", "services/email-worker/src/index.ts"]
+          env:
+            # ── Identity ──
+            - name: APP_ROLE
+              value: "imap-worker"
+            # Stable ordinal from StatefulSet hostname (e.g. audnix-imap-worker-3 → 3)
+            - name: POD_ORDINAL
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # K8s dynamic sharding: all pods compete via Redis atomic claim
+            - name: IMAP_DYNAMIC_SHARDING
+              value: "true"
+            - name: IMAP_MAX_SOCKETS
+              value: "50"
+            - name: IMAP_MAX_HEAP_MB
+              value: "700"
+
+            # ── Secrets ──
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: audnix-secrets
+                  key: database-url
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: audnix-secrets
+                  key: redis-password
+            - name: REDIS_URL
+              value: "redis://default:$(REDIS_PASSWORD)@redis-service:6379"
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: audnix-secrets
+                  key: encryption-key
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: audnix-secrets
+                  key: session-secret
+
+            # ── AI / OAuth / Stripe (shared env, IMAP worker doesn't use all but needs them for imports) ──
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: audnix-secrets
+                  key: openai-api-key
+                  optional: true
+            - name: SENDGRID_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: audnix-secrets
+                  key: sendgrid-api-key
+                  optional: true
+
+          ports:
+            - name: http
+              containerPort: 3001
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3001
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1500m"
+              memory: "2Gi"
+      # Restart quickly if the node dies
+      restartPolicy: Always

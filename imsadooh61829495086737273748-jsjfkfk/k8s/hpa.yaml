@@ -1,0 +1,206 @@
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata:
+  name: audnix-redis-auth
+spec:
+  secretTargetRef:
+    - parameter: address
+      name: audnix-secrets
+      key: redis-address
+    - parameter: password
+      name: audnix-secrets
+      key: redis-password
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-email-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-email
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 2
+  maxReplicaCount: 50
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_email_worker_backlog
+        threshold: "25"
+        query: sum(audnix_bullmq_waiting_jobs{queue=~"emailSync|emailVerification|emailRouting|emailReassign"} + audnix_bullmq_delayed_jobs{queue=~"emailSync|emailVerification|emailRouting|emailReassign"})
+# IMAP Worker autoscaling is now defined in imap-worker-keda.yaml
+# Uses Redis list length (imap:orphans) as the trigger — when orphaned
+# mailboxes accumulate, KEDA spins up new pods to claim them.
+#
+# Apply with: kubectl apply -f k8s/imap-worker-keda.yaml
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-outreach-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-outreach
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 2
+  maxReplicaCount: 50
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_outreach_worker_backlog
+        threshold: "25"
+        query: sum(audnix_bullmq_waiting_jobs{queue=~"outreach|campaignEngine"} + audnix_bullmq_delayed_jobs{queue=~"outreach|campaignEngine"})
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-ai-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-ai
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 1
+  maxReplicaCount: 50
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_ai_worker_backlog
+        threshold: "20"
+        query: sum(audnix_bullmq_waiting_jobs{queue=~"aiProcessing|leadScoring|sentimentAnalysis"} + audnix_bullmq_delayed_jobs{queue=~"aiProcessing|leadScoring|sentimentAnalysis"})
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-social-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-social
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 1
+  maxReplicaCount: 25
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_social_worker_backlog
+        threshold: "25"
+        query: sum(audnix_bullmq_waiting_jobs{queue="socialSync"} + audnix_bullmq_delayed_jobs{queue="socialSync"})
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-billing-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-billing
+  pollingInterval: 15
+  cooldownPeriod: 300
+  minReplicaCount: 1
+  maxReplicaCount: 8
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_billing_worker_backlog
+        threshold: "10"
+        query: sum(audnix_bullmq_waiting_jobs{queue="billing"} + audnix_bullmq_delayed_jobs{queue="billing"})
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-orchestrator-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-orchestrator
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 1
+  maxReplicaCount: 30
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_orchestrator_worker_backlog
+        threshold: "20"
+        query: sum(audnix_bullmq_waiting_jobs{queue=~"orchestrator|campaignEngine"} + audnix_bullmq_delayed_jobs{queue=~"orchestrator|campaignEngine"})
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-knowledge-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-knowledge
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 1
+  maxReplicaCount: 20
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_knowledge_worker_backlog
+        threshold: "10"
+        query: sum(audnix_bullmq_waiting_jobs{queue=~"knowledge|vectorOps"} + audnix_bullmq_delayed_jobs{queue=~"knowledge|vectorOps"})
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-vector-db-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-vector-db
+  pollingInterval: 15
+  cooldownPeriod: 180
+  minReplicaCount: 1
+  maxReplicaCount: 12
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_vector_db_backlog
+        threshold: "10"
+        query: sum(audnix_bullmq_waiting_jobs{queue="vectorOps"} + audnix_bullmq_delayed_jobs{queue="vectorOps"})
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: audnix-audit-worker-queue-scaler
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: audnix-worker-audit
+  pollingInterval: 30
+  cooldownPeriod: 300
+  minReplicaCount: 1
+  maxReplicaCount: 20
+  triggers:
+    - type: prometheus
+      metadata:
+        serverAddress: http://prometheus-operated.monitoring.svc.cluster.local:9090
+        metricName: audnix_audit_worker_backlog
+        threshold: "50"
+        query: sum(audnix_bullmq_waiting_jobs{queue=~"audit|webhookProcessing"} + audnix_bullmq_delayed_jobs{queue=~"audit|webhookProcessing"})

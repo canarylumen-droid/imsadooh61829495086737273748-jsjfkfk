@@ -1,0 +1,189 @@
+name: ECS Deploy — Build, Push & Register Task Definitions
+
+on:
+  push:
+    branches: [main, production]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'ECS service to redeploy (leave blank for all)'
+        required: false
+        default: ''
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: audnix-ai
+  ECS_CLUSTER: audnix-prod
+  IMAGE_TAG: ${{ github.sha }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-and-push:
+    name: Build Docker Image & Push to ECR
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build, Tag & Push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.ecs
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  deploy-services:
+    name: Register Task Def & Update ECS Service
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: audnix-api
+            app_role: api
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-socket
+            app_role: socket
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-email-worker
+            app_role: email
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-imap-worker
+            app_role: imap
+            task_def: aws/ecs/task-definition-imap.json
+            family: audnix-imap-worker
+          - service: audnix-outreach-worker
+            app_role: outreach
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-ai-worker
+            app_role: ai
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-social-worker
+            app_role: social
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-billing-worker
+            app_role: billing
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-lead-recovery-worker
+            app_role: lead-recovery
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-orchestrator-worker
+            app_role: orchestrator
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-rag-worker
+            app_role: rag
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-vector-db-service
+            app_role: vectordb
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-infra-scaler
+            app_role: infra-scaler
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+          - service: audnix-audit-worker
+            app_role: audit
+            task_def: aws/ecs/task-definition.json
+            family: audnix-worker
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Render & Register Task Definition
+        id: register
+        run: |
+          SERVICE_NAME="${{ matrix.service }}"
+          INPUT_SERVICE="${{ github.event.inputs.service }}"
+
+          if [ -n "$INPUT_SERVICE" ] && [ "$INPUT_SERVICE" != "$SERVICE_NAME" ]; then
+            echo "Skipping $SERVICE_NAME"
+            exit 0
+          fi
+
+          export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          export APP_ROLE="${{ matrix.app_role }}"
+          export IMAGE_TAG="${{ env.IMAGE_TAG }}"
+
+          echo "Rendering task definition for $SERVICE_NAME (APP_ROLE=$APP_ROLE)"
+          envsubst < "${{ matrix.task_def }}" > rendered-task.json
+
+          echo "Registering new revision for family: ${{ matrix.family }}"
+          REVISION_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://rendered-task.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          echo "revision=$REVISION_ARN" >> "$GITHUB_OUTPUT"
+          echo "Registered $REVISION_ARN"
+
+      - name: Update ECS Service
+        run: |
+          SERVICE_NAME="${{ matrix.service }}"
+          INPUT_SERVICE="${{ github.event.inputs.service }}"
+
+          if [ -n "$INPUT_SERVICE" ] && [ "$INPUT_SERVICE" != "$SERVICE_NAME" ]; then
+            exit 0
+          fi
+
+          echo "Updating $SERVICE_NAME to ${{ steps.register.outputs.revision }}"
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service "$SERVICE_NAME" \
+            --task-definition "${{ steps.register.outputs.revision }}" \
+            --no-cli-pager
+
+      - name: Wait for Service Stabilization
+        run: |
+          SERVICE_NAME="${{ matrix.service }}"
+          INPUT_SERVICE="${{ github.event.inputs.service }}"
+
+          if [ -n "$INPUT_SERVICE" ] && [ "$INPUT_SERVICE" != "$SERVICE_NAME" ]; then
+            exit 0
+          fi
+
+          echo "Waiting for $SERVICE_NAME to stabilize..."
+          aws ecs wait services-stable \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --services "$SERVICE_NAME"
+          echo "$SERVICE_NAME is stable."

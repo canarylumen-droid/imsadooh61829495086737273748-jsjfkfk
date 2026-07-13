@@ -1,0 +1,71 @@
+{
+  "family": "audnix-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "3072",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "audnix-worker",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/audnix-ai:${IMAGE_TAG}",
+      "essential": true,
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "UNIFIED_MODE", "value": "false" },
+        { "name": "IS_WORKER", "value": "true" },
+        { "name": "ECS_ENABLE_CONTAINER_METADATA", "value": "true" },
+        { "name": "APP_ROLE", "value": "${APP_ROLE}" },
+        { "name": "NODE_OPTIONS", "value": "--dns-result-order=ipv4first" },
+        { "name": "DB_POOL_MAX_WORKER", "value": "60" },
+        { "name": "DB_POOL_ABSOLUTE_CAP", "value": "120" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL_POOL", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/db-pool-url:SecretString::" },
+        { "name": "DATABASE_URL_DIRECT", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/db-direct-url:SecretString::" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/redis-url:SecretString::" },
+        { "name": "SESSION_SECRET", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/session-secret:SecretString::" },
+        { "name": "ENCRYPTION_KEY", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/encryption-key:SecretString::" },
+        { "name": "OPENAI_API_KEY", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/openai-key:SecretString::" },
+        { "name": "GEMINI_API_KEY", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/gemini-key:SecretString::" },
+        { "name": "STRIPE_SECRET_KEY", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/stripe-key:SecretString::" }
+      ],
+      "portMappings": [
+        { "containerPort": 5000, "protocol": "tcp" }
+      ],
+      "stopTimeout": 60,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/audnix-worker",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "audnix",
+          "awslogs-create-group": "true"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -fsS http://localhost:${PORT:-5000}/health || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 120
+      },
+      "ulimits": [
+        {
+          "name": "nofile",
+          "softLimit": 65536,
+          "hardLimit": 65536
+        }
+      ]
+    }
+  ],
+  "deploymentConfiguration": {
+    "deploymentCircuitBreaker": {
+      "enable": true,
+      "rollback": true
+    },
+    "maximumPercent": 200,
+    "minimumHealthyPercent": 100
+  }
+}

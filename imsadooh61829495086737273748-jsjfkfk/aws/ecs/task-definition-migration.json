@@ -1,0 +1,46 @@
+{
+  "family": "audnix-migration",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "audnix-migration",
+      "image": "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/audnix-ai:${IMAGE_TAG}",
+      "essential": true,
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "UNIFIED_MODE", "value": "false" },
+        { "name": "IS_WORKER", "value": "true" },
+        { "name": "ECS_ENABLE_CONTAINER_METADATA", "value": "true" },
+        { "name": "NODE_OPTIONS", "value": "--dns-result-order=ipv4first --max-old-space-size=512" },
+        { "name": "DB_POOL_MAX_WORKER", "value": "5" }
+      ],
+      "secrets": [
+        { "name": "DATABASE_URL_DIRECT", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/db-direct-url:SecretString::" },
+        { "name": "REDIS_URL", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/redis-url:SecretString::" },
+        { "name": "ENCRYPTION_KEY", "valueFrom": "arn:aws:secretsmanager:${AWS_REGION}:${AWS_ACCOUNT_ID}:secret:audnix/encryption-key:SecretString::" }
+      ],
+      "command": ["sh", "-c", "node dist/server/db/patch.js || echo 'No patch script found'"],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/audnix-migration",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "audnix",
+          "awslogs-create-group": "true"
+        }
+      },
+      "ulimits": [
+        {
+          "name": "nofile",
+          "softLimit": 4096,
+          "hardLimit": 4096
+        }
+      ]
+    }
+  ]
+}

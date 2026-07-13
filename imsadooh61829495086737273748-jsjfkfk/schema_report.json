@@ -1,0 +1,7 @@
+{
+  "missingTables": [],
+  "missingColumns": [
+    "campaign_leads.created_at",
+    "campaign_leads.updated_at"
+  ]
+}

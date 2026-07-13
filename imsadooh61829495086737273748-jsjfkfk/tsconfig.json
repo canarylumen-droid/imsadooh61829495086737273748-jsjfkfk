@@ -1,0 +1,69 @@
+{
+  "include": [
+    "client/src/**/*",
+    "shared/**/*",
+    "server/**/*",
+    "services/**/*",
+    "packages/**/*",
+    "api/**/*",
+    "scripts/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "build",
+    "dist",
+    "tmp",
+    "**/*.test.ts"
+  ],
+  "compilerOptions": {
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/typescript/tsbuildinfo",
+    "noEmit": true,
+    "target": "ES2020",
+    "module": "ESNext",
+    "strict": true,
+    "lib": [
+      "ES2020",
+      "dom",
+      "dom.iterable"
+    ],
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "moduleResolution": "bundler",
+    "typeRoots": [
+      "./node_modules/@types",
+      "./server/types"
+    ],
+    "types": [
+      "node",
+      "react",
+      "react-dom",
+      "jest"
+    ],
+    "paths": {
+      "@/*": [
+        "./client/src/*"
+      ],
+      "@shared/*": [
+        "./shared/*"
+      ],
+      "@audnix/shared": [
+        "./packages/shared/index.ts"
+      ],
+      "@audnix/shared/*": [
+        "./packages/shared/*"
+      ],
+      "@audnix/core": [
+        "./packages/core/index.ts"
+      ],
+      "@audnix/core/*": [
+        "./packages/core/*"
+      ],
+      "@services/*": [
+        "./services/*"
+      ]
+    }
+  }
+}

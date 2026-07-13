@@ -1,0 +1,12 @@
+<svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="audnixGradient" x1="20" y1="4" x2="20" y2="31" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#67e8f9" />
+      <stop offset="100%" stop-color="#22d3ee" />
+    </linearGradient>
+  </defs>
+  <path d="M20 4L34 31H6L20 4Z" stroke="url(#audnixGradient)" stroke-width="2.5" stroke-linejoin="round" opacity="0.25" />
+  <path d="M20 7L30 28H10L20 7Z" stroke="#22d3ee" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+  <circle cx="20" cy="19" r="3.5" fill="#22d3ee" />
+  <path d="M14 22H26" stroke="url(#audnixGradient)" stroke-width="2" stroke-linecap="round" opacity="0.5" />
+</svg>

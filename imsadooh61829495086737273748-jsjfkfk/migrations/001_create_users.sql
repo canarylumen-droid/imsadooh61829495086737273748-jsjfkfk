@@ -1,0 +1,3 @@
+-- This migration is for Supabase only
+-- Skip if not using Supabase (migration 000 handles standard PostgreSQL)
+-- All functionality is already provided by 000_SETUP_SUPABASE.sql

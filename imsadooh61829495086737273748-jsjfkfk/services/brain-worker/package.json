@@ -1,0 +1,16 @@
+{
+  "name": "@audnix/brain-worker",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node --import tsx index.ts",
+    "dev": "tsx watch index.ts"
+  },
+  "dependencies": {
+    "bullmq": "^5.70.1",
+    "ioredis": "^5.10.0",
+    "@audnix/core": "1.0.0",
+    "@audnix/shared": "1.0.0",
+    "@google/generative-ai": "^0.21.0"
+  }
+}

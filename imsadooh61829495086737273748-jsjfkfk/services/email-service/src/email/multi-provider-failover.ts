@@ -1,0 +1,337 @@
+/**
+ * Multi-Provider Email Failover System
+ * 
+ * Automatically tries multiple email providers in order:
+ * 1. Custom SMTP (user's own server)
+ * 2. Gmail API fallback
+ * 3. Outlook API fallback
+ * 
+ * NOTE: Using Twilio SendGrid for OTP emails (auth@audnixai.com)
+ */
+
+import nodemailer from 'nodemailer';
+import type { SentMessageInfo } from 'nodemailer';
+import { storage } from '@shared/lib/storage/storage.js';
+import type { ProviderResult } from '@shared/types.js';
+
+interface EmailPayload {
+  to: string;
+  subject: string;
+  html: string;
+  from?: string;
+  replyTo?: string;
+}
+
+interface FailoverResult {
+  success: boolean;
+  provider: string;
+  error?: string;
+}
+
+interface SmtpConfig {
+  smtp_host: string;
+  smtp_port?: number;
+  smtp_user: string;
+  smtp_pass: string;
+}
+
+interface OAuthCredentials {
+  email?: string;
+  access_token: string;
+  refresh_token?: string;
+}
+
+interface ApiErrorResponse {
+  error?: {
+    message?: string;
+  };
+}
+
+class MultiProviderEmailFailover {
+  async send(
+    email: EmailPayload,
+    userId?: string,
+    customSmtpConfig?: SmtpConfig
+  ): Promise<FailoverResult> {
+    const providers: Array<{ name: string; fn: () => Promise<void> }> = [];
+
+    if (customSmtpConfig || userId) {
+      providers.push({
+        name: 'Custom SMTP',
+        fn: () => this.sendViaSMTP(email, customSmtpConfig, userId)
+      });
+    }
+
+    if (userId) {
+      providers.push({
+        name: 'Gmail',
+        fn: () => this.sendViaGmail(email, userId)
+      });
+    }
+
+    if (userId) {
+      providers.push({
+        name: 'Outlook',
+        fn: () => this.sendViaOutlook(email, userId)
+      });
+    }
+
+    for (const provider of providers) {
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          await provider.fn();
+          console.log(`✅ Email sent via ${provider.name}: ${email.to}`);
+          return { success: true, provider: provider.name };
+        } catch (error: unknown) {
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          if (attempt < 3) {
+            console.warn(`⚠️ ${provider.name} attempt ${attempt} failed: ${errorMessage}. Retrying...`);
+            await new Promise(r => setTimeout(r, attempt * 1000));
+            continue;
+          }
+          console.error(`[Email] All ${attempt} attempts failed for ${provider.name}:`, errorMessage);
+        }
+      }
+    }
+
+    const lastError = providers[providers.length - 1];
+    return {
+      success: false,
+      provider: 'none',
+      error: `All email providers failed. Last tried: ${lastError?.name || 'unknown'}`
+    };
+  }
+
+  private async sendViaSMTP(
+    email: EmailPayload,
+    config?: SmtpConfig,
+    userId?: string
+  ): Promise<void> {
+    let smtpConfig: SmtpConfig | undefined = config;
+
+    if (!smtpConfig && userId) {
+      const integrations = await storage.getIntegrations(userId);
+      const emailIntegrations = integrations.filter(i => i.provider === 'custom_email' && i.connected);
+      
+      // If we have a 'from' address, find the exact matching integration
+      // Otherwise, fall back to the first available custom_email integration
+      const targetInt = email.from 
+        ? emailIntegrations.find(i => i.accountType === email.from)
+        : emailIntegrations[0];
+
+      if (targetInt?.encryptedMeta) {
+        try {
+          const { decryptToJSON } = await import('@shared/lib/crypto/encryption.js');
+          smtpConfig = decryptToJSON<SmtpConfig>(targetInt.encryptedMeta);
+        } catch (decErr: any) {
+          console.error(`[Outreach Engine] Failed to decrypt SMTP config for ${targetInt.accountType}:`, decErr.message);
+          // Fall through to throw if no config remains
+        }
+      }
+    }
+
+    if (!smtpConfig) {
+      throw new Error('SMTP configuration not found');
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.smtp_host,
+      port: parseInt(String(smtpConfig.smtp_port)) || 587,
+      secure: parseInt(String(smtpConfig.smtp_port)) === 465,
+      auth: {
+        user: smtpConfig.smtp_user,
+        pass: smtpConfig.smtp_pass
+      },
+      // Force IPv4 to avoid EDNS / EAI_AGAIN DNS failures in cloud environments
+      // that have misconfigured or restricted IPv6 DNS resolution.
+      family: 4,
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 20000,
+      greetingTimeout: 20000,
+      socketTimeout: 25000
+    } as any);
+
+    let result: SentMessageInfo;
+    try {
+      result = await transporter.sendMail({
+        from: email.from || smtpConfig.smtp_user,
+        to: email.to,
+        subject: email.subject,
+        html: email.html,
+        replyTo: email.replyTo
+      });
+    } finally {
+      transporter.close();
+    }
+
+    if (!result.messageId) {
+      throw new Error('SMTP send failed - no message ID returned');
+    }
+
+    // Append to Sent folder asynchronously
+    if (userId) {
+      try {
+        const { imapIdleManager } = await import('./imap-idle-manager.js');
+        const rawMime = this.createMimeMessage(
+          email.from || smtpConfig.smtp_user,
+          email.to,
+          email.subject,
+          email.html
+        );
+
+        // Bug fix: resolve the real integration ID instead of passing ''
+        // Passing '' caused appendSentMessage to fail silently — sent emails were never saved.
+        const allIntegrations = await storage.getIntegrations(userId);
+        const senderEmail = (email.from || smtpConfig.smtp_user).toLowerCase();
+        const targetInt = allIntegrations.find(
+          (i: any) => i.provider === 'custom_email' &&
+            i.connected &&
+            String(i.accountType || '').toLowerCase() === senderEmail
+        ) || allIntegrations.find(
+          (i: any) => i.provider === 'custom_email' && i.connected
+        );
+
+        if (targetInt) {
+          // Fire and forget — do not block send path
+          imapIdleManager.appendSentMessage(userId, targetInt.id, rawMime, {
+            smtp_host: smtpConfig.smtp_host,
+            smtp_port: smtpConfig.smtp_port,
+            smtp_user: smtpConfig.smtp_user,
+            smtp_pass: smtpConfig.smtp_pass
+          }).catch((err: any) => {
+            console.error(`[MultiProviderFailover] Failed to append to sent folder for user ${userId}:`, err.message);
+          });
+        } else {
+          console.warn(`[MultiProviderFailover] No matching custom_email integration found for ${senderEmail} — skipping Sent folder append.`);
+        }
+      } catch (err) {
+        console.error('[MultiProviderFailover] Error during Sent folder append setup:', err);
+      }
+    }
+  }
+
+  private async sendViaGmail(email: EmailPayload, userId: string): Promise<void> {
+    const integrations = await storage.getIntegrations(userId);
+    
+    // Find the specific Gmail account if 'from' is provided, otherwise fall back to first connected
+    const gmailIntegration = email.from 
+      ? integrations.find(i => i.provider === 'gmail' && i.connected && i.accountType === email.from)
+      : integrations.find(i => i.provider === 'gmail' && i.connected);
+
+    if (!gmailIntegration) {
+      throw new Error(`Gmail not configured for ${email.from || 'user'}`);
+    }
+
+    const { gmailOAuth } = await import('@services/api-gateway/src/oauth/gmail.js');
+    const token = await gmailOAuth.getValidToken(userId, gmailIntegration.accountType || undefined);
+    
+    if (!token) {
+      throw new Error(`Could not get valid Gmail token for ${gmailIntegration.accountType}`);
+    }
+
+    const message = this.createMimeMessage(
+      gmailIntegration.accountType || '',
+      email.to,
+      email.subject,
+      email.html
+    );
+
+    const encodedMessage = Buffer.from(message).toString('base64url');
+
+    const response = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ raw: encodedMessage })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json() as ApiErrorResponse;
+      throw new Error(errorData.error?.message || 'Gmail API error');
+    }
+  }
+
+  private async sendViaOutlook(email: EmailPayload, userId: string): Promise<void> {
+    const integrations = await storage.getIntegrations(userId);
+    const outlookIntegration = integrations.find(i => i.provider === 'outlook' && i.connected);
+
+    if (!outlookIntegration?.encryptedMeta) {
+      throw new Error('Outlook not configured');
+    }
+
+    const { decrypt } = await import('@shared/lib/crypto/encryption.js');
+    let credentials: OAuthCredentials;
+    try {
+      const decrypted = await decrypt(outlookIntegration.encryptedMeta);
+      credentials = JSON.parse(decrypted) as OAuthCredentials;
+    } catch {
+      throw new Error('Failed to decrypt Outlook credentials');
+    }
+
+    const response = await fetch('https://graph.microsoft.com/v1.0/me/sendMail', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${credentials.access_token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        message: {
+          subject: email.subject,
+          body: {
+            contentType: 'HTML',
+            content: email.html
+          },
+          toRecipients: [{ emailAddress: { address: email.to } }]
+        },
+        saveToSentItems: true
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json() as ApiErrorResponse;
+      throw new Error(errorData.error?.message || 'Outlook API error');
+    }
+  }
+
+  public createMimeMessage(from: string, to: string, subject: string, html: string): string {
+    const boundary = `----=_Part_${Date.now()}`;
+
+    return `From: ${from}
+To: ${to}
+Subject: ${subject}
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="${boundary}"
+
+--${boundary}
+Content-Type: text/plain; charset="UTF-8"
+
+${this.stripHtml(html)}
+
+--${boundary}
+Content-Type: text/html; charset="UTF-8"
+
+${html}
+
+--${boundary}--`;
+  }
+
+  private stripHtml(html: string): string {
+    const text = html
+      .replace(/<script(?:\s[^>]*)?>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style(?:\s[^>]*)?>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#x27;/g, "'")
+      .replace(/&#x2F;/g, '/');
+
+    return text.trim();
+  }
+}
+
+export const multiProviderEmailFailover = new MultiProviderEmailFailover();

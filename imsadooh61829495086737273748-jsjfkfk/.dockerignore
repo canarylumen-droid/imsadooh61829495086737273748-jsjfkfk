@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+.env
+.env.*
+.git
+.gitignore
+.github
+README.md
+coverage
+.nyc_output
+.vscode
+.idea
+*.md
+dist
+!dist/public
+logs
+*.log

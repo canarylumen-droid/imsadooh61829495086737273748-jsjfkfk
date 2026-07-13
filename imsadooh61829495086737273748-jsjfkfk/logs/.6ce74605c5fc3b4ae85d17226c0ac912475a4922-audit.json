@@ -1,0 +1,20 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "C:\\Users\\USER\\Saved Games\\audnix-ai-project\\logs\\.6ce74605c5fc3b4ae85d17226c0ac912475a4922-audit.json",
+    "files": [
+        {
+            "date": 1778979987860,
+            "name": "C:\\Users\\USER\\Saved Games\\audnix-ai-project\\logs\\combined-2026-05-16.log",
+            "hash": "b7c37f29bec7ab3351ceb78b4f994f295c52b91c7b940aa3828952fd5c524246"
+        },
+        {
+            "date": 1779125326021,
+            "name": "C:\\Users\\USER\\Saved Games\\audnix-ai-project\\logs\\combined-2026-05-18.log",
+            "hash": "bf06fa2eb26228a72ca0fe6919f9ae061d1748d022a516b2ed05e498b9e93c09"
+        }
+    ],
+    "hashType": "sha256"
+}

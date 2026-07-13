@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audnix-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: audnix-api
+  template:
+    metadata:
+      labels:
+        app: audnix-api
+    spec:
+      containers:
+      - name: api
+        image: audnix-ai:latest
+        env:
+        - name: APP_ROLE
+          value: "api"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: database-url
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: redis-password
+        - name: REDIS_URL
+          value: "redis://default:$(REDIS_PASSWORD)@redis-service:6379"
+        ports:
+        - containerPort: 5000
+        livenessProbe:
+          httpGet:
+            path: /api/health/status
+            port: 5000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /api/health/status
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "500m"
+            memory: "1Gi"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audnix-sync-worker
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: audnix-sync-worker
+  template:
+    metadata:
+      labels:
+        app: audnix-sync-worker
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: worker
+        image: audnix-ai:latest
+        env:
+        - name: APP_ROLE
+          value: "worker"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: database-url
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: redis-password
+        - name: REDIS_URL
+          value: "redis://default:$(REDIS_PASSWORD)@redis-service:6379"
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: audnix-worker-lead-recovery
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: audnix-worker-lead-recovery
+  template:
+    metadata:
+      labels:
+        app: audnix-worker-lead-recovery
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+      - name: lead-recovery-worker
+        image: audnix-ai:latest
+        env:
+        - name: APP_ROLE
+          value: "lead-recovery"
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: database-url
+        - name: MONGODB_URI
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: mongodb-uri
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: redis-password
+        - name: REDIS_URL
+          value: "redis://default:$(REDIS_PASSWORD)@redis-service:6379"
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: audnix-secrets
+              key: encryption-key
+        - name: LEAD_RECOVERY_WORKER_POLL_MS
+          value: "300000"
+        ports:
+        - containerPort: 8095
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8095
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8095
+          initialDelaySeconds: 30
+          periodSeconds: 15
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "1Gi"
+          limits:
+            cpu: "1000m"
+            memory: "2Gi"
