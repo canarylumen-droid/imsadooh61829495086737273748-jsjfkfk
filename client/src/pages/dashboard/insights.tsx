@@ -173,7 +173,7 @@ export default function InsightsPage() {
                   Connect Mailbox <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </Link>
-              <Link href="/dashboard/campaigns">
+              <Link href="/dashboard/outreach">
                 <Button variant="outline" className="rounded-xl h-11 px-6">
                   Create Campaign
                 </Button>

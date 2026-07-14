@@ -821,10 +821,10 @@ export default function IntegrationsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button variant="outline" className="rounded-full px-6 text-sm font-medium">
+          <Button variant="outline" className="rounded-full px-6 text-sm font-medium" onClick={() => window.open('https://docs.audnixai.com', '_blank')}>
             <FileText className="mr-2 h-4 w-4" /> Documentation
           </Button>
-          <Button className="rounded-full px-6 text-sm font-medium">
+          <Button className="rounded-full px-6 text-sm font-medium" onClick={() => window.open('mailto:hello@audnixai.com?subject=Request%20Integration', '_blank')}>
             <Plus className="mr-2 h-4 w-4" /> Request App
           </Button>
         </div>

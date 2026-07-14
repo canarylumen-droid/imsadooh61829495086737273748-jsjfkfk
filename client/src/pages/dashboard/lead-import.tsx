@@ -583,7 +583,7 @@ export default function LeadImportPage() {
                         </Button>
                       </>
                     )}
-                    <Button variant="ghost" size="sm" onClick={() => setLocation('/dashboard/prospecting')} className="text-[8px] sm:text-[10px] font-bold h-8">PIPELINE</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setLocation('/dashboard/home')} className="text-[8px] sm:text-[10px] font-bold h-8">PIPELINE</Button>
                   </div>
                 </div>
                 <div className="space-y-1 sm:space-y-2">

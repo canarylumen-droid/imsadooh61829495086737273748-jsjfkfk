@@ -1,8 +1,14 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { DocumentationLayout, DocSection, DocGrid, HighlightCard } from "@/components/landing/DocumentationLayout";
 import { Brain, Code, Terminal, Shield, Cpu, Zap, Database, Layers } from "lucide-react";
 
 export default function ApiDocsPage() {
+    useEffect(() => {
+        document.title = "AUDNIX — API & Integration Documentation";
+        const meta = document.querySelector('meta[name="description"]');
+        if (meta) meta.setAttribute("content", "AUDNIX API documentation. Integrate AI sales agents with your CRM, connect webhooks, and build custom workflows with our REST API.");
+    }, []);
+
     return (
         <DocumentationLayout
             title="Engineering Workflow"

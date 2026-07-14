@@ -2,9 +2,16 @@ import React, { useState } from "react";
 import { DocumentationLayout, DocSection, DocGrid, HighlightCard } from "@/components/landing/DocumentationLayout";
 import { LayoutGrid, Shield, Zap, Target, Rocket, Search, Users, Database, Globe, Briefcase, Plus, ChevronDown, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 
 export default function NicheVaultPage() {
     const [expanded, setExpanded] = useState(false);
+
+    useEffect(() => {
+        document.title = "AUDNIX — Niche Vault | Industry Playbooks";
+        const meta = document.querySelector('meta[name="description"]');
+        if (meta) meta.setAttribute("content", "Access 20+ industry-specific sales playbooks for roofing, real estate, SaaS, fintech, healthcare, and more. AI-powered niche intelligence.");
+    }, []);
 
     const initialNiches = [
         { name: "Roofing & Solar", focus: "Storm-damage triggers & permit data analytics." },

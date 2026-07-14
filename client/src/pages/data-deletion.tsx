@@ -4,8 +4,15 @@ import { Card } from "@/components/ui/card";
 import { Trash2, ArrowLeft, Mail, Shield, Clock, CheckCircle2 } from "lucide-react";
 import { Link } from "wouter";
 import { Logo } from "@/components/ui/Logo";
+import { useEffect } from "react";
 
 export default function DataDeletion() {
+  useEffect(() => {
+    document.title = "AUDNIX — Data Deletion Request";
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "Request deletion of your AUDNIX account data. We comply with GDPR, CCPA, and all applicable data protection regulations.");
+  }, []);
+
   return (
     <div className="min-h-screen bg-black">
       <nav className="fixed top-0 left-0 right-0 z-50 bg-black/80 backdrop-blur-xl border-b border-white/5">

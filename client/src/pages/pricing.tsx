@@ -20,6 +20,7 @@ const PLANS = [
       'Standard Support',
     ],
     cta: 'START FREE TRIAL',
+    link: '/signup',
     highlight: false,
   },
   {
@@ -37,6 +38,7 @@ const PLANS = [
       'Conversion Tracking',
     ],
     cta: 'START TRIAL',
+    link: '/signup',
     highlight: false,
   },
   {
@@ -55,6 +57,7 @@ const PLANS = [
       'Priority Support',
     ],
     cta: 'START TRIAL',
+    link: '/signup',
     highlight: true,
   },
   {
@@ -73,6 +76,7 @@ const PLANS = [
       '24/7 Priority Support',
     ],
     cta: 'CONTACT SALES',
+    link: 'mailto:hello@audnixai.com',
     highlight: false,
   },
 ];
@@ -169,7 +173,7 @@ export default function PricingPage() {
               VIEW PLANS
               <ChevronRight className="w-4 h-4 transition-transform group-hover:translate-x-1" />
             </a>
-            <a href="#" className="group inline-flex items-center gap-3 border border-[#1e1e1e] text-[#f2ede6] font-mono text-sm tracking-widest px-6 py-4 hover:border-[#2196f3]/40 transition-colors">
+            <a href="mailto:hello@audnixai.com" className="group inline-flex items-center gap-3 border border-[#1e1e1e] text-[#f2ede6] font-mono text-sm tracking-widest px-6 py-4 hover:border-[#2196f3]/40 transition-colors">
               TALK TO SALES
             </a>
           </motion.div>
@@ -263,7 +267,7 @@ export default function PricingPage() {
 
                 <div className="p-8">
                   <a
-                    href="#"
+                    href={p.link}
                     className={`w-full flex items-center justify-between font-mono text-[11px] tracking-widest px-5 py-4 transition-colors group ${
                       p.highlight
                         ? 'bg-[#2196f3] text-[#050505] hover:bg-[#60a5fa] font-semibold'
@@ -342,7 +346,7 @@ export default function PricingPage() {
               Still have questions?
             </p>
             <a
-              href="#"
+              href="mailto:hello@audnixai.com"
               className="group inline-flex items-center gap-3 text-[#2196f3] font-mono text-sm tracking-widest hover:text-[#42a5f5] transition-colors"
             >
               CONTACT OUR TEAM
@@ -397,7 +401,7 @@ export default function PricingPage() {
           </div>
 
           <p className="py-8 text-center font-mono text-[10px] text-[#3a3a3a]">
-            Want a detailed comparison? <a href="#" className="text-[#2196f3] hover:text-[#60a5fa] transition-colors">Download our comparison guide</a>
+            Want a detailed comparison? <a href="/compare" className="text-[#2196f3] hover:text-[#60a5fa] transition-colors">Download our comparison guide</a>
           </p>
         </div>
       </section>

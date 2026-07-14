@@ -109,7 +109,7 @@ export function FAQSection() {
             Still have questions?
           </p>
           <a
-            href="#"
+            href="mailto:hello@audnixai.com"
             className="group inline-flex items-center gap-3 text-[#2196f3] font-mono text-sm tracking-widest hover:text-[#42a5f5] transition-colors"
           >
             CONTACT OUR TEAM

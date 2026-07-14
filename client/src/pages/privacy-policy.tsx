@@ -5,8 +5,15 @@ import { Card } from "@/components/ui/card";
 import { Shield, Lock, Eye, Database, UserCheck, FileText, ArrowLeft, Mail, Calendar, MessageSquare, Phone } from "lucide-react";
 import { Link } from "wouter";
 import { Logo } from "@/components/ui/Logo";
+import { useEffect } from "react";
 
 export default function PrivacyPolicy() {
+  useEffect(() => {
+    document.title = "AUDNIX — Privacy Policy";
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "AUDNIX Privacy Policy. Learn how we collect, use, and protect your data. GDPR and CCPA compliant data handling practices.");
+  }, []);
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}

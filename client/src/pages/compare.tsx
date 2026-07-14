@@ -4,6 +4,7 @@ import { Navigation } from "@/components/landing/Navigation";
 import { Logo } from "@/components/ui/Logo";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 import {
     ChevronDown,
     ChevronRight,
@@ -450,6 +451,12 @@ export default function ComparePage() {
     const [openSections, setOpenSections] = useState<Record<string, boolean>>({ 0: true });
 
     const currentCompetitor = COMPETITORS.find(c => c.id === activeCompetitor)!;
+
+    useEffect(() => {
+        document.title = "AUDNIX vs Competitors | AI Sales Platform Comparison";
+        const meta = document.querySelector('meta[name="description"]');
+        if (meta) meta.setAttribute("content", "See how AUDNIX compares to Instantly.ai, Lemlist, Apollo, and 3 more sales tools. Feature-by-feature breakdown with honest analysis.");
+    }, []);
 
     const toggleSection = (index: number) => {
         setOpenSections(prev => ({ ...prev, [index]: !prev[index] }));

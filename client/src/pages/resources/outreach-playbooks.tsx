@@ -1,8 +1,14 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { DocumentationLayout, DocSection, DocGrid, HighlightCard } from "@/components/landing/DocumentationLayout";
 import { Zap, Target, Book, MessageSquare, Shield, Rocket, Brain, Layers, ArrowRight } from "lucide-react";
 
 export default function PlaybooksPage() {
+    useEffect(() => {
+        document.title = "AUDNIX — Outreach Playbooks | Winning Sales Sequences";
+        const meta = document.querySelector('meta[name="description"]');
+        if (meta) meta.setAttribute("content", "AI-powered outreach playbooks with proven 3-stage closing cycles. Pattern interrupts, objection handling, and deal-closing sequences.");
+    }, []);
+
     return (
         <DocumentationLayout
             title="Outreach Playbooks"

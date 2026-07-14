@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Shield, Mail, Clock, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { useMailbox } from "@/hooks/use-mailbox";
+import { Link } from "wouter";
 
 interface WarmupStatus {
   mailboxId: string;
@@ -229,9 +230,9 @@ export default function WarmupPage() {
             <p className="text-sm text-muted-foreground mb-4">
               Connect a mailbox to start warming up your sender reputation.
             </p>
-            <a href="/dashboard/integrations" className="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+            <Link href="/dashboard/integrations" className="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
               Connect Mailbox
-            </a>
+            </Link>
           </CardContent>
         </Card>
       )}

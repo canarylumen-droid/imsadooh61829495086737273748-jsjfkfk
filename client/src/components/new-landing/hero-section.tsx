@@ -82,7 +82,7 @@ export function HeroSection() {
                   <span className="transition-transform group-hover:translate-x-1">→</span>
                 </a>
                 <a
-                  href="#"
+                  href="#how-it-works"
                   className="group inline-flex items-center gap-8 border border-[#1e1e1e] text-[#f2ede6] font-mono text-xs tracking-widest px-8 py-4 hover:border-[#2196f3]/40 hover:text-[#2196f3] transition-colors font-black whitespace-nowrap"
                 >
                   WATCH DEMO

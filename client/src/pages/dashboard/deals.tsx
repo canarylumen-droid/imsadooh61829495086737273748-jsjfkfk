@@ -241,7 +241,7 @@ export default function DealsPage() {
           <Button onClick={syncDeals} className="bg-primary/20 text-primary border-primary/30 hover:bg-primary/30">
             <Sparkles className="mr-2 h-4 w-4" /> Refine with AI
           </Button>
-          <Button onClick={() => setLocation('/dashboard/conversations')}>
+          <Button onClick={() => {}}>
             <Plus className="mr-2 h-4 w-4" /> Add Deal
           </Button>
       </div>
@@ -355,7 +355,7 @@ export default function DealsPage() {
                 <p className="text-muted-foreground max-w-sm mt-1 mb-6">
                   Deals will automatically appear here when your AI converts a lead.
                 </p>
-                <Link href="/dashboard/campaigns">
+                <Link href="/dashboard/outreach">
                   <Button className="rounded-xl"><ArrowRight className="mr-2 h-4 w-4" />Create Campaign</Button>
                 </Link>
               </motion.div>

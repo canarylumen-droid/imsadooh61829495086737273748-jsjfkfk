@@ -459,7 +459,7 @@ export default function DashboardHome() {
               <Button
                 variant="default"
                 className="rounded-lg bg-primary hover:bg-primary/90 text-[10px] font-bold uppercase tracking-wider h-9 px-4 shadow-md"
-                onClick={() => setLocation('/dashboard/ai-analytics')}
+                onClick={() => setLocation('/dashboard/analytics')}
               >
                 View Full Analysis
               </Button>

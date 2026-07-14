@@ -5,8 +5,15 @@ import { FileText, Scale, AlertTriangle, CreditCard, Ban, CheckCircle2, ArrowLef
 
 import { Link } from "wouter";
 import { Logo } from "@/components/ui/Logo";
+import { useEffect } from "react";
 
 export default function TermsOfService() {
+  useEffect(() => {
+    document.title = "AUDNIX — Terms of Service";
+    const meta = document.querySelector('meta[name="description"]');
+    if (meta) meta.setAttribute("content", "AUDNIX Terms of Service. Read the legal agreement governing use of our AI-powered sales platform and services.");
+  }, []);
+
   return (
     <div className="min-h-screen bg-black">
       {/* Header */}

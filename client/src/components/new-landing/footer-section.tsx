@@ -39,9 +39,15 @@ export function FooterSection() {
               Your autonomous AI sales rep. Close deals while you sleep.
             </p>
             <div className="flex gap-3 mt-6">
-              {["TWITTER", "LINKEDIN", "GITHUB", "DISCORD"].map(s => (
-                <a key={s} href="#" className="font-mono text-[10px] tracking-widest text-[#d0cdc5] hover:text-[#2196f3] hover:bg-[#2196f3]/10 transition-all px-3 py-2 rounded border border-transparent hover:border-[#2196f3]/30">
-                  {s} ↗
+              {[
+                { name: "TWITTER", href: "https://twitter.com/audnixai" },
+                { name: "LINKEDIN", href: "https://linkedin.com/company/audnixai" },
+                { name: "GITHUB", href: "https://github.com/canarylumen-droid/imsadooh61829495086737273748-jsjfkfk" },
+                // TODO: Add Discord link when available
+                { name: "DISCORD", href: "#" },
+              ].map(s => (
+                <a key={s.name} href={s.href} className="font-mono text-[10px] tracking-widest text-[#d0cdc5] hover:text-[#2196f3] hover:bg-[#2196f3]/10 transition-all px-3 py-2 rounded border border-transparent hover:border-[#2196f3]/30">
+                  {s.name} ↗
                 </a>
               ))}
             </div>

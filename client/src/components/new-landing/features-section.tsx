@@ -189,7 +189,7 @@ export function FeaturesSection() {
           <div className="border-r border-[#1e1e1e]" />
           <div className="p-6 flex items-center justify-between">
             <span className="font-mono text-[10px] text-[#7a7a7a]">VIEW ALL CAPABILITIES IN DOCS →</span>
-            <a href="#" className="font-mono text-xs text-[#2196f3] hover:underline tracking-wider">EXPLORE SDK</a>
+            <a href="/resources/api-docs" className="font-mono text-xs text-[#2196f3] hover:underline tracking-wider">EXPLORE SDK</a>
           </div>
         </div>
       </div>
