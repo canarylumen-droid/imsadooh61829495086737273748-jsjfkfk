@@ -153,7 +153,7 @@ jobs:
           image: ${{ needs.build-and-push.outputs.image }}
 
       - name: Deploy ECS service
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.render.outputs.task-definition }}
           service: ${{ matrix.service.name }}
