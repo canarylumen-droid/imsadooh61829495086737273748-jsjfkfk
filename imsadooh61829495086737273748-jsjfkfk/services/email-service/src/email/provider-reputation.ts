@@ -90,15 +90,90 @@ export async function canSendToProvider(
   isFollowUpOrReply: boolean = false,
   cachedIntegration?: { providerLimits: any; initialOutreachLimit: number | null }
 ): Promise<{ allowed: boolean; reason?: string; remaining?: number }> {
-  // Domain reputation throttling is disabled per user request
-  return { allowed: true, remaining: 999 };
+  if (isFollowUpOrReply) {
+    return canSendFollowUpOrReply(integrationId, leadEmail);
+  }
+
+  try {
+    const group = detectProviderGroup(leadEmail);
+    if (!PROVIDER_GROUPS.includes(group as any)) return { allowed: true, remaining: 999 };
+
+    // Check daily send limit per provider group (Gmail: 100/day for cold, Outlook: 50/day)
+    const DAILY_LIMITS: Record<string, number> = {
+      gmail: 100,
+      outlook: 50,
+      yahoo: 50,
+      other: 80,
+    };
+    const dailyLimit = DAILY_LIMITS[group] || 80;
+
+    // Get current count from integrations table
+    const [row] = await db.select({ providerLimits: integrations.providerLimits })
+      .from(integrations)
+      .where(eq(integrations.id, integrationId))
+      .limit(1);
+
+    const limits = (row?.providerLimits as any) || {};
+    const groupData = limits[group] || {};
+    const dailyCount = groupData.dailySentCount || 0;
+
+    // Reset daily counter if it's a new day (UTC)
+    const lastAdjustment = groupData.lastAdjustmentAt ? new Date(groupData.lastAdjustmentAt) : null;
+    const isNewDay = !lastAdjustment || lastAdjustment.toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10);
+
+    if (isNewDay) {
+      // Reset will happen on next recordProviderOutcome call — allow send for now
+      return { allowed: true, remaining: dailyLimit };
+    }
+
+    if (dailyCount >= dailyLimit) {
+      return { allowed: false, reason: `Daily limit reached for ${group} (${dailyCount}/${dailyLimit})`, remaining: 0 };
+    }
+
+    // Per-minute burst protection: max 3 emails per minute per provider group
+    const recentSends = groupData.recentSendTimestamps || [];
+    const oneMinuteAgo = Date.now() - 60_000;
+    const recentCount = recentSends.filter((t: number) => t > oneMinuteAgo).length;
+    if (recentCount >= 3) {
+      return { allowed: false, reason: `Burst protection: ${recentCount} emails sent in the last minute to ${group}`, remaining: 0 };
+    }
+
+    return { allowed: true, remaining: dailyLimit - dailyCount };
+  } catch (err: any) {
+    // Non-critical — allow send if check fails
+    console.warn(`[ProviderReputation] canSendToProvider check failed: ${err.message}`);
+    return { allowed: true, remaining: 999 };
+  }
 }
 
 export async function canSendFollowUpOrReply(
   integrationId: string,
   leadEmail: string
 ): Promise<{ allowed: boolean; remaining: number }> {
-  return { allowed: true, remaining: 999 };
+  // Follow-ups and replies bypass daily limits but still have burst protection
+  try {
+    const group = detectProviderGroup(leadEmail);
+    if (!PROVIDER_GROUPS.includes(group as any)) return { allowed: true, remaining: 999 };
+
+    const [row] = await db.select({ providerLimits: integrations.providerLimits })
+      .from(integrations)
+      .where(eq(integrations.id, integrationId))
+      .limit(1);
+
+    const limits = (row?.providerLimits as any) || {};
+    const groupData = limits[group] || {};
+    const recentSends = groupData.recentSendTimestamps || [];
+    const oneMinuteAgo = Date.now() - 60_000;
+    const recentCount = recentSends.filter((t: number) => t > oneMinuteAgo).length;
+
+    if (recentCount >= 5) {
+      return { allowed: false, remaining: 0 };
+    }
+
+    return { allowed: true, remaining: 999 };
+  } catch {
+    return { allowed: true, remaining: 999 };
+  }
 }
 
 export async function recordProviderOutcome(
@@ -113,9 +188,50 @@ export async function recordProviderOutcome(
   if (!PROVIDER_GROUPS.includes(group as any)) return;
 
   const now = new Date().toISOString();
+  const nowMs = Date.now();
   const fieldToInc = outcome === 'sent' ? 'dailySentCount'
     : outcome === 'bounced' ? 'dailyBounceCount'
     : 'dailySpamCount';
+
+  // For sent events, also track recent timestamps for burst protection
+  if (outcome === 'sent') {
+    await db.execute(sql`
+      UPDATE integrations
+      SET provider_limits = jsonb_set(
+        jsonb_set(
+          COALESCE(provider_limits, '{}'::jsonb),
+          ARRAY[${group}, ${fieldToInc}],
+          to_jsonb(COALESCE(((provider_limits #>> ARRAY[${group}, ${fieldToInc}])::int), 0) + 1),
+          true
+        ),
+        ARRAY[${group}, 'recentSendTimestamps'],
+        to_jsonb(
+          CASE 
+            WHEN (provider_limits #> ARRAY[${group}, 'recentSendTimestamps']) IS NULL 
+            THEN to_jsonb(ARRAY[${nowMs}])
+            ELSE (
+              SELECT to_jsonb(
+                (
+                  SELECT array_agg(t)::bigint[]
+                  FROM unnest(
+                    COALESCE((provider_limits #>> ARRAY[${group}, 'recentSendTimestamps'])::bigint[], ARRAY[]::bigint[])
+                    || ARRAY[${nowMs}]
+                  ) AS t
+                  WHERE t > ${nowMs - 300000}
+                )
+              )
+            )
+          END
+        ),
+        true
+      ),
+      updated_at = NOW()
+      WHERE id = ${integrationId}::uuid
+    `).catch((err: any) => {
+      console.warn(`[ProviderReputation] recordProviderOutcome failed for ${group}/${fieldToInc}: ${err.message}`);
+    });
+    return;
+  }
 
   await db.execute(sql`
     UPDATE integrations

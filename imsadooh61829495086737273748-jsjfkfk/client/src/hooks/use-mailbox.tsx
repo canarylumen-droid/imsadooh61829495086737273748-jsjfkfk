@@ -1,10 +1,25 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useQuery } from "@tanstack/react-query";
 
+export interface MailboxInfo {
+    id: string;
+    connected: boolean;
+    name?: string;
+    email?: string;
+    provider?: string;
+    healthStatus?: string;
+    workerStatus?: string;
+    lastSyncAt?: string;
+    tier?: string;
+}
+
 interface MailboxContextType {
     selectedMailboxId: string | undefined;
     setSelectedMailboxId: (id: string | undefined) => void;
     isLoading: boolean;
+    mailboxes: MailboxInfo[];
+    selectedMailbox: MailboxInfo | undefined;
+    isMailboxHealthy: boolean;
 }
 
 const MailboxContext = createContext<MailboxContextType | undefined>(undefined);
@@ -15,25 +30,26 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
     });
 
     // Phase 12: Self-healing validation for stale mailbox IDs.
-    // Only runs when query has fully settled with a real non-empty list.
     const { data: status, isLoading, isError } = useQuery<{
-        integrations: Array<{ id: string; connected: boolean }>;
+        integrations: MailboxInfo[];
     }>({
         queryKey: ["/api/custom-email/status"],
         refetchOnWindowFocus: false,
-        staleTime: 60000, // 1 minute
+        staleTime: 30000, // 30 seconds for fresher mailbox health data
         retry: 2,
     });
 
+    const mailboxes = status?.integrations || [];
+    const selectedMailbox = mailboxes.find((m) => m.id === selectedMailboxId);
+    const isMailboxHealthy = selectedMailbox?.healthStatus !== 'critical' && selectedMailbox?.healthStatus !== 'failed';
+
     useEffect(() => {
-        // Guard: never reset on loading, error, or empty response (could be a transient blip).
         if (isLoading || isError) return;
         if (!status?.integrations || status.integrations.length === 0) return;
         if (!selectedMailboxId) return;
 
-        const exists = status.integrations.some((i: any) => i.id === selectedMailboxId);
+        const exists = status.integrations.some((i) => i.id === selectedMailboxId);
         if (!exists) {
-            console.log(`[MailboxProvider] 🔄 Resetting stale mailbox ID: ${selectedMailboxId} (confirmed absent from ${status.integrations.length} integrations)`);
             setSelectedMailboxId(undefined);
         }
     }, [status, isLoading, isError, selectedMailboxId]);
@@ -48,7 +64,7 @@ export function MailboxProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <MailboxContext.Provider value={{ selectedMailboxId, setSelectedMailboxId, isLoading }}>
+        <MailboxContext.Provider value={{ selectedMailboxId, setSelectedMailboxId, isLoading, mailboxes, selectedMailbox, isMailboxHealthy }}>
             {children}
         </MailboxContext.Provider>
     );

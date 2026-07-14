@@ -45,7 +45,8 @@ import {
   ShieldAlert,
   Clock,
   Terminal,
-  LifeBuoy
+  LifeBuoy,
+  Menu
 } from "lucide-react";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -246,6 +247,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         // { label: "Pending Payments", icon: DollarSign, path: "/dashboard/pending-payments" },
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
+        { label: "Warmup", icon: Shield, path: "/dashboard/warmup" },
       ],
     },
     {
@@ -260,6 +262,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
       label: "Reports",
       items: [
         { label: "Analytics", icon: BarChart3, path: "/dashboard/analytics" },
+        { label: "Deliverability", icon: Activity, path: "/dashboard/deliverability" },
         { label: "Insights", icon: Sparkles, path: "/dashboard/insights" },
         { label: "Billing", icon: CreditCard, path: "/dashboard/pricing" },
       ],
@@ -385,7 +388,6 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
     <RealtimeProvider userId={user?.id}>
       <TooltipProvider delayDuration={400}>
         <div className="flex h-[100dvh] bg-background font-sans text-foreground overflow-hidden relative">
-        <InternetConnectionBanner />
         <InstallPWAPrompt />
         <GuidedTour isOpen={showTour} onComplete={completeTour} onSkip={skipTour} />
 
@@ -662,7 +664,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                 onClick={handleOpenNavigation}
                 aria-label="Open navigation"
               >
-                <ChevronRight className="h-4 w-4" />
+                <Menu className="h-5 w-5" />
               </Button>
 
               <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>

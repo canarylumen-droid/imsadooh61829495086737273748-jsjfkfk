@@ -13,7 +13,7 @@ import { eq, and, or, sql, gte, desc } from 'drizzle-orm';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 
-const SWEEP_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const SWEEP_INTERVAL_MS = 2 * 60 * 1000; // 2 minutes — near-real-time inbox sweep
 const LOOKBACK_HOURS = 2;
 
 interface SweptEmail {

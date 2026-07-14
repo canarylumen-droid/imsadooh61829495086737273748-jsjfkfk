@@ -254,7 +254,7 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
         externalId: customerId,
         name: senderProfile.name || senderProfile.username || 'Instagram User',
         channel: 'instagram' as "instagram" | "email",
-        status: 'new' as "new" | "open" | "replied" | "converted" | "not_interested" | "cold",
+        status: 'new' as "new" | "contacted" | "replied" | "converted" | "not_interested" | "cold",
         tags: ['instagram', 'auto-captured'],
         metadata: { preferred_name: senderProfile.name?.split(' ')[0] }
       };
@@ -358,11 +358,11 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
     let newTags = [...(leadToUse.tags || [])];
 
     if (intent.isInterested && ((intent as any).confidence ?? 1) > 0.7) {
-      newStatus = 'open'; // mapped 'interested' -> 'open' (schema enum)
+      newStatus = 'contacted'; // mapped 'interested' -> 'contacted' (schema enum)
       newTags.push('hot-lead');
 
       if (intent.wantsToSchedule || intent.readyToBuy) {
-        newStatus = 'open'; 
+        newStatus = 'contacted';
         newTags.push('ready-to-buy');
 
         await storage.createFollowUp({
@@ -381,7 +381,7 @@ async function processInstagramMessage(message: InstagramMessage): Promise<void>
       newStatus = 'not_interested'; // valid enum
       newTags.push('cold');
     } else if (intent.needsMoreInfo) {
-      newStatus = 'open'; // 'nurturing' not in enum
+      newStatus = 'contacted'; // 'nurturing' not in enum
       newTags.push('needs-info');
     }
 
@@ -490,7 +490,7 @@ async function processInstagramComment(comment: InstagramCommentValue): Promise<
         externalId: from.id,
         name: from.username,
         channel: 'instagram' as "instagram" | "email",
-        status: 'new' as "new" | "open" | "replied" | "converted" | "not_interested" | "cold",
+        status: 'new' as "new" | "contacted" | "replied" | "converted" | "not_interested" | "cold",
         tags: ['instagram-comment', 'auto-captured'],
         metadata: {
           preferred_name: from.username

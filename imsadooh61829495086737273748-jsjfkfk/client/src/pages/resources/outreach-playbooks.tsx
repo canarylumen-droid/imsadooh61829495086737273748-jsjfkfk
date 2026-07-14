@@ -14,7 +14,7 @@ export default function PlaybooksPage() {
                     icon: Layers,
                     content: (
                         <DocSection title="The 3-Stage Closing Cycle">
-                            <p>Audnix doesn't just 'spray and pray'. Every playbook is built on three core pillars of intelligent persuasion.</p>
+                            <p>Every playbook is built on three core pillars.</p>
                             <DocGrid>
                                 <HighlightCard
                                     icon={Target}

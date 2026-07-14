@@ -27,14 +27,14 @@ export const ProcessMap: React.FC<ProcessMapProps> = ({ status, className }) => 
             id: "outreach",
             label: "Outreach",
             description: "Initial message sent",
-            status: ["open", "replied", "warm", "booked", "converted"].includes(status) ? "completed" : "current",
+            status: ["contacted", "replied", "warm", "booked", "converted"].includes(status) ? "completed" : "current",
         },
         {
             id: "engagement",
             label: "Engagement",
             description: "Active conversation",
             status: ["replied", "warm", "booked", "converted"].includes(status) ? "completed" :
-                ["open"].includes(status) ? "current" : "pending",
+                ["contacted"].includes(status) ? "current" : "pending",
         },
         {
             id: "conversion",

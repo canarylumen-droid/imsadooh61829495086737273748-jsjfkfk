@@ -1,5 +1,6 @@
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import { useRealtime } from "@/hooks/use-realtime";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ import {
 } from "lucide-react";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { cn } from "@/lib/utils";
+import { getLeadStatusDisplay } from "@/lib/lead-status";
 import { motion } from "framer-motion";
 import { LeadProcessModal } from "@/components/dashboard/LeadProcessModal";
 import { useState } from "react";
@@ -44,6 +46,7 @@ const statusStyles = {
 };
 
 export default function LeadProfilePage() {
+  useRealtime();
   const { id } = useParams();
   const [, setLocation] = useLocation();
   const [showProcessModal, setShowProcessModal] = useState(false);
@@ -96,7 +99,7 @@ export default function LeadProfilePage() {
                 {lead.name}
               </h1>
               <Badge variant="outline" className={cn("text-[10px] font-semibold uppercase tracking-wider px-3 py-1", statusStyles[lead.status as keyof typeof statusStyles])}>
-                {lead.status === 'hardened' ? 'Verified' : lead.status}
+                {getLeadStatusDisplay(lead.status)}
               </Badge>
               <Button
                 variant="ghost"
@@ -314,10 +317,14 @@ export default function LeadProfilePage() {
                 </div>
               ) : (
                 <div className="flex flex-col items-center justify-center py-20 text-center space-y-4">
-                  <Clock className="h-12 w-12 text-muted-foreground/20" />
+                  <div className="w-14 h-14 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 border border-blue-500/20 rounded-2xl flex items-center justify-center">
+                    <Clock className="h-7 w-7 text-blue-400" />
+                  </div>
                   <div>
-                    <p className="font-semibold text-muted-foreground/60">No interactions yet</p>
-                    <p className="text-xs text-muted-foreground/40 max-w-xs mt-1 px-8">Interactions will be logged here as your campaigns reach this prospect.</p>
+                    <p className="font-semibold text-foreground/80">No interactions yet</p>
+                    <p className="text-xs text-muted-foreground max-w-xs mt-1 px-8">
+                      Interactions will appear here as your campaigns reach this prospect.
+                    </p>
                   </div>
                 </div>
               )}

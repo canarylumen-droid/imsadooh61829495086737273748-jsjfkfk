@@ -163,7 +163,7 @@ export default function AIAnalyticsPage() {
             Audnix Intelligence
           </h1>
           <p className="text-muted-foreground mt-1">
-            Real-time insights on your AI sales performance.
+            AI sales performance analytics.
           </p>
         </div>
         <div className="flex items-center gap-2">

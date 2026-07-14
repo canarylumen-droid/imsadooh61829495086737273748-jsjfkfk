@@ -87,8 +87,14 @@ function LeadRecoveryContent() {
           </div>
           <div className="divide-y divide-border/30">
             {store.leads.length === 0 ? (
-              <div className="p-8 text-center text-xs sm:text-sm text-muted-foreground">
-                No recovered leads yet. Activate Lead Recovery, then click Sync 90 days to scan connected mailboxes.
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 rounded-xl flex items-center justify-center mb-4">
+                  <RefreshCw className="h-6 w-6 text-amber-400" />
+                </div>
+                <p className="text-sm font-semibold text-foreground">No recovered leads yet</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                  Activate Lead Recovery, then click Sync 90 days to scan connected mailboxes for cold leads.
+                </p>
               </div>
             ) : store.leads.map((lead) => (
               <div key={lead._id} className="grid gap-3 p-3 sm:p-4 grid-cols-2 md:grid-cols-[1fr_120px_120px_auto] md:items-center">

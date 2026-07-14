@@ -30,7 +30,7 @@ import { storage } from '@shared/lib/storage/storage.js';
 import { sendEmail } from '../channels/email.js';
 import { adjustCopyIfNecessary } from "../ai/copy-adjuster.js";
 import { generateExpertOutreach, generateAIReply } from "@services/brain-worker/src/ai-lib/core/conversation-ai.js";
-import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { decryptToJSON } from '@shared/lib/crypto/encryption.js';
 import { mailboxHealthService } from '@services/email-service/src/email/mailbox-health-service.js';
 import { warmupService } from '@services/outreach-worker/src/outreach-lib/warmup-service.js';
@@ -823,19 +823,6 @@ export async function mailboxHasPendingReply(integrationId: string): Promise<boo
 function calcMailboxInterval(sentToday: number, dailyLimit: number, integration?: any): number {
   let effectiveDailyLimit = dailyLimit;
 
-  // Plan-aware smart capping
-  if (integration) {
-    const tier = (integration.tier || 'starter').toLowerCase();
-    if (tier !== 'enterprise') {
-      const createdAt = new Date(integration.createdAt || Date.now());
-      const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
-      const smartCap = tier === 'pro'
-        ? (isWarmed ? 500 : 300)
-        : (isWarmed ? 200 : 100);
-      effectiveDailyLimit = Math.min(effectiveDailyLimit, smartCap);
-    }
-  }
-
   const now = new Date();
   const currentHour = now.getUTCHours();
   const isNightWatch = currentHour >= 22 || currentHour < 6;
@@ -1081,18 +1068,6 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     if (warmup.isWarmingUp && warmup.dailyLimit < effectiveLimit) {
       effectiveLimit = warmup.dailyLimit;
     }
-
-    // Neural Brain Smart Capping — plan-aware for 50k+ scale
-    const tier = ((currentIntegration as any).tier || 'starter').toLowerCase();
-    const isEnterprise = tier === 'enterprise';
-    if (!isEnterprise) {
-      const createdAt = new Date((currentIntegration as any).createdAt || Date.now());
-      const isWarmed = (Date.now() - createdAt.getTime()) > (14 * 24 * 60 * 60 * 1000);
-      const smartCap = tier === 'pro'
-        ? (isWarmed ? 500 : 300)
-        : (isWarmed ? 200 : 100); // was 45-60 for all non-enterprise
-      effectiveLimit = Math.min(effectiveLimit, smartCap);
-    }
   }
 
   if (initialSentToday >= effectiveLimit) {
@@ -1194,6 +1169,8 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
         ne(leads.status, 'booked'),
         ne(leads.status, 'converted'),
         ne(leads.status, 'not_interested'),
+        ne(leads.status, 'bouncy'),
+        ne(leads.status, 'unsubscribed'),
         // SOFT PAUSE GATE: If soft paused, only fetch leads that are already in a follow-up sequence
         isSoftPaused ? gt(campaignLeads.currentStep, 0) : undefined
       )
@@ -1417,6 +1394,10 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
           recordProviderOutcome(integrationId, lead.email, 'sent').catch((err: any) => {
             console.warn(`[CampaignWorker] ⚠️ Failed to record provider outcome: ${err.message}`);
           });
+          // Recalculate reputation after every send so dashboard reflects current state
+          import('@services/email-service/src/email/provider-reputation.js').then(({ recalculateProviderReputation }) => {
+            recalculateProviderReputation(integrationId).catch(() => {});
+          }).catch(() => {});
         }
       }
 
@@ -1455,7 +1436,7 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
         await campaignQueueManager.scheduleFollowUp(campaignId, userId, leadEntry.id, integrationId, nextStep, delayMs);
       }
 
-      wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
+      await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
 
       // Reschedule the mailbox for the next send
       if (campaignQueue) {
@@ -1702,7 +1683,7 @@ async function processFollowUp(data: FollowUpJobData): Promise<void> {
 
     // 8. Real-time KPI push
     await markJobSent(followupJobId).catch((err) => console.warn(`[CampaignWorker] markJobSent (follow-up) failed: ${err.message}`));
-    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'followup_sent' });
+    await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'followup_sent' });
     await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch((err) => console.warn(`[CampaignWorker] processStatsUpdate (follow-up) failed: ${err.message}`));
   } catch (err: any) {
     const errorMsg = err.message || 'Follow-up send failed';
@@ -1956,9 +1937,9 @@ async function processAutoReply(data: AutoReplyJobData): Promise<void> {
   await processStatsUpdate({ type: 'campaign:update-stats', campaignId, userId }).catch((err) => console.warn(`[CampaignWorker] processStatsUpdate (auto-reply) failed: ${err.message}`));
 
   await markJobSent(autoreplyJobId).catch((err) => console.warn(`[CampaignWorker] markJobSent (auto-reply) failed: ${err.message}`));
-  wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'auto_reply_sent' });
-  wsSync.notifyCampaignStatsUpdated(userId, campaignId);
-  wsSync.notifyStatsUpdated(userId);
+  await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'auto_reply_sent' });
+  await clusterSync.notifyCampaignStatsUpdated(userId, campaignId);
+  await clusterSync.notifyStatsUpdated(userId);
 
   console.log(`[CampaignWorker] 💬 Auto-reply sent to ${lead.email}`);
 }
@@ -1986,18 +1967,47 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
     .where(eq(campaignLeads.campaignId, campaignId))
     .groupBy(campaignLeads.status);
 
-  const stats: Record<string, number> = { total: 0, sent: 0, failed: 0, pending: 0, replied: 0, queued: 0, processing: 0, aborted: 0 };
+  const stats: Record<string, number> = { total: 0, sent: 0, failed: 0, pending: 0, replied: 0, queued: 0, processing: 0, aborted: 0, bounced: 0 };
 
   leadStats.forEach((s: any) => {
     stats.total += Number(s.count);
     if (stats[s.status] !== undefined) stats[s.status] += Number(s.count);
   });
 
-  // Update campaign stats in DB — merge with existing to preserve opened/clicked/consecutive_failures
+  // Also count bounced from campaign_emails table (not in campaign_leads status)
+  try {
+    const bouncedResult = await db.select({ count: sql<number>`count(*)` })
+      .from(campaignEmails)
+      .where(and(
+        eq(campaignEmails.campaignId, campaignId),
+        eq(campaignEmails.status, 'bounced')
+      ));
+    stats.bounced = Number(bouncedResult[0]?.count || 0);
+  } catch {
+    // non-critical — use existing stats.bounced
+  }
+
+  // Also count opened from campaign_emails (tracking pixel / open events)
+  try {
+    const openedResult = await db.select({ count: sql<number>`count(*)` })
+      .from(campaignEmails)
+      .where(and(
+        eq(campaignEmails.campaignId, campaignId),
+        eq(campaignEmails.status, 'opened')
+      ));
+    stats.opened = Number(openedResult[0]?.count || 0);
+  } catch {
+    // non-critical
+  }
+
+  // Update campaign stats in DB — merge with existing to preserve consecutive_failures
   const [existingCampaign] = await withDbRetry(() => db.select({ stats: outreachCampaigns.stats })
     .from(outreachCampaigns)
     .where(eq(outreachCampaigns.id, campaignId)));
   const existingStats = (existingCampaign?.stats as any) || {};
+
+  // Invalidate sent count cache so UI reads fresh data
+  sentCountCache.clear();
 
   await withDbRetry(() => db.update(outreachCampaigns)
     .set({ 
@@ -2009,14 +2019,17 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
         failed: stats.failed || 0,
         processing: stats.processing || 0,
         replied: stats.replied || 0,
-        bounced: stats.bounced || 0,
-        opened: existingStats.opened || 0,
+        bounced: stats.bounced || existingStats.bounced || 0,
+        opened: (stats as any).opened || existingStats.opened || 0,
         clicked: existingStats.clicked || 0,
         consecutive_failures: existingStats.consecutive_failures || 0,
       } as any, 
       updatedAt: new Date() 
     })
     .where(eq(outreachCampaigns.id, campaignId)));
+
+  // Invalidate api-gateway's dashboard stats cache via Redis pub/sub
+  await clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
 
   // X8 Fix: Check if campaign is complete.
   // A campaign is complete when ALL leads have been sent (no pending OR queued leads remain)
@@ -2045,7 +2058,7 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
       await campaignQueueManager.completeCampaign(campaignId);
 
       // Notify user via WebSocket + notification
-      wsSync.notifyCampaignsUpdated(userId);
+      await clusterSync.notifyCampaignsUpdated(userId);
       await storage.createNotification({
         userId,
         type: 'system',
@@ -2059,8 +2072,8 @@ async function processStatsUpdate(data: StatsUpdateJobData): Promise<void> {
   }
 
   // Push to dashboard
-  wsSync.notifyCampaignStatsUpdated(userId, campaignId);
-  wsSync.notifyStatsUpdated(userId);
+  await clusterSync.notifyCampaignStatsUpdated(userId, campaignId);
+  await clusterSync.notifyStatsUpdated(userId);
 }
 
 // ─── Shared Email Delivery Helper ────────────────────────────────────────────
@@ -2176,13 +2189,14 @@ async function deliverCampaignEmail(
   let senderName = 'there';
   let senderEmail = '';
   try {
-    const [integration] = await db!.select({ name: integrations.name, email: integrations.email })
+    const [integration] = await db!.select({ encryptedMeta: integrations.encryptedMeta })
       .from(integrations)
       .where(eq(integrations.id, integrationId))
       .limit(1);
     if (integration) {
-      senderName = integration.name?.trim() || integration.email?.split('@')[0] || 'there';
-      senderEmail = integration.email?.trim() || '';
+      const meta = decryptToJSON(integration.encryptedMeta);
+      senderName = meta.name?.trim() || meta.email?.split('@')[0] || 'there';
+      senderEmail = meta.email?.trim() || '';
     }
   } catch {
     // non-critical — fall through with defaults
@@ -2208,7 +2222,7 @@ async function deliverCampaignEmail(
   }
 
   // Ensure we always have a professional opt-out to prevent 'marked as spam' blocks
-  const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
+  const unsubscribeLink = `${senderEmail ? `https://${senderEmail.split('@')[1]}` : (process.env.PUBLIC_URL || 'https://audnixai.com')}/api/unsubscribe/${lead.id}`;
   body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
   body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
   const lowerBody = body.toLowerCase();
@@ -2371,7 +2385,7 @@ async function deliverCampaignEmail(
       const { dnsValidationEngine } = await import('@services/email-service/src/email/dns-validation-engine.js');
       const domain = lead.email?.split('@')[1];
       if (domain) {
-        const mxResult = await dnsValidationEngine.validateMX(domain);
+        const mxResult = await (dnsValidationEngine as any).validateMX(domain);
         if (!mxResult.valid) {
           console.warn(`[CampaignWorker] Skipping ${lead.email}: no MX records for ${domain}`);
           await releaseLock(lockKey);

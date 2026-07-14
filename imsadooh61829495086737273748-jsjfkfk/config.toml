@@ -1,0 +1,58 @@
+# Audnix AI Outreach Platform — Application Configuration
+# All values can be overridden via environment variables.
+
+[app]
+name = "audnix-ai"
+version = "2.0.0"
+port = 5000
+node_env = "production"
+log_level = "info"
+
+[client]
+port = 5173
+api_url = "http://localhost:5000"
+ws_url = "ws://localhost:5000"
+
+[database]
+host = "localhost"
+port = 5432
+name = "audnix"
+pool_min = 2
+pool_max = 20
+ssl = false
+
+[redis]
+host = "localhost"
+port = 6379
+db = 0
+
+[imap]
+# Near-instant IMAP settings
+idle_timeout_ms = 10000          # Re-IDLE every 10s
+noop_interval_ms = 5000          # NOOP heartbeat every 5s
+zombie_timeout_ms = 30000        # 30s silence = zombie
+watchdog_interval_ms = 15000     # Watchdog sweep every 15s
+heartbeat_interval_ms = 5000     # Persistent session heartbeat 5s
+max_idle_connections = 500       # Cap IDLE connections
+fallback_poll_ms = 5000          # Overflow polling 5s
+min_backoff_ms = 1000            # 1s initial retry
+max_backoff_ms = 60000           # 1m max retry
+
+[imap_worker]
+heartbeat_ms = 30000             # 30s NOOP + Redis TTL
+recycle_ms = 840000              # 14 min proactive recycle
+max_sockets = 50                 # Per-pod IMAP budget
+
+[email_worker]
+sweep_interval_ms = 120000       # 2 min inbox sweep
+spam_rescue_ms = 3600000         # 1 hour spam rescue
+
+[realtime]
+websocket_ping_interval = 15000
+websocket_ping_timeout = 10000
+heartbeat_client_ms = 5000       # Client WS heartbeat 5s
+sse_ping_interval = 15000        # SSE keepalive 15s
+
+[analytics]
+refresh_interval_ms = 2000       # UI auto-refresh 2s
+inbound_sweep_ms = 120000        # 2 min inbound sweep

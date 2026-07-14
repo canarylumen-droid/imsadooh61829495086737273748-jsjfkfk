@@ -25,6 +25,7 @@ import {
     Clock
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useRealtime } from "@/hooks/use-realtime";
 import {
     ChartContainer,
     ChartTooltip,
@@ -95,7 +96,8 @@ const chartConfig = {
 };
 
 export default function AnalyticsPage() {
-    const [dateRange, setDateRange] = useState<7 | 30>(7);
+    useRealtime();
+    const [dateRange, setDateRange] = useState<1 | 7 | 30 | 60 | 90>(7);
     const [showEmail, setShowEmail] = useState(true);
     const [showInstagram, setShowInstagram] = useState(true);
     const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -191,9 +193,12 @@ export default function AnalyticsPage() {
                         />
                     </>
                 ) : (
-                    <div className="lg:col-span-4 flex flex-col items-center justify-center py-16 text-center text-muted-foreground opacity-60">
-                        <Activity className="h-8 w-8 mb-3" />
-                        <p className="text-sm font-semibold tracking-wider uppercase">No data available for this period</p>
+                    <div className="lg:col-span-4 flex flex-col items-center justify-center py-16 text-center">
+                        <div className="w-12 h-12 bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/20 rounded-xl flex items-center justify-center mb-3">
+                            <Activity className="h-6 w-6 text-violet-400" />
+                        </div>
+                        <p className="text-sm font-semibold text-foreground/80">No data available for this period</p>
+                        <p className="text-xs text-muted-foreground mt-1">Send some emails to see analytics here.</p>
                     </div>
                 )}
             </ResponsiveGrid>
@@ -208,18 +213,42 @@ export default function AnalyticsPage() {
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    onClick={() => setDateRange(7)}
-                                    className={cn("h-7 text-[10px] font-bold px-4", dateRange === 7 && "bg-background shadow-sm")}
+                                    onClick={() => setDateRange(1)}
+                                    className={cn("h-7 text-[10px] font-bold px-3", dateRange === 1 && "bg-background shadow-sm")}
                                 >
-                                    7 Days
+                                    24h
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDateRange(7)}
+                                    className={cn("h-7 text-[10px] font-bold px-3", dateRange === 7 && "bg-background shadow-sm")}
+                                >
+                                    7d
                                 </Button>
                                 <Button
                                     variant="ghost"
                                     size="sm"
                                     onClick={() => setDateRange(30)}
-                                    className={cn("h-7 text-[10px] font-bold px-4", dateRange === 30 && "bg-background shadow-sm")}
+                                    className={cn("h-7 text-[10px] font-bold px-3", dateRange === 30 && "bg-background shadow-sm")}
                                 >
-                                    30 Days
+                                    30d
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDateRange(60)}
+                                    className={cn("h-7 text-[10px] font-bold px-3", dateRange === 60 && "bg-background shadow-sm")}
+                                >
+                                    60d
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setDateRange(90)}
+                                    className={cn("h-7 text-[10px] font-bold px-3", dateRange === 90 && "bg-background shadow-sm")}
+                                >
+                                    90d
                                 </Button>
                             </div>
                             {/* Chart Type Toggle */}
@@ -386,8 +415,14 @@ export default function AnalyticsPage() {
                     </h3>
                     <div className="space-y-6 flex-1">
                         {(analytics?.recentEvents || []).length > 0 ? (
-                            (analytics?.recentEvents || []).map(event => (
-                                <div key={event.id} className="flex gap-4 group items-center">
+                            (analytics?.recentEvents || []).map((event, idx) => (
+                                <motion.div
+                                    key={event.id}
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                    className="flex gap-4 group items-center"
+                                >
                                     <div className={cn(
                                         "mt-1 w-2 h-2 rounded-full shrink-0 transition-all duration-500",
                                         (event as any).isNew
@@ -403,7 +438,7 @@ export default function AnalyticsPage() {
                                         </div>
                                         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-1">{event.time}</p>
                                     </div>
-                                </div>
+                                </motion.div>
                             ))
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-center opacity-20 py-20">
@@ -423,6 +458,9 @@ export default function AnalyticsPage() {
                     <div className="absolute -bottom-20 -right-20 w-40 h-40 bg-primary/5 blur-[60px] rounded-full" />
                 </Card>
             </ResponsiveGrid>
+
+            {/* Inbox Placement & Spam Analytics */}
+            <InboxPlacementSection selectedMailboxId={selectedMailboxId} days={dateRange} />
 
             <ResponsiveGrid className="grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                 {/* Lead Distribution Pie Chart */}
@@ -522,7 +560,7 @@ export default function AnalyticsPage() {
                 <div className="p-8 border-b border-border/40 bg-muted/30 flex items-center justify-between">
                     <div>
                         <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50">Performance Matrix</CardTitle>
-                        <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-1">Numerical breakdown by intersection cycle</CardDescription>
+                        <CardDescription className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-1">Period comparison</CardDescription>
                     </div>
                     <Badge variant="outline" className="rounded-full px-4 h-6 border-primary/20 bg-primary/5 text-primary text-[8px] font-semibold tracking-wider uppercase">
                         Real-time Sync
@@ -640,15 +678,6 @@ function StatCard({ label, value, icon: Icon, trend, isUp, color, index }: any) 
                                 <span className="text-[8px] sm:text-[10px] font-semibold">{trend}</span>
                             </div>
                         )}
-                        {trend && trend !== "—" && (
-                            <div className={cn(
-                                "flex items-center gap-0.5 sm:gap-1 px-1.5 sm:px-2 py-0.5 rounded-full shrink-0 w-fit mt-0.5 sm:mt-0",
-                                isUp ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
-                            )}>
-                                {isUp ? <ArrowUpRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> : <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 rotate-180" />}
-                                <span className="text-[8px] sm:text-[10px] font-semibold">{trend}</span>
-                            </div>
-                        )}
                     </div>
                     {trend && trend !== "—" && (
                       <p className="text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-2 sm:mt-4">
@@ -660,5 +689,142 @@ function StatCard({ label, value, icon: Icon, trend, isUp, color, index }: any) 
                 </CardContent>
             </Card>
         </motion.div>
+    );
+}
+
+interface InboxPlacementData {
+    mailboxes: Array<{
+        integrationId: string;
+        sent: number;
+        inbox: number;
+        spam: number;
+        bounce: number;
+        other: number;
+        inboxRate: number;
+    }>;
+    totals: { sent: number; inbox: number; spam: number; bounce: number; rate: string };
+}
+
+function InboxPlacementSection({ selectedMailboxId, days }: { selectedMailboxId?: string; days: number }) {
+    const { data, isLoading } = useQuery<InboxPlacementData>({
+        queryKey: ["/api/stats/inbox-placement", { days, integrationId: selectedMailboxId }],
+    });
+
+    if (isLoading || !data) return null;
+
+    const { totals, mailboxes } = data;
+    const displayMailboxes = selectedMailboxId
+        ? mailboxes.filter(m => m.integrationId === selectedMailboxId)
+        : mailboxes;
+
+    if (totals.sent === 0 && displayMailboxes.length === 0) return null;
+
+    const pieData = [
+        { name: 'Inbox', value: totals.inbox, color: '#10b981' },
+        { name: 'Spam', value: totals.spam, color: '#ef4444' },
+        { name: 'Bounce', value: totals.bounce, color: '#f59e0b' },
+    ].filter(d => d.value > 0);
+
+    return (
+        <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+            {/* Overall Inbox Placement Pie */}
+            <Card className="bg-card border-border/40 rounded-2xl overflow-hidden">
+                <CardHeader className="p-6">
+                    <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+                        <Target className="w-4 h-4 text-emerald-500" /> Inbox Placement
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="h-[250px] flex items-center justify-center px-4">
+                    {pieData.length === 0 ? (
+                        <p className="text-xs text-muted-foreground/40 font-semibold uppercase">No placement data</p>
+                    ) : (
+                        <div className="w-full flex items-center gap-4">
+                            <ChartContainer config={{}} className="w-[55%] h-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <PieChart>
+                                        <Pie
+                                            data={pieData}
+                                            cx="50%"
+                                            cy="50%"
+                                            innerRadius={55}
+                                            outerRadius={85}
+                                            paddingAngle={4}
+                                            dataKey="value"
+                                        >
+                                            {pieData.map((entry, i) => (
+                                                <Cell key={i} fill={entry.color} stroke="transparent" />
+                                            ))}
+                                        </Pie>
+                                        <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
+                                    </PieChart>
+                                </ResponsiveContainer>
+                            </ChartContainer>
+                            <div className="flex flex-col gap-2 text-xs font-semibold">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                                    <span>Inbox: {totals.inbox} ({totals.rate})</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                                    <span>Spam: {totals.spam}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                                    <span>Bounce: {totals.bounce}</span>
+                                </div>
+                                <div className="text-muted-foreground/40 mt-1">
+                                    Total sent: {totals.sent}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+
+            {/* Per-Mailbox Inbox Rate */}
+            <Card className="bg-card border-border/40 rounded-2xl overflow-hidden lg:col-span-2">
+                <CardHeader className="p-6">
+                    <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-blue-500" /> Per-Mailbox Placement
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="px-6 pb-6">
+                    {displayMailboxes.length === 0 ? (
+                        <p className="text-xs text-muted-foreground/40 font-semibold uppercase text-center py-8">No mailbox data</p>
+                    ) : (
+                        <div className="space-y-4">
+                            {displayMailboxes.map(mb => (
+                                <div key={mb.integrationId} className="flex items-center gap-4">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-xs font-semibold truncate text-foreground/80">{mb.integrationId.slice(0, 8)}...</span>
+                                            <span className={cn(
+                                                "text-xs font-bold",
+                                                mb.inboxRate >= 90 ? "text-emerald-500" : mb.inboxRate >= 70 ? "text-amber-500" : "text-red-500"
+                                            )}>{mb.inboxRate}%</span>
+                                        </div>
+                                        <div className="w-full h-2 bg-muted/30 rounded-full overflow-hidden flex">
+                                            {mb.sent > 0 && (
+                                                <>
+                                                    <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(mb.inbox / mb.sent) * 100}%` }} />
+                                                    <div className="h-full bg-red-500 transition-all" style={{ width: `${(mb.spam / mb.sent) * 100}%` }} />
+                                                    <div className="h-full bg-amber-500 transition-all" style={{ width: `${(mb.bounce / mb.sent) * 100}%` }} />
+                                                </>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-3 mt-1 text-[10px] font-semibold text-muted-foreground/40">
+                                            <span>{mb.sent} sent</span>
+                                            <span className="text-emerald-500/60">{mb.inbox} inbox</span>
+                                            <span className="text-red-500/60">{mb.spam} spam</span>
+                                            <span className="text-amber-500/60">{mb.bounce} bounce</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </ResponsiveGrid>
     );
 }

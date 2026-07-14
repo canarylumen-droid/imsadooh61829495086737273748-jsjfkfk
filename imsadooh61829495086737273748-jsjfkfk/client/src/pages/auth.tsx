@@ -71,7 +71,7 @@ export default function AuthPage() {
   const [showResetOption, setShowResetOption] = useState(false);
   const [resetUsed, setResetUsed] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
-  const [otpEnabled, setOtpEnabled] = useState(true); // Default to true, will be updated on mount
+  const [otpEnabled, setOtpEnabled] = useState(false); // Default false until server confirms
 
   // Forgot password state
   const [isForgotPassword, setIsForgotPassword] = useState(false);
@@ -297,10 +297,9 @@ export default function AuthPage() {
         if (response.ok) {
           const data = await response.json();
           setOtpEnabled(data.otpEnabled);
-          console.log('OTP Status:', data.otpEnabled ? 'enabled' : 'disabled');
         }
       } catch (error) {
-        console.log('OTP status check failed, defaulting to enabled');
+        // OTP status check failed, defaulting to enabled
       }
     };
     checkOtpStatus();
@@ -339,7 +338,6 @@ export default function AuthPage() {
         }
       } catch (error) {
         // Silently fail - user can still proceed normally
-        console.log('State check skipped');
       }
     };
 
@@ -361,6 +359,16 @@ export default function AuthPage() {
     if (score === 2) return 'bg-yellow-500';
     if (score === 3) return 'bg-blue-500';
     return 'bg-green-500';
+  };
+
+  const getPasswordStrengthTextColor = () => {
+    if (!passwordStrength) return '#9ca3af';
+    const score = passwordStrength.score;
+    if (score === 0) return '#ef4444';
+    if (score === 1) return '#f97316';
+    if (score === 2) return '#eab308';
+    if (score === 3) return '#3b82f6';
+    return '#22c55e';
   };
 
   const getPasswordStrengthText = () => {
@@ -520,6 +528,26 @@ export default function AuthPage() {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
+        // Server may indicate OTP is disabled or setup is incomplete
+        if (data.otpEnabled === false || data.directSignupAvailable) {
+          setOtpEnabled(false);
+          setSignupStep(3);
+          toast({
+            title: "Almost There!",
+            description: "Now choose a username for your account",
+          });
+          setLoading(false);
+          return;
+        }
+        if (data.incompleteSetup || data.useLogin) {
+          toast({
+            title: "Account Exists",
+            description: "An account with this email exists but setup is incomplete. Please log in to continue.",
+          });
+          setLocation("/login");
+          setLoading(false);
+          return;
+        }
         setSignupStep(2);
         setResendCountdown(60);
         toast({
@@ -1005,7 +1033,7 @@ export default function AuthPage() {
                           <div className="space-y-1 pt-1">
                             <div className="flex justify-between text-[10px] uppercase tracking-wider font-bold">
                               <span className="text-white/40">Strength:</span>
-                              <span style={{ color: getPasswordStrengthColor().replace('bg-', '') }}>{getPasswordStrengthText()}</span>
+                              <span style={{ color: getPasswordStrengthTextColor() }}>{getPasswordStrengthText()}</span>
                             </div>
                             <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
                               <div

@@ -106,7 +106,7 @@ export class ReplyManager {
         .where(eq(leads.id, lead[0].id));
 
       await db.update(campaignLeads)
-        .set({ status: 'replied', repliedAt: new Date() })
+        .set({ status: 'replied', ...( { repliedAt: new Date() } as any ) })
         .where(eq(campaignLeads.leadId, lead[0].id));
 
       // Update campaign_emails for the last sent email to replied

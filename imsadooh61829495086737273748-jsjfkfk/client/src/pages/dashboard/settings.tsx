@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { User, Loader2, Upload, Mic, Settings, Save, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check, Download, Construction } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useRealtime } from "@/hooks/use-realtime";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useCanAccessVoiceNotes } from "@/hooks/use-access-gate";
@@ -28,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "wouter";
 import { PdfIcon, VoiceIcon } from "@/components/ui/CustomIcons";
+import { PremiumLoader } from "@/components/ui/premium-loader";
 import { BrandKnowledgeBase } from "@/components/admin/BrandKnowledgeBase";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
@@ -56,6 +58,7 @@ interface UserProfile {
 }
 
 export default function SettingsPage() {
+  useRealtime();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
@@ -213,7 +216,7 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
-  if (isLoading || !user) return <div className="flex justify-center p-20"><Loader2 className="animate-spin text-primary" /></div>;
+  if (isLoading || !user) return <div className="flex justify-center p-20"><PremiumLoader text="Loading Settings..." /></div>;
 
   return (
     <PageWrapper className="space-y-10">

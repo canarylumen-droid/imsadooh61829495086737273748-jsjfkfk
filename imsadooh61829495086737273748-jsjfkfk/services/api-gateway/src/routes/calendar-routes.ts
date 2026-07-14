@@ -12,6 +12,9 @@ import { db } from '@shared/lib/db/db.js';
 import { users, calendarSettings, calendarBookings, aiActionLogs } from '@audnix/shared';
 import { eq, desc } from 'drizzle-orm';
 import type { ChannelType } from '@shared/types.js';
+import { calendlyOAuth } from '@services/api-gateway/src/oauth/calendly.js';
+import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 const router = Router();
 
@@ -258,10 +261,18 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
 router.post('/disconnect-calendly', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
+
+    // 1. Revoke token remotely (best-effort — don't fail if Calendly API is down)
+    try {
+      await calendlyOAuth.revokeToken(userId);
+    } catch (revokeErr: any) {
+      console.warn('[Calendar] Remote token revocation failed:', revokeErr.message);
+    }
+
+    // 2. Delete integration record
     await storage.deleteIntegration(userId, 'calendly');
 
-    // Clear user-level Calendly fields so frontend checks like
-    // `user.calendlyAccessToken` immediately reflect the disconnected state.
+    // 3. Clear user-level Calendly fields
     await db.update(users).set({
       calendlyAccessToken: null as any,
       calendlyRefreshToken: null as any,
@@ -270,14 +281,18 @@ router.post('/disconnect-calendly', requireAuth, async (req: Request, res: Respo
       calendarLink: null as any,
     }).where(eq(users.id, userId));
 
-    // Disable calendar settings so GET /api/calendar/settings
-    // and GET /api/calendar/status return the correct state.
+    // 4. Disable calendar settings
     await db.update(calendarSettings).set({
       calendlyEnabled: false,
       calendlyToken: null as any,
       calendlyUsername: null as any,
       calendlyEventTypeUri: null as any,
     }).where(eq(calendarSettings.userId, userId));
+
+    // 5. Notify frontend — both direct and cross-process
+    wsSync.notifySettingsUpdated(userId);
+    clusterSync.notifyStatsUpdated(userId).catch(() => {});
+    clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
 
     res.json({ success: true });
   } catch (error: any) {

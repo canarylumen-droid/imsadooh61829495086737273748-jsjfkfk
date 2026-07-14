@@ -31,15 +31,15 @@ interface TourStep {
 const TOUR_STEPS: TourStep[] = [
   {
     id: "welcome",
-    title: "Welcome to Audnix",
-    description: "Your all-in-one AI revenue recovery suite. Let's take a quick tour of the key features to get you started.",
+    title: "Welcome",
+    description: "Quick tour of the key features.",
     icon: <Sparkles className="w-5 h-5 text-primary" />,
     position: "center",
   },
   {
     id: "sidebar",
-    title: "Main Navigation",
-    description: "Access all your tools, settings, and reports from here. Collapse it for more space.",
+    title: "Navigation",
+    description: "Access all tools and settings from the sidebar.",
     targetSelector: "[data-testid='sidebar-desktop']",
     icon: <Navigation className="w-5 h-5 text-primary" />,
     position: "right",
@@ -47,7 +47,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "import-leads",
     title: "Import Leads",
-    description: "Upload your CSV or PDF files here to start the recovery process. The AI will automatically score and prioritize them.",
+    description: "Upload CSV or PDF files to start outreach.",
     targetSelector: "[data-testid='nav-item-import leads']",
     path: "/dashboard/lead-import",
     icon: <Upload className="w-5 h-5 text-primary" />,
@@ -56,7 +56,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "inbox",
     title: "Inbox",
-    description: "View and manage all AI-driven conversations. Monitor objection handling and deal closures in real-time.",
+    description: "AI-driven conversations and deal tracking.",
     targetSelector: "[data-testid='nav-item-inbox']",
     path: "/dashboard/inbox",
     icon: <MessageSquare className="w-5 h-5 text-primary" />,
@@ -64,8 +64,8 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "objections",
-    title: "Objection Handling",
-    description: "Configure how the AI responds to specific customer objections. Fine-tune your sales strategy.",
+    title: "Objections",
+    description: "Configure AI responses to customer objections.",
     targetSelector: "[data-testid='nav-item-objections']",
     path: "/dashboard/objections",
     icon: <Shield className="w-5 h-5 text-primary" />,
@@ -74,7 +74,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "analytics",
     title: "Analytics",
-    description: "Track your revenue recovery performance, ROI, and engagement metrics at a glance.",
+    description: "Performance metrics and engagement data.",
     targetSelector: "[data-testid='nav-item-analytics']",
     path: "/dashboard/analytics",
     icon: <BarChart3 className="w-5 h-5 text-primary" />,
@@ -82,8 +82,8 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "done",
-    title: "You're All Set",
-    description: "You're ready to start recovering revenue! Click 'Finish' to close this tour.",
+    title: "All Set",
+    description: "You're ready to go.",
     icon: <Check className="w-5 h-5 text-emerald-400" />,
     position: "center",
   },

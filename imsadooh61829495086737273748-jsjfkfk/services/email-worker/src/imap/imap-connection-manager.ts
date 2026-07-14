@@ -46,7 +46,7 @@ async function ensureOutlookOAuth() {
   return outlookOAuth;
 }
 import { emailSyncQueue } from '@shared/lib/queues/email-sync-queue.js';
-import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { getRedisClient } from '@shared/lib/redis/redis.js';
 import { IMAP_KEYS, IMAP_TTL, CIRCUIT_BREAKER } from '@shared/lib/redis/imap-keys.js';
 import { imapCircuitTrippedTotal, imapCircuitStatus } from '@shared/lib/monitoring/metrics-service.js';
@@ -79,8 +79,8 @@ interface ImapClientData {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const RECYCLE_TIME     = 29 * 60 * 1000; // 29 min proactive recycle
-const HEARTBEAT_TIME   =  4 * 60 * 1000; // 4 min NOOP + Redis TTL refresh
+const RECYCLE_TIME     = 14 * 60 * 1000; // 14 min proactive recycle (under 15-min OAuth window)
+const HEARTBEAT_TIME   =  30 * 1000;     // 30s NOOP + Redis TTL refresh — near-instant
 // 50 mailboxes per pod: ~10MB/connection × 50 = 500MB IMAP budget.
 // Keeps event loop fast (<5ms latency per IDLE event) and isolates crashes.
 // Scale out by adding replicas (TOTAL_REPLICAS env var), not increasing this cap.
@@ -655,7 +655,7 @@ export class ImapConnectionManager {
     }
 
     // 2. Notify the UI immediately — priority event, not throttled
-    wsSync.notifyIntegrationError(integration.userId, {
+    await clusterSync.broadcast('INTEGRATION_ERROR', integration.userId, {
       integrationId: integration.id,
       provider: integration.provider,
       errorType: 'AUTH_FAILED',

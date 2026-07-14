@@ -2,12 +2,65 @@ import Imap from 'imap';
 import { simpleParser } from 'mailparser';
 import type { AddressObject } from 'mailparser';
 import { Readable } from 'stream';
+import dns from 'dns';
 import { db } from '@shared/lib/db/db.js';
 import { leads, bounceTracker } from '@audnix/shared';
 import { eq } from 'drizzle-orm';
 import { createLogger } from '@services/api-gateway/src/core/logger.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 const log = createLogger('BOUNCE-MONITOR');
+
+/**
+ * Check if email domain has valid MX records
+ */
+async function checkMxRecords(domain: string): Promise<{ valid: boolean; mxRecords: string[] }> {
+  return new Promise((resolve) => {
+    dns.resolveMx(domain, (err, addresses) => {
+      if (err || !addresses || addresses.length === 0) {
+        resolve({ valid: false, mxRecords: [] });
+      } else {
+        resolve({ valid: true, mxRecords: addresses.map(a => a.exchange) });
+      }
+    });
+  });
+}
+
+/**
+ * Check if email is deliverable via DNS
+ */
+async function checkEmailDeliverability(email: string): Promise<{ 
+  deliverable: boolean; 
+  hasMx: boolean; 
+  hasA: boolean;
+  reason?: string;
+}> {
+  const domain = email.split('@')[1];
+  if (!domain) return { deliverable: false, hasMx: false, hasA: false, reason: 'Invalid email format' };
+
+  // Check MX records first
+  const mxResult = await checkMxRecords(domain);
+  if (mxResult.valid) {
+    return { deliverable: true, hasMx: true, hasA: false };
+  }
+
+  // Fallback: check A record (some domains accept email on A record)
+  return new Promise((resolve) => {
+    dns.resolve4(domain, (err, addresses) => {
+      if (err || !addresses || addresses.length === 0) {
+        resolve({ 
+          deliverable: false, 
+          hasMx: false, 
+          hasA: false, 
+          reason: 'No MX or A records found' 
+        });
+      } else {
+        // Has A record but no MX - might still accept email
+        resolve({ deliverable: true, hasMx: false, hasA: true });
+      }
+    });
+  });
+}
 
 export class BounceMonitor {
   private imapConfig: any;
@@ -217,6 +270,16 @@ export class BounceMonitor {
     log.info(`[BounceMonitor] Processing bounce for ${recipient} (${bounceType})`);
 
     try {
+      // Verify email deliverability via DNS before marking as hard bounce
+      const dnsCheck = await checkEmailDeliverability(recipient);
+      
+      // If DNS says domain is valid but we got a hard bounce, it might be a soft bounce
+      // (mailbox full, auto-reply, etc.) rather than invalid address
+      if (bounceType === 'hard' && dnsCheck.deliverable) {
+        log.info(`[BounceMonitor] DNS check passed for ${recipient} — reclassifying as soft bounce`);
+        bounceType = 'soft';
+      }
+
       // Find matching lead by email
       const leadMatches = await db.select().from(leads).where(eq(leads.email, recipient)).limit(1);
       const lead = leadMatches[0];
@@ -227,17 +290,31 @@ export class BounceMonitor {
       }
 
       // Phase 38: Update lead status to 'bouncy'
-      await db.update(leads)
+      const [updated] = await db.update(leads)
         .set({
           status: 'bouncy',
           metadata: {
             ...(lead.metadata as object || {}),
             bounceType,
             bouncedAt: new Date().toISOString(),
-            bounceSnippet: rawBody.substring(0, 300)
+            bounceSnippet: rawBody.substring(0, 300),
+            dnsCheck: {
+              hasMx: dnsCheck.hasMx,
+              hasA: dnsCheck.hasA,
+              deliverable: dnsCheck.deliverable,
+              reason: dnsCheck.reason
+            }
           }
         })
-        .where(eq(leads.id, lead.id));
+        .where(eq(leads.id, lead.id))
+        .returning();
+
+      // Real-time notification
+      if (updated) {
+        clusterSync.notifyLeadsUpdated(lead.userId, { event: 'UPDATE', lead: updated }).catch(() => {});
+        clusterSync.notifyStatsCacheInvalidate(lead.userId).catch(() => {});
+        clusterSync.notifyStatsUpdated(lead.userId).catch(() => {});
+      }
 
       log.info(`[BounceMonitor] Lead ${lead.id} (${recipient}) marked as bouncy`);
 
@@ -249,7 +326,12 @@ export class BounceMonitor {
         bounceType,
         metadata: {
           rawSnippet: rawBody.substring(0, 500),
-          detectedAt: new Date().toISOString()
+          detectedAt: new Date().toISOString(),
+          dnsCheck: {
+            hasMx: dnsCheck.hasMx,
+            hasA: dnsCheck.hasA,
+            deliverable: dnsCheck.deliverable
+          }
         }
       });
 

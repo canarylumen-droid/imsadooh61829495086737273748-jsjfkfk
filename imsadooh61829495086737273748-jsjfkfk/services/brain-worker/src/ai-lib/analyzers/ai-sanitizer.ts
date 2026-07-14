@@ -3,6 +3,10 @@
  * 
  * Extracts the actual sales copy from LLM outputs, stripping conversational
  * fillers, assistant prefixes, JSON reasoning leaks, and accidental markdown.
+ * 
+ * CRITICAL: This is the last line of defense before a real email is sent to a lead.
+ * Any internal AI reasoning, JSON artifacts, or template variables that slip through
+ * will damage brand reputation.
  */
 
 /**
@@ -18,34 +22,97 @@
 export function sanitizeEmailBody(text: string): string {
   if (!text) return "";
 
-  const trimmed = text.trim();
+  let trimmed = text.trim();
 
-  // Detect if the entire text looks like a JSON object
-  if ((trimmed.startsWith('{') && trimmed.includes('"body"')) ||
-      (trimmed.startsWith('```') && trimmed.includes('"body"'))) {
+  // ── STRIP JSON REASONING LEAKS ─────────────────────────────────────────
+  // Detect if the text contains or starts with a JSON object containing reasoning fields
+  // This catches models that output: {"action":"send","reasoning":"...","body":"..."}
+  // as well as models that prepend/append JSON blocks to otherwise clean text.
+  
+  // Try to extract body from JSON if the text contains JSON with a body field
+  const jsonBlockMatch = trimmed.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) || 
+                         trimmed.match(/^(\{[\s\S]*?\})$/);
+  if (jsonBlockMatch) {
     try {
-      // Strip markdown code fences first
-      const raw = trimmed.replace(/^```[a-z]*\n?/, '').replace(/\n?```$/, '');
-      const parsed = JSON.parse(raw);
-
-      // Extract body field only — discard action, delayDays, reasoning, etc.
+      const parsed = JSON.parse(jsonBlockMatch[1]);
       const body = parsed.body || parsed.email_body || parsed.message || '';
       if (body && typeof body === 'string' && body.trim().length > 10) {
-        return body.trim();
+        // Successfully extracted body from JSON wrapper - use it
+        trimmed = body.trim();
+      } else if (parsed.reasoning || parsed.action || parsed.delayDays || parsed.thought || parsed.thinking) {
+        // JSON contains reasoning/action fields but no usable body - BLOCK
+        console.warn('[EmailSanitizer] AI returned JSON with reasoning fields and no usable body. Blocking send.');
+        return '';
       }
-
-      // If body is missing or empty, this is a bad AI output — return empty
-      console.warn('[EmailSanitizer] AI returned JSON without usable body field. Blocking send.');
-      return '';
     } catch {
-      // Not valid JSON — fall through to artifact pattern stripping below
+      // Not valid JSON — fall through to pattern stripping
     }
   }
 
-  // Also block any text that STARTS with JSON reasoning fields
-  if (/^\s*\{\s*"(action|reasoning|delayDays|thought|thinking)"/i.test(trimmed)) {
-    console.warn('[EmailSanitizer] Detected raw JSON reasoning prefix in email body. Blocking send.');
-    return '';
+  // Block any text that STARTS with JSON reasoning fields (even partial JSON)
+  if (/^\s*\{?\s*"(action|reasoning|delayDays|thought|thinking|thoughtProcess|strategy)"/i.test(trimmed)) {
+    // Try one more time to extract body from the JSON
+    try {
+      const jsonStart = trimmed.indexOf('{');
+      if (jsonStart >= 0) {
+        const jsonStr = trimmed.substring(jsonStart);
+        const jsonEnd = jsonStr.lastIndexOf('}');
+        if (jsonEnd > 0) {
+          const parsed = JSON.parse(jsonStr.substring(0, jsonEnd + 1));
+          const body = parsed.body || parsed.email_body || parsed.message || '';
+          if (body && typeof body === 'string' && body.trim().length > 10) {
+            trimmed = body.trim();
+          } else {
+            console.warn('[EmailSanitizer] Detected raw JSON reasoning prefix in email body. Blocking send.');
+            return '';
+          }
+        }
+      }
+    } catch {
+      console.warn('[EmailSanitizer] Detected raw JSON reasoning prefix in email body. Blocking send.');
+      return '';
+    }
+  }
+
+  // ── STRIP INLINE REASONING FRAGMENTS ───────────────────────────────────
+  // Some models embed reasoning between the email parts:
+  // "Hi there,\n\n...email body...\n\n{\"reasoning\": \"...\", \"action\": \"send\"}"
+  // or "Reasoning: The lead has replied...\n\nHi there,..."
+  const reasoningPatterns = [
+    /\n*-{3,}\s*\n*"?reasoning"?\s*:\s*[\s\S]*$/i,
+    /\n*"?reasoning"?\s*:\s*"[^"]*[\s\S]*$/i,
+    /\n*"?action"?\s*:\s*"(send|reply|wait|follow)"[\s\S]*$/i,
+    /\n*"?delayDays"?\s*:\s*\d+[\s\S]*$/i,
+    /\n*"?thought(?:s|Process)?"?\s*:\s*[\s\S]*$/i,
+    /\n*"?strategy"?\s*:\s*[\s\S]*$/i,
+    /\n*"?thoughts"?\s*:\s*"[\s\S]*$/i,
+    /\n*What AI will be thinking[\s\S]*$/i,
+    /\n*AI (?:Analysis|Reasoning|Thought)[\s\S]*$/i,
+  ];
+  for (const pattern of reasoningPatterns) {
+    if (pattern.test(trimmed)) {
+      trimmed = trimmed.replace(pattern, '').trim();
+    }
+  }
+
+  // ── STRIP LEADING JSON BLOCKS ──────────────────────────────────────────
+  // If the body starts with a JSON object (e.g., DeepSeek outputting full JSON),
+  // try to extract just the body field
+  if (/^\s*\{[\s\S]*"body"[\s\S]*\}/.test(trimmed) && !trimmed.includes('<')) {
+    try {
+      // Find the first { and last }
+      const firstBrace = trimmed.indexOf('{');
+      const lastBrace = trimmed.lastIndexOf('}');
+      if (lastBrace > firstBrace) {
+        const parsed = JSON.parse(trimmed.substring(firstBrace, lastBrace + 1));
+        const body = parsed.body || parsed.email_body || parsed.message || '';
+        if (body && typeof body === 'string' && body.trim().length > 10) {
+          trimmed = body.trim();
+        }
+      }
+    } catch {
+      // Not valid JSON, skip
+    }
   }
 
   return trimmed;

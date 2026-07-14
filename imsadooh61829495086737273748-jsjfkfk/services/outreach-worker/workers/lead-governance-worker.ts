@@ -1,7 +1,7 @@
 import { db } from '@shared/lib/db/db.js';
 import { leads } from '@audnix/shared';
 import { eq, and, sql, lt } from 'drizzle-orm';
-import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
+import { clusterSync } from "@shared/lib/realtime/redis-pubsub.js";
 import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
 import { quotaService } from "@shared/lib/monitoring/quota-service.js";
 
@@ -70,16 +70,16 @@ export class LeadGovernanceWorker {
       if (expiredLeads.length > 0) {
         console.log(`🕒 Expiring 'new' status for ${expiredLeads.length} leads...`);
 
-        // Batch update status to 'open'
+        // Batch update status to 'contacted'
         const leadIds = expiredLeads.map((l: { id: string }) => l.id);
         await db.update(leads)
-          .set({ status: 'open', updatedAt: new Date() })
+          .set({ status: 'contacted', updatedAt: new Date() })
           .where(sql`id IN (${sql.join(leadIds, sql`, `)})`);
 
         // Notify users via WebSocket
         const uniqueUserIds = [...new Set(expiredLeads.map((l: { userId: string }) => l.userId))];
         for (const userId of uniqueUserIds) {
-          wsSync.notifyLeadsUpdated(userId as string, { action: 'status_expired' });
+          await clusterSync.notifyLeadsUpdated(userId as string, { action: 'status_expired' });
         }
       }
 
@@ -109,7 +109,7 @@ export class LeadGovernanceWorker {
 
         const uniqueUserIds = [...new Set(coldLeads.map((l: { userId: string }) => l.userId))];
         for (const userId of uniqueUserIds) {
-          wsSync.notifyLeadsUpdated(userId as string, { action: 'warmth_decay' });
+          await clusterSync.notifyLeadsUpdated(userId as string, { action: 'warmth_decay' });
         }
       }
 

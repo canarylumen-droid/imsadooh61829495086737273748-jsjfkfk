@@ -2,6 +2,7 @@ import { db } from '@shared/lib/db/db.js';
 import { messages, leads } from '@audnix/shared';
 import { eq, and } from 'drizzle-orm';
 import crypto from 'crypto';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 /**
  * DEEP ENGAGEMENT TRACKING ENGINE
@@ -38,14 +39,18 @@ export class TrackingEngine {
      */
     static async recordClick(trackingId: string): Promise<void> {
         try {
-            await db.update(messages)
+            const [updated] = await db.update(messages)
                 .set({
                     clickedAt: new Date(),
                     openedAt: new Date() // A click implies an open
                 })
-                .where(eq(messages.trackingId, trackingId));
+                .where(eq(messages.trackingId, trackingId))
+                .returning();
 
-            console.log(`📡 Tracking: Registered click for message ${trackingId}`);
+            if (updated) {
+                clusterSync.notifyMessagesUpdated(updated.userId, { event: 'UPDATE', message: updated }).catch(() => {});
+                clusterSync.notifyStatsCacheInvalidate(updated.userId).catch(() => {});
+            }
         } catch (error) {
             console.error('Failed to record click:', error);
         }
@@ -65,14 +70,20 @@ export class TrackingEngine {
                 ));
 
             // Update lead status
-            await db.update(leads)
+            const [updated] = await db.update(leads)
                 .set({
                     status: 'replied',
                     warm: true // Real reply = Warm lead
                 })
-                .where(eq(leads.id, leadId));
+                .where(eq(leads.id, leadId))
+                .returning();
 
-            console.log(`📈 Intelligence: Lead ${leadId} replied. Marking as Warm.`);
+            // Real-time notification
+            if (updated) {
+                clusterSync.notifyLeadsUpdated(updated.userId, { event: 'UPDATE', lead: updated }).catch(() => {});
+                clusterSync.notifyStatsCacheInvalidate(updated.userId).catch(() => {});
+                clusterSync.notifyStatsUpdated(updated.userId).catch(() => {});
+            }
         } catch (error) {
             console.error('Failed to record reply:', error);
         }

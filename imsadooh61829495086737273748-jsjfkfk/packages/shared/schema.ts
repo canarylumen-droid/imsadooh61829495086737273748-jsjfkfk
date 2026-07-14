@@ -145,7 +145,7 @@ export const leads = pgTable("leads", {
   niche: text("niche"),
   industry: text("industry"),
   revenue: text("revenue"),
-  status: text("status", { enum: ["new", "open", "replied", "converted", "not_interested", "unsubscribed", "no_show", "cold", "hardened", "recovered", "bouncy", "booked", "warm", "qualified", "risky"] }).notNull().default("new"),
+  status: text("status", { enum: ["new", "contacted", "replied", "converted", "not_interested", "unsubscribed", "no_show", "cold", "hardened", "recovered", "bouncy", "booked", "warm", "qualified", "risky"] }).notNull().default("new"),
   verified: boolean("verified").notNull().default(false),
   verifiedAt: timestamp("verified_at"),
   score: integer("score").notNull().default(0),
@@ -699,11 +699,15 @@ export const emailTracking = pgTable("email_tracking", {
   openCount: integer("open_count").notNull().default(0),
   clickCount: integer("click_count").notNull().default(0),
   targetUrl: text("target_url"),
+  // Inbox placement tracking: 'unknown', 'inbox', 'spam', 'promotions', 'bounced'
+  placement: text("placement").default('unknown'),
+  placementUpdatedAt: timestamp("placement_updated_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({
   emailTrackingUserIdIdx: index("email_tracking_user_id_idx").on(table.userId),
   emailTrackingIntegrationIdIdx: index("email_tracking_integration_id_idx").on(table.integrationId),
   emailTrackingTokenIdx: index("email_tracking_token_idx").on(table.token),
+  emailTrackingPlacementIdx: index("email_tracking_placement_idx").on(table.placement),
 }));
 
 export const emailEvents = pgTable("email_events", {

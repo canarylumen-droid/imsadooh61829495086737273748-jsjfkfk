@@ -634,14 +634,16 @@ Return ONLY JSON:
 
     try {
         const parsed = JSON.parse(response.text || "{}");
+        const { sanitizeEmailBody } = await import('../../ai-lib/analyzers/ai-sanitizer.js');
         return {
             subject: parsed.subject || `Question for ${firstName}`,
-            body: parsed.body || response.text
+            body: sanitizeEmailBody(parsed.body || response.text)
         };
     } catch (e) {
+        const { sanitizeEmailBody } = await import('../../ai-lib/analyzers/ai-sanitizer.js');
         return {
             subject: `Question for ${firstName}`,
-            body: response.text || ""
+            body: sanitizeEmailBody(response.text || "")
         };
     }
   } catch (error) {

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { Link } from "wouter";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,8 +13,12 @@ import {
   Loader2,
   FileText,
   Download,
+  BarChart3,
+  ArrowRight,
 } from "lucide-react";
+import { PremiumLoader } from "@/components/ui/premium-loader";
 import { useQuery } from "@tanstack/react-query";
+import { useRealtime } from "@/hooks/use-realtime";
 import {
   ChartContainer,
   ChartTooltip,
@@ -28,8 +33,6 @@ import {
 } from "recharts";
 import { useCanAccessFullAnalytics } from "@/hooks/use-access-gate";
 import { FeatureLock } from "@/components/upgrade/FeatureLock";
-import { PremiumLoader } from "@/components/ui/premium-loader";
-import { AudnixLogo } from "@/components/ui/CustomIcons";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
@@ -67,6 +70,7 @@ interface InsightsApiResponse {
 }
 
 export default function InsightsPage() {
+  useRealtime();
   const { canAccess: canAccessFullAnalytics } = useCanAccessFullAnalytics();
   const { data: insightsData, isLoading, refetch, isFetching } = useQuery<InsightsApiResponse>({
     queryKey: ["/api/ai/insights"],
@@ -131,7 +135,7 @@ export default function InsightsPage() {
             AI Insights <Sparkles className="h-6 w-6 text-primary" />
           </h1>
           <p className="text-muted-foreground mt-1">
-            Real-time analysis to optimize your outreach strategy.
+            Performance insights and analytics.
           </p>
         </div>
         <div className="flex gap-2">
@@ -151,15 +155,30 @@ export default function InsightsPage() {
       {(!hasData && !insights) ? (
         <div className="grid gap-6">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
             className="flex flex-col items-center justify-center py-20 text-center"
           >
-            <AudnixLogo />
-            <h3 className="text-lg font-bold mt-8 text-foreground">Analyzing Intelligence</h3>
-            <p className="text-muted-foreground font-medium max-w-xs mt-2">
-              Gathering real-time market signals and campaign data...
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
+              <BarChart3 className="h-10 w-10 text-indigo-400" />
+            </div>
+            <h3 className="text-xl font-bold text-foreground mb-2">No Insights Yet</h3>
+            <p className="text-muted-foreground font-medium max-w-sm mb-8 leading-relaxed">
+              Connect a mailbox and run a campaign to see insights.
             </p>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Link href="/dashboard/integrations">
+                <Button className="rounded-xl h-11 px-6">
+                  Connect Mailbox <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+              <Link href="/dashboard/campaigns">
+                <Button variant="outline" className="rounded-xl h-11 px-6">
+                  Create Campaign
+                </Button>
+              </Link>
+            </div>
           </motion.div>
         </div>
       ) : (

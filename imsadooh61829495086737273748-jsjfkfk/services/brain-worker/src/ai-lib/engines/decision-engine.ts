@@ -360,7 +360,7 @@ export function calculateTimingScore(lead: Lead | undefined): number {
   
   if (lead.warm) score += 10;
   
-  if (lead.status === 'open' || lead.status === 'replied') score += 10;
+  if (lead.status === 'contacted' || lead.status === 'replied') score += 10;
   else if (lead.status === 'cold') score -= 20;
   else if (lead.status === 'not_interested') score -= 30;
   

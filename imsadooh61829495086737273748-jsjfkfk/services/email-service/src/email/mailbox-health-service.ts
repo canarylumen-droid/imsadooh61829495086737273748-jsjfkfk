@@ -20,7 +20,7 @@ import { eq, and, ne, sql, lte, isNull, or, gt, inArray, count as drizzleCount }
 import { storage } from '@shared/lib/storage/storage.js';
 import { sseService } from '@services/api-gateway/src/web-sockets/sse.js';
 import { decrypt, encryptJSON, decryptToJSON } from '@shared/lib/crypto/encryption.js';
-import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { getPlanCapabilities } from "@shared/plan-utils.js";
 import { sendSystemEmail } from '@shared/lib/channels/email.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
@@ -446,7 +446,7 @@ class MailboxHealthService {
         })
         .where(eq(integrations.id, integration.id));
         
-      wsSync.notifyActivityUpdated(integration.userId, {
+      await clusterSync.notifyActivityUpdated(integration.userId, {
         type: 'mailbox_warning',
         integrationId: integration.id,
         message: `Mailbox rate limited.`
@@ -506,14 +506,14 @@ class MailboxHealthService {
       }
 
       // Push real-time notification
-      wsSync.notifyActivityUpdated(integration.userId, {
+      await clusterSync.notifyActivityUpdated(integration.userId, {
         type: 'mailbox_warning',
         integrationId: integration.id,
         message: `Autonomous recovery active for: ${errorMessage}`
       });
 
       // Phase 5 Fix: Push dedicated integration_warning payload
-      wsSync.notifyIntegrationError(integration.userId, {
+      await clusterSync.broadcast('INTEGRATION_ERROR', integration.userId, {
         integrationId: integration.id,
         provider: integration.provider,
         errorType: 'connection_jitter',
@@ -651,7 +651,7 @@ class MailboxHealthService {
               metadata: { activityType: 'plan_expired' }
             });
 
-            wsSync.notifyCampaignsUpdated(user.id);
+            await clusterSync.notifyCampaignsUpdated(user.id);
           }
         }
       }

@@ -8,6 +8,7 @@ import {
 } from '@audnix/shared';
 import { and, eq, inArray, sql, desc } from 'drizzle-orm';
 import { exclusionEngine, type OutcomeType, type DetectedBy } from './exclusion-engine.js';
+import { clusterSync } from '../realtime/redis-pubsub.js';
 
 const GHOSTED_OUTCOME = 'ghosted' as OutcomeType;
 const GHOSTED_DETECTED = 'ghost_detection' as DetectedBy;
@@ -261,6 +262,11 @@ export class OutcomeRecorder {
       await db.update(leads)
         .set({ status: 'cold', aiPaused: false, updatedAt: new Date() })
         .where(and(inArray(leads.id, ghostBatch), eq(leads.userId, userId)));
+
+      // Real-time notification for batch status change
+      clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
+      clusterSync.notifyStatsUpdated(userId).catch(() => {});
+      clusterSync.notifyLeadsUpdated(userId, { event: 'BATCH_UPDATE', leadIds: ghostBatch }).catch(() => {});
     }
 
     // Batch-insert no-response outcomes

@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { PremiumLoader } from "@/components/ui/premium-loader";
 
 export default function AdminPage() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -149,7 +150,7 @@ export default function AdminPage() {
   if (isLoading) {
     return (
       <div className="p-4 md:p-6 lg:p-8 flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <PremiumLoader text="Loading Admin Console..." />
       </div>
     );
   }

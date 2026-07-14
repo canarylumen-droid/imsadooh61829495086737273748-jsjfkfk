@@ -38,7 +38,6 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
   useEffect(() => {
     if (!isLoading) {
       if (error || !user) {
-        console.log("🔓 Not authenticated - redirecting to /auth");
         setLocation("/auth");
         return;
       }
@@ -64,7 +63,6 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
           currentPath !== "/login" &&
           currentPath !== "/signup" &&
           user.role !== "admin") {
-        console.log("🚧 Onboarding incomplete - redirecting to /onboarding");
         localStorage.removeItem('onboarding_completed');
         setLocation("/onboarding");
         return;

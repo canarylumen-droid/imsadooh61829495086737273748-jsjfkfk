@@ -1,6 +1,6 @@
 import { storage } from '@shared/lib/storage/storage.js';
 import { verifyDomainDns } from "@services/email-service/src/email/dns-verification.js";
-import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
+import { clusterSync } from "@shared/lib/realtime/redis-pubsub.js";
 import { tryDecryptToJSON } from "@shared/lib/crypto/encryption.js";
 import { quotaService } from "@shared/lib/monitoring/quota-service.js";
 
@@ -81,12 +81,12 @@ export class ReputationWorker {
                     const { calculateReputationScore } = await import("@services/email-service/src/email/reputation-monitor.js");
                     await calculateReputationScore(integration.id);
 
-                    wsSync.notifyReputationUpdate(user.id, {
+                    await clusterSync.notifyStatsUpdated(user.id, {
                       integrationId: integration.id,
                       score: result.overallScore,
                       status: result.overallStatus
                     });
-                    wsSync.notifyStatsUpdated(user.id);
+                    await clusterSync.notifyStatsUpdated(user.id);
                 } catch (innerError: any) {
                     console.error(`[ReputationWorker] Failed for integration ${integration.id}:`, innerError.message);
                     if (mailboxHealthService.isMailboxError(innerError.message)) {

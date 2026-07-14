@@ -8,8 +8,6 @@ const registerServiceWorker = async () => {
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register('/sw.js');
-      console.log('✓ Service Worker registered:', registration);
-
       // Request notification permission
       if ('Notification' in window && Notification.permission === 'default') {
         await Notification.requestPermission();
@@ -58,7 +56,7 @@ const playSentSound = () => {
       osc.stop(audioCtx.currentTime + 0.2);
     });
   } catch (err) {
-    console.log('Sent sound playback error');
+    // Sent sound playback failed
   }
 };
 
@@ -151,26 +149,30 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       query: { userId },
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 300,
-      reconnectionDelayMax: 3000,
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 5000,
       randomizationFactor: 0.25,
-      timeout: 5000,
+      timeout: 10000,
       ackTimeout: 5000,
       transports: ['websocket', 'polling'],
-      upgrade: true
+      upgrade: true,
+      forceNew: false,
     });
 
     socketRef.current = socketInstance;
 
     socketInstance.on('connect', () => {
-      console.log('✅ Socket connected');
       setSocket(socketInstance);
       setConnectionStatus('connected');
       socketInstance.emit('client:ready', { userId, timestamp: Date.now() });
     });
 
+    socketInstance.on('reconnect', () => {
+      // On reconnect, invalidate ALL queries to get fresh data
+      queryClient.invalidateQueries();
+    });
+
     socketInstance.on('disconnect', () => {
-      console.log('❌ Socket disconnected');
       setConnectionStatus('disconnected');
     });
 
@@ -188,7 +190,6 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     // SYNC STATUS
     let syncTimeout: NodeJS.Timeout | null = null;
     socketInstance.on('sync_status', (payload: any) => {
-      console.log('🔄 Sync status update:', payload);
       setIsSyncing(!!payload.syncing);
       
       if (payload.syncing) {
@@ -247,7 +248,6 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
     // PROSPECTING EVENTS
     socketInstance.on('PROSPECTING_LOG', (payload: any) => {
-      console.log('Prospecting log:', payload);
       // Let individual pages handle logs via custom event or status
     });
 
@@ -290,7 +290,6 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     // NOTIFICATIONS UPDATES
     // Backend emits 'notification' event when creating rows or updating status
     socketInstance.on('notification', (payload: any) => {
-      console.log('Notification event:', payload);
       // Invalidate notifications queries
       queryClient.invalidateQueries({ queryKey: ['/api/notifications'] });
 
@@ -316,11 +315,85 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       });
     });
 
+    // NEW MAIL — instant inbox refresh
+    socketInstance.on('new_mail', (payload: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
+      if (payload?.subject) {
+        toast({ title: '📧 New Email', description: payload.subject });
+      }
+    });
+
+    // SPAM DETECTED — immediate alert + analytics refresh
+    socketInstance.on('spam_detected', (payload: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
+      toast({
+        title: '⚠️ Spam Detected',
+        description: payload?.message || 'Email detected in spam folder',
+        variant: 'destructive',
+      });
+      showPushNotification('⚠️ Spam Detected', {
+        body: payload?.message || 'Email detected in spam folder',
+        tag: 'spam-detected',
+        data: { url: '/dashboard/deliverability' }
+      });
+    });
+
+    // MAILBOX STATUS — reputation and health refresh
+    socketInstance.on('mailbox_status', (payload: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/integrations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
+    });
+
+    // INTEGRATION REPUTATION UPDATED — per-mailbox reputation live
+    socketInstance.on('integration_reputation_updated', (payload: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    });
+
+    socketInstance.on('deliverability_updated', (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+
+      if (data?.action === 'pause') {
+        toast({
+          title: 'Deliverability Alert',
+          description: `Campaign paused — inbox rate dropped to ${Math.round((data.inboxRate || 0) * 100)}%`,
+          variant: 'destructive',
+        });
+      } else if (data?.action === 'warn') {
+        toast({
+          title: 'Deliverability Warning',
+          description: `Inbox rate at ${Math.round((data.inboxRate || 0) * 100)}% — monitoring closely`,
+        });
+      } else if (data?.type === 'seed_placement') {
+        toast({
+          title: 'Seed Placement Check',
+          description: `Seed email found in ${data.folder || 'unknown'} folder`,
+        });
+      }
+    });
+
     // CALENDAR UPDATES
     socketInstance.on('calendar_updated', (payload: any) => {
-      console.log('Calendar update:', payload);
       queryClient.invalidateQueries({ queryKey: ['/api/oauth/google-calendar/events'] });
       queryClient.invalidateQueries({ queryKey: ['/api/calendar'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/calendar/bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/calendar/ai-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/calendar/slots'] });
 
       if (payload?.event === 'INSERT' && payload.eventData?.is_ai_booked) {
         toast({
@@ -353,7 +426,6 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     });
 
     socketInstance.on('insights_updated', (payload: any) => {
-      console.log('Insights updated:', payload);
       queryClient.invalidateQueries({ queryKey: ['/api/ai/insights'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
 
@@ -437,8 +509,6 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
     // DESKTOP/PUSH NOTIFICATIONS (Manual)
     socketInstance.on('desktop_notification', (payload: any) => {
-      console.log('Desktop notification:', payload);
-
       const { title, message, url, tag } = payload;
 
       toast({

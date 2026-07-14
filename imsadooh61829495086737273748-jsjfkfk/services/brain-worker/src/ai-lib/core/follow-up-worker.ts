@@ -602,6 +602,30 @@ export class FollowUpWorker {
         sendOptions.buttonUrl = calendarLink;
       }
 
+      // ── MAILER DAEMON / BOUNCE ADDRESS SUPPRESSION ──────────────────────────
+      // Never send to Mailer Daemon, noreply, postmaster, or abuse addresses.
+      const SUPPRESSED_PATTERNS = [
+        /mailer[-_]?daemon/i,
+        /^(noreply|no-reply|postmaster|abuse|bounce|return-path|bounces\+)/i,
+        /^(mail-noreply|auto-reply|automailer|donotreply)/i,
+      ];
+      const emailLower = (lead.email || '').toLowerCase();
+      const localPart = emailLower.split('@')[0] || '';
+      if (SUPPRESSED_PATTERNS.some(p => p.test(emailLower) || p.test(localPart))) {
+        console.log(`[FOLLOW_UP_WORKER] 🚫 Suppressed follow-up to bounce/daemon address: ${lead.email}. Pausing AI.`);
+        await storage.updateLead(lead.id, {
+          aiPaused: true,
+          metadata: {
+            ...((lead.metadata as any) || {}),
+            suppressed: true,
+            suppressedAt: new Date().toISOString(),
+            suppressionReason: 'mailer_daemon_bounce_address',
+          }
+        });
+        await db.update(followUpQueue).set({ status: 'completed', processedAt: new Date() }).where(eq(followUpQueue.id, job.id));
+        return;
+      }
+
       // --- PHASE 33: DRAFT VS SEND VERIFICATION LAYER ---
       const isAutonomous = globalAutonomousMode;
       let sent = false;
@@ -814,6 +838,10 @@ export class FollowUpWorker {
     } catch (e) {
       finalMessage = result.text || '';
     }
+
+    // Sanitize AI output — strip JSON reasoning, leaked placeholders
+    const { sanitizeEmailBody } = await import('../analyzers/ai-sanitizer.js');
+    finalMessage = sanitizeEmailBody(finalMessage);
 
     // Format with brand personalization
     if (personalizationContext) {

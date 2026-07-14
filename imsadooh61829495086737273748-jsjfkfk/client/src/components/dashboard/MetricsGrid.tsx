@@ -214,7 +214,7 @@ export function useMetricsStream(userId: string, options?: {
       eventSourceRef.current.onopen = () => {
         setConnectionStatus('connected');
         reconnectAttemptsRef.current = 0;
-        console.log('[SSE] Connected to advanced metrics stream');
+
       };
 
       eventSourceRef.current.onmessage = (event) => {
@@ -237,7 +237,7 @@ export function useMetricsStream(userId: string, options?: {
           } else if (message.type === 'alert') {
             console.warn('[SSE] Alert received:', message.data);
           } else if (message.type === 'system_status') {
-            console.log('[SSE] System status:', message.data);
+
           }
 
           // Send acknowledgment if required
@@ -266,7 +266,7 @@ export function useMetricsStream(userId: string, options?: {
           setConnectionStatus('reconnecting');
           
           const delay = reconnectDelay * Math.pow(2, reconnectAttemptsRef.current - 1); // Exponential backoff
-          console.log(`[SSE] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
+
           
           setTimeout(() => {
             connect();

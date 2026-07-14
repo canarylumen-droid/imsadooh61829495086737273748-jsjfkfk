@@ -116,7 +116,7 @@ Generate a personalized cold outreach email for an HVAC company owner. Focus on 
 
       // Update lead status
       await storage.updateLead(lead.id, {
-        status: 'open',
+        status: 'contacted',
         lastMessageAt: new Date(),
         metadata: {
           ...(lead.metadata || {} as any),

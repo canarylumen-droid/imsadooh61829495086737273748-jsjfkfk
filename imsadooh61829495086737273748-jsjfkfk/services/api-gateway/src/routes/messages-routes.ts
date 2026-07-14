@@ -199,7 +199,7 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
     // Update lead last message time
     const updatedLead = await storage.updateLead(leadId as string, {
       lastMessageAt: new Date(),
-      status: lead.status === "new" ? "open" : lead.status,
+      status: lead.status === "new" ? "contacted" : lead.status,
     });
 
     if (!updatedLead) {

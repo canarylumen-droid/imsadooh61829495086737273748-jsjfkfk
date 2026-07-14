@@ -8,6 +8,7 @@ import { createInboundWorker } from './src/workers/inbound-worker.js';
 import { warmupScheduler } from './src/workers/scheduler-worker.js';
 import { imapStealth } from './src/lib/imap-stealth.js';
 import { provisionSeedsOnStartup } from './src/init/seeds.js';
+import { startWarmupInternalServer } from './src/internal-api.js';
 
 // Health check server (lazy-import so unified-mode doesn't crash if api-gateway isn't built)
 async function startHealthServer() {
@@ -95,6 +96,9 @@ export async function startWarmupService() {
 
   // Start health check endpoint for Docker / Railway
   startHealthServer();
+
+  // Start internal API for other Audnix services (deliverability service, etc.)
+  startWarmupInternalServer();
 
   console.log('✅ [Warmup Service] All systems active. Running 24/7.');
 }

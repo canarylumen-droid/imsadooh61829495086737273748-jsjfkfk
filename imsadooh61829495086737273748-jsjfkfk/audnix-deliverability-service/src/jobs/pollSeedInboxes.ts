@@ -1,0 +1,146 @@
+import { db } from '../db/client.js';
+import { seedResults } from '../db/schema.js';
+import { eq, isNull } from 'drizzle-orm';
+import { fetchSeedAccounts, type SeedAccount } from '../services/warmupServiceClient.js';
+import { checkSeedPlacement } from '../services/imapClient.js';
+import { notifyCore } from '../webhooks/notifyCore.js';
+import { notifySeedUpdate } from '../webhooks/notifyCore.js';
+import { config } from '../config.js';
+import { v4 as uuid } from 'uuid';
+
+export async function pollSeedInboxes(): Promise<void> {
+  console.log('[SeedPoll] Starting seed inbox check...');
+
+  const seeds = await fetchSeedAccounts();
+  if (seeds.length === 0) {
+    console.log('[SeedPoll] No seed accounts available — skipping');
+    return;
+  }
+
+  const pendingRows = await db
+    .select()
+    .from(seedResults)
+    .where(isNull(seedResults.folderFound));
+
+  if (pendingRows.length === 0) {
+    console.log('[SeedPoll] No pending seed results to check');
+    return;
+  }
+
+  console.log(`[SeedPoll] Checking ${pendingRows.length} pending results across ${seeds.length} seeds`);
+
+  const seedMap = new Map<string, SeedAccount>();
+  for (const s of seeds) {
+    seedMap.set(s.email.toLowerCase(), s);
+    seedMap.set(s.id, s);
+  }
+
+  let checked = 0;
+  let found = 0;
+
+  for (const row of pendingRows) {
+    const createdAt = new Date(row.createdAt).getTime();
+    const ageMinutes = (Date.now() - createdAt) / (1000 * 60);
+    if (ageMinutes > config.seedCheck.maxWaitMinutes) {
+      await db.update(seedResults)
+        .set({ folderFound: 'not_found', checkedAt: new Date().toISOString() })
+        .where(eq(seedResults.id, row.id));
+      checked++;
+      continue;
+    }
+
+    const seed = seedMap.get(row.seedAccountRef.toLowerCase()) || seedMap.get(row.seedAccountRef);
+    if (!seed) continue;
+
+    try {
+      const result = await checkSeedPlacement(seed, row.testId, 20);
+      await db.update(seedResults)
+        .set({ folderFound: result.folder, checkedAt: new Date().toISOString() })
+        .where(eq(seedResults.id, row.id));
+      notifySeedUpdate({
+        campaignId: row.campaignId,
+        testId: row.testId,
+        seedEmail: seed.email,
+        folder: result.folder,
+        provider: seed.provider,
+      }).catch(() => {});
+      checked++;
+      if (result.folder === 'inbox') found++;
+    } catch (err: any) {
+      console.warn(`[SeedPoll] Check failed for ${seed.email}: ${err.message}`);
+    }
+  }
+
+  console.log(`[SeedPoll] Checked ${checked} results, ${found} in inbox`);
+  await evaluateCampaignRates();
+}
+
+async function evaluateCampaignRates(): Promise<void> {
+  const campaignRows = await db
+    .select({ campaignId: seedResults.campaignId })
+    .from(seedResults)
+    .groupBy(seedResults.campaignId);
+
+  for (const { campaignId } of campaignRows) {
+    const rows = await db
+      .select()
+      .from(seedResults)
+      .where(eq(seedResults.campaignId, campaignId));
+
+    const totalChecked = rows.filter(r => r.folderFound !== null);
+    if (totalChecked.length === 0) continue;
+
+    const inboxCount = totalChecked.filter(r => r.folderFound === 'inbox').length;
+    const spamCount = totalChecked.filter(r => r.folderFound === 'spam').length;
+    const inboxRate = inboxCount / totalChecked.length;
+    const spamRate = spamCount / totalChecked.length;
+
+    if (inboxRate < config.thresholds.inboxRatePause) {
+      await notifyCore({ campaignId, source: 'seed', inboxRate, spamRate, action: 'pause' });
+    } else if (inboxRate < config.thresholds.inboxRateWarn) {
+      await notifyCore({ campaignId, source: 'seed', inboxRate, spamRate, action: 'warn' });
+    }
+  }
+}
+
+export async function registerSeed(campaignId: string, testId: string, sentAt: string) {
+  const id = uuid();
+  await db.insert(seedResults).values({
+    id,
+    campaignId,
+    testId,
+    seedAccountRef: '',
+    provider: 'other',
+    createdAt: sentAt || new Date().toISOString(),
+  });
+  return { id, campaignId, testId };
+}
+
+export async function getSeedStatus(campaignId: string) {
+  const rows = await db
+    .select()
+    .from(seedResults)
+    .where(eq(seedResults.campaignId, campaignId));
+
+  const total = rows.length;
+  const checked = rows.filter(r => r.folderFound !== null);
+  const inboxCount = checked.filter(r => r.folderFound === 'inbox').length;
+  const spamCount = checked.filter(r => r.folderFound === 'spam').length;
+  const promoCount = checked.filter(r => r.folderFound === 'promotions').length;
+
+  return {
+    campaignId,
+    total,
+    checked: checked.length,
+    inboxRate: checked.length > 0 ? inboxCount / checked.length : 0,
+    spamRate: checked.length > 0 ? spamCount / checked.length : 0,
+    promotionsRate: checked.length > 0 ? promoCount / checked.length : 0,
+    results: rows.map(r => ({
+      id: r.id,
+      seedAccountRef: r.seedAccountRef,
+      provider: r.provider,
+      folderFound: r.folderFound,
+      checkedAt: r.checkedAt,
+    })),
+  };
+}

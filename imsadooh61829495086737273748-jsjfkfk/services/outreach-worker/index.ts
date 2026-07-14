@@ -39,13 +39,9 @@ async function handlePriorityReply(data: any): Promise<void> {
     const messages = await storage.getMessagesByLeadId(leadId);
     const recentMessages = messages.slice(-5);
 
-    const conversationHistory = recentMessages.map((m: any) =>
-      `${m.direction.toUpperCase()}: ${m.body?.substring(0, 500)}`
-    ).join('\n\n');
-
     // Use generateAIReply from campaign-queue's processAutoReply path
-    const aiReply = await generateAIReply(lead, userId, conversationHistory, 'email');
-    const replyBody = aiReply.body || aiReply.text || '';
+    const aiReply = await generateAIReply(lead, recentMessages as any, 'email');
+    const replyBody = aiReply.text || '';
 
     if (!replyBody) {
       console.warn(`[PriorityReply] AI generated empty reply for lead ${leadId}`);

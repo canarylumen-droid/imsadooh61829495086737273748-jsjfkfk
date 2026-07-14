@@ -43,7 +43,7 @@ export class ClosingWorker {
       .where(
         and(
           gte(leads.score, 85), // Category A: any lead scoring 85+ (high-value)
-          or(eq(leads.status, 'replied'), eq(leads.status, 'open')),
+          or(eq(leads.status, 'replied'), eq(leads.status, 'contacted')),
           eq(leads.aiPaused, false),
           sql`(${leads.metadata}->>'last_closing_nudge')::boolean IS NULL`,
           lt(messages.createdAt, fortyEightHoursAgo)

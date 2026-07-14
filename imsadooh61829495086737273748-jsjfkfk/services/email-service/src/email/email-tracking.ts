@@ -9,6 +9,7 @@ export interface EmailTrackingData {
   leadId?: string;
   integrationId?: string;
   recipientEmail: string;
+  senderEmail?: string;
   subject: string;
   sentAt: Date;
   targetUrl?: string;
@@ -78,7 +79,12 @@ export async function createTrackedEmail(data: EmailTrackingData): Promise<{ tok
   // store the same value in campaign_emails.message_id and correlate events.
   // If no messageId is provided, generate a new tracking token.
   const token = data.messageId || generateTrackingToken();
-  const baseUrl = (globalThis as any).process?.env?.BASE_URL || 'https://audnixai.com';
+  // Use sender's domain for tracking pixel URL, fallback to PUBLIC_URL, then audnixai.com
+  const senderDomain = data.senderEmail?.includes('@') ? data.senderEmail.split('@')[1] : null;
+  const baseUrl = (senderDomain ? `https://${senderDomain}` : null)
+    || (globalThis as any).process?.env?.PUBLIC_URL
+    || (globalThis as any).process?.env?.BASE_URL
+    || 'https://audnixai.com';
 
   try {
     const validLeadId = isValidUUID(data.leadId) ? data.leadId : null;
@@ -189,7 +195,7 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
 
     // Real-time Notification
     if (trackingInfo) {
-      const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+      const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
 
       // Update lead metadata for filtering
       if (trackingInfo.lead_id) {
@@ -198,7 +204,7 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
             await db.execute(sql`
                   UPDATE leads 
                   SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{isOpened}', 'true'::jsonb),
-                      status = CASE WHEN status = 'new' THEN 'open'::text ELSE status END,
+                      status = CASE WHEN status IN ('new', 'open') THEN 'opened'::text ELSE status END,
                       updated_at = NOW()
                   WHERE id = ${trackingInfo.lead_id}
                 `);
@@ -243,13 +249,13 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
           }
 
           // Notify lead update to refresh counts/badges
-          wsSync.notifyLeadsUpdated(trackingInfo.user_id, {
+          await clusterSync.notifyLeadsUpdated(trackingInfo.user_id, {
             leadId: trackingInfo.lead_id,
             action: event.type === 'open' ? 'email_opened' : 'email_clicked'
           });
 
           // Notify messages update to refresh the message thread instantly
-          wsSync.notifyMessagesUpdated(trackingInfo.user_id, {
+          await clusterSync.notifyMessagesUpdated(trackingInfo.user_id, {
             leadId: trackingInfo.lead_id,
             action: event.type === 'open' ? 'email_opened' : 'email_clicked'
           });
@@ -259,7 +265,7 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
       }
 
       // Notify activity feed with integrationId for mailbox-specific updates
-      wsSync.notifyActivityUpdated(trackingInfo.user_id, {
+      await clusterSync.notifyActivityUpdated(trackingInfo.user_id, {
         type: event.type === 'open' ? 'email_opened' : 'email_clicked',
         leadId: trackingInfo.lead_id,
         integrationId: trackingInfo.integration_id,
@@ -271,19 +277,20 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
         }
       });
 
-      // Also trigger a generic notification toast
-      if (trackingInfo.lead_id) {
-        wsSync.notifyNotification(trackingInfo.user_id, {
+      // Only notify for LINK CLICKS — email opens are too frequent for individual toasts.
+      // Open events are tracked silently in the activity feed and stats.
+      if (trackingInfo.lead_id && event.type === 'click') {
+        await clusterSync.notifyNotification(trackingInfo.user_id, {
           type: 'lead_activity',
-          title: event.type === 'open' ? '⚡ Email Opened' : '🔗 Link Clicked',
-          message: `${trackingInfo.recipient_email} ${event.type === 'open' ? 'opened your email' : 'clicked a link'}: "${trackingInfo.subject}"`,
+          title: '🔗 Link Clicked',
+          message: `${trackingInfo.recipient_email} clicked a link in "${trackingInfo.subject}"`,
           leadId: trackingInfo.lead_id,
           integrationId: trackingInfo.integration_id
         });
       }
 
       // Instant Stats Refresh for Dashboard
-      wsSync.notifyStatsUpdated(trackingInfo.user_id, { 
+      await clusterSync.notifyStatsUpdated(trackingInfo.user_id, { 
         integrationId: trackingInfo.integration_id,
         type: event.type 
       });
@@ -335,8 +342,8 @@ export async function getEmailStats(userId: string, days: number = 30, integrati
   }
 }
 
-export async function injectTrackingIntoEmail(content: string, token: string): Promise<{ html: string; urls: string[] }> {
-  const baseUrl = (globalThis as any).process?.env?.BASE_URL || 'https://audnixai.com';
+export async function injectTrackingIntoEmail(content: string, token: string, senderDomain?: string): Promise<{ html: string; urls: string[] }> {
+  const baseUrl = senderDomain ? `https://${senderDomain}` : ((globalThis as any).process?.env?.BASE_URL || 'https://audnixai.com');
 
   // Check if content is HTML or plain text
   const isHtml = /<[a-z][\s\S]*>/i.test(content);

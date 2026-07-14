@@ -3,6 +3,7 @@ import { campaignLeads, leads, notifications } from "@audnix/shared";
 import { eq, and, or } from "drizzle-orm";
 import { campaignQueue } from "./campaign-queue.js";
 import { createLogger } from "@services/api-gateway/src/core/logger.js";
+import { clusterSync } from "@shared/lib/realtime/redis-pubsub.js";
 
 const log = createLogger("SEQUENCE-KILLER");
 
@@ -69,14 +70,20 @@ export async function killLeadSequence(
   // STEP 2: Set aiPaused=true - the deepest stop signal.
   // processSendBatch WHERE clause: eq(leads.aiPaused, false)
   try {
-    await withDbRetry(() =>
+    const [updated] = await withDbRetry(() =>
       db
         .update(leads)
         .set({ aiPaused: true })
         .where(and(eq(leads.id, leadId), eq(leads.userId, userId)))
+        .returning()
     );
     result.leadPaused = true;
-    log.info("SEQUENCE-KILLER: Set aiPaused=true for lead " + leadId);
+
+    // Real-time notification
+    if (updated) {
+      clusterSync.notifyLeadsUpdated(userId, { event: 'UPDATE', lead: updated }).catch(() => {});
+      clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
+    }
   } catch (e: any) {
     log.error("SEQUENCE-KILLER: aiPaused update failed", { error: e.message });
   }

@@ -386,9 +386,11 @@ export default function ObjectionsLibraryPage() {
             ) : filteredObjections.length === 0 ? (
               <Card className="bg-muted/40 border-border/40">
                 <CardContent className="py-12 text-center">
-                  <MessageSquare className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                  <div className="w-12 h-12 bg-gradient-to-br from-rose-500/20 to-pink-500/20 border border-rose-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <MessageSquare className="w-6 h-6 text-rose-400" />
+                  </div>
                   <h3 className="text-lg font-medium text-foreground/80">No objections found</h3>
-                  <p className="text-muted-foreground mt-1">Try a different search or category</p>
+                  <p className="text-muted-foreground mt-1 text-sm">Try a different search or category</p>
                 </CardContent>
               </Card>
             ) : (

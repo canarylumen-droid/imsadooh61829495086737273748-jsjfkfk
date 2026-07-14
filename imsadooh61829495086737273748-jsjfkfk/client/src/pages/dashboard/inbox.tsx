@@ -30,6 +30,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import DOMPurify from "dompurify";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { getLeadStatusDisplay } from "@/lib/lead-status";
+import { formatDateShort, formatTimeOnly } from "@/lib/format-date";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -79,6 +81,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -408,7 +411,7 @@ export default function InboxPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const simpleStatuses = ['new', 'open', 'replied', 'booked', 'converted', 'not_interested', 'cold', 'warm'];
+  const simpleStatuses = ['new', 'contacted', 'replied', 'booked', 'converted', 'not_interested', 'cold', 'warm'];
 
   const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching } = useQuery<any>({
     queryKey: ["/api/leads", {
@@ -421,15 +424,17 @@ export default function InboxPage() {
       status: simpleStatuses.includes(filterStatus) ? filterStatus : undefined,
     }],
     placeholderData: (prev: any) => prev,
-    staleTime: 15_000,
+    staleTime: 0,
     refetchOnMount: true,
+    refetchOnWindowFocus: true,
   });
 
   const { data: messagesData, isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<any>({
     queryKey: ["/api/messages", leadId, { integrationId: selectedMailboxId }],
     enabled: !!leadId,
     placeholderData: (prev: any) => prev,
-    staleTime: 10_000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
 
   const { data: channelStatus, isLoading: channelsLoading } = useQuery<any>({
@@ -459,15 +464,14 @@ export default function InboxPage() {
 
   useEffect(() => {
     if (Array.isArray(leadsData?.leads)) {
-      hasLoadedLeadsRef.current = true;
       setTypingLeadId(null);
       setAllLeads(prev => {
-        // If page is 0, replace entirely. If page > 0, append new leads (deduplicated).
         if (page === 0) return leadsData.leads;
         const existingIds = new Set(prev.map(l => l.id));
         const newOnes = leadsData.leads.filter((l: any) => !existingIds.has(l.id));
         return [...prev, ...newOnes];
       });
+      hasLoadedLeadsRef.current = true;
     }
   }, [leadsData]);
 
@@ -492,14 +496,7 @@ export default function InboxPage() {
   useEffect(() => {
     if (leadId) {
       // Clear lead-specific notifications on the server
-      apiRequest("POST", `/api/messages/${leadId}/read`).catch(console.error);
-
-      // REDUCED: Move lead from 'new' to 'open' status immediately on click
-      if (activeLead?.status === 'new') {
-        apiRequest("PATCH", `/api/leads/${leadId}`, { status: 'open' }).then(() => {
-          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-        });
-      }
+      apiRequest("POST", `/api/messages/${leadId}/read`).catch(() => {});
 
       if (activeLead?.metadata?.isUnread) {
         const { isUnread, ...restMetadata } = activeLead.metadata;
@@ -527,12 +524,16 @@ export default function InboxPage() {
   }, [leadId, activeLead?.id, activeLead?.status, queryClient]); // Added activeLead?.status to dependencies
 
   const filteredLeads = useMemo(() => {
+    // Build regex once for faster search
+    const searchRegex = searchQuery ? new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : null;
+
     return allLeads.filter((lead: any) => {
-      const matchesSearch = !searchQuery ||
-        lead.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.snippet?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesSearch = !searchRegex ||
+        searchRegex.test(lead.name || '') ||
+        searchRegex.test(lead.email || '') ||
+        searchRegex.test(lead.company || '') ||
+        searchRegex.test(lead.snippet || '') ||
+        searchRegex.test(lead.subject || '');
 
       const matchesChannel = filterChannel === "all" || lead.channel === filterChannel;
 
@@ -554,7 +555,7 @@ export default function InboxPage() {
           // Catch any tracking format: opened=true, openedCount>0, or openedAt exists
           matchesStatus = !!lead.metadata?.openedCount || !!lead.metadata?.openedAt || lead.metadata?.opened === true || lead.status === 'opened';
         } else if (filterStatus === "cold") {
-          matchesStatus = ['cold', 'new', 'open'].includes(lead.status);
+          matchesStatus = lead.status === 'cold';
         } else if (filterStatus === "booked") {
           matchesStatus = ['booked', 'converted'].includes(lead.status);
         } else {
@@ -674,7 +675,7 @@ export default function InboxPage() {
               ...lead,
               snippet: newContent,
               lastMessageAt: new Date().toISOString(),
-              status: lead.status === "new" ? "open" : lead.status,
+              status: lead.status === "new" ? "opened" : lead.status,
               metadata: { ...lead.metadata, isUnread: false },
             }
           : lead
@@ -1008,6 +1009,9 @@ export default function InboxPage() {
                     <DropdownMenuItem onClick={() => setFilterStatus("cold")} className="cursor-pointer font-medium text-muted-foreground">Cold (No Reply)</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus("booked")} className="cursor-pointer font-medium text-sky-500">Booked / Converted</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus("not_interested")} className="cursor-pointer font-medium text-destructive/70">Not Interested</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setFilterStatus("bouncy")} className="cursor-pointer font-medium text-amber-500">Bounced</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setFilterStatus("unsubscribed")} className="cursor-pointer font-medium text-red-400">Unsubscribed</DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
@@ -1188,18 +1192,23 @@ export default function InboxPage() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="max-w-xs opacity-40">
-                    <div className="w-20 h-20 rounded-2xl bg-muted/20 flex items-center justify-center mb-6 mx-auto">
-                      <InboxIcon className="h-10 w-10 text-muted-foreground/30" />
+                  <div className="max-w-xs">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-500/20 to-gray-500/20 border border-slate-500/20 flex items-center justify-center mb-6 mx-auto">
+                      <InboxIcon className="h-10 w-10 text-slate-400" />
                     </div>
-                    <p className="text-sm font-bold uppercase tracking-wider text-foreground">No conversations found</p>
-                    <p className="text-[10px] text-muted-foreground font-semibold mt-2 uppercase">
-                      {searchQuery ? "Try adjusting your search" :
+                    <p className="text-sm font-bold text-foreground/80">
+                      {searchQuery ? "No matches found" :
                         filterStatus !== 'all' ? `No ${filterStatus} conversations` :
-                          selectedMailboxId ? "No conversations for this mailbox" :
-                            showArchived ? "No archived conversations" :
-                              allLeads.length > 0 ? "Leads are unassigned — start a campaign to see them here" :
-                                "Import leads to get started"}
+                          "No conversations yet"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      {searchQuery ? "Try different keywords or check spelling" :
+                        filterStatus === 'unread' ? "All caught up — no unread messages" :
+                        filterStatus === 'opened' ? "No opened conversations yet" :
+                        filterStatus === 'archived' ? "No archived conversations" :
+                        filterStatus !== 'all' ? "Try a different filter or check back later" :
+                          allLeads.length > 0 ? "Start a campaign to see conversations here" :
+                            "Connect a mailbox to start receiving messages"}
                     </p>
                   </div>
                 )}
@@ -1276,8 +1285,8 @@ export default function InboxPage() {
                               </Button>
                               <span className="text-[10px] text-muted-foreground/50 font-medium uppercase tracking-wider shrink-0 mt-0.5">
                                 {(() => {
-                                  const d = new Date(lead.lastMessageAt || lead.createdAt);
-                                  return d.getFullYear() > 2000 ? d.toLocaleDateString([], { month: 'short', day: 'numeric' }) : '';
+                                  const d = lead.lastMessageAt || lead.createdAt;
+                                  return d ? formatDateShort(d) : '';
                                 })()}
                               </span>
                             </div>
@@ -1298,7 +1307,7 @@ export default function InboxPage() {
                               variant: "outline",
                               className: cn("text-[9px] h-4 px-1 rounded-sm border-0 uppercase font-black tracking-wider", statusStyles[lead.status as keyof typeof statusStyles] || statusStyles.cold)
                             } as any)}>
-                              {lead.status === 'hardened' ? 'Verified' : lead.status}
+                              {getLeadStatusDisplay(lead.status)}
                             </Badge>
                             {lead.metadata?.isUnread && (
                               (() => {
@@ -1371,7 +1380,7 @@ export default function InboxPage() {
                     <div className="min-w-0">
                       <h3 className="text-base font-bold line-clamp-2 break-words leading-tight mb-1" title={activeLead?.name}>{activeLead?.name}</h3>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground truncate">{activeLead?.status === 'hardened' ? 'Verified' : activeLead?.status}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground truncate">{activeLead?.status ? getLeadStatusDisplay(activeLead.status) : ''}</span>
                         <div className="h-1 w-1 rounded-full bg-muted-foreground/30" />
                         <ChannelIcon className={cn("h-3 w-3 shrink-0", !isChannelConnected(activeLead?.channel) ? "text-destructive" : "text-muted-foreground")} />
                         {!isChannelConnected(activeLead?.channel) && (
@@ -1589,7 +1598,7 @@ export default function InboxPage() {
                                 <div className="p-4 rounded-2xl bg-muted/20 border border-border/30 space-y-3">
                                   <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
                                     <span className="text-muted-foreground flex items-center gap-2"><Clock className="h-3.5 w-3.5" /> Detected</span>
-                                    <span className="text-foreground/70">{activeLead?.createdAt ? new Date(activeLead.createdAt).toLocaleDateString() : "Unknown"}</span>
+                                    <span className="text-foreground/70">{activeLead?.createdAt ? formatDateShort(activeLead.createdAt) : "Unknown"}</span>
                                   </div>
                                   <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
                                     <span className="text-muted-foreground flex items-center gap-2"><MessageSquare className="h-3.5 w-3.5" /> Threads</span>
@@ -1728,12 +1737,12 @@ export default function InboxPage() {
                       <div className={cn(
                         "max-w-[90%] md:max-w-[75%] lg:max-w-[65%] p-4 rounded-2xl text-sm shadow-sm relative group transition-all hover:shadow-md min-w-0",
                         msg.direction === 'inbound'
-                          ? "bg-white text-black rounded-tl-none border border-border/50 shadow-sm"
+                          ? "bg-card text-card-foreground rounded-tl-none border border-border/50 shadow-sm"
                           : "bg-primary text-primary-foreground rounded-tr-none shadow-md shadow-primary/20"
                       )}>
                           <div className="whitespace-pre-wrap break-words break-all leading-relaxed overflow-hidden">
                             {(() => {
-                              let displayText = msg.body || '';
+                              let displayText = msg.body || msg.content || '';
                               // Strip unresolved variables {{...}}
                               displayText = displayText.replace(/\{\{[^}]+\}\}/g, '');
                               // Strip raw HTML if detected
@@ -1766,7 +1775,7 @@ export default function InboxPage() {
                             </div>
                           )}
                           {msg.metadata?.aiGenerated && <Sparkles className="h-2.5 w-2.5" />}
-                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {formatTimeOnly(msg.createdAt)}
                           {msg.direction === 'outbound' && (
                             <div className="flex ml-1">
                               <Check className={cn("h-3 w-3", msg.openedAt ? "text-primary-foreground" : "opacity-40")} />
@@ -1938,7 +1947,7 @@ export default function InboxPage() {
             </div>
           )}
         </div>
-      </div >
+      </div>
 
       {
         activeLead && (

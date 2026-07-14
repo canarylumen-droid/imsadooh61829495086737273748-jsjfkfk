@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { getLeadStatusDisplay } from "@/lib/lead-status";
 import {
   Table,
   TableBody,
@@ -389,7 +390,7 @@ export default function AdminUsers() {
                           <p className="font-medium">{lead.name}</p>
                           <p className="text-sm text-muted-foreground">{lead.channel}</p>
                         </div>
-                        <Badge variant="outline">{lead.status}</Badge>
+                        <Badge variant="outline">{getLeadStatusDisplay(lead.status)}</Badge>
                       </div>
                     ))}
                     {userDetails.leads.length === 0 && (

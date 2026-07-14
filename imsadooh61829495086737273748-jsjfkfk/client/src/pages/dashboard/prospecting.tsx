@@ -449,7 +449,11 @@ export default function ProspectingPage() {
             ) : (
                 <Card className="bg-card/50 backdrop-blur-sm border-border/40 rounded-2xl">
                     <CardContent className="p-12 text-center">
-                        <div className="text-muted-foreground/40 text-sm font-medium">No leads yet. Start a new search to discover prospects.</div>
+                        <div className="w-12 h-12 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/20 rounded-xl flex items-center justify-center mx-auto mb-4">
+                            <Search className="h-6 w-6 text-cyan-400" />
+                        </div>
+                        <p className="text-sm font-semibold text-foreground/80">No leads yet</p>
+                        <p className="text-xs text-muted-foreground mt-1">Start a new search to discover prospects.</p>
                     </CardContent>
                 </Card>
             )}

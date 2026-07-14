@@ -70,7 +70,7 @@ class StatsService {
     const bookedLeads: number = (statusMap['booked'] || 0) + (statusMap['completed'] || 0);
     const noShowLeads: number = statusMap['no_show'] || 0;
     const repliedLeads: number = statusMap['replied'] || 0;
-    const activeLeads: number = statusMap['open'] || 0;
+    const activeLeads: number = statusMap['contacted'] || 0;
 
     // ── 2. Emails Sent ───────────────────────────────────────────────────
     const sentResult = await db

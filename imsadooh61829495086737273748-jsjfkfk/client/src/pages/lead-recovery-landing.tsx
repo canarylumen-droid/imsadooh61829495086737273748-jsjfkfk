@@ -156,11 +156,11 @@ export default function LeadRecoveryPage() {
 
           <div className="divide-y divide-[#1e1e1e]">
             {[
-              { q: 'How does it know when to re-engage?', a: 'AI monitors 150+ signals including funding announcements, job postings, and budget cycles to identify the perfect re-engagement moment.' },
-              { q: 'Will it spam our prospects?', a: 'Never. Respectful cadence rules apply. One strategic message when conditions align, not multiple follow-ups.' },
-              { q: 'What recovery rates should we expect?', a: 'Industry average is 12-18%. Audnix achieves 15-30% because timing is perfect and messaging addresses new objections.' },
-              { q: 'Can we customize recovery templates?', a: 'Yes. Upload your playbooks and AI personalizes them based on why each prospect went cold.' },
-              { q: 'Does it work with my CRM?', a: 'Completely. Salesforce, HubSpot, Pipedrive, and 50+ others. Integration is seamless.' }
+              { q: 'How does it know when to re-engage?', a: 'Monitors 150+ signals: funding, job postings, budget cycles. Re-engages when conditions align.' },
+              { q: 'Will it spam our prospects?', a: 'No. One strategic message when conditions align. Respectful cadence rules always apply.' },
+              { q: 'What recovery rates should we expect?', a: '15-30% recovery rate. Industry average is 12-18%.' },
+              { q: 'Can we customize recovery templates?', a: 'Yes. Upload playbooks. AI personalizes based on why each prospect went cold.' },
+              { q: 'Does it work with my CRM?', a: 'Yes. Salesforce, HubSpot, Pipedrive, and 50+ others. Seamless integration.' }
             ].map((faq, i) => (
               <div key={i} className="transition-all duration-500">
                 <button

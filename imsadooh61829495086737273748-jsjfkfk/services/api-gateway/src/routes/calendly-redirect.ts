@@ -3,6 +3,7 @@ import { calendlyOAuth, registerCalendlyWebhook } from '@services/api-gateway/sr
 import { storage } from '@shared/lib/storage/storage.js';
 import { encrypt, decryptState } from '@shared/lib/crypto/encryption.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { db } from '@shared/lib/db/db.js';
 import { users, calendarSettings } from '@audnix/shared';
 import { eq } from 'drizzle-orm';
@@ -116,12 +117,14 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
       }
     }, 100);
 
-    // 4. Notify frontend
+    // 4. Notify frontend — both direct and cross-process
     wsSync.notifySettingsUpdated(userId);
+    clusterSync.notifyStatsUpdated(userId).catch(() => {});
+    clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
 
     console.log('[Calendly Redirect] Success. Saving session and redirecting back to dashboard.');
     req.session.save(() => {
-      res.redirect('/dashboard/integrations?success=calendly_connected');
+      res.redirect('/dashboard/integrations?success=calendly_connected&t=' + Date.now());
     });
   } catch (error) {
     console.error('[Calendly Redirect] Fatal callback error:', error);

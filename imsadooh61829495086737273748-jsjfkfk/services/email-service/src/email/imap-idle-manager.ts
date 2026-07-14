@@ -39,13 +39,13 @@ class ImapIdleManager {
     private failureCooldowns: Map<string, number> = new Map(); // Key: integrationId -> timestamp to retry
     private syncingFolders: Set<string> = new Set(); // Key: `${integrationId}:${folderName}`
     private watchdogInterval: NodeJS.Timeout | null = null;
-    private readonly MIN_BACKOFF = 5000; // 5s initial retry
-    private readonly MAX_BACKOFF = 15 * 60 * 1000; // 15m max
-    private readonly ZOMBIE_TIMEOUT_MS = 120 * 60 * 1000; // 2 hours silence = zombie
+    private readonly MIN_BACKOFF = 1000; // 1s initial retry
+    private readonly MAX_BACKOFF = 60 * 1000; // 1m max
+    private readonly ZOMBIE_TIMEOUT_MS = 30 * 1000; // 30s silence = zombie (near-instant detection)
     // ─── Scaling: Connection throttle ────────────────────────────────────────────
     // IDLE connections hold a permanent TCP socket + buffer. At 500 mailboxes this
-    // exhausts OS file descriptors (~1024 limit). Cap at 100 IDLE; overflow polls.
-    private readonly MAX_IDLE_CONNECTIONS = 100;
+    // exhausts OS file descriptors (~1024 limit). Cap at 500 IDLE; overflow polls.
+    private readonly MAX_IDLE_CONNECTIONS = 500;
     private pollingOnlyIntegrations: Map<string, { interval: NodeJS.Timeout; integration: Integration }> = new Map();
     private discoveryRegistry = new WorkerDiscoveryRegistry('email-service');
 
@@ -68,7 +68,7 @@ class ImapIdleManager {
         if (emailSyncQueue) {
           await emailSyncQueue.add('sync-connections', { type: 'discovery' }, {
             repeat: {
-              every: 5 * 60 * 1000 // Every 5 minutes
+              every: 60 * 1000 // Every 1 minute (fast discovery)
             },
             jobId: 'discovery-cycle'
           });
@@ -114,6 +114,15 @@ class ImapIdleManager {
      */
     public getRunningStatus(): boolean {
         return this.isRunning;
+    }
+
+    public isConnectionAlive(integrationId: string): boolean {
+        const folderMap = this.connections.get(integrationId);
+        if (!folderMap || folderMap.size === 0) return false;
+        for (const imap of folderMap.values()) {
+            if (imap.state === 'authenticated' || imap.state === 'idle') return true;
+        }
+        return false;
     }
 
     public async releaseAllMailboxClaims(): Promise<void> {
@@ -394,12 +403,12 @@ class ImapIdleManager {
 
     /**
      * Polling fallback for integrations beyond MAX_IDLE_CONNECTIONS cap.
-     * Fetches the last 50 unseen messages every 5 minutes instead of holding
+     * Fetches the last 50 unseen messages every 30 seconds instead of holding
      * a permanent TCP socket. This prevents OS fd exhaustion at 500+ mailboxes.
      */
     private startPollingFallback(integrationId: string, integration: Integration): void {
-        const POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
-        console.log(`[IMAP] 📅 ${integrationId} (${integration.provider}) → polling fallback (IDLE cap ${this.MAX_IDLE_CONNECTIONS} reached). Polling every 5 min.`);
+        const POLL_INTERVAL_MS = 5 * 1000; // 5 seconds — near-instant polling for overflow connections
+        console.log(`[IMAP] 📅 ${integrationId} (${integration.provider}) → polling fallback (IDLE cap ${this.MAX_IDLE_CONNECTIONS} reached). Polling every 30s.`);
         const poll = async () => {
             try {
                 const { emailSyncQueue } = await import('@shared/lib/queues/email-sync-queue.js');
@@ -503,8 +512,8 @@ class ImapIdleManager {
                 connTimeout: 45000,
                 authTimeout: 45000,
                 keepalive: {
-                    interval: 15000,
-                    idleInterval: 30000, // Part 1: Reduced from 60s to 30s — detect stale connections faster before token expires
+                    interval: 5000,    // NOOP every 5s — near-instant dead connection detection
+                    idleInterval: 10000, // Re-IDLE every 10s — fastest possible mail push
                     forceNoop: true
                 }
             };
@@ -716,8 +725,8 @@ class ImapIdleManager {
                 },
                 tlsOptions: { rejectUnauthorized: false },
                 keepalive: {
-                    interval: 15000, // NOOP interval
-                    idleInterval: 30000, // Part 1: Reduced from 60s to 30s for faster stale detection
+                    interval: 5000,    // NOOP every 5s — instant heartbeat
+                    idleInterval: 10000, // Re-IDLE every 10s — fastest mail push
                     forceNoop: true
                 }
             };
@@ -858,24 +867,22 @@ class ImapIdleManager {
                                       }
                                     }
 
-                                    // NOOP is safer than full fetch for heartbeat unless we actually expect mail signal to be lost
-                                    // imap.noop(() => {}); 
                                     this.fetchNewEmails(integrationId, integration.userId, imap, folderName, direction);
                                 } catch (e) {
                                     console.warn('[IMAP] Error in heartbeat interval fetch for', integrationId, (e as Error)?.message);
                                 }
                             }
                         }
-                    }, 5 * 60 * 1000); // 5m is enough with imap keepalive active
+                    }, 5 * 1000); // 5s heartbeat — instant sync trigger
                     this.syncIntervals.get(integrationId)!.set(folderName, interval);
 
                     // Phase 26: Proactive Recycling (RFC 2177 Safety)
-                    // Servers MUST terminate IDLE after 30 mins. We reset at 25 mins to be 100% safe.
+                    // Servers MUST terminate IDLE after 30 mins. We reset at 29 mins to be safe.
                     if (!this.restartTimers.has(integrationId)) this.restartTimers.set(integrationId, new Map());
                     const restartTimer = setTimeout(() => {
-                        console.log(`🔄 [IMAP] Proactive 25m recycle for ${integrationId}:${folderName}`);
+                        console.log(`🔄 [IMAP] Proactive 29m recycle for ${integrationId}:${folderName}`);
                         this.forceRecycleConnection(integrationId, folderName);
-                    }, 25 * 60 * 1000);
+                    }, 29 * 60 * 1000);
                     this.restartTimers.get(integrationId)!.set(folderName, restartTimer);
                 });
             });
@@ -1074,6 +1081,53 @@ class ImapIdleManager {
                                     }
 
                                     if (isSpam) {
+                                        // REAL-TIME SPAM PLACEMENT DETECTION
+                                        // When emails arrive in the spam folder via IDLE push, immediately check
+                                        // if they match our tracked sent emails and mark placement as 'spam'.
+                                        try {
+                                            const { db } = await import('@shared/lib/db/db.js');
+                                            const { emailTracking: etSchema } = await import('@audnix/shared');
+                                            const { eq, and, gte: gteF } = await import('drizzle-orm');
+                                            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+                                            const recentSent = await db.select({
+                                                id: etSchema.id,
+                                                subject: etSchema.subject,
+                                            }).from(etSchema)
+                                            .where(and(
+                                                eq(etSchema.integrationId, integrationId),
+                                                gteF(etSchema.sentAt, oneDayAgo)
+                                            ))
+                                            .limit(100);
+
+                                            if (recentSent.length > 0) {
+                                                let spamDetected = 0;
+                                                for (const email of nonWarmupEmails) {
+                                                    const subj = (email.subject || '').toLowerCase();
+                                                    if (!subj) continue;
+                                                    const match = recentSent.find(s => s.subject && subj === s.subject.toLowerCase());
+                                                    if (match) {
+                                                        spamDetected++;
+                                                        await db.update(etSchema)
+                                                            .set({ placement: 'spam', placementUpdatedAt: new Date() })
+                                                            .where(eq(etSchema.id, match.id));
+                                                    }
+                                                }
+                                                if (spamDetected > 0) {
+                                                    console.warn(`⚡ [IMAP-Spam] Real-time: ${spamDetected} emails detected in spam folder for ${integrationId}`);
+                                                    const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+                                                    await clusterSync.notifyActivityUpdated(userId, {
+                                                        type: 'spam_detected',
+                                                        integrationId,
+                                                        spamCount: spamDetected,
+                                                        message: `${spamDetected} email(s) detected in spam folder in real-time.`
+                                                    }).catch(() => {});
+                                                }
+                                            }
+                                        } catch (spamErr) {
+                                            console.warn('[IMAP] Real-time spam detection error:', (spamErr as Error)?.message);
+                                        }
+
                                         const { triggerImmediateReputationCheck } = await import('./reputation-monitor.js');
                                         triggerImmediateReputationCheck(integrationId).catch(console.error);
                                     }
@@ -1766,7 +1820,7 @@ class ImapIdleManager {
             } catch (resErr) {
                 console.error('[WATCHDOG] Resurrection scan failed:', resErr);
             }
-        }, 60 * 1000 + Math.floor(Math.random() * 10000)); // 1-minute frequency + randomized jitter (up to 10s)
+        }, 15 * 1000 + Math.floor(Math.random() * 5000)); // 15s frequency + jitter — zombie detection near-instant
     }
 
     private forceRecycleConnection(integrationId: string, folderName: string): void {

@@ -201,8 +201,8 @@ export async function appendLinkIfNeeded(
     return aiResponse;
   }
   
-  // Ensure confidence threshold is met
-  if (linkIntent.confidence < 0.25) {
+  // Ensure confidence threshold is met (raised from 0.25 to 0.75 to avoid false positives from AI-generated copy)
+  if (linkIntent.confidence < 0.75) {
     return aiResponse;
   }
   

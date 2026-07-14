@@ -144,7 +144,7 @@ export class ReEngagementWorker {
           });
 
           await storage.updateLead(lead.id, {
-            status: 'open', // Moved back to active outreach — not 'replied' until lead actually responds
+            status: 'contacted', // Moved back to active outreach — not 'replied' until lead actually responds
             metadata: {
               ...(lead.metadata as any || {}),
               re_engagement_sent: new Date().toISOString(),

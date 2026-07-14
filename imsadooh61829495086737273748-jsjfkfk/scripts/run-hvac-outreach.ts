@@ -174,7 +174,7 @@ async function runCampaignForUser(userId: string) {
   const emailLeads = allLeads.filter(lead =>
     lead.email &&
     lead.channel === 'email' &&
-    (lead.status === 'new' || lead.status === 'open')
+    (lead.status === 'new' || lead.status === 'contacted')
   ).slice(0, 8);
 
   if (emailLeads.length === 0) {
@@ -281,7 +281,7 @@ async function runOutreachSequence(userId: string, leads: any[]) {
 
       // Update lead status
       await storage.updateLead(lead.id, {
-        status: 'open',
+        status: 'contacted',
         lastMessageAt: new Date(),
         metadata: {
           ...(lead.metadata || {}),

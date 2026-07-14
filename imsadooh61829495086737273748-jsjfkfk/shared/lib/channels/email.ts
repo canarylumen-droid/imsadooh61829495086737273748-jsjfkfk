@@ -199,7 +199,7 @@ async function sendViaKumoMTA(
       });
 
       transporter.close();
-      return { messageId: info.messageId || `<${Date.now()}@audnixai.com>` };
+      return { messageId: info.messageId || `<${Date.now()}@${config.smtp_user?.split('@')[1] || 'audnixai.com'}>` };
     } catch (err: any) {
       lastError = err;
       if (transporter) try { transporter.close(); } catch {}
@@ -270,7 +270,8 @@ async function sendCustomSMTP(
   integrationId?: string,
   inReplyTo?: string,
   references?: string,
-  replyTo?: string
+  replyTo?: string,
+  leadId?: string
 ): Promise<{ messageId: string }> {
   const nodemailer = await import('nodemailer');
   const dns = await import('dns');
@@ -324,7 +325,7 @@ async function sendCustomSMTP(
     smtpPools.set(cacheKey, createTransporterPool());
   }
 
-  const messageId = `<${import.meta.url ? (await import('crypto')).randomUUID() : Date.now() + Math.random()}@audnixai.com>`;
+  const messageId = `<${import.meta.url ? (await import('crypto')).randomUUID() : Date.now() + Math.random()}@${config.smtp_user?.split('@')[1] || 'audnixai.com'}>`;
 
   const fromAddress = config.from_name
     ? `"${config.from_name}" <${config.smtp_user}>`
@@ -385,7 +386,7 @@ async function sendCustomSMTP(
       // Attempt to save to "Sent" folder via background IMAP connection
       // We DO NOT await this because it can be slow and shouldn't block the actual email delivery
       try {
-        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId, inReplyTo, references, replyTo);
+        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId, inReplyTo, references, replyTo, leadId);
         
         const backgroundAppend = async () => {
           try {
@@ -774,6 +775,21 @@ export async function sendEmail(
     throw new Error('Email not connected. Please connect your business email in Settings.');
   }
 
+  // 1.3. Pre-send bounce check — skip if this email has hard-bounced or been marked spam
+  if (recipientEmail && !options.isPriorityReply) {
+    try {
+      const { bounceHandler } = await import('@services/email-service/src/email/bounce-handler.js');
+      const shouldSkip = await bounceHandler.shouldSkipBounceEmail(recipientEmail, userId);
+      if (shouldSkip) {
+        console.warn(`[EmailService] Skipping ${recipientEmail} — previously bounced or spam-flagged`);
+        throw new Error(`Email ${recipientEmail} is on the bounce/suppression list.`);
+      }
+    } catch (skipErr: any) {
+      if (skipErr.message.includes('suppression list')) throw skipErr;
+      // If bounce handler import fails, continue sending (non-critical)
+    }
+  }
+
   // 1.2. Infrastructure-level pause check removed for 24/7 autonomous deployment
 
   // 1.5. Check Daily Sending Limits (Gmail: 500, Custom: 2500)
@@ -833,9 +849,10 @@ export async function sendEmail(
     const { decrypt } = await import('@shared/lib/crypto/encryption.js');
     if (!integration.encryptedMeta) throw new Error('Email credentials missing');
     const credentials = JSON.parse(await decrypt(integration.encryptedMeta)) as EmailConfig;
+    const senderDomain = credentials.smtp_user?.includes('@') ? credentials.smtp_user.split('@')[1] : null;
 
     const unsubscribeUrl = options.leadId 
-      ? `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${options.leadId}`
+      ? `${senderDomain ? `https://${senderDomain}` : (process.env.PUBLIC_URL || 'https://audnixai.com')}/api/unsubscribe/${options.leadId}`
       : undefined;
 
     let emailBody = content;
@@ -845,12 +862,12 @@ export async function sendEmail(
           ? generateMeetingEmail(content, options.buttonUrl, brandColors, businessName, unsubscribeUrl, physicalAddress)
           : generateBrandedEmail(content, { text: options.buttonText, url: options.buttonUrl }, brandColors, businessName, unsubscribeUrl, physicalAddress);
       } else {
-        emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl, physicalAddress);
+        emailBody = generateBrandedEmail(content, { text: 'View Details', url: senderDomain ? `https://${senderDomain}` : 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl, physicalAddress);
       }
     }
 
     const { injectTrackingIntoEmail, createTrackedEmail } = await import('@services/email-service/src/email/email-tracking.js');
-    const trackingResult = await injectTrackingIntoEmail(emailBody, trackingId);
+    const trackingResult = await injectTrackingIntoEmail(emailBody, trackingId, senderDomain || undefined);
     emailBody = trackingResult.html;
     const firstUrl = trackingResult.urls.length > 0 ? trackingResult.urls.join(',') : null;
 
@@ -879,7 +896,8 @@ export async function sendEmail(
           integration.id,
           options.inReplyTo,
           options.references,
-          options.replyTo
+          options.replyTo,
+          options.leadId
         );
 
     // Only create tracking record AFTER successful send, so sentAt reflects
@@ -890,6 +908,7 @@ export async function sendEmail(
         leadId: options.leadId || undefined,
         integrationId: integration.id,
         recipientEmail,
+        senderEmail: credentials.smtp_user,
         subject,
         sentAt: new Date(),
         messageId: trackingId,
@@ -920,9 +939,10 @@ export async function sendEmail(
   // --- PART 2: OAuth (Gmail/Outlook) ---
   const { generateEmailSubject } = await import('./email-subject-generator.js');
   const emailSubject = subject || await generateEmailSubject(userId, content);
+  const oauthSenderDomain = integration.accountType?.includes('@') ? integration.accountType.split('@')[1] : null;
 
   const unsubscribeUrl = options.leadId 
-    ? `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${options.leadId}`
+    ? `${oauthSenderDomain ? `https://${oauthSenderDomain}` : (process.env.PUBLIC_URL || 'https://audnixai.com')}/api/unsubscribe/${options.leadId}`
     : undefined;
 
   let emailBody = content;
@@ -950,7 +970,7 @@ export async function sendEmail(
       }
       options.isHtml = true;
     } else {
-      emailBody = generateBrandedEmail(content, { text: 'View Details', url: 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl, physicalAddress);
+      emailBody = generateBrandedEmail(content, { text: 'View Details', url: oauthSenderDomain ? `https://${oauthSenderDomain}` : 'https://audnixai.com' }, brandColors, businessName, unsubscribeUrl, physicalAddress);
       options.isHtml = true;
     }
   } else {
@@ -959,7 +979,7 @@ export async function sendEmail(
 
   // Apply tracking pixel and link wrapping for OAuth providers
   const { injectTrackingIntoEmail, createTrackedEmail } = await import('@services/email-service/src/email/email-tracking.js');
-  const trackingResult = await injectTrackingIntoEmail(emailBody, trackingId);
+  const trackingResult = await injectTrackingIntoEmail(emailBody, trackingId, oauthSenderDomain || undefined);
   emailBody = trackingResult.html;
   const firstUrl = trackingResult.urls.length > 0 ? trackingResult.urls.join(',') : null;
 
@@ -1003,7 +1023,8 @@ export async function sendEmail(
         options.inReplyTo,
         options.references,
         options.threadId,
-        options.replyTo
+        options.replyTo,
+        options.leadId
       );
       if (result && result.messageId && !options.isTest) {
         // Create tracking record AFTER successful send (not before)
@@ -1012,6 +1033,7 @@ export async function sendEmail(
           leadId: options.leadId || undefined,
           integrationId: integration.id,
           recipientEmail,
+          senderEmail: credentials.email,
           subject: emailSubject,
           sentAt: new Date(),
           messageId: trackingId,
@@ -1054,6 +1076,7 @@ export async function sendEmail(
           leadId: options.leadId || undefined,
           integrationId: integration.id,
           recipientEmail,
+          senderEmail: credentials.email,
           subject: emailSubject,
           sentAt: new Date(),
           messageId: trackingId,
@@ -1104,11 +1127,12 @@ async function sendGmailMessage(
   inReplyTo?: string,
   references?: string,
   threadId?: string,
-  replyTo?: string
+  replyTo?: string,
+  leadId?: string
 ): Promise<{ messageId: string }> {
   const emailBody = body;
 
-  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml, undefined, inReplyTo, references, replyTo);
+  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml, undefined, inReplyTo, references, replyTo, leadId);
   const encodedMessage = Buffer.from(message).toString('base64url');
 
   const bodyData: any = {
@@ -1226,9 +1250,16 @@ function createMimeMessage(
   messageId?: string,
   inReplyTo?: string,
   references?: string,
-  replyTo?: string
+  replyTo?: string,
+  leadId?: string
 ): string {
   const boundary = '----=_Part_' + Date.now();
+
+  // Extract sender domain for unsubscribe URL and Message-ID
+  const senderDomain = from.includes('@') ? from.split('@')[1] : null;
+  const appUrl = senderDomain ? `https://${senderDomain}` : (process.env.PUBLIC_URL || 'https://audnixai.com');
+  const unsubscribeUrl = leadId ? `${appUrl}/api/unsubscribe/${leadId}` : '';
+  const unsubscribeEmail = `unsubscribe@${senderDomain}`;
 
   const stripHtml = (html: string): string => {
     if (!html) return '';
@@ -1255,7 +1286,12 @@ function createMimeMessage(
     `MIME-Version: 1.0`,
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     `Date: ${new Date().toUTCString()}`,
-    messageId ? `Message-ID: ${messageId}` : `Message-ID: <${Date.now()}@audnixai.com>`
+    messageId ? `Message-ID: ${messageId}` : `Message-ID: <${Date.now()}@${senderDomain}>`,
+    // List-Unsubscribe: web URL (Gmail/Outlook native button) + mailto fallback (RFC compliance)
+    leadId
+      ? `List-Unsubscribe: <${unsubscribeUrl}>, <mailto:${unsubscribeEmail}?subject=unsubscribe>`
+      : `List-Unsubscribe: <mailto:${unsubscribeEmail}?subject=unsubscribe>`,
+    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
   ];
 
   if (inReplyTo) {
@@ -1279,11 +1315,16 @@ function createMimeMessage(
   ];
 
   if (isHtml) {
+    // Wrap in proper <html> tags if not already present (fixes mail-tester HTML_MIME_NO_HTML_TAG penalty)
+    let htmlBody = body;
+    if (!/<html[\s>]/i.test(htmlBody)) {
+      htmlBody = `<html><head><meta charset="utf-8"></head><body>${htmlBody}</body></html>`;
+    }
     parts.push(
       `--${boundary}`,
       'Content-Type: text/html; charset=UTF-8',
       '',
-      body,
+      htmlBody,
       ''
     );
   }

@@ -132,10 +132,13 @@ export default function SecurityDashboard() {
                 ))
               ) : allLogs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="h-32 text-center text-muted-foreground">
+                  <TableCell colSpan={4} className="h-32 text-center">
                     <div className="flex flex-col items-center gap-2">
-                      <Shield className="w-8 h-8 opacity-20" />
-                      No threats detected yet. Sentinel is standing by.
+                      <div className="w-10 h-10 bg-gradient-to-br from-emerald-500/20 to-green-500/20 border border-emerald-500/20 rounded-xl flex items-center justify-center">
+                        <Shield className="w-5 h-5 text-emerald-400" />
+                      </div>
+                      <p className="text-sm font-semibold text-foreground/80">No threats detected</p>
+                      <p className="text-xs text-muted-foreground">Sentinel is standing by.</p>
                     </div>
                   </TableCell>
                 </TableRow>

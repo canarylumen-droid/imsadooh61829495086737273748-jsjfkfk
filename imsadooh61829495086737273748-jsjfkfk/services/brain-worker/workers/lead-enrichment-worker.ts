@@ -63,7 +63,7 @@ export class LeadEnrichmentWorker {
           and(
             or(
               eq(leads.status, 'new'),
-              eq(leads.status, 'open')
+              eq(leads.status, 'contacted')
             ),
             or(
               isNull(sql`leads.metadata->'enriched'`),

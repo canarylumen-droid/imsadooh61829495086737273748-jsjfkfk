@@ -15,7 +15,7 @@ import { Queue, Worker, type Job } from 'bullmq';
 import { createFreshConnection, getSharedRedisConnection, hasRedis } from './redis-config.js';
 import { imapIdleManager } from '@services/email-service/src/email/imap-idle-manager.js';
 import { emailSyncWorker } from '@services/email-service/src/email/email-sync-worker.js';
-import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { storage } from '@shared/lib/storage/storage.js';
 
 // ─── Queue Definition ─────────────────────────────────────────────────────────
@@ -102,7 +102,7 @@ export function startEmailSyncWorker() {
 
               if (!newMessages || newMessages.length === 0) {
                 // Even without a message, ping the UI to refresh (EXISTS may be a flag change)
-                wsSync.notifyNewMail(userId, {
+                await clusterSync.notifyNewMail(userId, {
                   integrationId,
                   refresh: true,
                   timestamp: new Date().toISOString(),
@@ -125,7 +125,7 @@ export function startEmailSyncWorker() {
                   } catch { /* non-critical */ }
                 }
                 if (ownAddr && senderAddr === ownAddr) {
-                  wsSync.notifyNewMail(userId, {
+                  await clusterSync.notifyNewMail(userId, {
                     integrationId,
                     messageId: msg.messageId,
                     subject: msg.subject,
@@ -173,7 +173,7 @@ export function startEmailSyncWorker() {
                 });
 
                 // Real-time push — immediate, no throttle (priority event)
-                wsSync.notifyNewMail(userId, {
+                await clusterSync.notifyNewMail(userId, {
                   integrationId,
                   messageId: saved?.messageId || msg.messageId,
                   subject: msg.subject,

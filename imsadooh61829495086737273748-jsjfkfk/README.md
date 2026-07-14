@@ -1,63 +1,167 @@
-# Audnix AI — Intelligent Sales Automation
+# Audnix AI — Real-Time Sales Outreach Platform
 
-Audnix is a production sales outreach platform that automates email engagement, tracks lead pipeline status, and uses AI to generate and send personalized messages on your behalf.
+Production sales outreach platform with AI-powered cold email, real-time IMAP IDLE, inbox placement tracking, spam detection, and per-mailbox domain reputation.
+
+**Live App:** https://audnixai.com
 
 ## Architecture
 
-| Layer | Technology |
-|---|---|
-| Frontend | React + Vite + TailwindCSS (Wouter routing) |
-| API | Express (api-gateway service) |
-| Queue | campaign-queue (shared lib) running inside api-gateway |
-| Outreach Worker | Separate Node service — sends emails, generates AI copy |
-| Brain Worker | Separate Node service — AI scoring, intent, objection handling |
-| Database | PostgreSQL via Drizzle ORM |
-| Realtime | Socket.IO (api-gateway process only) |
-| AI | DeepSeek via Replit AI proxy |
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Client (React + Vite + Tailwind)                           │
+│  WebSocket → instant push for spam_detected, new_mail, etc  │
+│  React Query → 2s auto-refresh + WS cache invalidation     │
+└──────────────┬──────────────────────────────────────────────┘
+               │ Socket.IO + REST
+┌──────────────▼──────────────────────────────────────────────┐
+│  API Gateway (Express) :5000                                │
+│  /api/stats/inbox-placement  /api/stats/domain-reputation   │
+│  /t/{token} stealth tracking  /c/{token} click tracking    │
+└──────────────┬──────────────────────────────────────────────┘
+               │ BullMQ + Redis
+┌──────────────▼──────────────────────────────────────────────┐
+│  Workers (14 processes)                                     │
+│  ┌─────────────┐ ┌──────────────┐ ┌────────────────────┐   │
+│  │ email-worker │ │ brain-worker │ │ outreach-worker     │   │
+│  │ IMAP 5s      │ │ AI scoring   │ │ campaign sends      │   │
+│  │ heartbeat    │ │ intent       │ │ drip engine         │   │
+│  └─────────────┘ └──────────────┘ └────────────────────┘   │
+│  ┌─────────────┐ ┌──────────────┐ ┌────────────────────┐   │
+│  │ imap-worker  │ │ social-worker│ │ billing-worker      │   │
+│  │ 30s heartbeat│ │ Instagram    │ │ Stripe/webhook      │   │
+│  │ 14min recycle│ │ sync         │ │ processing          │   │
+│  └─────────────┘ └──────────────┘ └────────────────────┘   │
+│  warmup, orchestrator, rag, vector-db, audit, infra-scaler  │
+└──────────────┬──────────────────────────────────────────────┘
+               │
+┌──────────────▼──────────────────────────────────────────────┐
+│  PostgreSQL (Drizzle ORM)  │  Redis 7 (BullMQ + PubSub)    │
+└─────────────────────────────┴───────────────────────────────┘
+```
 
-## Key Services
+## Real-Time Performance (Current)
 
-- **api-gateway** (`services/api-gateway`) — REST API, auth, campaigns, leads, socket server
-- **outreach-worker** (`services/outreach-worker`) — autonomous email sends, priority queue
-- **brain-worker** (`services/brain-worker`) — AI message generation, lead scoring, objection handling
-- **shared** (`shared/lib`) — DB, storage, queue, template vars, realtime (shared across services)
+| Component | Setting | Speed |
+|-----------|---------|-------|
+| IMAP IDLE NOOP | `keepalive.interval` | **5 seconds** |
+| IMAP IDLE Re-IDLE | `keepalive.idleInterval` | **10 seconds** |
+| Zombie detection | `ZOMBIE_TIMEOUT_MS` | **30 seconds** |
+| Watchdog sweep | `watchdogInterval` | **15 seconds** |
+| Persistent heartbeat | heartbeat inside IDLE | **5 seconds** |
+| Overflow fallback poll | `POLL_INTERVAL_MS` | **5 seconds** |
+| Email worker NOOP | `HEARTBEAT_TIME` | **30 seconds** |
+| Email worker recycle | `RECYCLE_TIME` | **14 minutes** |
+| Inbound sweep | `SWEEP_INTERVAL_MS` | **2 minutes** |
+| Spam rescue | `RESCUE_INTERVAL_MS` | **1 hour** |
+| IMAP reconnect backoff | `MIN_BACKOFF → MAX_BACKOFF` | **1s → 60s** |
+| UI data refresh | React Query `refetchInterval` | **2 seconds** |
+| WebSocket events | `spam_detected`, `new_mail` | **instant (priority)** |
+| Spam placement detection | IDLE push → DB update | **real-time** |
+
+## Services
+
+| Service | Path | Role |
+|---------|------|------|
+| **api-gateway** | `services/api-gateway` | REST API, auth, Socket.IO, campaigns, leads |
+| **email-service** | `services/email-service` | IMAP IDLE manager, spam monitor, reputation |
+| **email-worker** | `services/email-worker` | IMAP connection pool, email sync |
+| **outreach-worker** | `services/outreach-worker` | Autonomous email sends, AI copy |
+| **brain-worker** | `services/brain-worker` | AI scoring, intent, objection handling |
+| **warmup-service** | `services/warmup-service` | 24/7 email warmup |
+| **billing-service** | `services/billing-service` | Stripe, subscriptions |
+| **social-worker** | `services/social-worker` | Instagram sync |
+| **shared** | `shared/lib` | DB, queues, realtime, crypto |
 
 ## Core Features
 
-- **AI-generated cold outreach** — generates personalized emails using brand context, lead industry, and procedural memory
-- **Campaign automation** — queue-based drip engine with configurable delays and follow-up rules
-- **Inbox** — unified message thread view with inbound/outbound tracking
-- **Analytics** — open rate, response rate, bounce rate, and per-campaign stats
-- **Mailbox integration** — Gmail OAuth, Outlook OAuth, custom SMTP/IMAP
-- **Lead import** — CSV bulk import with email validation
-- **Pipeline** — deal tracking with status and revenue
+- **Real-time IMAP IDLE** — 5s NOOP heartbeat, 10s re-IDLE, instant mail push via WebSocket
+- **Spam detection** — emails in spam folder detected in real-time via IDLE push, matched against `email_tracking` by subject
+- **Inbox placement analytics** — per-mailbox inbox/spam/bounce donut charts, stacked progress bars
+- **Domain reputation per mailbox** — spam rate, bounce rate, 0-100 score, health badges
+- **AI cold outreach** — DeepSeek-powered personalized emails with brand context
+- **Campaign automation** — Queue-based drip engine with configurable delays
+- **Stealth tracking** — `/t/{token}` pixel opens, `/c/{token}` link clicks
+- **Warmup** — 24/7 P2P warmup with seed pools
+- **Lead pipeline** — Import CSV, status tracking, deal revenue
+- **Multi-provider** — Gmail OAuth, Outlook OAuth, custom SMTP/IMAP
 
-## Email Safety Rules (enforced in outreach-worker)
+## Quick Start
 
-1. **Mailer Daemon suppression** — Any lead whose email matches `mailer-daemon`, `noreply`, `postmaster`, `abuse`, `bounce`, or `donotreply` is automatically paused (`aiPaused: true`) and never contacted.
-2. **AI JSON sanitization** — `sanitizeEmailBody()` runs before every send. If the AI output contains a JSON reasoning blob (`{action, reasoning, delayDays, ...}`) the body is extracted from the `body` field only. If extraction fails, the send is blocked entirely.
-3. **Template variable resolution** — `resolveTemplateVars()` replaces `{{senderName}}`, `{{firstName}}`, `{{company}}` etc. in both subject and body before sending.
+```bash
+# Install dependencies
+npm install
 
-## Quickstart
+# Type check (needs 4GB heap)
+NODE_OPTIONS="--max-old-space-size=4096" npx tsc --noEmit
 
-1. Connect a mailbox: **Integrations** → Gmail / Outlook / Custom SMTP
-2. Upload brand guidelines (PDF) in **Settings**
-3. Import leads via **Import Leads** (CSV)
-4. Create a campaign: **Inbox** → New Campaign
-5. Engine sends automatically; monitor in **Analytics** and **Inbox**
+# Build client
+npx vite build
 
-## Admin Endpoints
+# Run tests
+npx vitest run
 
-| Endpoint | Description |
-|---|---|
-| `POST /api/admin/reset-all-users` | Deletes non-admin user accounts (keeps data) |
-| `POST /api/admin/clear-data` | Wipes all leads, mailboxes, campaigns, messages. Requires `{ confirm: "CONFIRM_CLEAR_ALL_DATA" }` |
+# Start dev server
+npm run dev
+```
 
-## Known Limitations
+## Docker
 
-- **WebSocket events are api-gateway-only** — the outreach worker runs in a separate process and cannot push real-time events directly. Clients poll for updates. A Redis pub/sub bridge would fix this.
-- **Stats update on campaign completion** — queued/pending/failed counts are now persisted on each stats update cycle.
-- **No prospecting page** — the lead-prospecting tool has been removed from the nav.
+```bash
+# Start all services
+docker compose up -d
+
+# Scale IMAP workers
+docker compose up -d --scale imap-worker=3
+```
+
+## Environment Variables
+
+Required: `DATABASE_URL`, `REDIS_URL`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`
+
+See `config.toml` for all configurable intervals.
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/stats/inbox-placement` | GET | Per-mailbox inbox/spam/bounce stats |
+| `/api/stats/domain-reputation` | GET | Per-mailbox spam rate, bounce rate, score |
+| `/api/stats/bounces/stats` | GET | Bounce statistics |
+| `/api/stats/sending/limits` | GET | SMTP rate limit status |
+| `/api/stats/warmup/status` | GET | Warmup pool status |
+| `/t/{token}` | GET | Stealth open tracking (1x1 GIF) |
+| `/c/{token}` | GET | Click tracking redirect |
+
+## WebSocket Events
+
+| Event | Priority | Description |
+|-------|----------|-------------|
+| `spam_detected` | instant | Email detected in spam folder |
+| `new_mail` | instant | New email arrived |
+| `mailbox_status` | instant | Mailbox health changed |
+| `integration_reputation_updated` | instant | Domain reputation recalculated |
+| `leads_updated` | throttled 1s | Lead data changed |
+| `sync_status` | throttled 1s | IMAP sync progress |
+
+## Tests
+
+```bash
+# Run all tests
+npx vitest run
+
+# Run specific test file
+npx vitest run tests/email-pipeline.test.ts
+```
+
+## Cleanup Done
+
+Removed ~105MB of stale files:
+- `attached_assets/` (82MB screenshots/logs)
+- `HxD-Portable/` (15MB Windows hex editor)
+- `dist/` (5MB build output in repo)
+- 25 stale markdown files at root
+- 30+ one-off scripts (tmp-*, check-*, test-*)
+- `.temp/`, `logs/`, `migrations_meta_backup/`
 
 ---
 © 2026 AUDNIX OPERATIONS CO.

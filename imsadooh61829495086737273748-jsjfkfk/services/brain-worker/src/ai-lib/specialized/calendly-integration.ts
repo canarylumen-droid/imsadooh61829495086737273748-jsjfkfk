@@ -237,7 +237,7 @@ async function handleMeetingCancelled(event: CalendlyWebhookEvent): Promise<void
       if (booking) {
         activeUserId = booking.userId;
         const [updatedLead] = await tx.update(leads)
-          .set({ status: 'open', updatedAt: new Date() })
+          .set({ status: 'contacted', updatedAt: new Date() })
           .where(and(eq(leads.userId, booking.userId), eq(leads.email, booking.attendeeEmail || '')))
           .returning();
 

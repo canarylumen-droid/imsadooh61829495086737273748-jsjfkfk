@@ -2,7 +2,7 @@ import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import { Queue, Worker, Job } from 'bullmq';
 import { createFreshConnection, hasRedis, redisConnection } from './redis-config.js';
-import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 /**
  * AUTONOMOUS LEAD DISTRIBUTION ENGINE
@@ -197,11 +197,7 @@ export const startConsumerWorker = () => {
       }
 
       // Broadcast update
-      wsSync.broadcastToUser(userId, { type: 'campaign_stats_updated', payload: {
-        campaignId,
-        pulled: pulledLeads.length,
-        integrationId
-      }});
+      await clusterSync.notifyCampaignStatsUpdated(userId, campaignId);
 
       return { status: 'processing', count: pulledLeads.length };
     },

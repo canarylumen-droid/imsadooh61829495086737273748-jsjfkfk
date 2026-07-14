@@ -159,11 +159,11 @@ export default function CreatorsPage() {
 
           <div className="divide-y divide-[#1e1e1e]">
             {[
-              { q: 'Will emails end up in spam?', a: 'No. We use industry best practices for deliverability. Smart warmup sequences, proper SPF/DKIM setup, and natural sending patterns. 98%+ inbox placement.' },
-              { q: 'How long before I see results?', a: 'First responses in 2-3 days. Full campaign momentum takes 1-2 weeks. Average 18% response rate within 30 days.' },
-              { q: 'Can I customize the email templates?', a: 'Complete control. Write your own emails or use AI templates. Set tone, messaging, CTAs. We personalize based on your data.' },
-              { q: 'What data do you need to personalize?', a: 'Company name, industry, and website are ideal. AI extracts additional insights. More data = better personalization = higher response rates.' },
-              { q: 'Can I pause or stop campaigns?', a: 'Yes, anytime. Full control over scheduling, pausing, and recipient lists. View real-time analytics and adjust on the fly.' }
+              { q: 'Will emails end up in spam?', a: 'No. SPF/DKIM, warmup sequences, and natural sending patterns ensure 98%+ inbox placement.' },
+              { q: 'How long before I see results?', a: 'First responses in 2-3 days. Average 18% response rate within 30 days.' },
+              { q: 'Can I customize the email templates?', a: 'Yes. Full control over emails, tone, messaging, and CTAs. AI personalizes based on your data.' },
+              { q: 'What data do you need to personalize?', a: 'Company name, industry, and website. AI extracts additional insights from public data.' },
+              { q: 'Can I pause or stop campaigns?', a: 'Yes, anytime. Full control over scheduling, pausing, and recipient lists.' }
             ].map((faq, i) => (
               <div key={i} className="transition-all duration-500">
                 <button

@@ -7,6 +7,7 @@ import { isValidUUID } from '../utils/validation.js';
 import crypto from 'crypto';
 import process from 'process';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { getPlanCapabilities, getActivePlanId } from '../../../shared/plan-utils.js';
 import { episodicMemory } from '../memory/episodic-memory-service.js';
 // Time Saved Benchmarks (in seconds)
@@ -40,7 +41,14 @@ function checkDatabase() {
 export class DrizzleStorage implements IStorage {
   async toggleAi(leadId: string, paused: boolean): Promise<void> {
     checkDatabase();
-    await db.update(leads).set({ aiPaused: paused, updatedAt: new Date() }).where(eq(leads.id, leadId));
+    const [updated] = await db.update(leads).set({ aiPaused: paused, updatedAt: new Date() }).where(eq(leads.id, leadId)).returning();
+    if (updated) {
+      wsSync.notifyLeadsUpdated(updated.userId, { event: 'UPDATE', lead: updated });
+      try {
+        clusterSync.notifyStatsCacheInvalidate(updated.userId);
+        clusterSync.notifyStatsUpdated(updated.userId);
+      } catch {}
+    }
   }
 
   async incrementAIFailureCount(leadId: string): Promise<boolean> {
@@ -625,6 +633,13 @@ export class DrizzleStorage implements IStorage {
       })
       .where(eq(leads.id, leadId))
       .returning();
+    if (result) {
+      wsSync.notifyLeadsUpdated(result.userId, { event: 'UPDATE', lead: result });
+      try {
+        clusterSync.notifyStatsCacheInvalidate(result.userId);
+        clusterSync.notifyStatsUpdated(result.userId);
+      } catch {}
+    }
     return result;
   }
 
@@ -756,11 +771,11 @@ export class DrizzleStorage implements IStorage {
       wsSync.notifyLeadsUpdated(result.userId, { event: 'UPDATE', lead: result });
 
       // Phase 11: Invalidate dashboard stats for Zero Refresh
+      // Use Redis pub/sub for cross-process cache invalidation
       try {
-        const { invalidateStatsCache } = await import('@services/api-gateway/src/routes/dashboard-routes.js');
-        invalidateStatsCache(result.userId);
-        wsSync.notifyStatsUpdated(result.userId);
-      } catch (err) { }
+        clusterSync.notifyStatsCacheInvalidate(result.userId);
+        clusterSync.notifyStatsUpdated(result.userId);
+      } catch (err) { console.warn('[Storage] Stats cache invalidate failed:', err); }
 
 
       // Trigger notification on status change
@@ -779,7 +794,7 @@ export class DrizzleStorage implements IStorage {
              notificationTitle = '📅 Meeting Booked!';
              notificationMessage = `${result.name} booked a meeting.`;
            }
-        } else if (updates.status === 'open') {
+        } else if (updates.status === 'contacted') {
            // Notify only if it actually opened something and wasn't just imported
            if (oldLead.status !== 'new') {
               shouldNotify = true;
@@ -904,6 +919,10 @@ export class DrizzleStorage implements IStorage {
     }
 
     wsSync.notifyLeadsUpdated(userId, { event: 'BULK_UPDATE', leadIds: ids, updates: { archived } });
+    try {
+      clusterSync.notifyStatsCacheInvalidate(userId);
+      clusterSync.notifyStatsUpdated(userId);
+    } catch {}
   }
 
   async deleteMultipleLeads(ids: string[], userId: string): Promise<void> {
@@ -918,6 +937,10 @@ export class DrizzleStorage implements IStorage {
       throw err;
     }
     wsSync.notifyLeadsUpdated(userId, { event: 'BULK_UPDATE', leadIds: ids, updates: { archived: true } });
+    try {
+      clusterSync.notifyStatsCacheInvalidate(userId);
+      clusterSync.notifyStatsUpdated(userId);
+    } catch {}
   }
 
   // getAuditLogs with options is defined below in the Audit Trail section
@@ -1081,11 +1104,11 @@ export class DrizzleStorage implements IStorage {
       wsSync.notifyLeadsUpdated(message.userId, { event: 'UPDATE', leadId: message.leadId });
 
       // Phase 11: Invalidate dashboard stats for Zero Refresh sync
+      // Use Redis pub/sub for cross-process cache invalidation
       try {
-        const { invalidateStatsCache } = await import('@services/api-gateway/src/routes/dashboard-routes.js');
-        invalidateStatsCache(message.userId);
-        wsSync.notifyStatsUpdated(message.userId);
-      } catch (err) { }
+        clusterSync.notifyStatsCacheInvalidate(message.userId);
+        clusterSync.notifyStatsUpdated(message.userId);
+      } catch (err) { console.warn('[Storage] Stats cache invalidate failed:', err); }
 
 
       // Phase 8: Emit direct thread update to dashboard for instant conversation sync
@@ -2238,7 +2261,7 @@ export class DrizzleStorage implements IStorage {
     const [mainSummary] = await db.select({
       totalLeads: sql<number>`count(*)`,
       conversions: sql<number>`count(*) filter (where status in ('converted', 'booked'))`,
-      active: sql<number>`count(*) filter (where status in ('open', 'replied', 'warm'))`,
+      active: sql<number>`count(*) filter (where status in ('contacted', 'replied', 'warm'))`,
       ghosted: sql<number>`count(*) filter (where status = 'cold')`,
       notInterested: sql<number>`count(*) filter (where status = 'not_interested')`,
       leadsReplied: sql<number>`count(*) filter (where status in ('replied', 'converted', 'booked', 'warm'))`,
@@ -2287,7 +2310,7 @@ export class DrizzleStorage implements IStorage {
 
     // Sentiment calculation
     const [sentimentSummary] = await db.select({
-      positive: sql<number>`count(*) filter (where status in ('replied', 'converted', 'booked', 'open', 'warm'))`,
+      positive: sql<number>`count(*) filter (where status in ('replied', 'converted', 'booked', 'contacted', 'warm'))`,
       negative: sql<number>`count(*) filter (where status in ('not_interested', 'cold'))`,
     })
       .from(leads)
@@ -2646,11 +2669,22 @@ export class DrizzleStorage implements IStorage {
         : eq(followUpQueue.userId, userId)
       );
 
+    // [FIX] Query bounceTracker table directly for accurate bounce counts
+    const bounceTrackerWhere = options?.integrationId
+      ? and(eq(bounceTracker.userId, userId), eq(bounceTracker.integrationId, options.integrationId))
+      : eq(bounceTracker.userId, userId);
+    const [bounceTrackerStats] = await db.select({
+      hard: sql<number>`count(*) filter (where ${bounceTracker.bounceType} = 'hard')`,
+      soft: sql<number>`count(*) filter (where ${bounceTracker.bounceType} = 'soft')`,
+      spam: sql<number>`count(*) filter (where ${bounceTracker.bounceType} = 'spam')`,
+      total: sql<number>`count(*)`,
+    }).from(bounceTracker).where(bounceTrackerWhere);
+
     // [PHASE 70] SENIOR PERFORMANCE OPTIMIZATION: Single-trip aggregation query
     const [combinedStats] = await db.select({
       totalLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere})`,
       newLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND ${leads.createdAt} >= ${sevenDaysAgo})`,
-      activeLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status IN ('open', 'replied', 'warm'))`,
+      activeLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status IN ('contacted', 'replied', 'warm'))`,
       convertedLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status IN ('converted', 'booked'))`,
       hardenedLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND verified = true)`,
       bouncyLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'bouncy')`,
@@ -2726,16 +2760,16 @@ export class DrizzleStorage implements IStorage {
       intentRate: this.calculateRate(Number(combinedStats.positiveIntents || 0), Number(combinedStats.repliedLeads || 0), 1),
       outreachVelocity: this.calculateRate(Number(combinedStats.totalSent || 0), Number(combinedStats.totalLeads || 0), 1),
       timeSaved,
-      globalBounceRate: this.calculateRate(Number(combinedStats.bouncyLeads || 0), Number(combinedStats.outreachedLeads || 0), 1) / 100,
+      globalBounceRate: this.calculateRate(Number(bounceTrackerStats?.total || 0), Number(combinedStats.outreachedLeads || 0), 1) / 100,
       health: {
         score: integration?.reputationScore ?? null,
         status: integration?.reputationScore == null ? 'unknown' : integration.reputationScore < 45 ? 'critical' : integration.reputationScore < 70 ? 'warning' : 'healthy',
         reputation: integration?.reputationScore ?? null,
         bounces: {
-          hard: Number(combinedStats.bouncyLeads || 0),
-          soft: Number(integration?.syncMetadata?.bounces?.soft || 0),
-          spam: Number(integration?.syncMetadata?.bounces?.spam || 0),
-          total: Number(combinedStats.bouncyLeads || 0) + Number(integration?.syncMetadata?.bounces?.soft || 0) + Number(integration?.syncMetadata?.bounces?.spam || 0)
+          hard: Number(bounceTrackerStats?.hard || 0),
+          soft: Number(bounceTrackerStats?.soft || 0),
+          spam: Number(bounceTrackerStats?.spam || 0),
+          total: Number(bounceTrackerStats?.total || 0)
         }
       }
     };
@@ -3139,6 +3173,13 @@ export class DrizzleStorage implements IStorage {
 
   async updateCampaignLeadStatus(campaignId: string, leadId: string, status: OutreachCampaignStatus, error?: string): Promise<void> {
     checkDatabase();
+    // Look up userId for notifications
+    const [cLead] = await db.select({ userId: leads.userId })
+      .from(campaignLeads)
+      .innerJoin(leads, eq(campaignLeads.leadId, leads.id))
+      .where(and(eq(campaignLeads.campaignId, campaignId), eq(campaignLeads.leadId, leadId)))
+      .limit(1);
+
     await db
       .update(campaignLeads)
       .set({ 
@@ -3151,6 +3192,12 @@ export class DrizzleStorage implements IStorage {
         eq(campaignLeads.campaignId, campaignId),
         eq(campaignLeads.leadId, leadId)
       ));
+
+    // Real-time notification
+    if (cLead?.userId) {
+      clusterSync.notifyCampaignStatsUpdated(cLead.userId, campaignId).catch(() => {});
+      clusterSync.notifyStatsCacheInvalidate(cLead.userId).catch(() => {});
+    }
   }
 
   async scheduleNextCampaignStep(campaignLeadId: string, nextActionAt: Date): Promise<void> {

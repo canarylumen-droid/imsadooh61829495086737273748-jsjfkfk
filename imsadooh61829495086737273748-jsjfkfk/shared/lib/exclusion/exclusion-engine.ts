@@ -8,6 +8,7 @@ import {
   messages,
 } from '@audnix/shared';
 import { and, eq, inArray, or, isNull, sql, gt, gte, desc } from 'drizzle-orm';
+import { clusterSync } from '../realtime/redis-pubsub.js';
 
 export type OutcomeType =
   | 'converted' | 'not_interested' | 'ghosted' | 'bounced'
@@ -215,13 +216,21 @@ export class LeadExclusionEngine {
     const newStatus = statusMap[outcome];
     const shouldPause = outcome === 'hard_bounce' || outcome === 'spam_complaint' || outcome === 'unsubscribed' || outcome === 'booked' || outcome === 'converted';
     if (newStatus) {
-      await db.update(leads)
+      const [updated] = await db.update(leads)
         .set({
           status: newStatus as any,
           aiPaused: shouldPause,
           updatedAt: new Date(),
         })
-        .where(and(eq(leads.id, leadId), eq(leads.userId, userId)));
+        .where(and(eq(leads.id, leadId), eq(leads.userId, userId)))
+        .returning();
+
+      // Real-time notification for status change
+      if (updated) {
+        clusterSync.notifyLeadsUpdated(userId, { event: 'UPDATE', lead: updated }).catch(() => {});
+        clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
+        clusterSync.notifyStatsUpdated(userId).catch(() => {});
+      }
     }
 
     // Invalidate cache

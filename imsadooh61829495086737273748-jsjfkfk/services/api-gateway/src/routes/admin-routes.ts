@@ -556,7 +556,7 @@ router.get("/users/:userId", async (req: express.Request, res: express.Response)
         COUNT(*) as total,
         COUNT(CASE WHEN status = 'converted' THEN 1 END) as converted,
         COUNT(CASE WHEN status = 'new' THEN 1 END) as new,
-        COUNT(CASE WHEN status = 'open' THEN 1 END) as open
+        COUNT(CASE WHEN status = 'contacted' THEN 1 END) as contacted
       FROM leads
       WHERE user_id = ${userId}
     `);
@@ -656,7 +656,7 @@ router.get("/leads", async (req: express.Request, res: express.Response): Promis
       .orderBy(desc(leads.createdAt));
 
     const conditions = [];
-    if (status) conditions.push(eq(leads.status, status as "new" | "open" | "replied" | "converted" | "not_interested" | "cold"));
+    if (status) conditions.push(eq(leads.status, status as "new" | "contacted" | "replied" | "converted" | "not_interested" | "cold"));
     if (channel) conditions.push(eq(leads.channel, channel as "instagram" | "email"));
 
     if (conditions.length > 0) {

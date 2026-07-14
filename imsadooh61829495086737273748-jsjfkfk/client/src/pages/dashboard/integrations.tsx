@@ -442,7 +442,6 @@ export default function IntegrationsPage() {
   // Real-time listener for reputation and health updates
   useEffect(() => {
     const handleStatsUpdated = () => {
-      console.log("[Realtime] Health stats updated, refetching...");
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
     };
@@ -1703,6 +1702,11 @@ export default function IntegrationsPage() {
               )}
             </Card>
 
+            {/* Per-Mailbox Domain Reputation — shows spam/bounce/inbox rates per connected mailbox */}
+            {customEmailStatus?.integrations && customEmailStatus.integrations.length > 0 && (
+              <PerMailboxReputationSection integrations={customEmailStatus.integrations} selectedMailboxId={selectedMailboxId} />
+            )}
+
             {/* Social and SaaS Integrations */}
             <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {isLoading ? (
@@ -1805,5 +1809,105 @@ export default function IntegrationsPage() {
         </TabsContent>
       </Tabs >
     </PageWrapper>
+  );
+}
+
+interface DomainReputationData {
+  reputations: Array<{
+    integrationId: string;
+    sent: number;
+    spam: number;
+    bounce: number;
+    spamRate: number;
+    bounceRate: number;
+    score: number;
+  }>;
+}
+
+function PerMailboxReputationSection({ integrations, selectedMailboxId }: {
+  integrations: Array<{ id: string; email: string; connected: boolean }>;
+  selectedMailboxId?: string;
+}) {
+  const [repDays, setRepDays] = useState<1 | 7 | 30 | 60 | 90>(30);
+  const { data } = useQuery<DomainReputationData>({
+    queryKey: ["/api/stats/domain-reputation", { integrationId: selectedMailboxId, days: repDays }],
+  });
+
+  if (!data?.reputations || data.reputations.length === 0) return null;
+
+  const displayReps = selectedMailboxId
+    ? data.reputations.filter(r => r.integrationId === selectedMailboxId)
+    : data.reputations;
+
+  if (displayReps.length === 0) return null;
+
+  return (
+    <Card className="rounded-2xl border-border/50 overflow-hidden bg-card">
+      <CardHeader className="p-6 pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-primary" /> Domain Reputation Per Mailbox
+          </CardTitle>
+          <div className="flex bg-muted/50 rounded-lg p-0.5">
+            {([1, 7, 30, 60, 90] as const).map(d => (
+              <Button key={d} variant="ghost" size="sm" onClick={() => setRepDays(d)}
+                className={cn("h-6 text-[9px] font-bold px-2", repDays === d && "bg-background shadow-sm")}>
+                {d === 1 ? '24h' : `${d}d`}
+              </Button>
+            ))}
+          </div>
+        </div>
+        <CardDescription className="text-[10px] font-semibold uppercase tracking-wider">
+          Spam rate, bounce rate, and reputation score for each connected mailbox
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="px-6 pb-6">
+        <div className="space-y-4">
+          {displayReps.map(rep => {
+            const integration = integrations.find(i => i.id === rep.integrationId);
+            const email = integration?.email || rep.integrationId.slice(0, 8) + '...';
+            const scoreColor = rep.score >= 80 ? 'text-emerald-500' : rep.score >= 50 ? 'text-amber-500' : 'text-red-500';
+            const spamColor = rep.spamRate < 5 ? 'text-emerald-500' : rep.spamRate < 15 ? 'text-amber-500' : 'text-red-500';
+            const bounceColor = rep.bounceRate < 2 ? 'text-emerald-500' : rep.bounceRate < 5 ? 'text-amber-500' : 'text-red-500';
+
+            return (
+              <div key={rep.integrationId} className="flex items-center gap-4 p-3 rounded-xl bg-muted/20 border border-border/30">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-bold text-foreground/80 truncate">{email}</span>
+                    <Badge className={cn(
+                      "text-[7px] font-black uppercase tracking-wider px-1.5 py-0 shrink-0 border",
+                      rep.score >= 70 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                      rep.score >= 40 ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
+                      "bg-red-500/10 text-red-500 border-red-500/20"
+                    )}>
+                      {rep.score >= 70 ? 'Healthy' : rep.score >= 40 ? 'At Risk' : 'Critical'}
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3 text-center">
+                    <div>
+                      <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/60">Sent</p>
+                      <p className="text-sm font-black text-foreground/80">{rep.sent}</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/60">Spam</p>
+                      <p className={cn("text-sm font-black", spamColor)}>{rep.spamRate}%</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/60">Bounce</p>
+                      <p className={cn("text-sm font-black", bounceColor)}>{rep.bounceRate}%</p>
+                    </div>
+                    <div>
+                      <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/60">Score</p>
+                      <p className={cn("text-sm font-black", scoreColor)}>{rep.score}/100</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
   );
 }

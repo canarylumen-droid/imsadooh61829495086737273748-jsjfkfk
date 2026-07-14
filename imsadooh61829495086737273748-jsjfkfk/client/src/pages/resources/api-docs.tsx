@@ -14,17 +14,17 @@ export default function ApiDocsPage() {
                     icon: Cpu,
                     content: (
                         <DocSection title="The Intelligence Core">
-                            <p>Audnix is built on a high-availability, distributed agent architecture. Our proprietary logic engine processes complex sentiment and intent signals across multi-channel environments to ensure deterministic accuracy and zero-latency decision making.</p>
+                            <p>Distributed agent architecture with deterministic decision-making and multi-tenant isolation.</p>
                             <DocGrid>
                                 <HighlightCard
                                     icon={Brain}
                                     title="Deductive Logic Layer"
-                                    desc="Our primary agent decision tree is deterministic, ensuring zero hallucinations."
+                                    desc="Deterministic decision tree with zero hallucinations."
                                 />
                                 <HighlightCard
                                     icon={Layers}
                                     title="Multi-Tenant Isolation"
-                                    desc="Strict data-siloing architecture ensures your brand data never leaks between agents."
+                                    desc="Strict data-siloing prevents brand data leaks between agents."
                                 />
                             </DocGrid>
                         </DocSection>

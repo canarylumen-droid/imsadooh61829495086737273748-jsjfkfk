@@ -157,10 +157,10 @@ export function startAutomaticCalendlySync() {
   // Run immediately on start
   syncCalendlyEventsForAllUsers();
   
-  // Then run every 10 minutes
+  // Then run every 5 minutes
   syncInterval = setInterval(() => {
     syncCalendlyEventsForAllUsers();
-  }, 10 * 60 * 1000); // 10 minutes
+  }, 5 * 60 * 1000); // 5 minutes
 }
 
 export function stopAutomaticCalendlySync() {

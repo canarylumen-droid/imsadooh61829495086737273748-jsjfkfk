@@ -238,7 +238,7 @@ router.post('/update-status', requireAuth, async (req: Request, res: Response): 
       return;
     }
 
-    const validStatuses: LeadStatus[] = ['new', 'open', 'replied', 'converted', 'not_interested', 'cold'];
+    const validStatuses: LeadStatus[] = ['new', 'contacted', 'replied', 'converted', 'not_interested', 'cold'];
     if (!validStatuses.includes(status)) {
       res.status(400).json({ error: 'Invalid status' });
       return;
@@ -604,8 +604,8 @@ router.get('/export-category', requireAuth, async (req: Request, res: Response):
         leads = await storage.getLeads({ userId, status: 'no_show', limit: 50000 });
         break;
       case 'no_reply':
-        // Leads that haven't replied — new/open/cold status
-        const statuses = ['new', 'open', 'cold'];
+        // Leads that haven't replied — new/contacted/cold status
+        const statuses = ['new', 'contacted', 'cold'];
         const allLeads = await storage.getLeads({ userId, limit: 50000 });
         leads = allLeads.filter((l: any) => statuses.includes(l.status));
         break;

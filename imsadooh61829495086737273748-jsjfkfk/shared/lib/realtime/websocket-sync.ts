@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import http from 'http';
 
-type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error' | 'new_mail' | 'mailbox_status' | 'integration_reputation_updated';
+type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error' | 'new_mail' | 'mailbox_status' | 'integration_reputation_updated' | 'deliverability_updated';
 
 interface SyncMessage {
   type: MessageType;
@@ -115,8 +115,8 @@ class WebSocketSyncServer {
     // Phase 18: Adaptive Throttling & Debouncing
     const throttleEvents = ['leads_updated', 'messages_updated', 'activity_updated', 'sync_status'];
     const debounceEvents = ['stats_updated', 'insights_updated', 'campaign_stats_updated', 'campaigns_updated'];
-    // new_mail and mailbox_status must NEVER be throttled — inbox freshness depends on it
-    const priorityEvents = ['notification', 'TERMINATE_SESSION', 'integration_error', 'SECURITY_ALERT', 'new_mail', 'mailbox_status'];
+    // new_mail, mailbox_status, spam_detected must NEVER be throttled — inbox freshness and security depend on it
+    const priorityEvents = ['notification', 'TERMINATE_SESSION', 'integration_error', 'SECURITY_ALERT', 'new_mail', 'mailbox_status', 'spam_detected', 'integration_reputation_updated'];
 
     // 1. Priority events: Always fire immediately
     if (priorityEvents.includes(event)) {
@@ -323,6 +323,22 @@ class WebSocketSyncServer {
     paused: boolean;
   }) {
     this.emitToUser(userId, 'integration_reputation_updated', {
+      ...data,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  notifyDeliverabilityUpdated(userId: string, data: {
+    type: 'seed_placement' | 'reputation' | 'campaign_alert';
+    campaignId?: string;
+    domain?: string;
+    inboxRate?: number;
+    spamRate?: number;
+    action?: 'warn' | 'pause';
+    folder?: string;
+    source?: string;
+  }) {
+    this.emitToUser(userId, 'deliverability_updated', {
       ...data,
       timestamp: new Date().toISOString()
     });

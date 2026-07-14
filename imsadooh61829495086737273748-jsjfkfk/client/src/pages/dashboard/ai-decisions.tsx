@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRealtime } from "@/hooks/use-realtime";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,7 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
 };
 
 export default function AIDecisionsPage() {
+  useRealtime();
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [decisionFilter, setDecisionFilter] = useState<string>('all');
   const queryClient = useQueryClient();
@@ -122,7 +124,7 @@ export default function AIDecisionsPage() {
             Transparency Log
           </h1>
           <p className="text-muted-foreground/80 text-base font-medium tracking-tight">
-            Complete visibility into every automated decision and interaction.
+            Every AI decision and interaction logged.
           </p>
         </div>
         <div className="flex items-center gap-3">

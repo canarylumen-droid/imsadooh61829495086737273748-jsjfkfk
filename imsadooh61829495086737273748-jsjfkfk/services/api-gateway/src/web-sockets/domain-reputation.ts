@@ -66,9 +66,9 @@ class DomainReputationMonitor extends EventEmitter {
   
   // Plan-based monitoring intervals
   private planCheckIntervals = {
-    free: 3600000, // 1 hour
-    pro: 1800000, // 30 minutes
-    enterprise: 600000, // 10 minutes
+    free: 600000, // 10 minutes
+    pro: 300000, // 5 minutes
+    enterprise: 120000, // 2 minutes
   };
   
   private monitoringInterval?: NodeJS.Timeout;

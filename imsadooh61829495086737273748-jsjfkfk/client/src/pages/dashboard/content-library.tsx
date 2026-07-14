@@ -1,6 +1,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useRealtime } from "@/hooks/use-realtime";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,7 @@ const CHANNELS = [
 ];
 
 export default function ContentLibraryPage() {
+  useRealtime();
   const { toast } = useToast();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [activeTab, setActiveTab] = useState('reply_template');
@@ -310,20 +312,26 @@ export default function ContentLibraryPage() {
                   <div className="py-20 flex justify-center"><PremiumLoader text={`Loading ${type.label}s...`} /></div>
                 ) : !filteredContent.length ? (
                   <div className="flex flex-col items-center justify-center py-20 text-center border-2 border-dashed border-border/40 rounded-xl bg-muted/5">
-                    <div className={`p-4 rounded-full ${type.bg} mb-4`}>
-                      <type.icon className={`h-8 w-8 ${type.color}`} />
-                    </div>
-                    <h3 className="text-lg font-semibold">No {type.label}s found</h3>
-                    <p className="text-muted-foreground max-w-sm mt-1 mb-6">
-                      Add templates or assets to help your AI handle leads more effectively.
-                    </p>
-                    <Button onClick={() => {
-                      setNewContent({ ...newContent, contentType: type.value });
-                      setShowCreateDialog(true);
-                    }}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create First {type.label}
-                    </Button>
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="flex flex-col items-center"
+                    >
+                      <div className={`p-4 rounded-2xl ${type.bg} mb-4`}>
+                        <type.icon className={`h-8 w-8 ${type.color}`} />
+                      </div>
+                      <h3 className="text-lg font-semibold">No {type.label}s found</h3>
+                      <p className="text-muted-foreground max-w-sm mt-1 mb-6">
+                        Add templates or assets to help your AI handle leads more effectively.
+                      </p>
+                      <Button className="rounded-xl" onClick={() => {
+                        setNewContent({ ...newContent, contentType: type.value });
+                        setShowCreateDialog(true);
+                      }}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Create First {type.label}
+                      </Button>
+                    </motion.div>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

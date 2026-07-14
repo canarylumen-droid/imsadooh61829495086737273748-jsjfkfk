@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { formatRelativeTime, formatDateFull } from "@/lib/format-date";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -110,7 +111,6 @@ export function RecentConversations() {
 
     const handleThreadUpdate = (payload: any) => {
       // payload: { leadId, userId, message }
-      console.log("[SOCKET] Thread update received:", payload.leadId);
       
       // Invalidate the leads list to show the new snippet (debounced)
       debouncedInvalidateLeads();
@@ -150,38 +150,6 @@ export function RecentConversations() {
 
   const leads = (leadsData as any)?.leads || [];
   const messages = (messagesData as any)?.messages || [];
-
-  const isValidDate = (d: Date) => d instanceof Date && !isNaN(d.getTime()) && d.getFullYear() > 2000;
-
-  const formatTime = (dateString: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    if (!isValidDate(date)) return '';
-    const now = new Date();
-    const diff = now.getTime() - date.getTime();
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const days = Math.floor(hours / 24);
-
-    if (hours < 1) return "Just now";
-    if (hours < 24) return `${hours}h ago`;
-    if (days === 1) return "Yesterday";
-    if (days < 7) return `${days}d ago`;
-    return date.toLocaleDateString();
-  };
-
-  const formatFullTime = (dateString: string) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    if (!isValidDate(date)) return '';
-    return date.toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
-  };
 
   if (selectedLead) {
     return (
@@ -274,7 +242,7 @@ export function RecentConversations() {
                       {selectedLead.channel === "outlook" && (
                         <Mail className="h-4 w-4 text-blue-600" />
                       )}
-                      <span>{formatFullTime(message.createdAt)}</span>
+                      <span>{formatDateFull(message.createdAt)}</span>
                     </div>
                   </div>
                 </motion.div>
@@ -382,7 +350,7 @@ export function RecentConversations() {
                                 {lead.name}
                               </h4>
                               <span className="text-[9px] font-black uppercase tracking-widest text-white/20">
-                                {formatTime(lead.lastMessageAt)}
+                                {formatRelativeTime(lead.lastMessageAt)}
                               </span>
                             </div>
 

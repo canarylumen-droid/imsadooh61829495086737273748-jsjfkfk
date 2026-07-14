@@ -101,7 +101,7 @@ export function ComponentShowcase() {
                 <div className="p-6 border border-border/50 rounded-xl bg-card/30 backdrop-blur-sm">
                     <VideoAutomationGrid
                         loading={loadingVideos}
-                        onSelect={(v) => console.log('Selected video:', v.title)}
+                        onSelect={(v) => {}}
                         onContextMenu={(e, video) => handleContextMenu(e, 'video', video)}
                     />
                 </div>
@@ -145,7 +145,7 @@ export function ComponentShowcase() {
             <CustomContextMenu
                 config={contextConfig}
                 onClose={closeMenu}
-                onAction={(id) => console.log('Context Action:', id)}
+                onAction={(id) => {}}
             />
 
         </div>

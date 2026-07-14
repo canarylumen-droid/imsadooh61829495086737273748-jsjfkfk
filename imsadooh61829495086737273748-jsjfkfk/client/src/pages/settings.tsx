@@ -14,7 +14,7 @@ export function SettingsPage() {
             <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent tracking-tight">
               Settings
             </h1>
-            <p className="text-muted-foreground text-lg">Manage your business integrations and outreach core.</p>
+            <p className="text-muted-foreground text-lg">Integrations and core settings.</p>
           </div>
         </div>
 
@@ -29,7 +29,7 @@ export function SettingsPage() {
               <CardHeader className="border-b border-border/40 bg-muted/20 p-8">
                 <CardTitle className="text-2xl font-bold">Global Outreach SMTP</CardTitle>
                 <CardDescription className="text-base">
-                  Configure your high-delivery mail server for automated prospecting.
+                  SMTP configuration for email outreach.
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
@@ -45,7 +45,7 @@ export function SettingsPage() {
               <CardHeader className="border-b border-border/40 bg-muted/20 p-8">
                 <CardTitle className="text-2xl font-bold">Calendly Connection</CardTitle>
                 <CardDescription className="text-base">
-                  Connect your scheduling links to automatically book calls when leads are ready.
+                  Connect scheduling links for automated booking.
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">

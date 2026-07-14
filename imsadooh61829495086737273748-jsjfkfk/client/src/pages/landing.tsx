@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Navigation } from "@/components/new-landing/navigation";
 import { HeroSection } from "@/components/new-landing/hero-section";
 import { FeaturesSection } from "@/components/new-landing/features-section";
@@ -23,31 +23,35 @@ export default function LandingPage() {
 
   useEffect(() => {
     document.title = "AUDNIX — AI Sales Agent | Cold Email & Lead Generation Platform";
-    let meta = document.querySelector('meta[name="description"]');
+    const meta = document.querySelector('meta[name="description"]');
     if (meta) meta.setAttribute("content", "AUDNIX is the autonomous AI sales platform for cold email outreach, lead generation, and objection handling. AI SDR that prospects, qualifies, and books meetings 24/7.");
   }, []);
 
-  useEffect(() => {
-    if (!userLoading && user) {
-      const lastActive = localStorage.getItem('auth_last_active');
-      if (lastActive && Date.now() - Number(lastActive) < 3600000) {
-        setLocation("/dashboard");
-      }
-    }
-  }, [user, userLoading, setLocation]);
-
-  if (!userLoading && user) {
+  const shouldRedirect = useMemo(() => {
+    if (userLoading || !user) return false;
     const lastActive = localStorage.getItem('auth_last_active');
-    if (lastActive && Date.now() - Number(lastActive) < 3600000) {
-      return (
-        <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="flex flex-col items-center gap-4">
-            <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <p className="text-muted-foreground text-sm font-medium">Entering Dashboard...</p>
-          </div>
-        </div>
-      );
+    return !!(lastActive && Date.now() - Number(lastActive) < 3600000);
+  }, [user, userLoading]);
+
+  useEffect(() => {
+    if (shouldRedirect) {
+      setLocation("/dashboard");
     }
+  }, [shouldRedirect, setLocation]);
+
+  if (userLoading) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-12 h-12 border-2 border-[#2196f3] border-t-transparent rounded-full animate-spin" />
+          <p className="text-[#7a7a7a] text-sm font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (shouldRedirect) {
+    return null;
   }
 
   return (

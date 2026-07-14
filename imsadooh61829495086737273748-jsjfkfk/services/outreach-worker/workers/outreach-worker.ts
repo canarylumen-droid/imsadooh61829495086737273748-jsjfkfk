@@ -7,10 +7,10 @@
  */
 
 import { db } from '@shared/lib/db/db.js';
-import { users, leads, messages, integrations, followUpQueue } from '@audnix/shared';
+import { users, leads, messages, integrations, followUpQueue, outreachCampaigns, campaignLeads, campaignEmails } from '@audnix/shared';
 import { eq, and, or, isNull, ne, sql } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
-import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
+import { clusterSync } from "@shared/lib/realtime/redis-pubsub.js";
 import { sendEmail } from "@shared/lib/channels/email.js";
 import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
 /**
@@ -336,7 +336,7 @@ private async checkUserHasActiveCampaigns(userId: string): Promise<boolean> {
       const followUpLeads = await db.select().from(leads).where(
         and(
           eq(leads.userId, userId),
-          or(eq(leads.status, 'open'), eq(leads.status, 'warm')),
+          or(eq(leads.status, 'contacted'), eq(leads.status, 'warm')),
           eq(leads.aiPaused, false),
           sql`${leads.lastMessageAt} < ${new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)}`
         )
@@ -572,45 +572,124 @@ Provide a 1-sentence strategic directive for the outreach generation.
     const { resolveTemplateVars } = await import('@shared/lib/template-variables.js');
     const brandContext = await getBrandContext(userId);
     const threadMessages = await storage.getMessagesByLeadId(lead.id);
-    let emailContent: { subject: string, body: string };
+    let emailContent: { subject: string, body: string } = { subject: '', body: '' };
     
-    console.log(`[AutoOutreach] 🧠 Generating Priority ${lead.priority} Context-Aware response for ${lead.email}...`);
-    
-    const aiResult = await generateContextAwareMessage(
-      lead as any,
-      brandContext,
-      [], // Testimonials
-      threadMessages
-    );
-
-    // ── SANITIZE AI OUTPUT ──────────────────────────────────────────────────
-    // Strip JSON reasoning leaks, then resolve {{senderName}} / {{firstName}} etc.
-    const integrations = await storage.getIntegrations(userId);
-    const mailbox = integrations.find((i: any) => i.id === (lead.metadata as any)?.integrationId)
-      || integrations.find((i: any) => i.connected && ['custom_email', 'gmail', 'outlook'].includes(i.provider));
-    const senderContext = {
-      name: (mailbox as any)?.name || user?.name || user?.businessName || businessName,
-      email: (mailbox as any)?.email || user?.email || '',
-    };
-
-    const rawSubject = (lead.metadata as any)?.outreach_subject || aiResult.subject || `Question for ${lead.name}`;
-    const rawBody = aiResult.message || '';
-
-    const cleanBody = sanitizeEmailBody(rawBody);
-    const cleanSubject = sanitizeEmailSubject(rawSubject) || rawSubject;
-
-    if (!cleanBody || cleanBody.trim().length < 10) {
-      console.error(`[AutoOutreach] ❌ Email body empty after AI sanitization for ${lead.email}. Skipping send to avoid sending garbage.`);
-      return;
+    // ── LOOK UP CAMPAIGN TEMPLATE FIRST ────────────────────────────────────
+    // If this lead belongs to an active campaign, use the campaign template
+    // instead of generating new AI copy. This prevents wrong/duplicate copy.
+    let campaignTemplate: any = null;
+    try {
+      const campaignLeadRows = await db.select({ 
+        campaignId: campaignLeads.campaignId,
+        currentStep: campaignLeads.currentStep
+      })
+        .from(campaignLeads)
+        .where(eq(campaignLeads.leadId, lead.id))
+        .limit(1);
+      
+      if (campaignLeadRows.length > 0) {
+        const [campaignRow] = await db.select({ template: outreachCampaigns.template, config: outreachCampaigns.config })
+          .from(outreachCampaigns)
+          .where(eq(outreachCampaigns.id, campaignLeadRows[0].campaignId))
+          .limit(1);
+        
+        if (campaignRow?.template) {
+          campaignTemplate = campaignRow.template;
+          const step = campaignLeadRows[0].currentStep;
+          const followups = (campaignTemplate as any)?.followups || [];
+          
+          if (step > 0 && followups[step - 1]) {
+            // Use follow-up template
+            const resolvedBody = followups[step - 1].body || (campaignTemplate as any)?.body || '';
+            const resolvedSubject = followups[step - 1].subject || (campaignTemplate as any)?.subject || `Following up`;
+            console.log(`[AutoOutreach] 📋 Using campaign follow-up template step ${step} for ${lead.email}`);
+            
+            // Get sender context for template vars
+            const integrationsList = await storage.getIntegrations(userId);
+            const mailboxForTemplate = integrationsList.find((i: any) => i.id === (lead.metadata as any)?.integrationId)
+              || integrationsList.find((i: any) => i.connected && ['custom_email', 'gmail', 'outlook'].includes(i.provider));
+            const senderContextForTemplate = {
+              name: (mailboxForTemplate as any)?.name || user?.name || user?.businessName || businessName,
+              email: (mailboxForTemplate as any)?.email || user?.email || '',
+            };
+            
+            emailContent = {
+              subject: resolveTemplateVars(resolvedSubject, lead, senderContextForTemplate),
+              body: resolveTemplateVars(resolvedBody, lead, senderContextForTemplate),
+            };
+            
+            if (emailContent.body && emailContent.body.trim().length > 10) {
+              // Skip AI generation below — use template directly
+              campaignTemplate = 'USED'; // marker
+            }
+          } else if (!(campaignTemplate as any)?.followups || (campaignTemplate as any).followups.length === 0) {
+            // No follow-ups defined, use initial template
+            const resolvedBody = (campaignTemplate as any)?.initial?.body || (campaignTemplate as any)?.body || '';
+            const resolvedSubject = (campaignTemplate as any)?.initial?.subject || (campaignTemplate as any)?.subject || `Question for ${lead.name}`;
+            
+            const integrationsList = await storage.getIntegrations(userId);
+            const mailboxForTemplate = integrationsList.find((i: any) => i.id === (lead.metadata as any)?.integrationId)
+              || integrationsList.find((i: any) => i.connected && ['custom_email', 'gmail', 'outlook'].includes(i.provider));
+            const senderContextForTemplate = {
+              name: (mailboxForTemplate as any)?.name || user?.name || user?.businessName || businessName,
+              email: (mailboxForTemplate as any)?.email || user?.email || '',
+            };
+            
+            emailContent = {
+              subject: resolveTemplateVars(resolvedSubject, lead, senderContextForTemplate),
+              body: resolveTemplateVars(resolvedBody, lead, senderContextForTemplate),
+            };
+            
+            if (emailContent.body && emailContent.body.trim().length > 10) {
+              campaignTemplate = 'USED';
+            }
+          }
+        }
+      }
+    } catch (templateErr) {
+      console.warn(`[AutoOutreach] Campaign template lookup failed, falling back to AI:`, templateErr);
     }
 
-    const resolvedBody = resolveTemplateVars(cleanBody, lead, senderContext);
-    const resolvedSubject = resolveTemplateVars(cleanSubject, lead, senderContext);
+    // ── AI GENERATION (only if no campaign template was used) ──────────────
+    if (campaignTemplate !== 'USED') {
+      console.log(`[AutoOutreach] 🧠 Generating Priority ${lead.priority} Context-Aware response for ${lead.email}...`);
+      
+      const aiResult = await generateContextAwareMessage(
+        lead as any,
+        brandContext,
+        [], // Testimonials
+        threadMessages
+      );
 
-    emailContent = {
-      subject: resolvedSubject,
-      body: resolvedBody,
-    };
+      // ── SANITIZE AI OUTPUT ──────────────────────────────────────────────
+      // Strip JSON reasoning leaks, then resolve {{senderName}} / {{firstName}} etc.
+      const rawSubject = (lead.metadata as any)?.outreach_subject || aiResult.subject || `Question for ${lead.name}`;
+      const rawBody = aiResult.message || '';
+
+      const cleanBody = sanitizeEmailBody(rawBody);
+      const cleanSubject = sanitizeEmailSubject(rawSubject) || rawSubject;
+
+      if (!cleanBody || cleanBody.trim().length < 10) {
+        console.error(`[AutoOutreach] ❌ Email body empty after AI sanitization for ${lead.email}. Skipping send to avoid sending garbage.`);
+        return;
+      }
+
+      const integrationsList = await storage.getIntegrations(userId);
+      const mailbox = integrationsList.find((i: any) => i.id === (lead.metadata as any)?.integrationId)
+        || integrationsList.find((i: any) => i.connected && ['custom_email', 'gmail', 'outlook'].includes(i.provider));
+      const senderContext = {
+        name: (mailbox as any)?.name || user?.name || user?.businessName || businessName,
+        email: (mailbox as any)?.email || user?.email || '',
+      };
+
+      const resolvedBody = resolveTemplateVars(cleanBody, lead, senderContext);
+      const resolvedSubject = resolveTemplateVars(cleanSubject, lead, senderContext);
+
+      emailContent = {
+        subject: resolvedSubject,
+        body: resolvedBody,
+      };
+    }
 
     // Generate a tracking token (sendEmail will create the DB record after successful send)
     const trackingToken = `auto_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -690,7 +769,7 @@ Provide a 1-sentence strategic directive for the outreach generation.
 
     // Update lead status and metadata
     await storage.updateLead(lead.id, {
-      status: 'open',
+      status: 'contacted',
       lastMessageAt: new Date(),
       metadata: {
         ...lead.metadata,
@@ -728,12 +807,11 @@ Provide a 1-sentence strategic directive for the outreach generation.
       }
     });
 
-    // Send real-time WebSocket updates
-    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'outreach_sent' });
-    wsSync.notifyMessagesUpdated(userId, { leadId: lead.id });
-    wsSync.notifyActivityUpdated(userId, { type: 'outreach_sent', leadName: lead.name });
-    // Also notify stats update for real-time dashboard KPIs
-    wsSync.broadcastToUser(userId, { type: 'stats_updated', payload: { source: 'outreach_worker' } });
+    // Send real-time WebSocket updates via Redis pub/sub (cross-process safe)
+    await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'outreach_sent' });
+    await clusterSync.notifyMessagesUpdated(userId, { leadId: lead.id });
+    await clusterSync.notifyActivityUpdated(userId, { type: 'outreach_sent', leadName: lead.name });
+    await clusterSync.notifyStatsUpdated(userId, { source: 'outreach_worker' });
   }
 }
 

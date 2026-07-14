@@ -113,7 +113,6 @@ export default function DealsPage() {
 
   const { data: revenueAnalytics } = useQuery<RevenueAnalyticsResponse>({
     queryKey: ["/api/deals/analytics", { integrationId: selectedMailboxId }],
-
     retry: false,
   });
 
@@ -222,7 +221,7 @@ export default function DealsPage() {
             Revenue & Pipeline
           </h1>
           <p className="text-muted-foreground mt-1 text-lg">
-            Monitor your sales performance and active deals.
+            Sales pipeline and deal tracking.
           </p>
         </div>
           <div className="relative group">
@@ -343,16 +342,23 @@ export default function DealsPage() {
         {deals.length === 0 ? (
           <Card className="border-dashed border-2 bg-muted/5">
             <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="h-16 w-16 bg-muted rounded-full flex items-center justify-center mb-4">
-                <Package className="h-8 w-8 text-muted-foreground/50" />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground">No deals yet</h3>
-              <p className="text-muted-foreground max-w-sm mt-1 mb-6">
-                Deals will automatically appear here when your AI converts a lead.
-              </p>
-              <Link href="/dashboard/integrations">
-                <Button>Connect Sources <ArrowRight className="ml-2 h-4 w-4" /></Button>
-              </Link>
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4 }}
+                className="flex flex-col items-center"
+              >
+                <div className="h-16 w-16 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/20 rounded-2xl flex items-center justify-center mb-4">
+                  <Package className="h-8 w-8 text-emerald-400" />
+                </div>
+                <h3 className="text-lg font-semibold text-foreground">No deals yet</h3>
+                <p className="text-muted-foreground max-w-sm mt-1 mb-6">
+                  Deals will automatically appear here when your AI converts a lead.
+                </p>
+                <Link href="/dashboard/campaigns">
+                  <Button className="rounded-xl"><ArrowRight className="mr-2 h-4 w-4" />Create Campaign</Button>
+                </Link>
+              </motion.div>
             </CardContent>
           </Card>
         ) : (

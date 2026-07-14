@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { getLeadStatusDisplay } from "@/lib/lead-status";
 import OutreachConfigModal from "@/components/outreach/OutreachConfigModal";
 import {
   Table,
@@ -94,7 +95,7 @@ export default function AdminLeads() {
         return "bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-400";
       case "new":
         return "bg-blue-100 text-blue-700 dark:bg-blue-900/20 dark:text-blue-400";
-      case "open":
+      case "contacted":
         return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400";
       case "replied":
         return "bg-purple-100 text-purple-700 dark:bg-purple-900/20 dark:text-purple-400";
@@ -140,7 +141,7 @@ export default function AdminLeads() {
                   <SelectContent>
                     <SelectItem value="">All Status</SelectItem>
                     <SelectItem value="new">New</SelectItem>
-                    <SelectItem value="open">Open</SelectItem>
+                    <SelectItem value="contacted">Contacted</SelectItem>
                     <SelectItem value="replied">Replied</SelectItem>
                     <SelectItem value="converted">Converted</SelectItem>
                     <SelectItem value="not_interested">Not Interested</SelectItem>
@@ -227,7 +228,7 @@ export default function AdminLeads() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline" className={getStatusColor(item.lead.status)}>
-                            {item.lead.status.replace("_", " ")}
+                            {getLeadStatusDisplay(item.lead.status)}
                           </Badge>
                         </TableCell>
                         <TableCell>

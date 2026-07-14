@@ -1,16 +1,20 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useRealtime } from "@/hooks/use-realtime";
 import { PageWrapper } from '@/components/ui/page-wrapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, ExternalLink, TrendingDown, TrendingUp, Minus } from 'lucide-react';
-import { useNavigate } from 'wouter';
+import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, ExternalLink, TrendingDown, TrendingUp, Minus, Target, PieChart as PieChartIcon } from 'lucide-react';
+import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
+import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 
 export default function DeliverabilityPage() {
-  const [, navigate] = useNavigate();
+  useRealtime();
+  const [, navigate] = useLocation();
 
   const { data: integrationsData, isLoading, refetch } = useQuery({
     queryKey: ['/api/integrations'],
@@ -84,6 +88,8 @@ export default function DeliverabilityPage() {
               </CardContent>
             </Card>
           </div>
+
+          <InboxPlacementPie />
 
           <div className="space-y-3">
             {mailboxes.map((mb: any, i: number) => {
@@ -162,5 +168,136 @@ export default function DeliverabilityPage() {
         </>
       )}
     </PageWrapper>
+  );
+}
+
+interface InboxPlacementData {
+  totals: { sent: number; inbox: number; spam: number; bounce: number; rate: string };
+  mailboxes: Array<{ integrationId: string; sent: number; inbox: number; spam: number; bounce: number; inboxRate: number }>;
+}
+
+function InboxPlacementPie() {
+  const [pieDays, setPieDays] = useState<1 | 7 | 30 | 60 | 90>(30);
+  const { data } = useQuery<InboxPlacementData>({
+    queryKey: ["/api/stats/inbox-placement", { days: pieDays }],
+  });
+
+  if (!data || data.totals.sent === 0) return null;
+
+  const { totals } = data;
+  const pieData = [
+    { name: 'Inbox', value: totals.inbox, color: '#10b981' },
+    { name: 'Spam', value: totals.spam, color: '#ef4444' },
+    { name: 'Bounce', value: totals.bounce, color: '#f59e0b' },
+  ].filter(d => d.value > 0);
+
+  if (pieData.length === 0) return null;
+
+  const dayLabel = pieDays === 1 ? '24h' : `${pieDays}d`;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card className="bg-card/50 border-border/40">
+        <CardHeader className="p-4 pb-0">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+              <Target className="w-4 h-4 text-emerald-500" /> Inbox Placement ({dayLabel})
+            </CardTitle>
+            <div className="flex bg-muted/50 rounded-lg p-0.5">
+              {([1, 7, 30, 60, 90] as const).map(d => (
+                <Button key={d} variant="ghost" size="sm" onClick={() => setPieDays(d)}
+                  className={cn("h-6 text-[9px] font-bold px-2", pieDays === d && "bg-background shadow-sm")}>
+                  {d === 1 ? '24h' : `${d}d`}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="h-[200px] flex items-center justify-center">
+          <div className="w-full flex items-center gap-4">
+            <ChartContainer config={{}} className="w-[50%] h-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={75}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <ChartTooltip content={<ChartTooltipContent className="bg-card border-border rounded-xl" />} />
+                </PieChart>
+              </ResponsiveContainer>
+            </ChartContainer>
+            <div className="flex flex-col gap-2 text-xs font-semibold">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                <span>Inbox: {totals.inbox} ({totals.rate})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
+                <span>Spam: {totals.spam}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+                <span>Bounce: {totals.bounce}</span>
+              </div>
+              <div className="text-muted-foreground/40 mt-1">
+                Total sent: {totals.sent}
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card/50 border-border/40">
+        <CardHeader className="p-4 pb-0">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+            <PieChartIcon className="w-4 h-4 text-blue-500" /> Per-Mailbox Inbox Rate
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 pb-4 pt-2">
+          {data.mailboxes.length === 0 ? (
+            <p className="text-xs text-muted-foreground/40 font-semibold uppercase text-center py-8">No mailbox data</p>
+          ) : (
+            <div className="space-y-3">
+              {data.mailboxes.map(mb => (
+                <div key={mb.integrationId} className="flex items-center gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold truncate text-foreground/80">{mb.integrationId.slice(0, 8)}...</span>
+                      <span className={cn(
+                        "text-[10px] font-bold",
+                        mb.inboxRate >= 90 ? "text-emerald-500" : mb.inboxRate >= 70 ? "text-amber-500" : "text-red-500"
+                      )}>{mb.inboxRate}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-muted/30 rounded-full overflow-hidden flex">
+                      {mb.sent > 0 && (
+                        <>
+                          <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(mb.inbox / mb.sent) * 100}%` }} />
+                          <div className="h-full bg-red-500 transition-all" style={{ width: `${(mb.spam / mb.sent) * 100}%` }} />
+                          <div className="h-full bg-amber-500 transition-all" style={{ width: `${(mb.bounce / mb.sent) * 100}%` }} />
+                        </>
+                      )}
+                    </div>
+                    <div className="flex gap-2 mt-0.5 text-[8px] font-semibold text-muted-foreground/40">
+                      <span>{mb.sent} sent</span>
+                      <span className="text-emerald-500/60">{mb.inbox} inbox</span>
+                      <span className="text-red-500/60">{mb.spam} spam</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

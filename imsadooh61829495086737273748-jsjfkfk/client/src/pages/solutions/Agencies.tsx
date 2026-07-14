@@ -270,9 +270,9 @@ export default function AgenciesPage() {
         <motion.div initial="initial" whileInView="animate" viewport={{ once: true }} variants={staggerContainer} className="space-y-16">
           <motion.div variants={bounceIn} className="grid md:grid-cols-3 gap-8">
             {[
-              { title: 'Multi-Tenant Infrastructure', desc: 'Serve 100+ clients from a single AI deployment. Enterprise-grade security with complete data isolation per client.' },
-              { title: 'White-Label Customization', desc: 'Your brand, your domain, your logo. Clients never know it\'s AI. Complete brand control with custom training on client playbooks.' },
-              { title: 'Revenue Share Model', desc: 'Earn 70% of all AI revenue. Scale from 10 to 100 clients without hiring. Exponential growth, linear costs.' }
+              { title: 'Multi-Tenant Infrastructure', desc: 'Serve 100+ clients from a single deployment with full data isolation.' },
+              { title: 'White-Label Customization', desc: 'Your brand, your domain. Clients never know it\'s AI-powered.' },
+              { title: 'Revenue Share Model', desc: 'Earn 70% of AI revenue. Scale clients without hiring.' }
             ].map((item, i) => (
               <motion.div key={i} variants={flipIn} className="p-8 border border-[#1e1e1e] hover:border-[#2196f3]/40 transition-colors rounded-lg">
                 <h3 className="font-display text-2xl text-[#2196f3] mb-3">{item.title}</h3>
@@ -329,11 +329,11 @@ export default function AgenciesPage() {
 
           <div className="space-y-4">
             {[
-              { q: 'How long until our clients see results?', a: 'Agencies typically deploy their first instance in 3-7 days. Client results appear within 14-21 days as the AI learns your playbooks and begins handling conversations.' },
-              { q: 'Can we white-label completely?', a: 'Yes, 100% white-label. Your domain, your branding, your support line. Clients never know it\'s powered by Audnix. You keep the revenue and the relationship.' },
-              { q: 'What\'s the revenue split?', a: 'Standard agency program: 60% first year, 50% after year one. Enterprise agencies on custom contracts can negotiate up to 70%+ based on volume commitments.' },
-              { q: 'Does it work with our existing CRM?', a: 'Yes. Audnix integrates with Salesforce, HubSpot, Pipedrive, and 50+ other platforms. Integration takes 15 minutes with our pre-built connectors.' },
-              { q: 'How do we get client support?', a: 'You get a dedicated Agency Success Manager. We also provide client onboarding templates, co-branded resources, and quarterly business reviews.' }
+              { q: 'How long until our clients see results?', a: '3-7 days to deploy, 14-21 days for client results as the AI learns your playbooks.' },
+              { q: 'Can we white-label completely?', a: 'Yes. Your domain, branding, and support line. Clients never know it\'s AI-powered.' },
+              { q: 'What\'s the revenue split?', a: '60% first year, 50% after. Enterprise agencies can negotiate 70%+ on volume.' },
+              { q: 'Does it work with our existing CRM?', a: 'Yes. Salesforce, HubSpot, Pipedrive, and 50+ platforms. 15-minute setup.' },
+              { q: 'How do we get client support?', a: 'Dedicated Agency Success Manager, onboarding templates, and quarterly reviews.' }
             ].map((faq, i) => (
               <motion.div key={i} variants={blurIn} className="border border-[#1e1e1e] rounded-lg overflow-hidden hover:border-[#2196f3]/40 transition-colors">
                 <details className="group cursor-pointer">

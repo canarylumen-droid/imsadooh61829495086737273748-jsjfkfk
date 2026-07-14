@@ -55,7 +55,7 @@ export default function PaymentSuccess() {
             <div className="absolute inset-0 rounded-full border-t-2 border-primary animate-spin"></div>
             <div className="absolute inset-0 rounded-full border-2 border-primary/10"></div>
           </div>
-          <p className="text-white/40 text-sm font-medium tracking-wide">Processing your investment...</p>
+          <p className="text-white/40 text-sm font-medium tracking-wide">Processing payment...</p>
         </div>
       </div>
     );
@@ -87,7 +87,7 @@ export default function PaymentSuccess() {
                 <p className="text-sm font-bold uppercase tracking-wider">Pending Activation</p>
               </div>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Your payment has been logged. Our intelligent verification system is finalizing your account upgrade. You'll have full access in just a few moments.
+                Payment received. Verifying and activating your account. Access will be available shortly.
               </p>
             </div>
 

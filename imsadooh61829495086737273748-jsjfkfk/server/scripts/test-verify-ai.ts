@@ -38,10 +38,10 @@ async function verify() {
     console.log(`📊 Updated Lead Score: ${updatedLead?.score}`);
     console.log(`📝 AI Reasoning: ${(updatedLead?.metadata as any)?.lastAnalysis?.reasoning}`);
 
-    if (updatedLead?.status === 'open') {
-      console.log('✨ SUCCESS: Lead status correctly updated to "open" via High Intent detection.');
+    if (updatedLead?.status === 'contacted') {
+      console.log('✨ SUCCESS: Lead status correctly updated to "contacted" via High Intent detection.');
     } else {
-      console.log('⚠️ WARNING: Lead status was not updated to "open". Check AI analysis confidence.');
+      console.log('⚠️ WARNING: Lead status was not updated to "contacted". Check AI analysis confidence.');
     }
 
     // 5. Verify Dashboard Stats

@@ -186,7 +186,7 @@ export async function autoUpdateLeadStatus(
 }
 
 export interface ConversationStatusResult {
-  status: "new" | "open" | "replied" | "booked" | "not_interested" | "cold" | "warm";
+  status: "new" | "contacted" | "replied" | "booked" | "not_interested" | "cold" | "warm";
   confidence: number;
   reason?: string;
   shouldUseVoice?: boolean;
@@ -248,12 +248,12 @@ export function detectConversationStatus(messages: Message[]): ConversationStatu
   const lastInbound = messages.filter(m => m.direction === 'inbound').pop();
   if (lastInbound) {
     const daysSince = (Date.now() - new Date(lastInbound.createdAt).getTime()) / (1000 * 60 * 60 * 24);
-    if (daysSince > 3) {
-      return { status: 'cold', confidence: 0.75, reason: 'No response in 3+ days', shouldUseVoice: false };
+    if (daysSince > 7) {
+      return { status: 'cold', confidence: 0.75, reason: 'No response in 7+ days', shouldUseVoice: false };
     }
   }
 
-  return { status: 'open', confidence: 0.6, shouldUseVoice: false };
+  return { status: 'new', confidence: 0.6, shouldUseVoice: false };
 }
 
 /**
@@ -651,7 +651,7 @@ Only reminders are authorised. Do not generate a response.`,
   };
 
   const currentStatus = lead.status || 'new';
-  const statusInstruction = STATUS_PLAYBOOK[currentStatus] || STATUS_PLAYBOOK['open'];
+  const statusInstruction = STATUS_PLAYBOOK[currentStatus] || STATUS_PLAYBOOK['contacted'];
 
   // --- GLOBAL LOCALIZATION (Phase 32) ---
   const languageCode = intent?.languageCode || 'en';
@@ -669,7 +669,7 @@ Only reminders are authorised. Do not generate a response.`,
   const regionalInstruction = getRegionalInstruction(intent?.detectedCountry || null);
 
   const inboundCount = conversationHistory.filter(m => m.direction === 'inbound').length;
-  const shouldPushBooking = (currentStatus === 'open' && inboundCount >= 2) || currentStatus === 'replied' || currentStatus === 'warm';
+  const shouldPushBooking = (currentStatus === 'contacted' && inboundCount >= 2) || currentStatus === 'replied' || currentStatus === 'warm';
 
   const systemPrompt = `## IDENTITY
 You are an elite B2B sales closer and outreach expert. You write like a real human — sharp, confident, and impossible to ignore. Your job is to turn conversations into booked meetings, demo calls, or signed deals. You adapt your style when the user provides specific brand guidelines below.

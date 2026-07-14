@@ -23,7 +23,7 @@ async function test() {
         userId: user.id,
         email: testEmail,
         name: 'Test Calendly Lead',
-        status: 'open',
+        status: 'contacted',
         channel: 'email'
       });
   } catch (e) {

@@ -57,6 +57,7 @@ import { registerAnalyticsRoutes } from "./analytics-routes.js";
 import revenueWebhook from "../webhooks/revenue-webhook.js";
 import unsubscribeRoutes from "./unsubscribe-routes.js";
 import fblWebhookRoutes from "./fbl-webhook.js";
+import deliverabilityWebhookRoutes from './deliverability-webhook.js';
 import { sseRouter } from "./sse-routes";
 
 export async function registerRoutes(app: Express): Promise<http.Server> {
@@ -147,6 +148,7 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/voice", voiceRoutes);
   app.use("/api/webhook", webhookRouter);
   app.use("/api/webhooks/fbl", fblWebhookRoutes);  // Specific FIRST
+  app.use('/api/webhooks/deliverability', deliverabilityWebhookRoutes);
   app.use("/api/webhooks", revenueWebhook);        // Generic AFTER
   app.use("/webhook", webhookMetaRoutes); // Root-level Meta webhook
 

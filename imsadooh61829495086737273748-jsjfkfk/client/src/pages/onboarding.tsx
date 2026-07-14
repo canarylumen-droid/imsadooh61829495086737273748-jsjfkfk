@@ -50,8 +50,8 @@ export function OnboardingPage() {
           <div className="absolute inset-0 rounded-full border-2 border-primary/10"></div>
         </div>
         <div className="space-y-2">
-          <h2 className="text-xl font-bold text-white tracking-tight">Initializing Workspace</h2>
-          <p className="text-white/40 text-sm">Preparing your custom sales ecosystem...</p>
+          <h2 className="text-xl font-bold text-white tracking-tight">Loading</h2>
+          <p className="text-white/40 text-sm">Setting up your workspace...</p>
         </div>
       </div>
     </div>

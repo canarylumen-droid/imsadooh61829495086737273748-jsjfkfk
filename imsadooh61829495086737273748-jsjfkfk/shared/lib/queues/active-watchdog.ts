@@ -1,6 +1,6 @@
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
-import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 /**
  * THE "SYSTEM AUDIT" WATCHDOG DAEMON
@@ -40,11 +40,11 @@ export function startActiveWatchdog() {
         // Notify affected users
         const affectedUsers = new Set(released.rows.map((r: any) => r.user_id));
         affectedUsers.forEach((userId: any) => {
-          wsSync.broadcastToUser(userId as string, { type: 'watchdog_alert', payload: {
+          clusterSync.broadcast('WATCHDOG_ALERT', userId as string, {
             type: 'stuck_leads_released',
             count: released.rows.filter((r: any) => r.user_id === userId).length,
             message: 'Stuck leads have been auto-released and re-queued.'
-          }});
+          });
         });
       }
 

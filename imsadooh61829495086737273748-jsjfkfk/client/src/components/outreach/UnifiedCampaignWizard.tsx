@@ -80,6 +80,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [mailboxMaxMultipliers, setMailboxMaxMultipliers] = useState<Record<string, number>>({});
   const [defaultPerMailbox, setDefaultPerMailbox] = useState(35);
   const [useDefaultForAll, setUseDefaultForAll] = useState(true);
+  const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([]);
 
   // When default changes or selection changes, apply same limit to ALL mailboxes
   useEffect(() => {
@@ -99,7 +100,6 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [aiAutonomousMode, setAiAutonomousMode] = useState(true);
   const [aiAdjustCopy, setAiAdjustCopy] = useState(false);
   const [threadFollowUp, setThreadFollowUp] = useState(true);
-  const [selectedMailboxes, setSelectedMailboxes] = useState<string[]>([]);
   const [replyTo, setReplyTo] = useState("");
   
   const [subject, setSubject] = useState("");

@@ -83,16 +83,16 @@ export default function NicheVaultPage() {
                     content: (
                         <DocSection title="Intelligent Specialization">
                             <p className="mb-8">
-                                How do Audnix agents become experts? Every cluster undergoes a rigorous <strong>Knowledge Ingestion Cycle</strong> before it is deployed to the global network. We don't just feed the AI data; we architect understanding.
+                                Every cluster undergoes a Knowledge Ingestion Cycle before deployment.
                             </p>
                             <div className="space-y-6">
                                 <div className="p-8 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-4">
                                     <h4 className="text-xl font-black uppercase tracking-tight text-white mb-2">Stage 1: Knowledge Ingestion</h4>
-                                    <p className="text-sm text-white/40 leading-relaxed font-medium">We ingest 10,000+ real-world case studies, whitepapers, and customer support transcripts for each niche to map the exact vocabulary and pain points used by decision makers.</p>
+                                    <p className="text-sm text-white/40 leading-relaxed font-medium">10,000+ case studies, whitepapers, and support transcripts per niche to map vocabulary and pain points.</p>
                                 </div>
                                 <div className="p-8 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-4">
                                     <h4 className="text-xl font-black uppercase tracking-tight text-white mb-2">Stage 2: Sentiment Mapping</h4>
-                                    <p className="text-sm text-white/40 leading-relaxed font-medium">Our models identify 'Sentiment Triggers'—specific phrasing that indicates a prospect is frustrated, skeptical, or ready to buy. This ensures our agents never sound like generic bots.</p>
+                                    <p className="text-sm text-white/40 leading-relaxed font-medium">Identifies phrasing that signals frustration, skepticism, or buying intent.</p>
                                 </div>
                             </div>
                         </DocSection>

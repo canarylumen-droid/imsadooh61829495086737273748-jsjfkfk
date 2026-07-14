@@ -21,7 +21,7 @@ import { getBrandContext } from "@services/brain-worker/src/ai-lib/context/brand
 import { generateExpertOutreach } from "@services/brain-worker/src/ai-lib/core/conversation-ai.js";
 import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
 import { MODELS } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
-import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
+import { clusterSync } from "@shared/lib/realtime/redis-pubsub.js";
 import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
 import { AuditTrailService } from "@shared/lib/monitoring/audit-trail-service.js";
 import { sendInstagramOutreach } from "@shared/lib/providers/instagram.js";
@@ -273,7 +273,7 @@ export class OutreachEngine {
 
     } finally {
       // Emit stats refresh for instant KPI updates on dashboard
-      wsSync.notifyStatsUpdated(userId);
+      await clusterSync.notifyStatsUpdated(userId);
       this.activeUserProcessing.delete(userId);
     }
   }
@@ -931,7 +931,8 @@ export class OutreachEngine {
         );
 
         if (result.text && result.text.trim()) {
-          body = result.text.trim();
+          const { sanitizeEmailBody } = await import('@services/brain-worker/src/ai-lib/analyzers/ai-sanitizer.js');
+          body = sanitizeEmailBody(result.text.trim());
         }
       } else {
         // For initial step, use Context-Aware stateful generation
@@ -947,6 +948,11 @@ export class OutreachEngine {
 
         subject = contextAwareResult.subject || subject;
         body = contextAwareResult.message;
+
+        // Sanitize AI output — strip JSON reasoning, leaked placeholders
+        const { sanitizeEmailBody, sanitizeEmailSubject } = await import('@services/brain-worker/src/ai-lib/analyzers/ai-sanitizer.js');
+        body = sanitizeEmailBody(body || '');
+        if (subject) subject = sanitizeEmailSubject(subject) || subject;
 
         // PHASE 43: Store A/B variant for tracking
         if (contextAwareResult.intelligence.variant) {
@@ -964,13 +970,14 @@ export class OutreachEngine {
     let senderName = 'there';
     let senderEmail = '';
     try {
-      const [integration] = await db.select({ name: integrations.name, email: integrations.email })
+      const [integration] = await db.select({ encryptedMeta: integrations.encryptedMeta })
         .from(integrations)
         .where(eq(integrations.id, integrationId))
         .limit(1);
       if (integration) {
-        senderName = integration.name?.trim() || integration.email?.split('@')[0] || 'there';
-        senderEmail = integration.email?.trim() || '';
+        const meta = decryptToJSON(integration.encryptedMeta);
+        senderName = meta.name?.trim() || meta.email?.split('@')[0] || 'there';
+        senderEmail = meta.email?.trim() || '';
       }
     } catch {
       // non-critical — fall through with defaults
@@ -979,6 +986,32 @@ export class OutreachEngine {
     const { resolveTemplateVars } = await import('@shared/lib/template-variables.js');
     body = resolveTemplateVars(body, lead, { name: senderName, email: senderEmail });
     subject = resolveTemplateVars(subject, lead, { name: senderName, email: senderEmail });
+
+    // ── MAILER DAEMON / BOUNCE ADDRESS SUPPRESSION ──────────────────────────
+    const SUPPRESSED_PATTERNS = [
+      /mailer[-_]?daemon/i,
+      /^(noreply|no-reply|postmaster|abuse|bounce|return-path|bounces\+)/i,
+      /^(mail-noreply|auto-reply|automailer|donotreply)/i,
+    ];
+    const emailLower = (lead.email || '').toLowerCase();
+    const localPart = emailLower.split('@')[0] || '';
+    if (SUPPRESSED_PATTERNS.some(p => p.test(emailLower) || p.test(localPart))) {
+      console.warn(`[OutreachEngine] 🚫 Suppressed send to bounce/daemon address: ${lead.email}`);
+      const [suppressed] = await db.update(leads)
+        .set({ aiPaused: true, metadata: { ...((lead.metadata as any) || {}), suppressed: true, suppressedAt: new Date().toISOString(), suppressionReason: 'mailer_daemon_bounce_address' } })
+        .where(eq(leads.id, lead.id))
+        .returning();
+      await db.update(campaignLeads)
+        .set({ status: 'failed', error: '[Suppression] Mailer Daemon / bounce address' })
+        .where(eq(campaignLeads.id, leadEntry.id));
+
+      // Real-time notification
+      if (suppressed) {
+        clusterSync.notifyLeadsUpdated(userId, { event: 'UPDATE', lead: suppressed }).catch(() => {});
+        clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
+      }
+      return;
+    }
 
     // SYSTEM 8: Duplicate Send Guard
     const { DuplicateSendGuard } = await import('@shared/lib/guards/duplicate-send-guard.js');
@@ -1003,13 +1036,20 @@ export class OutreachEngine {
         console.warn(`[OutreachEngine] 🛡️ REJECTED lead ${lead.email}: ${verification.reason} (Score: ${verification.score})`);
         
         // Mark as bouncy and failed
-        await db.update(leads)
+        const [bounced] = await db.update(leads)
           .set({ status: 'bouncy', metadata: { ...(lead.metadata as any || {}), bounce_reason: verification.reason, verification_score: verification.score } })
-          .where(eq(leads.id, lead.id));
+          .where(eq(leads.id, lead.id))
+          .returning();
           
         await db.update(campaignLeads)
           .set({ status: 'failed', error: `[Pre-flight Verification Failed] ${verification.reason}` })
           .where(eq(campaignLeads.id, leadEntry.id));
+
+        // Real-time notification
+        if (bounced) {
+          clusterSync.notifyLeadsUpdated(userId, { event: 'UPDATE', lead: bounced }).catch(() => {});
+          clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
+        }
           
         return; // Stop here
       }
@@ -1050,7 +1090,7 @@ export class OutreachEngine {
       }
 
       // Unsubscribe handling — replace variables and ensure opt-out footer
-      const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
+      const unsubscribeLink = `${senderEmail ? `https://${senderEmail.split('@')[1]}` : (process.env.PUBLIC_URL || 'https://audnixai.com')}/api/unsubscribe/${lead.id}`;
       body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
       body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
       const lowerBody = body.toLowerCase();
@@ -1072,6 +1112,11 @@ export class OutreachEngine {
         threadId,
         replyTo: campaign.config?.replyTo
       });
+      // Track send + recalculate reputation so dashboard stays accurate
+      import('@services/email-service/src/email/provider-reputation.js').then(({ recordProviderOutcome, recalculateProviderReputation }) => {
+        recordProviderOutcome(integrationId, lead.email, 'sent').catch(() => {});
+        recalculateProviderReputation(integrationId).catch(() => {});
+      }).catch(() => {});
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
       console.error(`[OutreachEngine] ❌ Send failed for ${lead.email} via ${integrationId}: ${errorMsg}`);
@@ -1222,9 +1267,9 @@ export class OutreachEngine {
       })
       .where(eq(outreachCampaigns.id, campaign.id));
 
-    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
-    wsSync.notifyCampaignStatsUpdated(userId, campaign.id);
-    wsSync.notifyInsightsUpdated(userId);
+    await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
+    await clusterSync.notifyCampaignStatsUpdated(userId, campaign.id);
+    await clusterSync.broadcast('INSIGHTS_UPDATED', userId);
     } finally {
       const { releaseLock } = await import('@shared/lib/redis/redis.js');
       await releaseLock(lockKey);
@@ -1294,8 +1339,36 @@ export class OutreachEngine {
       threadMessages
     );
 
-    const subject = (lead.metadata as any)?.outreach_subject || aiResult.subject || `Question for ${lead.name}`;
-    const body = aiResult.message;
+    // Sanitize AI output — strip JSON reasoning, leaked placeholders, etc.
+    const { sanitizeEmailBody, sanitizeEmailSubject } = await import('@services/brain-worker/src/ai-lib/analyzers/ai-sanitizer.js');
+    const { resolveTemplateVars } = await import('@shared/lib/template-variables.js');
+
+    let subject = (lead.metadata as any)?.outreach_subject || aiResult.subject || `Question for ${lead.name}`;
+    let body = sanitizeEmailBody(aiResult.message || '');
+    subject = sanitizeEmailSubject(subject) || subject;
+
+    if (!body || body.trim().length < 10) {
+      console.error(`[OutreachEngine] Email body empty after sanitization for ${lead.email}. Skipping.`);
+      return;
+    }
+
+    // Resolve template variables with sender context
+    let senderName = 'there';
+    let senderEmail = '';
+    try {
+      const [integration] = await db.select({ encryptedMeta: integrations.encryptedMeta })
+        .from(integrations)
+        .where(eq(integrations.id, integrationId))
+        .limit(1);
+      if (integration) {
+        const meta = decryptToJSON(integration.encryptedMeta);
+        senderName = meta.name?.trim() || meta.email?.split('@')[0] || 'there';
+        senderEmail = meta.email?.trim() || '';
+      }
+    } catch { /* non-critical */ }
+
+    body = resolveTemplateVars(body, lead, { name: senderName, email: senderEmail });
+    subject = resolveTemplateVars(subject, lead, { name: senderName, email: senderEmail });
     const trackingId = Math.random().toString(36).substring(2, 11);
 
     // PHASE 43: Store A/B variant
@@ -1361,6 +1434,22 @@ export class OutreachEngine {
     }
 
     try {
+      // ── MAILER DAEMON / BOUNCE ADDRESS SUPPRESSION ──────────────────────────
+      if (channel === 'email') {
+        const SUPPRESSED_PATTERNS = [
+          /mailer[-_]?daemon/i,
+          /^(noreply|no-reply|postmaster|abuse|bounce|return-path|bounces\+)/i,
+          /^(mail-noreply|auto-reply|automailer|donotreply)/i,
+        ];
+        const emailLower = (lead.email || '').toLowerCase();
+        const localPart = emailLower.split('@')[0] || '';
+        if (SUPPRESSED_PATTERNS.some(p => p.test(emailLower) || p.test(localPart))) {
+          console.warn(`[OutreachEngine] 🚫 Suppressed autonomous send to bounce/daemon address: ${lead.email}`);
+          await storage.updateLead(lead.id, { aiPaused: true, metadata: { ...((lead.metadata as any) || {}), suppressed: true, suppressionReason: 'mailer_daemon_bounce_address' } });
+          return;
+        }
+      }
+
       if (channel === 'instagram') {
         await sendInstagramOutreach(userId, (lead.metadata as any)?.instagramId || lead.externalId, body);
       } else {
@@ -1401,15 +1490,16 @@ export class OutreachEngine {
         }
 
         // Unsubscribe handling
+        let outgoingBody = body;
         const unsubscribeLink = `${process.env.PUBLIC_URL || 'https://audnixai.com'}/api/unsubscribe/${lead.id}`;
-        body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
-        body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
-        const lowerBody = body.toLowerCase();
+        outgoingBody = outgoingBody.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
+        outgoingBody = outgoingBody.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
+        const lowerBody = outgoingBody.toLowerCase();
         if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
-          body += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
+          outgoingBody += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
         }
 
-        await sendEmail(userId, lead.email, body, subject, {
+        await sendEmail(userId, lead.email, outgoingBody, subject, {
           isRaw: true,
           isHtml: true,
           leadId: lead.id,
@@ -1418,6 +1508,11 @@ export class OutreachEngine {
           references,
           threadId,
         });
+        // Track send + recalculate reputation so dashboard stays accurate
+        import('@services/email-service/src/email/provider-reputation.js').then(({ recordProviderOutcome, recalculateProviderReputation }) => {
+          recordProviderOutcome(integrationId as string, lead.email, 'sent').catch(() => {});
+          recalculateProviderReputation(integrationId as string).catch(() => {});
+        }).catch(() => {});
       }
     } catch (sendError: any) {
       const errorMsg = sendError.message || 'Unknown send error';
@@ -1452,7 +1547,7 @@ export class OutreachEngine {
     });
 
     await storage.updateLead(lead.id, {
-      status: 'open',
+      status: 'contacted',
       lastMessageAt: new Date(),
       metadata: {
         ...(lead.metadata as Record<string, any>),
@@ -1461,8 +1556,8 @@ export class OutreachEngine {
       }
     });
 
-    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'autonomous_sent' });
-    wsSync.notifyInsightsUpdated(userId);
+    await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'autonomous_sent' });
+    await clusterSync.broadcast('INSIGHTS_UPDATED', userId);
   }
 
   /**
@@ -1559,9 +1654,9 @@ export class OutreachEngine {
       })
       .where(eq(outreachCampaigns.id, campaign.id));
 
-    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
-    wsSync.notifyCampaignStatsUpdated(userId, campaign.id);
-    wsSync.notifyInsightsUpdated(userId);
+    await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'campaign_sent' });
+    await clusterSync.notifyCampaignStatsUpdated(userId, campaign.id);
+    await clusterSync.broadcast('INSIGHTS_UPDATED', userId);
   }
 
   /**
@@ -1586,7 +1681,7 @@ export class OutreachEngine {
     });
 
     await storage.updateLead(lead.id, {
-      status: 'open',
+      status: 'contacted',
       lastMessageAt: new Date(),
       metadata: {
         ...(lead.metadata as Record<string, any>),
@@ -1595,9 +1690,9 @@ export class OutreachEngine {
       }
     });
 
-    wsSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'autonomous_sent' });
-    wsSync.notifyStatsUpdated(userId);
-    wsSync.notifyInsightsUpdated(userId);
+    await clusterSync.notifyLeadsUpdated(userId, { leadId: lead.id, action: 'autonomous_sent' });
+    await clusterSync.notifyStatsUpdated(userId);
+    await clusterSync.broadcast('INSIGHTS_UPDATED', userId);
   }
 
   /**

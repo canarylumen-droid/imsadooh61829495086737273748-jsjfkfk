@@ -179,7 +179,7 @@ export function SolutionPageTemplate({
                         <div className="text-center space-y-4 sm:space-y-6 max-w-3xl mx-auto mb-8 sm:mb-20">
                             <h2 className="text-2xl sm:text-3xl md:text-6xl font-black tracking-tighter text-white uppercase">Engineered for <span className="text-primary">Dominance.</span></h2>
                             <p className="text-white/40 text-base sm:text-xl font-medium max-w-2xl mx-auto leading-relaxed">
-                                Standard outreach is dead. Autonomous intelligence is the only path forward for modern growth engines.
+                                Built for teams that move fast and close deals.
                             </p>
                         </div>
 

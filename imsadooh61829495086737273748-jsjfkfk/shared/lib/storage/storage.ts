@@ -679,6 +679,12 @@ export class MemStorage implements IStorage {
   async createMessage(message: Partial<InsertMessage> & { leadId: string; userId: string; direction: "inbound" | "outbound"; body: string; threadId?: string }, tx?: any): Promise<Message> {
     const id = randomUUID();
     const now = new Date();
+    // Use the actual email timestamp from Gmail/IMAP (metadata.date) if available,
+    // otherwise fall back to current time. This fixes inbox timestamps not matching Gmail.
+    const emailDate = (message.metadata as any)?.date
+      ? new Date((message.metadata as any).date)
+      : now;
+    const createdAt = !isNaN(emailDate.getTime()) ? emailDate : now;
     const newMessage: Message = {
       id,
       leadId: message.leadId,
@@ -700,7 +706,7 @@ export class MemStorage implements IStorage {
       uid: message.uid || null,
       isWarmup: message.isWarmup ?? false,
       metadata: message.metadata || {},
-      createdAt: now,
+      createdAt,
       updatedAt: now,
     };
     this.messages.set(id, newMessage);

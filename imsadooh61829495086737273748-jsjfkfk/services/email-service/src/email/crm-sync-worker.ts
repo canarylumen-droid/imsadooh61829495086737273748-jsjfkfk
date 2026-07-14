@@ -14,6 +14,7 @@ import {
 } from '@audnix/shared';
 import { eq, and, isNull, desc } from 'drizzle-orm';
 import { CRMSyncJobData, startCRMSyncWorker } from '@shared/lib/queues/crm-sync-queue.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 /**
  * Process CRM sync job
@@ -156,7 +157,7 @@ async function handleSpamComplaint(
 ): Promise<void> {
   try {
     // Mark leads as risky due to spam complaint
-    await db
+    const updatedLeads = await db
       .update(leads)
       .set({
         status: 'risky',
@@ -164,7 +165,17 @@ async function handleSpamComplaint(
       .where(and(
         eq(leads.userId, userId),
         integrationId ? eq(leads.integrationId, integrationId) : isNull(leads.integrationId)
-      ));
+      ))
+      .returning();
+
+    // Real-time notification for each affected lead
+    for (const lead of updatedLeads) {
+      clusterSync.notifyLeadsUpdated(userId, { event: 'UPDATE', lead }).catch(() => {});
+    }
+    if (updatedLeads.length > 0) {
+      clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
+      clusterSync.notifyStatsUpdated(userId).catch(() => {});
+    }
 
     console.log(`[CRMSync] Spam complaint handling completed`);
   } catch (error) {

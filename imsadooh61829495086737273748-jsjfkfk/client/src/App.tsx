@@ -32,7 +32,6 @@ const PlaybooksPage = lazy(() => import("./pages/resources/outreach-playbooks"))
 const ApiDocsPage = lazy(() => import("./pages/resources/api-docs"));
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { ComponentShowcase } from '@/pages/dashboard/component-test';
 import { AuthGuard } from '@/components/auth-guard';
 import { InternetConnectionBanner } from "@/components/InternetConnectionBanner";
 // import { ExpertChat } from "@/components/landing/ExpertChat";
@@ -108,13 +107,6 @@ function Router() {
       <Route path="/">
         {() => <Suspense fallback={<LoadingFallback />}><Landing /></Suspense>}
       </Route>
-      <Route path="/components">
-        {() => (
-          <AuthGuard>
-            <ComponentShowcase />
-          </AuthGuard>
-        )}
-      </Route>
       {/* All dashboard routes handled by DashboardRoutes with layout */}
       {/* Two routes inside Switch — first matches /dashboard exactly, second matches sub-pages */}
       <Route path="/dashboard">
@@ -183,34 +175,6 @@ function Router() {
           window.location.href = `/${secretPath}`;
           return null;
         }}
-      </Route>
-      <Route path="/admin/users">
-        {() => (
-          <AuthGuard adminOnly={true}>
-            <AdminUsers />
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/admin/analytics">
-        {() => (
-          <AuthGuard adminOnly={true}>
-            <AdminAnalytics />
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/admin/leads">
-        {() => (
-          <AuthGuard adminOnly={true}>
-            <AdminLeads />
-          </AuthGuard>
-        )}
-      </Route>
-      <Route path="/admin/settings">
-        {() => (
-          <AuthGuard adminOnly={true}>
-            <AdminSettings />
-          </AuthGuard>
-        )}
       </Route>
 
       <Route component={NotFound} />

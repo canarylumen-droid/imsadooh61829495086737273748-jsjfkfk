@@ -2,7 +2,7 @@ import { db } from '@shared/lib/db/db.js';
 import { bounceTracker, leads, Lead, integrations } from '@audnix/shared';
 import { eq, and, sql } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
-import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { mailboxHealthService } from './mailbox-health-service.js';
 import { recordProviderOutcome } from './provider-reputation.js';
 
@@ -158,7 +158,7 @@ class BounceHandler {
               
             if (pausedCampaign) {
               console.log(`⚠️ Campaign ${pausedCampaign.id} auto-paused due to reputation protection (Spam: ${spamCount}, Hard: ${hardCount})`);
-              wsSync.notifyCampaignsUpdated(event.userId);
+              await clusterSync.notifyCampaignsUpdated(event.userId);
               
               await storage.createNotification({
                 userId: event.userId,
@@ -174,7 +174,7 @@ class BounceHandler {
       }
 
       // Notify UI in real-time
-      wsSync.notifyActivityUpdated(event.userId, {
+      await clusterSync.notifyActivityUpdated(event.userId, {
         type: 'email_bounce',
         bounceType: event.bounceType,
         leadId: event.leadId,
@@ -202,6 +202,9 @@ class BounceHandler {
         message: `${event.bounceType.toUpperCase()} bounce from ${event.email}. Lead marked as cold.`,
         actionUrl: `/dashboard/inbox?leadId=${event.leadId}`
       });
+
+      // Invalidate dashboard stats so bounce rate updates in real-time
+      await clusterSync.notifyStatsCacheInvalidate(event.userId).catch(() => {});
     } catch (error) {
       console.error('Error recording bounce:', error);
     }

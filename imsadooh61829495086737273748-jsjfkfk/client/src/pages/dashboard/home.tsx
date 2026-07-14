@@ -10,33 +10,21 @@ import { apiRequest } from "@/lib/queryClient";
 import { useMailbox } from "@/hooks/use-mailbox";
 import {
   ArrowRight,
-  Minus,
-  DollarSign,
-  TrendingUp,
   Users,
   MessageSquare,
   Zap,
   Mail,
-  ArrowUp,
-  Download,
-  ShieldCheck,
-  AlertCircle,
-  AlertTriangle,
   Activity,
   RefreshCw,
   Sparkles,
-  ArrowDown,
   Send,
   Brain,
-  Plus,
-  FileText,
-  Loader2,
-  Clock,
   Info
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Link, useLocation } from "wouter";
 import { useReducedMotion } from "@/lib/animation-utils";
+import { formatRelativeTime } from "@/lib/format-date";
 import { useRealtime } from "@/hooks/use-realtime";
 import { SiGmail, SiGoogle } from "react-icons/si";
 import { useState, useEffect } from "react";
@@ -232,7 +220,7 @@ export default function DashboardHome() {
       return res.json();
     },
     refetchOnMount: true,
-    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
     placeholderData: (previousData) => previousData,
   });
 
@@ -310,22 +298,6 @@ export default function DashboardHome() {
 
   const trialDaysLeft = getTrialDaysLeft();
 
-  const formatTimeAgo = (date: string | Date | null | undefined) => {
-    if (!date) return "Unknown";
-    const now = new Date();
-    const then = new Date(date);
-    if (isNaN(then.getTime())) return "Unknown";
-    const diffMs = now.getTime() - then.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 2) return "Real-time";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    return `${diffDays}d ago`;
-  };
-
   const calculatePercentageChange = (current: number, previous: number | undefined): string => {
     if (!previousStats || previous === undefined) return "—";
     if (previous === 0) return current > 0 ? "+100%" : "—";
@@ -337,76 +309,62 @@ export default function DashboardHome() {
 
   const summaryMetrics = [
     {
-      label: "TOTAL SENT",
+      label: "TOTAL LEADS",
+      value: stats?.leads ?? stats?.totalLeads ?? 0,
+      icon: Users,
+      percentage: calculatePercentageChange(stats?.leads ?? 0, previousStats?.leads),
+      trend: previousStats ? ((stats?.leads ?? 0) > (previousStats?.leads || 0) ? "up" : (stats?.leads ?? 0) < (previousStats?.leads || 0) ? "down" : "neutral") : "neutral",
+      color: "text-indigo-500",
+      bgColor: "bg-indigo-500/10",
+      borderColor: "border-indigo-500/20",
+      glow: "hover:shadow-[0_0_20px_rgba(99,102,241,0.15)]"
+    },
+    {
+      label: "SENT",
       value: stats?.outreachedLeads ?? stats?.totalMessages ?? 0,
       icon: Send,
       percentage: calculatePercentageChange(stats?.outreachedLeads ?? stats?.totalMessages ?? 0, previousStats?.messages),
       trend: previousStats ? ((stats?.outreachedLeads ?? stats?.totalMessages ?? 0) > (previousStats?.messages || 0) ? "up" : (stats?.outreachedLeads ?? stats?.totalMessages ?? 0) < (previousStats?.messages || 0) ? "down" : "neutral") : "neutral",
-      color: "text-indigo-500",
-      glow: "hover:shadow-[0_0_20px_rgba(99,102,241,0.15)]"
+      color: "text-blue-500",
+      bgColor: "bg-blue-500/10",
+      borderColor: "border-blue-500/20",
+      glow: "hover:shadow-[0_0_20px_rgba(59,130,246,0.15)]"
     },
     {
       label: "OPEN RATE",
-      value: (stats?.openRate === null || stats?.openRate === undefined) ? "Calculating" : stats.openRate.toFixed(2),
+      value: (stats?.openRate === null || stats?.openRate === undefined) ? "—" : stats.openRate.toFixed(1),
       suffix: (stats?.openRate === null || stats?.openRate === undefined) ? "" : "%",
       icon: Mail,
       percentage: calculatePercentageChange(stats?.openRate || 0, previousStats?.openRate),
       trend: previousStats ? ((stats?.openRate || 0) > (previousStats?.openRate || 0) ? "up" : (stats?.openRate || 0) < (previousStats?.openRate || 0) ? "down" : "neutral") : "neutral",
       color: "text-emerald-500",
+      bgColor: "bg-emerald-500/10",
+      borderColor: "border-emerald-500/20",
       glow: "group-hover:shadow-[0_0_20px_rgba(16,185,129,0.15)]"
     },
     {
-      label: "RESPONSE RATE",
-      value: (stats?.responseRate === null || stats?.responseRate === undefined) ? "Calculating" : stats.responseRate.toFixed(2),
+      label: "RESPONSES",
+      value: (stats?.responseRate === null || stats?.responseRate === undefined) ? "—" : stats.responseRate.toFixed(1),
       suffix: (stats?.responseRate === null || stats?.responseRate === undefined) ? "" : "%",
       icon: MessageSquare,
       percentage: calculatePercentageChange(stats?.responseRate || 0, previousStats?.responseRate),
       trend: previousStats ? ((stats?.responseRate || 0) > (previousStats?.responseRate || 0) ? "up" : (stats?.responseRate || 0) < (previousStats?.responseRate || 0) ? "down" : "neutral") : "neutral",
-      color: "text-blue-500",
-      glow: "group-hover:shadow-[0_0_20px_rgba(59,130,246,0.15)]"
-    },
-    {
-      label: "BOUNCE RATE",
-      value: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "Calculating" : (stats.globalBounceRate * 100).toFixed(2),
-      suffix: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "" : "%",
-      description: "Includes invalid emails detected during import & campaign sends",
-      icon: AlertCircle,
-      percentage: calculatePercentageChange(stats?.globalBounceRate || 0, previousStats ? (previousStats as any).globalBounceRate : undefined),
-      trend: (previousStats && (previousStats as any).globalBounceRate !== undefined)
-        ? ((stats?.globalBounceRate || 0) < ((previousStats as any).globalBounceRate || 0) ? "up" : (stats?.globalBounceRate || 0) > ((previousStats as any).globalBounceRate || 0) ? "down" : "neutral")
-        : "neutral",
       color: "text-amber-500",
+      bgColor: "bg-amber-500/10",
+      borderColor: "border-amber-500/20",
       glow: "group-hover:shadow-[0_0_20px_rgba(245,158,11,0.15)]"
     },
     {
-      label: "QUEUED",
-      value: stats?.queuedLeads ?? 0,
-      icon: Clock,
-      percentage: "—",
-      trend: "neutral",
-      color: "text-sky-500",
-      glow: "group-hover:shadow-[0_0_20px_rgba(14,165,233,0.15)]"
-    },
-    {
-      label: "FAILED",
-      value: (stats?.bouncyLeads ?? 0) + (stats?.undeliveredLeads ?? 0),
-      icon: AlertTriangle,
-      percentage: "—",
-      trend: "neutral",
-      color: (stats?.bouncyLeads ?? 0) > 0 ? "text-red-500" : "text-muted-foreground",
-      glow: "group-hover:shadow-[0_0_20px_rgba(239,68,68,0.15)]"
-    },
-    {
-      label: "REVENUE",
-      value: typeof stats?.closedRevenue === 'number' ? stats.closedRevenue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00",
-      prefix: "$",
-      icon: DollarSign,
-      percentage: calculatePercentageChange(stats?.closedRevenue || 0, previousStats?.closedRevenue),
-      trend: previousStats ? ((stats?.closedRevenue || 0) > (previousStats?.closedRevenue || 0) ? "up" : (stats?.closedRevenue || 0) < (previousStats?.closedRevenue || 0) ? "down" : "neutral") : "neutral",
+      label: "CONVERTED",
+      value: stats?.conversions ?? stats?.convertedLeads ?? 0,
+      icon: Zap,
+      percentage: calculatePercentageChange(stats?.conversions || 0, previousStats?.conversions),
+      trend: previousStats ? ((stats?.conversions || 0) > (previousStats?.conversions || 0) ? "up" : (stats?.conversions || 0) < (previousStats?.conversions || 0) ? "down" : "neutral") : "neutral",
       color: "text-primary",
+      bgColor: "bg-primary/10",
+      borderColor: "border-primary/20",
       glow: "hover:shadow-[0_0_20px_rgba(var(--primary),0.15)]"
     },
-
   ];
 
   // Strict Render Guard: Block the entire tree if loading, to prevent flickering.
@@ -460,7 +418,7 @@ export default function DashboardHome() {
             {stats?.sync?.lastSync && !stats?.sync?.isAutonomous && (
               <Badge variant="outline" className="px-3 py-1.5 bg-muted/30 text-muted-foreground border-border/40 rounded-lg font-bold text-[11px]">
                 <RefreshCw className="w-3 h-3 mr-2 opacity-50" />
-                Synced {formatTimeAgo(stats.sync.lastSync)}
+                Synced {formatRelativeTime(stats.sync.lastSync)}
               </Badge>
             )}
             {trialDaysLeft > 0 && (
@@ -580,7 +538,7 @@ export default function DashboardHome() {
             <div className="h-[480px]">
               <RecentConversations />
             </div>
-            {statsData?.aiActionLogs?.length > 0 && (
+            {(statsData?.aiActionLogs?.length ?? 0) > 0 && (
               <div className="mt-6">
                 <AutonomousActionFeed logs={statsData?.aiActionLogs || []} />
               </div>
