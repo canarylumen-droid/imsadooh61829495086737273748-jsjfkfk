@@ -9,7 +9,7 @@ import type { Redis } from 'ioredis';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 
 export const warmupOutboundQueue = new Queue(WARMUP_CONFIG.OUTBOUND_QUEUE_NAME, {
-  connection: redisConfig as unknown as Redis,
+  connection: redisConfig as any,
   defaultJobOptions: {
     attempts: WARMUP_CONFIG.MAX_SEND_ATTEMPTS,
     backoff: { type: 'exponential', delay: 60000 },
@@ -19,7 +19,7 @@ export const warmupOutboundQueue = new Queue(WARMUP_CONFIG.OUTBOUND_QUEUE_NAME, 
 });
 
 export const warmupInboundQueue = new Queue(WARMUP_CONFIG.INBOUND_QUEUE_NAME, {
-  connection: redisConfig as unknown as Redis,
+  connection: redisConfig as any,
   defaultJobOptions: {
     attempts: WARMUP_CONFIG.MAX_IMAP_ATTEMPTS,
     backoff: { type: 'exponential', delay: 30000 },

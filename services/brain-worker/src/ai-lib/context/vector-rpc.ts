@@ -12,7 +12,7 @@ function getRagQueueEvents(): QueueEvents {
       throw new Error('❌ Redis is not configured for QueueEvents');
     }
     ragQueueEventsInstance = new QueueEvents('ragQueue', {
-      connection: createFreshConnection(),
+      connection: createFreshConnection() as any,
     });
   }
   return ragQueueEventsInstance;

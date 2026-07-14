@@ -5,8 +5,7 @@
     "server/**/*",
     "services/**/*",
     "packages/**/*",
-    "api/**/*",
-    "scripts/**/*"
+    "api/**/*"
   ],
   "exclude": [
     "node_modules",
@@ -39,8 +38,7 @@
     "types": [
       "node",
       "react",
-      "react-dom",
-      "jest"
+      "react-dom"
     ],
     "paths": {
       "@/*": [

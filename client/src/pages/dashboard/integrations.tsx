@@ -42,7 +42,7 @@ import {
   Info,
   Construction,
 } from "lucide-react";
-import { SiGoogle, SiShopify, SiHubspot, SiSlack } from "react-icons/si";
+import { SiGoogle, SiShopify, SiHubspot, SiGooglechat } from "react-icons/si";
 import {
   Dialog,
   DialogContent,

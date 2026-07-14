@@ -35,7 +35,7 @@ export function createInboundWorker(): Worker {
           console.warn(`[Warmup][Inbound] Unknown job type: ${name}`);
       }
     },
-    { connection: createFreshConnection(), concurrency: WARMUP_CONFIG.INBOUND_CONCURRENCY }
+    { connection: createFreshConnection() as any, concurrency: WARMUP_CONFIG.INBOUND_CONCURRENCY }
   );
 }
 

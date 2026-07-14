@@ -550,7 +550,7 @@ export function startVerificationWorker() {
       await processVerification(job.data);
     },
     {
-      connection: createFreshConnection(), // dedicated connection per worker
+      connection: createFreshConnection() as any, // dedicated connection per worker
       concurrency: 50,  // 50 parallel SMTP checks
       lockDuration: 60_000,    // SMTP checks can take up to 30s
       stalledInterval: 120_000, // 2min between stall checks for verification jobs
@@ -588,7 +588,7 @@ export function startRoutingWorker() {
       }
     },
     {
-    connection: createFreshConnection(), // dedicated connection per worker
+    connection: createFreshConnection() as any, // dedicated connection per worker
     concurrency: 20,
     lockDuration: 60_000,
     stalledInterval: 120_000,
@@ -618,7 +618,7 @@ export function startReassignWorker() {
       }
     },
     {
-      connection: createFreshConnection(), // dedicated connection per worker
+      connection: createFreshConnection() as any, // dedicated connection per worker
       concurrency: 10, // Reassign is high-priority but low-volume
       lockDuration: 60_000,
       stalledInterval: 120_000,

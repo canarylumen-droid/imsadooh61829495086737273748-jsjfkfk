@@ -62,7 +62,7 @@ export async function createCalendarEvent(
 ): Promise<any> {
   try {
     const oauth2Client = getGoogleOAuth2Client(accessToken);
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client } as any);
 
     const response = await calendar.events.insert({
       calendarId: 'primary',
@@ -113,7 +113,7 @@ export async function listUpcomingEvents(
 ): Promise<any[]> {
   try {
     const oauth2Client = getGoogleOAuth2Client(accessToken);
-    const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: oauth2Client } as any);
 
     const response = await calendar.events.list({
       calendarId: 'primary',

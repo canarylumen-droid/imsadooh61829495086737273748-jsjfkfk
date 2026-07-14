@@ -299,7 +299,7 @@ export function createOutboundWorker(): Worker {
 
       return { success: result.success, interactionId: interaction?.id };
     },
-    { connection: createFreshConnection(), concurrency: WARMUP_CONFIG.OUTBOUND_CONCURRENCY }
+    { connection: createFreshConnection() as any, concurrency: WARMUP_CONFIG.OUTBOUND_CONCURRENCY }
   );
 }
 

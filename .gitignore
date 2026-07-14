@@ -11,15 +11,30 @@ opencode.json
 *.log
 coverage/
 
+# Build artifacts
+*.tsbuildinfo
+build/
+
 # WhatsApp session files (sensitive)
 .wwebjs_auth/
 .wwebjs_cache/
 .wwebjs_auth.json
 
 # Temporary and Scratch files
-*.txt
-*.log
 scratch/
 .gemini/
 ts_*.txt
 tsc_*.txt
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+
+# Vercel
+.vercel/
+
+# Docker
+.docker/

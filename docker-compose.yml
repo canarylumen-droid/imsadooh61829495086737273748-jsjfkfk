@@ -251,7 +251,6 @@ services:
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
     depends_on:
       redis:
@@ -321,7 +320,6 @@ services:
       dockerfile: Dockerfile.production
     image: audnix-ai:latest
     container_name: audnix-vector-db-service
-    env_file: .env
     environment:
       - NODE_ENV=production
       - APP_ROLE=vectordb

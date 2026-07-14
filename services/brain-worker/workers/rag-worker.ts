@@ -15,7 +15,7 @@ export class RagWorker {
 
   constructor() {
     this.worker = new Worker('ragQueue', this.processJob.bind(this), {
-      connection: createFreshConnection(),
+      connection: createFreshConnection() as any,
       concurrency: 10,
       removeOnComplete: { count: 100 },
       removeOnFail: { count: 100 }

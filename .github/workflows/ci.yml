@@ -21,17 +21,13 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: npm ci --legacy-peer-deps
 
-      # Security Audit (Warn only to prevent build failure on minor issues)
       - name: Security Audit
-        run: npm audit --audit-level=critical || true
-
-      - name: Lint
-        run: npm run lint --if-present
+        run: npm audit --audit-level=critical
 
       - name: Type check
-        run: npm run check --if-present
+        run: npx tsc --noEmit
 
-      - name: Build
-        run: npm run build
+      - name: Build client
+        run: npx vite build

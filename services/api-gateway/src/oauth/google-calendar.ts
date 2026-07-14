@@ -29,7 +29,7 @@ export class GoogleCalendarOAuth {
       this.config.clientId,
       this.config.clientSecret,
       this.config.redirectUri
-    );
+    ) as any;
   }
 
   /**
@@ -65,7 +65,7 @@ export class GoogleCalendarOAuth {
     this.oauth2Client.setCredentials(tokens);
 
     // Get user info to verify email
-    const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client });
+    const oauth2 = google.oauth2({ version: 'v2', auth: this.oauth2Client } as any);
     const userInfo = await oauth2.userinfo.get();
 
     return {
@@ -104,7 +104,7 @@ export class GoogleCalendarOAuth {
     endTime: Date
   ): Promise<boolean> {
     this.oauth2Client.setCredentials({ access_token: accessToken });
-    const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client } as any);
 
     try {
       const response = await calendar.freebusy.query({
@@ -218,7 +218,7 @@ export class GoogleCalendarOAuth {
    */
   async listUpcomingEvents(accessToken: string, maxResults: number = 10): Promise<any[]> {
     this.oauth2Client.setCredentials({ access_token: accessToken });
-    const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client } as any);
 
     const response = await calendar.events.list({
       calendarId: 'primary',
@@ -246,7 +246,7 @@ export class GoogleCalendarOAuth {
     }
   ): Promise<any> {
     this.oauth2Client.setCredentials({ access_token: accessToken });
-    const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
+    const calendar = google.calendar({ version: 'v3', auth: this.oauth2Client } as any);
 
     const eventData: any = {
       summary: event.summary,

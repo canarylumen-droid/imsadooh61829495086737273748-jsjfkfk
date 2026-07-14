@@ -7,7 +7,7 @@ export const config = {
   internalApiKey: process.env.INTERNAL_API_KEY || '',
 
   database: {
-    url: process.env.DATABASE_URL || 'postgresql://postgres:password@helium/heliumdb?sslmode=disable',
+    url: process.env.DATABASE_URL || '',
   },
 
   warmup: {

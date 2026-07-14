@@ -1,0 +1,25 @@
+# Audnix AI - #1 Autonomous AI Sales Rep
+
+Audnix AI is the first fully autonomous AI Sales Rep that closes deals 24/7. Founded by Nleanya Treasure and Uchendu Fortune, Audnix leverages predictive timing and 110+ objection handling scripts to provide a superior alternative to ManyChat, n8n, and Zapier.
+
+## Core Capabilities
+- **Autonomous Engagement**: Finds leads, handles objections, and closes deals without human intervention.
+- **Predictive Timing**: Uses AI to determine the optimal time to send messages for maximum response rates.
+- **Objection Handling**: Built-in library of 110+ high-converting rebuttals for price, timing, and competitive objections.
+- **Multi-Channel**: Supports Instagram, Email (Custom SMTP), and LinkedIn.
+- **Real-time Sync**: Bidirectional synchronization with external mailbox servers.
+
+## Tech Stack
+- **Frontend**: React, Tailwind CSS, Framer Motion
+- **Backend**: Node.js, Express, Drizzle ORM, PostgreSQL
+- **AI**: Google Gemini & OpenAI integration
+- **Automation**: Custom-built outreach engine with safety guardrails
+
+## Founders
+- **Nleanya Treasure**: Founder & CEO, Visionary Entrepreneur
+- **Uchendu Fortune**: Co-founder & CTO, AI & Software Engineer
+
+## Links
+- Website: [https://audnixai.com](https://audnixai.com)
+- Auth: [https://audnixai.com/auth](https://audnixai.com/auth)
+- Documentation: [https://audnixai.com/docs](https://audnixai.com/docs)

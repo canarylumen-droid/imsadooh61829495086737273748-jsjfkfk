@@ -1,0 +1,70 @@
+name: Deployment Status
+
+on:
+  deployment_status:
+  workflow_run:
+    workflows: ["CI Pipeline", "CI/CD Pipeline", "ECS Deploy — Build, Push & Register Task Definitions"]
+    types: [completed]
+
+permissions:
+  deployments: write
+  contents: read
+
+jobs:
+  report:
+    name: Report Deployment
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Get workflow info
+        id: info
+        run: |
+          if [ "${{ github.event_name }}" = "deployment_status" ]; then
+            echo "status=${{ github.event.deployment_status.state }}" >> $GITHUB_OUTPUT
+            echo "url=${{ github.event.deployment_status.environment_url }}" >> $GITHUB_OUTPUT
+            echo "env=${{ github.event.deployment_status.environment }}" >> $GITHUB_OUTPUT
+          else
+            echo "status=${{ github.event.workflow_run.conclusion }}" >> $GITHUB_OUTPUT
+            echo "url=" >> $GITHUB_OUTPUT
+            echo "env=ci" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create deployment status
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const status = '${{ steps.info.outputs.status }}' || 'pending';
+            const url = '${{ steps.info.outputs.env }}';
+            const env = '${{ steps.info.outputs.env }}' || 'production';
+            const sha = context.sha;
+
+            let state = 'pending';
+            if (status === 'success') state = 'success';
+            else if (status === 'failure') state = 'failure';
+            else if (status === 'cancelled') state = 'inactive';
+
+            try {
+              await github.rest.repos.createDeploymentStatus({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                deployment_id: context.payload.deployment?.id || 0,
+                state: state,
+                target_url: url || undefined,
+                description: `Deploy ${state}: ${env}`,
+                environment: env
+              });
+            } catch(e) {
+              console.log('Deployment status note:', e.message);
+            }
+
+      - name: Summary
+        run: |
+          echo "## Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Status** | ${{ steps.info.outputs.status }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Environment** | ${{ steps.info.outputs.env }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **URL** | ${{ steps.info.outputs.url || 'N/A' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Branch** | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY

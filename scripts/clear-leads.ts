@@ -5,8 +5,11 @@ import pg from 'pg';
 async function cleanup() {
     console.log('🔌 Connecting to database to clear leads...');
 
-    // Hardcoded connection if env is missing (same fallback as migration script)
-    const CONNECTION_STRING = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_y1WCRm9QsVJh@ep-wispy-frost-ahj6lqe0-pooler.c-3.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require';
+    const CONNECTION_STRING = process.env.DATABASE_URL;
+    if (!CONNECTION_STRING) {
+      console.error('DATABASE_URL environment variable is required');
+      process.exit(1);
+    }
 
     const pool = new pg.Pool({
         connectionString: CONNECTION_STRING,

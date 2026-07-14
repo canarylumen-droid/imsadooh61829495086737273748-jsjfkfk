@@ -28,7 +28,7 @@ export class PostmasterService {
       return;
     }
 
-    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri) as any;
     this._isEnabled = true;
   }
 

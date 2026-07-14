@@ -30,7 +30,7 @@ export interface CRMSyncJobData {
 
 // Queue definition
 export const crmSyncQueue = new Queue<CRMSyncJobData>('crm-sync', {
-  connection: getSharedRedisConnection(),
+  connection: getSharedRedisConnection() as any,
   defaultJobOptions: {
     attempts: 3,
     backoff: {
@@ -61,7 +61,7 @@ export async function queueDNSUpdate(data: {
   dmarcPolicy: 'none' | 'quarantine' | 'reject';
 }): Promise<void> {
   await crmSyncQueue.add(
-    `dns-update-${data.domain}`,
+    `dns-update-${data.domain}` as any,
     {
       type: 'dns_update',
       userId: data.userId,
@@ -91,7 +91,7 @@ export async function queueBounceTracking(data: {
   bounceType: 'hard' | 'soft' | 'spam';
 }): Promise<void> {
   await crmSyncQueue.add(
-    `bounce-${data.email}-${Date.now()}`,
+    `bounce-${data.email}-${Date.now()}` as any,
     {
       type: 'bounce',
       userId: data.userId,
@@ -116,7 +116,7 @@ export async function queueSpamComplaint(data: {
   email: string;
 }): Promise<void> {
   await crmSyncQueue.add(
-    `spam-complaint-${data.email}-${Date.now()}`,
+    `spam-complaint-${data.email}-${Date.now()}` as any,
     {
       type: 'spam_complaint',
       userId: data.userId,
@@ -143,7 +143,7 @@ export async function queueDomainReputationUpdate(data: {
   complaintRate: number;
 }): Promise<void> {
   await crmSyncQueue.add(
-    `domain-reputation-${data.domain}`,
+    `domain-reputation-${data.domain}` as any,
     {
       type: 'domain_reputation',
       userId: data.userId,
@@ -173,7 +173,7 @@ export async function queueMailboxHealthUpdate(data: {
   lastHealthError?: string;
 }): Promise<void> {
   await crmSyncQueue.add(
-    `mailbox-health-${data.integrationId}`,
+    `mailbox-health-${data.integrationId}` as any,
     {
       type: 'mailbox_health',
       userId: data.userId,
@@ -200,7 +200,7 @@ export function startCRMSyncWorker(processJob: (job: Job<CRMSyncJobData>) => Pro
       await processJob(job);
     },
     {
-      connection: getSharedRedisConnection(),
+      connection: getSharedRedisConnection() as any,
       concurrency: 5,
       limiter: {
         max: 100,

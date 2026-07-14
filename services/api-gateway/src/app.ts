@@ -36,7 +36,7 @@ export function createApp() {
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'", "https://www.audnixai.com", "wss://www.audnixai.com", "https://audnixai.com", "wss://audnixai.com", "https://54.227.164.241", "ws://54.227.164.241", "http://54.227.164.241"],
+        connectSrc: ["'self'", "https://www.audnixai.com", "wss://www.audnixai.com", "https://audnixai.com", "wss://audnixai.com"],
       },
     },
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
@@ -45,28 +45,25 @@ export function createApp() {
 
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    const allowedOriginsStr = process.env.ALLOWED_ORIGINS || '';
-    let allowedOrigins = allowedOriginsStr.split(',').map(o => o.trim()).filter(Boolean);
+    const allowedOrigins = [
+      "https://www.audnixai.com",
+      "https://audnixai.com",
+      "http://localhost:5173",
+      "http://localhost:5000",
+      ...(process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean) || []),
+      ...(process.env.RAILWAY_STATIC_URL ? [`https://${process.env.RAILWAY_STATIC_URL}`] : []),
+    ];
 
-    if (process.env.NODE_ENV !== 'production' && allowedOrigins.length === 0) {
-      allowedOrigins.push('http://localhost:5000', 'http://www.audnixai.com', 'http://audnixai.com');
+    if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.audnixai.com') || origin.endsWith('.railway.app'))) {
+      res.setHeader("Access-Control-Allow-Origin", origin);
+      res.setHeader("Access-Control-Allow-Credentials", "true");
     }
 
-    const isAllowedOrigin = origin && (
-      origin.endsWith('.up.railway.app') ||
-      allowedOrigins.includes(origin)
-    );
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+    res.setHeader("Access-Control-Max-Age", "86400");
 
-    if (origin && isAllowedOrigin) {
-      res.setHeader('Access-Control-Allow-Origin', origin);
-      res.setHeader('Access-Control-Allow-Credentials', 'true');
-      res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
-      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
-    }
-
-    if (req.method === 'OPTIONS') {
-      return res.sendStatus(200);
-    }
+    if (req.method === "OPTIONS") return res.sendStatus(204);
     next();
   });
 
@@ -190,60 +187,6 @@ export function createApp() {
   };
 
   app.use(session(sessionConfig));
-
-  const ALLOWED_ORIGINS = [
-    "https://www.audnixai.com",
-    "https://audnixai.com",
-    "http://localhost:5173",
-    "http://localhost:5000",
-    process.env.RAILWAY_STATIC_URL
-      ? `https://${process.env.RAILWAY_STATIC_URL}`
-      : null,
-  ]
-    .flat()
-    .filter(Boolean) as string[];
-
-  app.use((req, res, next) => {
-    if (process.env.NODE_ENV !== 'production') return next();
-    const origin = req.headers.origin;
-    if (!origin) return next();
-    const isAllowed = ALLOWED_ORIGINS.some(allowed =>
-      origin === allowed || origin.endsWith(allowed)
-    );
-    if (!isAllowed) {
-      res.status(403).json({ error: 'Forbidden' });
-      return;
-    }
-    next();
-  });
-
-  app.use((req, res, next) => {
-    const origin = req.get("origin");
-    const isAllowedDomain =
-      !origin ||
-      ALLOWED_ORIGINS.includes(origin) ||
-      origin.endsWith(".railway.app") ||
-      origin.endsWith(".up.railway.app") ||
-      origin.endsWith(".audnixai.com");
-
-    if (isAllowedDomain && origin) {
-      res.setHeader("Access-Control-Allow-Origin", origin);
-      res.setHeader("Access-Control-Allow-Credentials", "true");
-    } else if (!origin) {
-      res.setHeader("Access-Control-Allow-Origin", ALLOWED_ORIGINS[0]);
-    }
-    res.setHeader(
-      "Access-Control-Allow-Methods",
-      "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-    );
-    res.setHeader(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization, X-Requested-With",
-    );
-    res.setHeader("Access-Control-Max-Age", "86400");
-    if (req.method === "OPTIONS") return res.sendStatus(204);
-    next();
-  });
 
   return app;
 }

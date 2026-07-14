@@ -1,5 +1,9 @@
 # Audnix AI — Real-Time Sales Outreach Platform
 
+[![CI](https://github.com/canarylumen-droid/imsadooh61829495086737273748-jsjfkfk/actions/workflows/ci.yml/badge.svg)](https://github.com/canarylumen-droid/imsadooh61829495086737273748-jsjfkfk/actions/workflows/ci.yml)
+[![Deploy](https://github.com/canarylumen-droid/imsadooh61829495086737273748-jsjfkfk/actions/workflows/deploy.yml/badge.svg)](https://github.com/canarylumen-droid/imsadooh61829495086737273748-jsjfkfk/actions/workflows/deploy.yml)
+[![ECS Deploy](https://github.com/canarylumen-droid/imsadooh61829495086737273748-jsjfkfk/actions/workflows/ecs-deploy.yml/badge.svg)](https://github.com/canarylumen-droid/imsadooh61829495086737273748-jsjfkfk/actions/workflows/ecs-deploy.yml)
+
 Production sales outreach platform with AI-powered cold email, real-time IMAP IDLE, inbox placement tracking, spam detection, and per-mailbox domain reputation.
 
 **Live App:** https://audnixai.com
