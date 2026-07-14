@@ -78,10 +78,16 @@ export function createApp() {
     }
   } else {
     if (!process.env.SESSION_SECRET) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error("SESSION_SECRET must be set in production.");
+      }
       console.warn("SESSION_SECRET not set - using development fallback");
       process.env.SESSION_SECRET = "audnix-dev-secret-do-not-use-in-prod";
     }
     if (!process.env.ENCRYPTION_KEY) {
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error("ENCRYPTION_KEY must be set in production.");
+      }
       console.warn("ENCRYPTION_KEY not set - using development fallback");
       process.env.ENCRYPTION_KEY = "audnix-dev-key-32-chars-long-!!!";
     }

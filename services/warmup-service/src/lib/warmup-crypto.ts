@@ -3,7 +3,13 @@ import crypto from 'crypto';
 const ALGORITHM = 'aes-256-gcm';
 
 function getWarmupKey(): Buffer {
-  const key = process.env.WARMUP_ENCRYPTION_KEY || 'default-insecure-key-change-in-production';
+  const key = process.env.WARMUP_ENCRYPTION_KEY;
+  if (!key) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('WARMUP_ENCRYPTION_KEY is not set. Refusing to run with fallback key in production.');
+    }
+    throw new Error('WARMUP_ENCRYPTION_KEY is not set. Please set it in your environment.');
+  }
   return crypto.createHash('sha256').update(key).digest();
 }
 

@@ -1,3 +1,4 @@
--- Reputation check is now handled in init.lua to avoid handler conflicts.
--- This file is kept for reference only.
--- See kumomta/init.lua for the integrated smtp_receive_message handler.
+-- Reputation checking is now handled in reputation.lua
+-- This file is kept for backward compatibility.
+-- See kumomta/reputation.lua for the full implementation.
+return require 'reputation'

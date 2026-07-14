@@ -10,13 +10,17 @@ RUN npm run build:client
 FROM node:22-alpine
 WORKDIR /app
 
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl tini
+
+# Create user first, then copy files
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=frontend-builder /app/dist/public ./dist/public
 
+# Copy application code with correct ownership
 COPY --chown=nodejs:nodejs client ./client
 COPY --chown=nodejs:nodejs server ./server
 COPY --chown=nodejs:nodejs services ./services
@@ -29,7 +33,9 @@ COPY --chown=nodejs:nodejs polyfill-file.cjs ./polyfill-file.cjs
 COPY --chown=nodejs:nodejs tsconfig.json ./tsconfig.json
 COPY --chown=nodejs:nodejs package.json ./package.json
 
-RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+# Copy KumoMTA config if present
+COPY --chown=nodejs:nodejs kumomta ./kumomta
+
 USER nodejs
 
 ENV NODE_ENV=production
@@ -42,4 +48,5 @@ EXPOSE 5000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
   CMD curl -fsS http://localhost:5000/health || exit 1
 
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["sh", "-c", "if [ -n \"$APP_ROLE\" ] && [ \"$APP_ROLE\" != \"api\" ]; then npm run start:worker:$APP_ROLE; else npm run start:api; fi"]

@@ -21,9 +21,25 @@ permissions:
   contents: read
 
 jobs:
+  ci-check:
+    name: CI Must Pass
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Type check
+        run: npm run check
+      - name: Build client
+        run: npm run build:client
+
   build-and-push:
     name: Build Docker Image & Push to ECR
     runs-on: ubuntu-latest
+    needs: ci-check
     outputs:
       image: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
     steps:

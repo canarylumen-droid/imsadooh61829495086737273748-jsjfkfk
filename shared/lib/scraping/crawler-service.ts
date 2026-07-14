@@ -2,15 +2,19 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { EmailVerifier } from './email-verifier.js';
 
-// Active Intelligent Proxy Mesh (Global Residential Cluster)
-// Free proxy rotation (simulated for dev, use PROXY_URL for enterprise scraping)
-let PROXY_POOL: any[] = [
-    { protocol: 'http', host: '159.203.87.130', port: 3128 },
-    { protocol: 'http', host: '67.43.227.228', port: 80 },
-    { protocol: 'http', host: '192.241.130.1', port: 8080 },
-    { protocol: 'http', host: '165.227.117.16', port: 3128 },
-    { protocol: 'http', host: '138.68.60.8', port: 8080 }
-];
+// Proxy pool is loaded from PROXY_POOL env var (JSON array) or defaults to empty.
+// In production, set PROXY_POOL or PROXY_URL instead of using hardcoded IPs.
+let PROXY_POOL: any[] = (() => {
+    const raw = process.env.PROXY_POOL;
+    if (raw) {
+        try {
+            return JSON.parse(raw);
+        } catch {
+            console.warn('[Crawler] Failed to parse PROXY_POOL env var, using empty pool');
+        }
+    }
+    return [];
+})();
 
 async function scrapePublicProxies(): Promise<any[]> {
     const sources = [

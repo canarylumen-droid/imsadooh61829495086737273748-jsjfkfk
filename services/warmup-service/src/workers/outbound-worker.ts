@@ -21,7 +21,13 @@ import crypto from 'crypto';
 
 function decryptWarmupSecret(ciphertext: string): string {
   if (!ciphertext || !ciphertext.includes(':')) return ciphertext;
-  const key = process.env.WARMUP_ENCRYPTION_KEY || 'default-insecure-key-change-in-production';
+  const key = process.env.WARMUP_ENCRYPTION_KEY;
+  if (!key) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('WARMUP_ENCRYPTION_KEY is not set. Refusing to run with fallback key in production.');
+    }
+    throw new Error('WARMUP_ENCRYPTION_KEY is not set. Please set it in your environment.');
+  }
   try {
     const parts = ciphertext.split(':');
     if (parts.length !== 3) return ciphertext;

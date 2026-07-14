@@ -14,7 +14,9 @@
 name: Deploy to AWS EC2
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
@@ -22,6 +24,7 @@ jobs:
   deploy:
     name: Deploy to AWS EC2
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
 
     steps:
       - name: Deploy via SSH
@@ -36,18 +39,18 @@ jobs:
             set -e
             cd ${{ secrets.AWS_EC2_APP_DIR }}
 
-            echo "� Pulling latest code..."
+            echo "Pulling latest code..."
             git pull origin main
 
-            echo "� Building and deploying..."
+            echo "Building and deploying..."
             ./scripts/aws-deploy.sh
 
-            echo "✅ Deploy triggered via CI/CD!"
+            echo "Deploy triggered via CI/CD!"
 
       - name: Notify on success
         if: success()
-        run: echo "✅ Deployed commit ${{ github.sha }} to EC2"
+        run: echo "Deployed commit ${{ github.sha }} to EC2"
 
       - name: Notify on failure
         if: failure()
-        run: echo "❌ Deploy FAILED for commit ${{ github.sha }}"
+        run: echo "Deploy FAILED for commit ${{ github.sha }}"

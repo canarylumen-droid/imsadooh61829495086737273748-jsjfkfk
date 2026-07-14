@@ -20,22 +20,6 @@ permissions:
   contents: read
 
 jobs:
-  quality:
-    name: TypeScript & Build Check
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Type check
-        run: npm run check
-      - name: Build client
-        run: npm run build:client
-
   build-and-push:
     name: Build & Push to ECR
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

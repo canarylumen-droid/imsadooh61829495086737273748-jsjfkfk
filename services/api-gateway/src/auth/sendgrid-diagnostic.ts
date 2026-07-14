@@ -33,11 +33,11 @@ export class SendGridDiagnostic {
     // Verify key format (should be SG.xxx)
     if (!sendgridKey.startsWith('SG.')) {
       console.log('\n⚠️  WARNING: API Key might be invalid (should start with "SG.")');
-      console.log(`   Your key starts with: ${sendgridKey.substring(0, 10)}...`);
+      console.log(`   Key is present but may not start with "SG."`);
     }
     
     console.log('\n✅ SendGrid API Key Detected!');
-    console.log(`   Key format: ${sendgridKey.substring(0, 10)}...${sendgridKey.substring(sendgridKey.length - 5)}`);
+    console.log('   Key is present and starts with "SG."');
     
     console.log('\n📬 SENDER EMAIL CONFIGURATION:');
     console.log(`   Email: ${emailFrom}`);

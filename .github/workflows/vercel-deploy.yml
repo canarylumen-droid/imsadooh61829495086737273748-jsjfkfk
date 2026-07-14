@@ -1,7 +1,9 @@
-name: Vercel Preview Deployment
+name: Vercel Deployment
 
 on:
-  push:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
     branches: [main]
   pull_request:
     branches: [main]
@@ -16,9 +18,11 @@ permissions:
 
 jobs:
   deploy-preview:
-    name: Vercel Deploy
+    name: Vercel Preview
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: >
+      (github.event_name == 'pull_request') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     steps:
       - uses: actions/checkout@v4
 
@@ -38,6 +42,7 @@ jobs:
           echo "url=$url" >> $GITHUB_OUTPUT
 
       - name: Comment PR with Preview URL
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
@@ -54,7 +59,7 @@ jobs:
   deploy-production:
     name: Vercel Production
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     steps:
       - uses: actions/checkout@v4
 

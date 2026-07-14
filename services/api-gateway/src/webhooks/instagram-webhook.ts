@@ -129,14 +129,14 @@ export function handleInstagramVerification(req: Request, res: Response): void {
 
   console.log('[Instagram Webhook] Verification request received');
   console.log('[Instagram Webhook] Mode:', mode);
-  console.log('[Instagram Webhook] Token received:', token);
+  console.log('[Instagram Webhook] Verification request received');
   console.log('[Instagram Webhook] Token configured:', !!verifyToken);
 
   // If no token configured, show helpful error
   if (!verifyToken) {
     console.error('[Instagram Webhook] ❌ META_VERIFY_TOKEN not configured!');
     console.error('[Instagram Webhook] Set META_VERIFY_TOKEN in environment to fix this');
-    console.log('[Instagram Webhook] Token received from Meta:', token);
+    console.log('[Instagram Webhook] Verification token not configured');
     res.status(403).json({ error: 'META_VERIFY_TOKEN not configured on server' });
     return;
   }
