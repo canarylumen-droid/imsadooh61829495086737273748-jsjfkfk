@@ -108,19 +108,19 @@ describe('API - Inbox Placement & Domain Reputation', () => {
 
 // ─── Client Components ──────────────────────────────────────────────────────
 describe('Client - Real-Time UI', () => {
-  it('analytics should have InboxPlacementSection with 2s refresh', () => {
+  it('analytics should have InboxPlacementSection with useRealtime', () => {
     expect(analytics).toContain('InboxPlacementSection');
-    expect(analytics).toContain('refetchInterval: 2000');
+    expect(analytics).toContain('useRealtime');
   });
 
-  it('deliverability should have InboxPlacementPie with 2s refresh', () => {
+  it('deliverability should have InboxPlacementPie with useRealtime', () => {
     expect(deliverability).toContain('InboxPlacementPie');
-    expect(deliverability).toContain('refetchInterval: 2000');
+    expect(deliverability).toContain('useRealtime');
   });
 
-  it('integrations should have PerMailboxReputationSection with 2s refresh', () => {
+  it('integrations should have PerMailboxReputationSection without polling', () => {
     expect(integrations).toContain('PerMailboxReputationSection');
-    expect(integrations).toContain('refetchInterval: 2000');
+    expect(integrations).toContain('useRealtime');
   });
 
   it('use-realtime should handle spam_detected WebSocket event', () => {

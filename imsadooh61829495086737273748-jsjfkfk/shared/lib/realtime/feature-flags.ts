@@ -92,7 +92,7 @@ export function registerRoutes(router: Router) {
   });
 
   // Ping endpoint: deploy script calls this after deploy to trigger flag broadcast
-  router.post("/feature-flags/ping", (req: Request, res: Response) => {
+  router.post("/feature-flags/ping", requireAuth, (req: Request, res: Response) => {
     const { flags } = req.body || {};
     if (flags) updateFeatureFlags(flags);
     else broadcastToAll();

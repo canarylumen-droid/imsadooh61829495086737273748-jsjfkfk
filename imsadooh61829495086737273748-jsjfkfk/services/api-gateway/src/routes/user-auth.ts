@@ -881,7 +881,7 @@ router.get('/check-state', async (req: Request, res: Response): Promise<void> =>
  * For users stuck in limbo state - allows them to clear their account and start fresh
  * This preserves their email but resets username and onboarding status
  */
-router.post('/reset-account', async (req: Request, res: Response): Promise<void> => {
+router.post('/reset-account', rateLimit({ windowMs: 60_000, max: 5, message: { error: 'Too many reset attempts' } }), async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body as { email?: string };
 

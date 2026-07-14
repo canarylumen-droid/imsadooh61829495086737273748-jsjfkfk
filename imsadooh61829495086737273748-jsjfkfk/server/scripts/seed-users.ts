@@ -9,14 +9,14 @@ async function seedUsers() {
         {
             email: 'team.replyflow@gmail.com',
             username: 'replyflow_team',
-            password: 'StrongPassword123!', // They should reset this, or we set a known initial one
+            password: process.env.SEED_VIP_PASSWORD || 'SetSEED_VIP_PASSWORD-env-var',
             plan: 'enterprise',
             subscriptionTier: 'enterprise'
         },
         {
             email: 'fortuneuchendu708@gmail.com',
             username: 'fortune_vip',
-            password: 'StrongPassword123!',
+            password: process.env.SEED_VIP_PASSWORD || 'SetSEED_VIP_PASSWORD-env-var',
             plan: 'enterprise',
             subscriptionTier: 'enterprise'
         }

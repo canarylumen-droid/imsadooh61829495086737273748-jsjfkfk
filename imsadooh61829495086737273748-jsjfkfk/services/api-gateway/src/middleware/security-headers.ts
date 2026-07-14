@@ -31,9 +31,14 @@ export function corsConfig(req: Request, res: Response, next: NextFunction) {
   const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',') || [];
   const origin = req.headers.origin;
   
-  if (process.env.NODE_ENV === 'development' || (origin && allowedOrigins.includes(origin))) {
-    res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  } else if (!origin) {
+    // Non-browser requests (curl, server-to-server) — allow
+    res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   }

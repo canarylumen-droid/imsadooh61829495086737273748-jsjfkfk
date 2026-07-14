@@ -1,11 +1,19 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { db } from '../db/client.js';
 import { reputationSnapshots } from '../db/schema.js';
 import { eq, desc } from 'drizzle-orm';
 
 const router = Router();
 
-router.get('/:domain', async (req, res) => {
+function requireApiKey(req: Request, res: Response, next: NextFunction) {
+  const key = req.headers['x-api-key'];
+  if (process.env.INTERNAL_API_KEY && key !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+router.get('/:domain', requireApiKey, async (req, res) => {
   try {
     const { domain } = req.params;
     const rows = await db

@@ -1,9 +1,17 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { registerSeed, getSeedStatus } from '../jobs/pollSeedInboxes.js';
 
 const router = Router();
 
-router.post('/register', async (req, res) => {
+function requireApiKey(req: Request, res: Response, next: NextFunction) {
+  const key = req.headers['x-api-key'];
+  if (process.env.INTERNAL_API_KEY && key !== process.env.INTERNAL_API_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
+
+router.post('/register', requireApiKey, async (req, res) => {
   try {
     const { campaignId, testId, sentAt } = req.body;
     if (!campaignId || !testId) {
@@ -17,7 +25,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-router.get('/status/:campaignId', async (req, res) => {
+router.get('/status/:campaignId', requireApiKey, async (req, res) => {
   try {
     const status = await getSeedStatus(req.params.campaignId);
     res.json(status);

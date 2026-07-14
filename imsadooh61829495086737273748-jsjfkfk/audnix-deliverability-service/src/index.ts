@@ -11,7 +11,10 @@ import { pollSNDS } from './jobs/pollSNDS.js';
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:5173'],
+  credentials: true,
+}));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {

@@ -1157,7 +1157,7 @@ router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Pr
       return;
     }
 
-    const { verifyDomainDns } = await (eval('import("@services/email-service/src/email/dns-verification.js")') as Promise<any>);
+    const { verifyDomainDns } = await import("@services/email-service/src/email/dns-verification.js");
     const { generateContextAwareMessage } = await import("@services/brain-worker/src/orchestrator/agents/universal-sales-agent-integrated.js");
 
     const results = {

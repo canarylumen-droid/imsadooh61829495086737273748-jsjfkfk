@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { sseService } from '../web-sockets/sse.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -7,7 +8,7 @@ const router = Router();
  * Unified SSE connection endpoint with advanced features
  * GET /api/sse/connect?compression=true&subscribe=mailbox_health,dns_verification
  */
-router.get('/connect', async (req: Request, res: Response) => {
+router.get('/connect', requireAuth, async (req: Request, res: Response) => {
   try {
     const options = {
       compression: req.query.compression === 'true',
@@ -33,7 +34,7 @@ router.get('/connect', async (req: Request, res: Response) => {
  * SSE connection endpoint for real-time metrics (legacy support)
  * GET /api/sse/metrics/:userId
  */
-router.get('/metrics/:userId', async (req: Request, res: Response) => {
+router.get('/metrics/:userId', requireAuth, async (req: Request, res: Response) => {
   try {
     const options = {
       compression: req.query.compression === 'true',
@@ -54,7 +55,7 @@ router.get('/metrics/:userId', async (req: Request, res: Response) => {
  * SSE connection endpoint for mailbox health updates (legacy support)
  * GET /api/sse/mailbox-health/:userId
  */
-router.get('/mailbox-health/:userId', async (req: Request, res: Response) => {
+router.get('/mailbox-health/:userId', requireAuth, async (req: Request, res: Response) => {
   try {
     const options = {
       compression: req.query.compression === 'true',
@@ -75,7 +76,7 @@ router.get('/mailbox-health/:userId', async (req: Request, res: Response) => {
  * SSE connection endpoint for DNS verification updates (legacy support)
  * GET /api/sse/dns-verification/:userId
  */
-router.get('/dns-verification/:userId', async (req: Request, res: Response) => {
+router.get('/dns-verification/:userId', requireAuth, async (req: Request, res: Response) => {
   try {
     const options = {
       compression: req.query.compression === 'true',
@@ -109,7 +110,7 @@ router.get('/health', (req: Request, res: Response) => {
  * Get dead letter queue for monitoring
  * GET /api/sse/dead-letter?limit=100
  */
-router.get('/dead-letter', (req: Request, res: Response) => {
+router.get('/dead-letter', requireAuth, requireAdmin, (req: Request, res: Response) => {
   const limit = parseInt(req.query.limit as string) || 100;
   const deadLetters = sseService.getDeadLetterQueue(limit);
   res.json({
@@ -122,7 +123,7 @@ router.get('/dead-letter', (req: Request, res: Response) => {
  * Clear dead letter queue (admin only)
  * DELETE /api/sse/dead-letter
  */
-router.delete('/dead-letter', (req: Request, res: Response) => {
+router.delete('/dead-letter', requireAuth, requireAdmin, (req: Request, res: Response) => {
   sseService.clearDeadLetterQueue();
   res.json({ success: true, message: 'Dead letter queue cleared' });
 });
@@ -131,7 +132,7 @@ router.delete('/dead-letter', (req: Request, res: Response) => {
  * Reset circuit breaker (admin only)
  * POST /api/sse/circuit-breaker/reset
  */
-router.post('/circuit-breaker/reset', (req: Request, res: Response) => {
+router.post('/circuit-breaker/reset', requireAuth, requireAdmin, (req: Request, res: Response) => {
   sseService.resetCircuitBreaker();
   res.json({ success: true, message: 'Circuit breaker reset' });
 });
@@ -140,7 +141,7 @@ router.post('/circuit-breaker/reset', (req: Request, res: Response) => {
  * Send acknowledgment from client
  * POST /api/sse/ack
  */
-router.post('/ack', (req: Request, res: Response) => {
+router.post('/ack', requireAuth, (req: Request, res: Response) => {
   const { clientId, messageId } = req.body;
   
   if (!clientId || !messageId) {

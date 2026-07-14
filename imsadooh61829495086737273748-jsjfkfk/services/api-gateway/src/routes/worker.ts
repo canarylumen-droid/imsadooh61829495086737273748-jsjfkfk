@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, getCurrentUserId } from '../middleware/auth.
 import { db } from '@shared/lib/db/db.js';
 import { followUpQueue, leads } from '@audnix/shared';
 import { eq, and, gte, sql } from 'drizzle-orm';
+import { rateLimit } from 'express-rate-limit';
 
 const router = Router();
 
@@ -42,7 +43,7 @@ router.post('/worker/stop', requireAdmin, async (req: Request, res: Response) =>
 /**
  * Get worker status
  */
-router.get('/worker/status', async (req: Request, res: Response) => {
+router.get('/worker/status', requireAuth, rateLimit({ windowMs: 60_000, max: 30, message: { error: 'Rate limit exceeded' } }), async (req: Request, res: Response) => {
   try {
     const isRunning = (followUpWorker as any).isRunning || false;
 
@@ -155,9 +156,8 @@ router.post('/worker/trigger/:leadId', requireAuth, async (req: Request, res: Re
  */
 router.post('/worker/process', async (req: Request, res: Response) => {
   try {
-    // Basic auth check or secret check
     const secret = req.headers['x-cron-secret'];
-    if (process.env.CRON_SECRET && secret !== process.env.CRON_SECRET) {
+    if (!process.env.CRON_SECRET || secret !== process.env.CRON_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
