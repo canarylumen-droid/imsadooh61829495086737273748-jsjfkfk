@@ -146,7 +146,7 @@ export async function runJobWatchdog(): Promise<void> {
  * Delays the first sweep by 5 minutes to let the service warm up.
  */
 export function startJobWatchdog(): void {
-  const INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+  const INTERVAL_MS = 900000; // 15 minutes
 
   console.log('[JobWatchdog] 🐕 Self-healing watchdog armed (sweep every 1h, first in 5m)');
 

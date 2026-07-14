@@ -11,7 +11,7 @@ import { leads, messages, integrations } from '@audnix/shared';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
 
-const RESCUE_INTERVAL_MS = 1 * 60 * 60 * 1000; // 1 hour — fast spam rescue
+const RESCUE_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes — fast spam rescue
 
 class SpamRescueWorker {
   private interval: NodeJS.Timeout | null = null;

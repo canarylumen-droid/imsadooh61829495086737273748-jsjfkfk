@@ -24,7 +24,7 @@ import { quotaService } from '@shared/lib/monitoring/quota-service.js';
 
 class RedistributionWorker {
   private interval: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // Every 1 hour
+  private readonly CHECK_INTERVAL_MS = 900000; // Every 15 minutes
   private readonly REDISTRIBUTION_THRESHOLD_HOURS = 24;
 
   start(): void {

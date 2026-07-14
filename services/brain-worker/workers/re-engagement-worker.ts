@@ -14,7 +14,7 @@ import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
 export class ReEngagementWorker {
   private isRunning: boolean = false;
   private interval: NodeJS.Timeout | null = null;
-  private readonly TICK_INTERVAL_MS = 24 * 60 * 60 * 1000; // Run once every 24 hours
+  private readonly TICK_INTERVAL_MS = 12 * 60 * 60 * 1000; // Run once every 12 hours
 
   start(): void {
     if (this.isRunning) return;

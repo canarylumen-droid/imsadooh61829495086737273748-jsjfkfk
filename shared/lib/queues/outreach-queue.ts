@@ -51,7 +51,7 @@ export async function enqueuePriorityReply(data: OutreachJobData) {
 export async function schedulePulseSweep() {
   return await outreachQueue.add('pulse-sweep-trigger', { type: 'autonomous' } as any, {
     repeat: {
-      every: 12 * 60 * 60 * 1000, // 12 hours
+      every: 4 * 60 * 60 * 1000, // 4 hours
     },
     jobId: 'global-pulse-sweep'
   });

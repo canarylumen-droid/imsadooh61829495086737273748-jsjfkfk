@@ -1,4 +1,5 @@
 local kumo = require 'kumo'
+local os = require 'os'
 
 -- =============================================================================
 -- Reputation System — Audnix AI
@@ -15,8 +16,13 @@ local THRESHOLD_BAD = tonumber(os.getenv('KUMO_REP_BAD_THRESHOLD') or '-10')
 local THRESHOLD_GOOD = tonumber(os.getenv('KUMO_REP_GOOD_THRESHOLD') or '10')
 local THRESHOLD_EXCELLENT = tonumber(os.getenv('KUMO_REP_EXCELLENT_THRESHOLD') or '50')
 
--- Pool definitions
-local POOLS = {
+-- Export thresholds for use by policy.lua
+M.THRESHOLD_BAD = THRESHOLD_BAD
+M.THRESHOLD_GOOD = THRESHOLD_GOOD
+M.THRESHOLD_EXCELLENT = THRESHOLD_EXCELLENT
+
+-- Pool definitions (exported for policy.lua pool selection)
+M.POOLS = {
   excellent = {
     name = 'pool:excellent',
     -- Best IPs, used for high-value sends (demos, trials)
@@ -94,37 +100,6 @@ function M.configure()
       { name = 'ip-list', data = { '10.0.1.40' } },
     },
   }
-
-  -- ── Reputation Check Handler ──────────────────────────────────────────────
-  -- Called before each message is queued
-  kumo.on('smtp_server_message_begin', function(conn)
-    -- Check sender reputation
-    local sender = conn.meta.from
-    local domain = sender:match('@(.+)$') or 'unknown'
-
-    -- Look up domain reputation
-    local rep = kumo.get_reputation(domain)
-    local score = rep and rep.score or 0
-
-    -- Select pool based on reputation
-    local pool
-    if score >= THRESHOLD_EXCELLENT then
-      pool = POOLS.excellent
-    elseif score >= THRESHOLD_GOOD then
-      pool = POOLS.good
-    elseif score >= THRESHOLD_BAD then
-      pool = POOLS.warmup
-    else
-      pool = POOLS.cold
-    end
-
-    -- Set the pool for this message
-    conn:set_meta('pool', pool.name)
-
-    -- Log reputation decision
-    print(string.format('[reputation] %s domain=%s score=%.1f pool=%s',
-      conn.serial_num, domain, score, pool.name))
-  end)
 
   -- ── Bounce Handling ───────────────────────────────────────────────────────
   -- Adjust reputation when bounces occur

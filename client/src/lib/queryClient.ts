@@ -104,7 +104,7 @@ export const queryClient = new QueryClient({
       refetchInterval: false,
       refetchOnWindowFocus: true,
       staleTime: 1000 * 60, // 60 seconds - data considered fresh for 1 minute
-      gcTime: 1000 * 60 * 60 * 24, // 24 hours
+      gcTime: 1000 * 60 * 60, // 1 hour
       retry: false,
       refetchOnMount: false, // Prevents refetching immediately when component remounts
     },

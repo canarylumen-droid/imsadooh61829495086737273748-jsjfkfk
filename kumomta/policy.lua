@@ -1,4 +1,5 @@
 local kumo = require 'kumo'
+local reputation = require 'reputation'
 
 -- =============================================================================
 -- Message Policy — Audnix AI
@@ -82,15 +83,6 @@ function M.configure()
         spf_result.result, sender, conn.remote_addr))
     end
 
-    -- ── Rate Limiting ─────────────────────────────────────────────────────
-    -- Per-sender rate limit
-    local rate_key = 'sender:' .. sender_domain
-    local allowed = kumo.check_throttle(rate_key, '50/1m')
-    if not allowed then
-      conn:reject(452, 'Rate limit exceeded — try again later')
-      return false
-    end
-
     -- ── IP Reputation Check ───────────────────────────────────────────────
     local ip = conn.remote_addr
     local ip_rep = kumo.get_ip_reputation(ip)
@@ -98,6 +90,27 @@ function M.configure()
       conn:reject(554, 'Rejected: sender reputation too low')
       return false
     end
+
+    -- ── Reputation-Based Pool Selection ────────────────────────────────────
+    local domain = sender_domain ~= '' and sender_domain or 'unknown'
+    local rep = kumo.get_reputation(domain)
+    local score = rep and rep.score or 0
+
+    local pool
+    if score >= reputation.THRESHOLD_EXCELLENT then
+      pool = reputation.POOLS.excellent
+    elseif score >= reputation.THRESHOLD_GOOD then
+      pool = reputation.POOLS.good
+    elseif score >= reputation.THRESHOLD_BAD then
+      pool = reputation.POOLS.warmup
+    else
+      pool = reputation.POOLS.cold
+    end
+
+    conn:set_meta('pool', pool.name)
+
+    print(string.format('[policy] pool-select domain=%s score=%.1f pool=%s',
+      domain, score, pool.name))
 
     return true
   end)

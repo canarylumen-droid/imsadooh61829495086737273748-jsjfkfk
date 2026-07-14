@@ -14,7 +14,7 @@ import { quotaService } from "@shared/lib/monitoring/quota-service.js";
 export class LeadGovernanceWorker {
   private isRunning: boolean = false;
   private interval: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
+  private readonly CHECK_INTERVAL_MS = 900000; // Check every 15 minutes
   private readonly EXPIRY_HOURS = 6;
   private readonly WARMTH_DECAY_DAYS = 7;
 

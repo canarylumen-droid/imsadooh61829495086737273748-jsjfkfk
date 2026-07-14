@@ -3067,7 +3067,7 @@ export async function initializeCampaignWorker(): Promise<void> {
     AutonomousScalerService.runOptimizationCycle().catch((err: any) => console.error('Initial Scaler Cycle failed:', err.message));
     setInterval(() => {
       AutonomousScalerService.runOptimizationCycle().catch((err: any) => console.error('Daily Scaler Cycle failed:', err.message));
-    }, 12 * 60 * 60 * 1000);
+    }, 3600000);
   }).catch((err: any) => {
     console.error('Failed to load AutonomousScalerService:', err.message);
   });

@@ -38,7 +38,7 @@ class EmailSyncWorker {
   private isRunning = false;
   private isSyncing = false;
   private syncTimeout: NodeJS.Timeout | null = null;
-  private readonly SYNC_INTERVAL_MS = 3600000; // 1 hour - Real-time sync is now handled by IMAP IDLE.
+  private readonly SYNC_INTERVAL_MS = 900000; // 15 minutes - Real-time sync is now handled by IMAP IDLE.
   private readonly GHOSTED_THRESHOLD_HOURS = 48;
 
   /**

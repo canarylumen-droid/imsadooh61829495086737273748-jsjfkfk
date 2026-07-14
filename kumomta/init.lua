@@ -99,7 +99,7 @@ kumo.configure_queue {
 kumo.configure_logger {
   -- Log to jlog for analytics
   log_dir = '/var/log/kumomta',
-  log_mode = 'imap',
+  log_mode = 'json',
   -- Don't log DKIM keys or auth tokens
   denied_headers = {
     'x-auth-token',

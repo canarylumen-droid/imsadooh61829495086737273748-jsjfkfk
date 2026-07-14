@@ -11,7 +11,7 @@ import { workerHealthMonitor } from "@shared/lib/monitoring/worker-health.js";
 export class PostMortemWorker {
   private isProcessing: boolean = false;
   private interval: NodeJS.Timeout | null = null;
-  private readonly INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
+  private readonly INTERVAL_MS = 2 * 60 * 60 * 1000; // 2 hours
 
   start(): void {
     if (this.interval) return;

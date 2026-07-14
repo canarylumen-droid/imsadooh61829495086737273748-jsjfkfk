@@ -1,0 +1,34 @@
+[package]
+name = "audnix-imap-worker"
+version = "0.1.0"
+edition = "2021"
+description = "High-performance IMAP IDLE worker for Audnix AI — replaces node-imap for 10K+ concurrent connections"
+authors = ["Audnix AI <hello@audnixai.com>"]
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+imap-codec = { version = "2", features = ["ext"] }
+redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-native-tls", "postgres", "chrono", "uuid"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1", features = ["v4"] }
+log = "0.4"
+env_logger = "0.11"
+anyhow = "1"
+thiserror = "1"
+dashmap = "6"
+flume = "0.11"
+futures = "0.3"
+tokio-util = "0.7"
+bytes = "1"
+mail-parser = "0.9"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

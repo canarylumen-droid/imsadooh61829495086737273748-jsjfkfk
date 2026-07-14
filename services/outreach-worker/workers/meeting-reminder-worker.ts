@@ -11,7 +11,7 @@ import { quotaService } from "@shared/lib/monitoring/quota-service.js";
 export class MeetingReminderWorker {
   private isRunning: boolean = false;
   private pollingInterval: NodeJS.Timeout | null = null;
-  private readonly POLL_INTERVAL_MS = 600000; // Increased to 10m to protect DB quota (Neon)
+  private readonly POLL_INTERVAL_MS = 300000; // 5 minutes to protect DB quota (Neon)
 
   start(): void {
     if (this.isRunning) return;
