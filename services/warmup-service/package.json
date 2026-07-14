@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "aws-sdk": "1.18.0",
-    "bullmq": "^5.0.0",
+    "bullmq": "^5.80.2",
     "dotenv": "^16.3.0",
     "drizzle-orm": "^0.45.0",
-    "drizzle-zod": "^0.7.0",
+    "drizzle-zod": "^0.8.3",
     "imapflow": "^1.0.0",
-    "mailauth": "^4.13.2",
+    "mailauth": "^4.13.3",
     "nodemailer": "^6.9.0",
     "openai": "^4.0.0",
     "winston": "^3.11.0",
@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@types/nodemailer": "^6.4.0",
-    "tsx": "^4.0.0",
+    "tsx": "^4.23.1",
     "typescript": "^5.3.0"
   }
 }

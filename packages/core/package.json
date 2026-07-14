@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
-    "pg": "^8.16.3",
+    "pg": "^8.22.0",
     "dotenv": "^17.2.3",
     "@audnix/shared": "1.0.0",
-    "ioredis": "^5.10.0"
+    "ioredis": "^5.11.1"
   },
   "devDependencies": {
-    "@types/pg": "^8.11.10"
+    "@types/pg": "^8.20.0"
   }
 }
