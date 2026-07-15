@@ -23,7 +23,7 @@ updates:
       include: "scope"
 
   - package-ecosystem: "npm"
-    directory: "/audnix-deliverability-service"
+    directory: "/services/deliverability-service"
     schedule:
       interval: "weekly"
     labels:

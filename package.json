@@ -292,6 +292,7 @@
     "ws": "^8.18.2",
     "axios": "^1.16.1",
     "tar": "^7.4.3",
-    "drizzle-orm": "^0.45.2"
+    "drizzle-orm": "^0.45.2",
+    "@opentelemetry/core": "^2.8.0"
   }
 }
