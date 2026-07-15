@@ -57,6 +57,8 @@ Audnix - email outreach/campaign platform.
 - CalendarLink: Saved to `users.calendarLink` column instead of `metadata` JSONB
 - Calendly real-time: `settings_updated` socket handler invalidates `/api/user/profile` query
 - mysql2: Lazy import so API gateway starts without the package
+- Warmup: Summary KPIs (Total/Warming/Warmed/Rep) always visible even before warmup starts; empty state now sits below KPIs; added reputation score to per-mailbox grid; explained what happens after warmup starts
+- Integrations: Mobile layout — removed `max-sm:hidden` on reputation/bounce/status stats so they show on mobile; increased email truncation from 120px→160px; reduced padding from p-8→p-4 on mobile
 
 ## Useful Commands
 
