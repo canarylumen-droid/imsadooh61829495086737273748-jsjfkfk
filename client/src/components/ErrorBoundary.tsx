@@ -23,6 +23,9 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught an error", error, errorInfo);
+    if (error?.message?.includes("dynamically imported module") || error?.message?.includes("Loading chunk")) {
+      window.location.reload();
+    }
   }
 
   public render() {
@@ -45,7 +48,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 </h2>
 
                 <p className="text-muted-foreground/60 text-sm mb-6">
-                  An unexpected error occurred. Your data is safe.
+                  An unexpected error occurred. Reloading usually fixes it.
                 </p>
 
                 <div className="flex flex-col gap-3 w-full">
