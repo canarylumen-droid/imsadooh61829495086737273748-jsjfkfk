@@ -41,5 +41,3 @@ Thumbs.db
 .replit
 rust-email-sender/target/
 rust-imap-worker/target/
-rust-email-sender/Cargo.lock
-rust-imap-worker/Cargo.lock

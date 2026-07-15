@@ -2,10 +2,9 @@
   "buildCommand": "npm run build:client",
   "outputDirectory": "dist/public",
   "framework": "vite",
-  "installCommand": "npm install",
+  "installCommand": "npm install --ignore-scripts",
   "rewrites": [
-    { "source": "/assets/(.*)", "destination": "/$1" },
-    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+    { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
     {
