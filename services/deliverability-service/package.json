@@ -16,13 +16,13 @@
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "drizzle-orm": "^0.33.0",
+    "drizzle-orm": "^0.45.2",
     "express": "^4.21.0",
     "imapflow": "^1.0.170",
     "mailparser": "^3.7.1",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.6.0",
     "postgres": "^3.4.9",
-    "uuid": "^10.0.0"
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
