@@ -1,9 +1,10 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useRealtime } from "@/hooks/use-realtime";
 import { Loader2, Plus, Play, Pause, Trash2, Activity, PlayCircle, Loader, StopCircle, Mail, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -19,7 +20,16 @@ const PAGE_SIZE = 10;
 export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignListModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { socket } = useRealtime();
   const [page, setPage] = useState(0);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
+    socket.on("leads_updated", handler);
+    socket.on("campaign_update", handler);
+    return () => { socket.off("leads_updated", handler); socket.off("campaign_update", handler); };
+  }, [socket, queryClient]);
 
   const { data: campaigns, isLoading } = useQuery<any[]>({
     queryKey: ["/api/outreach/campaigns"],
@@ -82,22 +92,24 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     const sent = camp.stats?.sent || 0;
     const remaining = Math.max(0, total - sent);
     
-    if (remaining === 0) return 'Awaiting Replies';
+    if (remaining === 0) return '~0d';
 
     const config = camp.config || {};
-    let dailyLimit = config.totalDailyLimit || config.dailyLimit || 50;
-    
-    // Simulate Neural Brain Throttle UP for high reply rates
-    const replied = camp.stats?.replied || 0;
-    const replyRate = sent > 0 ? (replied / sent) : 0;
-    if (replyRate > 0.05) {
-      dailyLimit = Math.floor(dailyLimit * 1.5);
-    }
-
+    const dailyLimit = config.totalDailyLimit || config.dailyLimit || 50;
     const maxMailboxes = Object.keys(config.mailboxLimits || {}).length || 1;
     const effectiveLimit = dailyLimit * maxMailboxes;
     
-    const days = Math.ceil(remaining / effectiveLimit);
+    if (effectiveLimit <= 0) return 'Unknown';
+
+    // Use actual send rate if available, otherwise estimate
+    const createdAt = camp.createdAt ? new Date(camp.createdAt).getTime() : 0;
+    const elapsed = createdAt > 0 ? (Date.now() - createdAt) / (1000 * 60 * 60 * 24) : 0;
+    let actualPerDay = effectiveLimit;
+    if (elapsed > 0.5 && sent > 0) {
+      actualPerDay = Math.max(1, Math.ceil(sent / elapsed));
+    }
+
+    const days = Math.ceil(remaining / Math.min(effectiveLimit, Math.max(10, actualPerDay)));
     return `~${days} ${days === 1 ? 'day' : 'days'}`;
   };
 

@@ -306,6 +306,27 @@ router.get('/api/mcp/keys', requireAuth, async (req: Request, res: Response): Pr
   }
 });
 
+// PATCH /api/mcp/key/:id — Rename an API key
+router.patch('/api/mcp/key/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
+    const { id } = req.params;
+    const { name } = req.body;
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      res.status(400).json({ error: 'Key name is required' });
+      return;
+    }
+
+    await db.execute(sql`UPDATE api_keys SET name = ${name.trim()} WHERE id = ${id} AND user_id = ${userId}`);
+    res.json({ success: true, message: 'API key name updated.' });
+  } catch (error) {
+    console.error('[MCP] Error updating key:', error);
+    res.status(500).json({ error: 'Failed to update key name' });
+  }
+});
+
 // DELETE /api/mcp/key/:id — Delete an API key
 router.delete('/api/mcp/key/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {

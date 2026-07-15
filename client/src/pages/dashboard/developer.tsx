@@ -18,7 +18,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRealtime } from "@/hooks/use-realtime";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
-import { Key, Copy, Check, Trash2, Loader2, Plus, Eye, EyeOff, Shield } from "lucide-react";
+import { Key, Copy, Check, Trash2, Loader2, Plus, Eye, EyeOff, Shield, Pencil } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 
@@ -38,6 +38,8 @@ function DeveloperPage() {
   const [createPermission, setCreatePermission] = useState("read_write");
   const [newKeyData, setNewKeyData] = useState<{ key: string; name: string; permissionLevel: string } | null>(null);
   const [showFullKey, setShowFullKey] = useState(false);
+  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renameName, setRenameName] = useState("");
 
   useEffect(() => {
     if (!socket) return;
@@ -72,6 +74,21 @@ function DeveloperPage() {
     },
     onError: (e: Error) =>
       toast({ title: "Failed to create key", description: e.message, variant: "destructive" }),
+  });
+
+  const renameKey = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) =>
+      apiRequest("PATCH", `/api/mcp/key/${id}`, { name }).then(async r => {
+        if (!r.ok) { const err = await r.json(); throw new Error(err.error || "Failed to rename"); }
+        return r.json();
+      }),
+    onSuccess: () => {
+      toast({ title: "Key renamed" });
+      setRenameTarget(null);
+      qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed to rename", description: e.message, variant: "destructive" }),
   });
 
   const deleteKey = useMutation({
@@ -211,7 +228,7 @@ function DeveloperPage() {
                 <TableHead>Permission</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead>Last used</TableHead>
-                <TableHead className="w-12" />
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -248,15 +265,25 @@ function DeveloperPage() {
                       {k.lastUsedAt ? formatDistanceToNow(new Date(k.lastUsedAt), { addSuffix: true }) : "Never"}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => { if (confirm("Delete this key?")) deleteKey.mutate(k.id); }}
-                        disabled={deleteKey.isPending}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-primary"
+                          onClick={() => { setRenameTarget({ id: k.id, name: k.name }); setRenameName(k.name); }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => { if (confirm(`Delete "${k.name}"?`)) deleteKey.mutate(k.id); }}
+                          disabled={deleteKey.isPending}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -265,6 +292,27 @@ function DeveloperPage() {
           </Table>
         </div>
       </Card>
+
+      <Dialog open={!!renameTarget} onOpenChange={(o) => { if (!o) setRenameTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rename API key</DialogTitle>
+          </DialogHeader>
+          <div className="py-3">
+            <Label>Name</Label>
+            <Input value={renameName} onChange={e => setRenameName(e.target.value)} className="mt-1.5" />
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={() => renameTarget && renameKey.mutate({ id: renameTarget.id, name: renameName })} disabled={renameKey.isPending || !renameName.trim()}>
+              {renameKey.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageWrapper>
   );
 }
