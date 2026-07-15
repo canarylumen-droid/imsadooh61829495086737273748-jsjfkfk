@@ -255,7 +255,7 @@
     "winston-daily-rotate-file": "^5.0.0",
     "wouter": "^3.3.5",
     "ws": "^8.18.2",
-    "zod": "^3.24.2",
+    "zod": "^4.4.3",
     "zod-validation-error": "^3.4.0"
   },
   "optionalDependencies": {

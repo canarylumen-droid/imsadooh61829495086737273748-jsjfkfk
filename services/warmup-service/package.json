@@ -19,7 +19,7 @@
     "nodemailer": "^9.0.3",
     "openai": "^4.0.0",
     "winston": "^3.11.0",
-    "zod": "^3.22.0"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/nodemailer": "^6.4.0",
