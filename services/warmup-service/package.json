@@ -16,7 +16,7 @@
     "drizzle-zod": "^0.7.0",
     "imapflow": "^1.0.0",
     "mailauth": "^4.13.2",
-    "nodemailer": "^9.0.3",
+    "nodemailer": "^9.0.1",
     "openai": "^4.0.0",
     "winston": "^3.11.0",
     "zod": "^3.22.0"
