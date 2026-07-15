@@ -26,9 +26,13 @@
 |----------|--------|
 | `POST /api/user/auth/login` | ✅ Valid creds → `success: true` |
 | `POST /api/user/auth/login` | ❌ Invalid creds → `401 Invalid email or password` |
-| Session | Express-session (cookie-based), no Set-Cookie observed on localhost (may require proxy headers) |
-| API Key (Bearer) | ✅ Works for `requireAuthOrApiKey` endpoints |
+| Session | Express-session (cookie-based), `secure: true` in prod — cookies flow through nginx HTTPS ✅ |
+| API Key (Bearer) | ✅ Works: `auth.ts:257` sets `req.user` + `req.session.userId` |
 | API Key (x-api-key) | ✅ Works for `requireAuthOrApiKey` endpoints |
+
+### Auth fixes applied (commit `efd165be`):
+- `requireApiKey` now sets `req.user = { id }` (fixed `Cannot read id of undefined` in prospecting)
+- `requireApiKey` now populates `req.session.userId` so route handlers that check `req.session?.userId` work with API keys
 
 ---
 
@@ -94,12 +98,12 @@ Integrations for `team.replyflow`:
 
 ## 7. Known Issues
 
-1. **Session cookies not sent on localhost** — express-session may require `trust proxy` for localhost requests. Works through nginx.
-2. **Redis not configured** — REDIS_URL missing, infra-scaler logs errors every 30s. WebSocket offline buffer not available.
-3. **Signup/forgot-password endpoints need attention** — 404/500 responses.
-4. **npm install fails on server** — Replit package firewall (EAI_AGAIN) prevents installing new packages. Must SCP node_modules when needed.
-5. **`/api/ai/insights` returns 404** — Route may be mounted under different prefix.
-6. **`/api/channel-status/all` returns 404** — Route may be mounted under different prefix.
+1. **Session cookies on localhost** — `secure: true` in prod; cookies work through nginx HTTPS only.
+2. **Redis not configured** — REDIS_URL missing, infra-scaler errors every 30s. WebSocket offline buffer unavailable.
+3. **Forgot-password fails (500)** — SendGrid credits exceeded, Resend domain not verified. Needs email provider fix.
+4. **npm install fails on server** — Replit package firewall (EAI_AGAIN). Must SCP node_modules.
+5. **`/api/ai/insights` 404** — Route mounted under different prefix (leads routes are at `/api/leads`).
+6. **Signup uses OTP flow** — `POST /api/user/auth/signup/request-otp` (not bare `/signup`). Direct signup disabled.
 
 ---
 
