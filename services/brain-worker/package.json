@@ -7,10 +7,10 @@
     "dev": "tsx watch index.ts"
   },
   "dependencies": {
-    "bullmq": "^5.70.1",
+    "bullmq": "^5.80.3",
     "ioredis": "^5.10.0",
     "@audnix/core": "1.0.0",
     "@audnix/shared": "1.0.0",
-    "@google/generative-ai": "^0.21.0"
+    "@google/generative-ai": "^0.24.1"
   }
 }
