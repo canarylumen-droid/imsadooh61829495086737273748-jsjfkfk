@@ -43,13 +43,15 @@ Audnix - email outreach/campaign platform.
 - EC2: `i-0fc13fe518b5f483e` (54.227.164.241), us-east-1d
 - App dir: `/home/ubuntu/app`
 - PM2 runs `audnix-api-gateway` (id 17) on port 5000 via tsx
-- Deploy: `git push github main && ssh EC2 pull && pm2 restart audnix-api-gateway`
-- Key scp: use EC2 Instance Connect to push temporary SSH key
+- Deploy: `git push github main` then ssh EC2: `cd /home/ubuntu/app && git pull && cd client && npm run build && pm2 restart audnix-api-gateway`
+- Key scp: use EC2 Instance Connect to push temporary SSH key; `ssh -i <key> ubuntu@54.227.164.241`
+- SSH key not available in automated workspace — use EC2 console Instance Connect to push a temp key
 
 ## Recent Fixes (Jul 15 2026)
 
 - Dashboard KPIs: Added empty state when no mailbox connected — shows "Connect Mailbox" / "Create Campaign" buttons
-- AI Insights: Three-tier empty state based on mailbox connected, campaign running, or awaiting activity; fetches integrations/campaigns for smarter messaging
+- AI Insights page: Rewritten to match actual backend response (trends, predictions, recommendations, topPerformers — NOT channels/funnel/hasData/timeSeries which backend doesn't return); three-tier empty state with smart messaging; `hasData` replaced with real `hasRealData` check based on trend values
+- Deals pipeline: Status badges now color-coded (red=lost, amber=pending, sky=open, emerald=booked/closed); "Pending Payment" only shown for `pending` status; "Not Interested" for `closed_lost`; "Booked" for `converted`
 - Inbox: `statusStyles` now handles `contacted` and `opened` (previously missing, causing blank badge); reply on new lead sets `contacted` not `opened`; "Contacted" filter added
 - Avatar upload: `POST /api/user/avatar` route added with Supabase/S3 → local disk fallback; `/uploads/` static serving
 - CalendarLink: Saved to `users.calendarLink` column instead of `metadata` JSONB

@@ -4,7 +4,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Shield, Mail, Clock, TrendingUp, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Shield, Mail, Clock, TrendingUp, AlertTriangle, CheckCircle2, Thermometer } from "lucide-react";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { Link } from "wouter";
 
@@ -41,13 +41,15 @@ export default function WarmupPage() {
     queryKey: ["/api/warmup/status", { integrationId: selectedMailboxId }],
     refetchOnWindowFocus: true,
     staleTime: 10_000,
-
   });
 
   const warmupStatuses: WarmupStatus[] = warmupData?.mailboxes || [];
 
   const activeWarmups = warmupStatuses.filter((w) => w.isWarmingUp);
   const completedWarmups = warmupStatuses.filter((w) => !w.isWarmingUp);
+
+  const hasWarmupData = warmupStatuses.length > 0;
+  const hasMailboxConnected = mailboxes.length > 0;
 
   const getStageLabel = (percent: number): string => {
     if (percent <= 10) return "Day 1-2: Warming Up";
@@ -64,6 +66,10 @@ export default function WarmupPage() {
     return "text-red-500";
   };
 
+  const avgReputation = warmupStatuses.length > 0
+    ? Math.round(warmupStatuses.reduce((sum, w) => sum + w.reputationScore, 0) / warmupStatuses.length)
+    : 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -76,11 +82,11 @@ export default function WarmupPage() {
         <Badge variant={activeWarmups.length > 0 ? "default" : "secondary"}>
           {activeWarmups.length > 0
             ? `${activeWarmups.length} warming`
-            : "All warmed"}
+            : hasWarmupData ? "All warmed" : "—"}
         </Badge>
       </div>
 
-      {/* Summary Cards */}
+      {/* Summary Cards — always visible */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4">
@@ -89,7 +95,7 @@ export default function WarmupPage() {
                 <Mail className="h-5 w-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{warmupStatuses.length}</p>
+                <p className="text-2xl font-bold">{hasMailboxConnected ? mailboxes.length : 0}</p>
                 <p className="text-xs text-muted-foreground">Total Mailboxes</p>
               </div>
             </div>
@@ -128,14 +134,7 @@ export default function WarmupPage() {
                 <Shield className="h-5 w-5 text-purple-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {warmupStatuses.length > 0
-                    ? Math.round(
-                        warmupStatuses.reduce((sum, w) => sum + w.reputationScore, 0) /
-                          warmupStatuses.length
-                      )
-                    : 0}
-                </p>
+                <p className="text-2xl font-bold">{avgReputation}</p>
                 <p className="text-xs text-muted-foreground">Avg Reputation</p>
               </div>
             </div>
@@ -173,7 +172,7 @@ export default function WarmupPage() {
                     Sending {w.dailyLimit}/{w.providerMax} emails/day
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="grid grid-cols-4 gap-2 text-center">
                   <div className="bg-muted/30 rounded p-2">
                     <p className="text-lg font-bold">{w.totalSent}</p>
                     <p className="text-[10px] text-muted-foreground">Sent</p>
@@ -186,9 +185,15 @@ export default function WarmupPage() {
                     <p className="text-lg font-bold text-red-500">{w.totalBounced}</p>
                     <p className="text-[10px] text-muted-foreground">Bounced</p>
                   </div>
+                  <div className="bg-muted/30 rounded p-2">
+                    <p className="text-lg font-bold" style={{ color: w.reputationScore >= 60 ? '#10b981' : w.reputationScore >= 40 ? '#f59e0b' : '#ef4444' }}>
+                      {w.reputationScore}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">Reputation</p>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <TrendingUp className={`h-3 w-3 ${getReputationColor(w.reputationScore)}`} />
+                  <Thermometer className={`h-3 w-3 ${getReputationColor(w.reputationScore)}`} />
                   <span className={`text-xs font-medium ${getReputationColor(w.reputationScore)}`}>
                     Reputation: {w.reputationScore}/100
                   </span>
@@ -233,15 +238,19 @@ export default function WarmupPage() {
         </Card>
       )}
 
-      {warmupStatuses.length === 0 && !isLoading && (
+      {/* Empty state — only shown when no warmup data at all */}
+      {!hasWarmupData && !isLoading && (
         <Card>
           <CardContent className="p-12 text-center">
             <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            {mailboxes.length > 0 ? (
+            {hasMailboxConnected ? (
               <>
                 <h3 className="text-lg font-medium mb-2">Warmup not started</h3>
                 <p className="text-sm text-muted-foreground mb-4">
                   Mailbox connected but warmup hasn't started yet. It will begin automatically.
+                </p>
+                <p className="text-xs text-muted-foreground/60">
+                  Once started, you'll see real-time stats for emails sent, opened, bounced, and your reputation score.
                 </p>
               </>
             ) : (

@@ -1252,7 +1252,7 @@ export default function IntegrationsPage() {
                   </div>
                 </div>
               ) : hasMailboxesConnected ? (
-                <div className="p-8 space-y-8">
+                <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
                   <div className="flex items-center justify-between pb-4 border-b border-border/50">
                     <div className="space-y-3 flex-1">
                       <div className="flex items-center justify-between">
@@ -1368,7 +1368,7 @@ export default function IntegrationsPage() {
                           </div>
                           <div className="space-y-0.5 min-w-0">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              <h4 className={cn("text-xs sm:text-sm font-bold transition-colors truncate max-w-[120px] sm:max-w-xs", !mailbox.connected ? "text-muted-foreground" : "text-foreground")}>
+                              <h4 className={cn("text-xs sm:text-sm font-bold transition-colors truncate max-w-[160px] sm:max-w-xs", !mailbox.connected ? "text-muted-foreground" : "text-foreground")}>
                                 {mailbox.email}
                               </h4>
                               {mailbox.connected ? (
@@ -1422,7 +1422,7 @@ export default function IntegrationsPage() {
 
                         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mt-2 lg:mt-0">
                           {mailbox.connected && (
-                            <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto max-sm:hidden">
+                            <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto">
                               <div className="flex flex-col justify-center">
                                 <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reputation</span>
                                 <span className={cn(
@@ -1467,7 +1467,7 @@ export default function IntegrationsPage() {
                             <Button 
                               variant="ghost" 
                               size="sm" 
-                              className="h-8 rounded-lg text-[9px] sm:text-[10px] px-2.5 font-bold text-destructive hover:bg-destructive/10 flex-1 sm:flex-initial" 
+                              className="h-8 rounded-lg text-[9px] sm:text-[10px] px-2.5 sm:px-2.5 font-bold text-destructive hover:bg-destructive/10 flex-1 sm:flex-initial" 
                               onClick={() => confirmDisconnect(mailbox.provider, mailbox.id)}
                             >
                               <Unplug className="h-3 w-3 mr-1" /> {mailbox.connected ? "Disconnect" : "Remove"}
