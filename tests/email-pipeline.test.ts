@@ -73,8 +73,8 @@ describe('Background Workers - Speed', () => {
     expect(inboundSweep).not.toContain('15 * 60 * 1000');
   });
 
-  it('spam rescue should be 1hr (was 6hr)', () => {
-    expect(spamRescue).toContain('1 * 60 * 60 * 1000');
+  it('spam rescue should be 30min (was 6hr)', () => {
+    expect(spamRescue).toContain('30 * 60 * 1000');
     expect(spamRescue).not.toContain('6 * 60 * 60 * 1000');
   });
 });

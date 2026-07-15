@@ -95,7 +95,7 @@ describe('API Gateway Integration', () => {
       const res = await request(app)
         .options('/api/test')
         .set('Origin', 'http://localhost:5000');
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(204);
       expect(res.headers['access-control-allow-methods']).toBeDefined();
       expect(res.headers['access-control-allow-origin']).toBe('http://localhost:5000');
     });

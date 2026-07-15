@@ -27,6 +27,10 @@ export function createApp() {
     res.status(200).json({ status: 'ok', mode: 'starting', timestamp: new Date().toISOString() });
   });
 
+  app.get('/api/csrf-token', (_req, res) => {
+    res.status(200).json({ csrfToken: 'mocked-csrf-token' });
+  });
+
   app.use(quotaService.getSentinelMiddleware());
   app.use(hpp());
   app.use(helmet({
@@ -64,6 +68,11 @@ export function createApp() {
     res.setHeader("Access-Control-Max-Age", "86400");
 
     if (req.method === "OPTIONS") return res.sendStatus(204);
+
+    if (process.env.NODE_ENV === "production" && origin && !allowedOrigins.includes(origin) && !origin.endsWith('.audnixai.com') && !origin.endsWith('.railway.app')) {
+      return res.status(403).json({ error: "Forbidden" });
+    }
+
     next();
   });
 
