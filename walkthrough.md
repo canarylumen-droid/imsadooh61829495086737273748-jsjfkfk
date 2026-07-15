@@ -785,4 +785,71 @@ curl -X POST "https://api.audnixai.com/mcp" \
 
 ---
 
+## 14. AWS Infrastructure & SSH Access
+
+### 14.1 EC2 Instance
+
+| Field | Value |
+|-------|-------|
+| Name | **Audnix-ai** |
+| Instance ID | `i-0fc13fe518b5f483e` |
+| Public IP | `54.227.164.241` |
+| Private IP | `172.31.33.97` |
+| State | `running` |
+| Key Pair | `audnix-deploy-key` |
+| VPC | `vpc-0c0a91c8cbb139bc3` |
+| Subnet | `subnet-087af2226e5503816` |
+| Security Group | `sg-08dae598a8abf2554` (SSH open to `0.0.0.0/0`) |
+| Launch Time | 2026-07-07T10:19:08Z |
+| OS | Ubuntu 7.0.0-aws (Node.js v22.23.1) |
+
+### 14.2 SSH Access
+
+Credentials stored in `opencode.json` (excluded from git via `.gitignore`).
+
+**EC2 Instance Connect** (recommended — no permanent key needed):
+```bash
+# Push temp SSH key and connect in one flow:
+aws ec2-instance-connect send-ssh-public-key \
+  --instance-id i-0fc13fe518b5f483e \
+  --instance-os-user ubuntu \
+  --ssh-public-key file://~/.ssh/id_rsa.pub
+
+ssh -i ~/.ssh/id_rsa ubuntu@54.227.164.241
+```
+
+**App directory:** `/home/ubuntu/app/` (PM2 managed)
+**Services:** 16 PM2 processes (API gateway on 5000, Socket on 5001, workers)
+**Redis:** Docker container `app-redis-1` on port 6379
+**Database:** RDS PostgreSQL `database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com`
+**Reverse proxy:** nginx on 80/443 → localhost:5000
+
+### 14.3 PM2 Process Management
+
+```bash
+# Check all services
+pm2 list
+
+# View logs for a specific service
+pm2 logs audnix-api-gateway
+pm2 logs audnix-socket-server
+
+# Restart a service
+pm2 restart audnix-api-gateway --update-env
+
+# Start all from ecosystem config
+cd /home/ubuntu/app && pm2 start ecosystem.config.cjs
+```
+
+### 14.4 Known Issues & Fixes
+
+| Issue | Cause | Fix |
+|-------|-------|-----|
+| All PM2 services crash on start | Missing `instrument.ts` (Sentry init) | Created `/home/ubuntu/app/instrument.ts` with `Sentry.init()` |
+| CPU at 100% (load ~10.5) | Workers restart-loop before fix | Stabilized after `instrument.ts` deploy |
+
+---
+
+*© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*
+
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*

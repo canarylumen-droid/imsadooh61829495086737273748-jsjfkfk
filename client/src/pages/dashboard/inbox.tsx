@@ -24,7 +24,6 @@ import {
 } from "@/components/ui/dialog";
 
 import { Skeleton } from "@/components/ui/skeleton";
-import { EmptyState } from "@/components/shared/EmptyState";
 import { useParams, useLocation } from "wouter";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import DOMPurify from "dompurify";
@@ -411,7 +410,7 @@ export default function InboxPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const simpleStatuses = ['new', 'contacted', 'replied', 'booked', 'converted', 'not_interested', 'cold', 'warm'];
+  const simpleStatuses = ['new', 'contacted', 'converted', 'not_interested'];
 
   const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching } = useQuery<any>({
     queryKey: ["/api/leads", {
@@ -723,56 +722,55 @@ export default function InboxPage() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   }, [replyMessage, sendMutation]);
 
-  const handleMagicPencil = async () => {
-    if (!replyMessage || isPolishing) return;
-    setIsPolishing(true);
-    try {
+  const handleAI = async () => {
+    if (replyMessage.trim()) {
+      if (isPolishing) return;
+      setIsPolishing(true);
+      try {
         const res = await fetch("/api/leads/magic-pencil", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          text: replyMessage,
-          tone: activeLead?.metadata?.tone || 'professional',
-          context: activeLead?.name ? `Replying to ${activeLead.name} from ${activeLead.company || 'unknown company'}` : 'Sales reply'
-        })
-      });
-      const data = await res.json();
-      if (data.rewrittenText) {
-        setReplyMessage(data.rewrittenText);
-        toast({ title: "✨ Message Polished", description: "AI has refined your response for maximum conversion." });
-      }
-    } catch (err) {
-      console.error("Magic Pencil Error:", err);
-      toast({ variant: "destructive", title: "Pencil Failed", description: "Could not refine message at this time." });
-    } finally {
-      setIsPolishing(false);
-    }
-  };
-
-  const handleAiReply = async () => {
-    setIsGenerating(true);
-    setTypedText("");
-    try {
-      const res = await apiRequest("POST", `/api/leads/draft-reply/${leadId}`);
-      const data = await res.json();
-      const aiSuggestion = data.draft || data.aiSuggestion || data.content || "";
-
-      // Typewriter effect from ConversationsPage
-      let index = 0;
-      const interval = setInterval(() => {
-        if (index < aiSuggestion.length) {
-          setTypedText(aiSuggestion.slice(0, index + 1));
-          index++;
-        } else {
-          clearInterval(interval);
-          setReplyMessage(aiSuggestion);
-          setIsGenerating(false);
-          setTypedText(""); // clear the overlay text after typing finishes
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            text: replyMessage,
+            tone: activeLead?.metadata?.tone || 'professional',
+            context: activeLead?.name ? `Replying to ${activeLead.name} from ${activeLead.company || 'unknown company'}` : 'Sales reply'
+          })
+        });
+        const data = await res.json();
+        if (data.rewrittenText) {
+          setReplyMessage(data.rewrittenText);
+          toast({ title: "✨ Message Polished", description: "AI has refined your response for maximum conversion." });
         }
-      }, 10); // Sped up typing
-    } catch (err) {
-      toast({ title: "AI Error", description: "Failed to generate reply", variant: "destructive" });
-      setIsGenerating(false);
+      } catch (err) {
+        toast({ variant: "destructive", title: "AI Error", description: "Could not refine message at this time." });
+      } finally {
+        setIsPolishing(false);
+      }
+    } else {
+      if (isGenerating) return;
+      setIsGenerating(true);
+      setTypedText("");
+      try {
+        const res = await apiRequest("POST", `/api/leads/draft-reply/${leadId}`);
+        const data = await res.json();
+        const aiSuggestion = data.draft || data.aiSuggestion || data.content || "";
+
+        let index = 0;
+        const interval = setInterval(() => {
+          if (index < aiSuggestion.length) {
+            setTypedText(aiSuggestion.slice(0, index + 1));
+            index++;
+          } else {
+            clearInterval(interval);
+            setReplyMessage(aiSuggestion);
+            setIsGenerating(false);
+            setTypedText("");
+          }
+        }, 10);
+      } catch (err) {
+        toast({ title: "AI Error", description: "Failed to generate reply", variant: "destructive" });
+        setIsGenerating(false);
+      }
     }
   };
 
@@ -1174,10 +1172,30 @@ export default function InboxPage() {
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
-            ) : filteredLeads.length === 0 && !leadsFetching && hasLoadedLeadsRef.current && !channelsLoading ? (
+            ) : filteredLeads.length === 0 && !leadsFetching && hasLoadedLeadsRef.current && !channelsLoading && allLeads.length > 0 ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
-                {/* Only show "Connect Sources" if loading is DONE and ABSOLUTELY no channels are connected AND no leads exist */}
-                {!channelsLoading && hasAnyChannel === false && allLeads.length === 0 ? (
+                <div className="max-w-xs">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-500/20 to-gray-500/20 border border-slate-500/20 flex items-center justify-center mb-6 mx-auto">
+                    <InboxIcon className="h-10 w-10 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-bold text-foreground/80">
+                    {searchQuery ? "No matches found" :
+                      filterStatus !== 'all' ? `No ${filterStatus} conversations` :
+                        "No conversations yet"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {searchQuery ? "Try different keywords or check spelling" :
+                      filterStatus === 'unread' ? "All caught up — no unread messages" :
+                      filterStatus === 'opened' ? "No opened conversations yet" :
+                      filterStatus === 'archived' ? "No archived conversations" :
+                      filterStatus !== 'all' ? "Try a different filter or check back later" :
+                        "Start a campaign to see conversations here"}
+                  </p>
+                </div>
+              </div>
+            ) : !leadsFetching && hasLoadedLeadsRef.current && !channelsLoading && allLeads.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
+                {hasAnyChannel === false ? (
                   <div className="max-w-xs">
                     <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-8 mx-auto relative group">
                       <div className="absolute inset-0 bg-primary/20 blur-xl md:blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1886,25 +1904,23 @@ export default function InboxPage() {
                         <div className="absolute right-3 bottom-2 flex gap-1.5 z-10">
                           <Button
                             size="icon"
-                            variant="ghost"
-                            onClick={handleMagicPencil}
-                            disabled={!replyMessage || isPolishing}
+                            onClick={handleAI}
+                            disabled={isPolishing || isGenerating}
                             className={cn(
                               "h-7 w-7 rounded-lg transition-all",
-                              isPolishing ? "animate-pulse bg-primary/10" : "hover:bg-primary/10 text-primary"
+                              replyMessage.trim()
+                                ? "hover:bg-primary/10 text-primary"
+                                : "bg-gradient-to-br from-[#FFD700] via-[#FDB931] to-[#D4AF37] text-black shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 border border-amber-400/50 group/ai"
                             )}
-                            title="AI Magic Pencil: Polish & Rewrite"
+                            title={replyMessage.trim() ? "Polish with AI" : "Generate AI Reply"}
                           >
-                            {isPolishing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />}
-                          </Button>
-                          <Button
-                            size="icon"
-                            onClick={handleAiReply}
-                            disabled={isGenerating}
-                            className="h-7 w-7 rounded-lg bg-gradient-to-br from-[#FFD700] via-[#FDB931] to-[#D4AF37] text-black shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 transition-all border border-amber-400/50 group/ai"
-                            title="Generate AI Reply"
-                          >
-                            {isGenerating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 fill-black/20" />}
+                            {isPolishing || isGenerating ? (
+                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            ) : replyMessage.trim() ? (
+                              <Wand2 className="h-3.5 w-3.5" />
+                            ) : (
+                              <Sparkles className="h-3.5 w-3.5 fill-black/20" />
+                            )}
                           </Button>
                         </div>
                       </div>

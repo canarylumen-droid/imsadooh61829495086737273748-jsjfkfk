@@ -84,7 +84,7 @@ async function runTool(toolName: string, args: any, userId: string, permissionLe
         return mcpError(400, 'send_message requires: to, subject, body');
       }
       const { sendEmail } = await import('@shared/lib/channels/email.js');
-      await sendEmail({ to: args.to, subject: args.subject, body: args.body, userId });
+      await sendEmail(userId, args.to, args.body, args.subject);
       return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Message sent' }) }] };
     }
     case 'manage_webhooks': {

@@ -989,7 +989,7 @@ router.post("/draft-reply/:leadId", requireAuthOrApiKey, async (req: Request, re
       }
     }
 
-    const messages = await storage.getMessagesByLeadId(leadId);
+    const messages = (await storage.getMessagesByLeadId(leadId)).slice(-50);
     const user = await storage.getUserById(userId);
     
     // Pass same context as the auto-reply
@@ -1805,32 +1805,6 @@ Provide ONLY the rewritten message.`;
   } catch (error) {
     console.error("Magic pencil error:", error);
     res.status(500).json({ error: "Failed to rewrite message" });
-  }
-});
-
-/**
- * POST /api/ai/draft-reply/:leadId
- * Generate an AI draft reply for a lead conversation
- */
-router.post("/draft-reply/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const userId = getCurrentUserId(req)!;
-    const { leadId } = req.params;
-    const lead = await storage.getLeadById(leadId);
-    if (!lead || lead.userId !== userId) {
-      res.status(404).json({ error: "Lead not found" });
-      return;
-    }
-    const messages = await storage.getMessagesByLeadId(leadId);
-    const recentHistory = messages.slice(-10);
-    
-    const { generateAIReply } = await import("@services/brain-worker/src/ai-lib/core/conversation-ai.js");
-    const result = await generateAIReply(lead as any, recentHistory, 'email', {});
-    
-    res.json({ draft: result.text, aiSuggestion: result.text });
-  } catch (error: any) {
-    console.error("[AI Draft Reply] Error:", error.message);
-    res.status(500).json({ error: "Failed to generate reply" });
   }
 });
 

@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Loader2, Send, Wand2, Mail, Clock, Users, Smartphone, Monitor,
   Upload, CheckCircle2, ChevronRight, ChevronLeft, Sparkles,
-  FileText, Plus, Database, Inbox, Tags, Trash2, X, AlertTriangle, Search
+  FileText, Plus, Database, Inbox, Tags, Trash2, X, AlertTriangle, Search, ArrowRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";

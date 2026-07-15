@@ -72,6 +72,9 @@ class WebSocketSyncServer {
       }
       this.userSocketMap.get(userId)!.add(socket.id);
 
+      // Replay buffered offline events
+      this.replayBufferedEvents(userId, socket);
+
       socket.on('disconnect', () => {
         const sockets = this.userSocketMap.get(userId);
         if (sockets) {
@@ -155,6 +158,47 @@ class WebSocketSyncServer {
     this.executeEmit(userId, event, data, now);
   }
 
+  private async getRedis() {
+    try {
+      const { getPubClient } = await import('@shared/lib/redis/redis.js');
+      return await getPubClient();
+    } catch { return null; }
+  }
+
+  private async bufferOfflineEvent(userId: string, event: MessageType, data: any, now: number) {
+    const redis = await this.getRedis();
+    if (!redis) return;
+    try {
+      const key = `ws:buffer:${userId}`;
+      const message: SyncMessage = { type: event, data, timestamp: new Date(now).toISOString() };
+      await redis.lPush(key, JSON.stringify(message));
+      await redis.expire(key, 300);
+      const len = await redis.lLen(key);
+      if (len > 200) await redis.lTrim(key, 0, 199);
+    } catch {}
+  }
+
+  private async replayBufferedEvents(userId: string, socket: any) {
+    const redis = await this.getRedis();
+    if (!redis) return;
+    try {
+      const key = `ws:buffer:${userId}`;
+      const batch: string[] = [];
+      let msg = await redis.rPop(key);
+      while (msg) { batch.push(msg); msg = await redis.rPop(key); }
+      if (batch.length === 0) return;
+      batch.reverse();
+      for (const raw of batch) {
+        try {
+          const parsed: SyncMessage = JSON.parse(raw);
+          socket.emit('message', parsed);
+          socket.emit(parsed.type, parsed.data);
+        } catch {}
+      }
+      console.log(`[WebSocketSync] Replayed ${batch.length} buffered events for user ${userId}`);
+    } catch {}
+  }
+
   private executeEmit(userId: string, event: MessageType, data: any, now: number) {
     if (!this.io) return;
     
@@ -164,11 +208,18 @@ class WebSocketSyncServer {
       timestamp: new Date(now).toISOString()
     };
 
-    setImmediate(() => {
-      if (!this.io) return;
-      this.io.to(`user:${userId}`).emit('message', message);
-      this.io.to(`user:${userId}`).emit(event, data);
-    });
+    const room = this.io.sockets.adapter.rooms.get(`user:${userId}`);
+    const isConnected = room && room.size > 0;
+
+    if (isConnected) {
+      setImmediate(() => {
+        if (!this.io) return;
+        this.io.to(`user:${userId}`).emit('message', message);
+        this.io.to(`user:${userId}`).emit(event, data);
+      });
+    } else {
+      this.bufferOfflineEvent(userId, event, data, now);
+    }
 
     // Cleanup emissions map
     if (this.lastEmissions.size > 1000) {

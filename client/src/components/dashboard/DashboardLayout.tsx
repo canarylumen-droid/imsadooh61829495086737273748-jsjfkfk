@@ -427,6 +427,13 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
             </div>
 
 
+            {/* Sidebar Mailbox Switcher */}
+            {!sidebarCollapsed && (
+              <div className="px-3 pt-4 pb-2 border-b border-border/10">
+                <MailboxSwitcher className="w-full [&>div]:w-full [&_[role=combobox]]:w-full [&_[role=combobox]]:h-9 [&_[role=combobox]]:text-[10px] [&_[role=combobox]]:rounded-xl [&_[role=combobox]]:bg-muted/40 [&_[role=combobox]]:border-border/30" />
+              </div>
+            )}
+
             {/* Navigation */}
             <ScrollArea className="flex-1 px-2 py-4">
               <div className="space-y-5">
