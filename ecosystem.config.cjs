@@ -306,6 +306,26 @@ module.exports = {
       max_memory_restart: '512M'
     },
     {
+      name: 'audnix-deliverability',
+      script: './services/deliverability-service/dist/index.js',
+      instances: 1,
+      exec_mode: 'fork',
+      env_file: './.env',
+      env: {
+        NODE_ENV: 'production',
+        APP_ROLE: 'deliverability',
+        PORT: '3100'
+      },
+      error_file: './logs/deliverability-error.log',
+      out_file: './logs/deliverability-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s',
+      max_memory_restart: '256M'
+    },
+    {
       name: 'audnix-infra-scaler',
       script: './services/outreach-worker/src/outreach-lib/infra-scaler-entry.ts',
       interpreter: 'node',

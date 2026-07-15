@@ -13,7 +13,24 @@ import { decryptWarmupSecret } from './lib/warmup-crypto.js';
 const app = express();
 const PORT = parseInt(process.env.WARMUP_INTERNAL_PORT || '3101', 10);
 
-app.get('/api/internal/seed-accounts', async (_req, res) => {
+function requireInternalAuth(req: express.Request, res: express.Response, next: express.NextFunction) {
+  const expected = process.env.WARMUP_API_KEY || process.env.INTERNAL_API_KEY;
+  if (process.env.NODE_ENV === 'production' && !expected) {
+    return res.status(503).json({ error: 'Internal API key is not configured' });
+  }
+
+  if (expected) {
+    const auth = req.headers.authorization;
+    const token = auth?.startsWith('Bearer ') ? auth.slice('Bearer '.length) : req.headers['x-api-key'];
+    if (token !== expected) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  }
+
+  next();
+}
+
+app.get('/api/internal/seed-accounts', requireInternalAuth, async (_req, res) => {
   try {
     const seeds = await db
       .select()

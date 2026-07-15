@@ -1,17 +1,38 @@
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { db } from '@shared/lib/db/db.js';
-import { users } from '@audnix/shared';
+import { outreachCampaigns } from '@audnix/shared';
 import { eq } from 'drizzle-orm';
 
 const router = Router();
+
+function requireWebhookSecret(req: Request, res: Response, next: NextFunction) {
+  const expected = process.env.CORE_WEBHOOK_SECRET;
+  if (expected && req.headers['x-webhook-secret'] !== expected) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
+  next();
+}
+
+async function resolveCampaignUserId(campaignId?: string): Promise<string | undefined> {
+  if (!campaignId) return undefined;
+
+  const [campaign] = await db
+    .select({ userId: outreachCampaigns.userId })
+    .from(outreachCampaigns)
+    .where(eq(outreachCampaigns.id, campaignId))
+    .limit(1);
+
+  return campaign?.userId;
+}
 
 /**
  * POST /api/webhooks/deliverability
  * Called by the deliverability service when placement/reputation alerts fire.
  * Emits WebSocket events to the relevant user in real-time.
  */
-router.post('/', async (req: Request, res: Response) => {
+router.post('/', requireWebhookSecret, async (req: Request, res: Response) => {
   try {
     const { campaignId, source, inboxRate, spamRate, action } = req.body;
 
@@ -23,10 +44,7 @@ router.post('/', async (req: Request, res: Response) => {
     let userId = req.body.userId;
     if (!userId && campaignId) {
       try {
-        const [row] = await db.select({ userId: users.id })
-          .from(users)
-          .limit(1);
-        userId = row?.userId;
+        userId = await resolveCampaignUserId(campaignId);
       } catch {}
     }
 
@@ -62,7 +80,7 @@ router.post('/', async (req: Request, res: Response) => {
  * Called by the deliverability service after each individual seed check completes.
  * Emits real-time placement results to the frontend.
  */
-router.post('/seed-update', async (req: Request, res: Response) => {
+router.post('/seed-update', requireWebhookSecret, async (req: Request, res: Response) => {
   try {
     const { campaignId, testId, seedEmail, folder, provider } = req.body;
 
@@ -73,10 +91,7 @@ router.post('/seed-update', async (req: Request, res: Response) => {
     let userId = req.body.userId;
     if (!userId && campaignId) {
       try {
-        const [row] = await db.select({ userId: users.id })
-          .from(users)
-          .limit(1);
-        userId = row?.userId;
+        userId = await resolveCampaignUserId(campaignId);
       } catch {}
     }
 

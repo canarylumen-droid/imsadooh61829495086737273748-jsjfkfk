@@ -68,6 +68,27 @@ services:
     mem_limit: 5g
     memswap_limit: 6g
 
+  # --- Deliverability Service (Seed Inbox Placement + Reputation) ---
+  deliverability-service:
+    build:
+      context: ./services/deliverability-service
+      dockerfile: Dockerfile
+    image: audnix-deliverability-service:latest
+    container_name: audnix-deliverability-service
+    network_mode: host
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=3100
+      - WARMUP_SERVICE_URL=http://localhost:3101
+      - CORE_WEBHOOK_URL=http://localhost:5000/api/webhooks/deliverability
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    mem_limit: 256m
+
 volumes:
   certbot-data:
   certbot-www:
