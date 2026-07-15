@@ -1201,67 +1201,41 @@ curl -H "Authorization: Bearer audnix_..." \\
                   </div>
                 </motion.div>
               ) : (
-                <div className="p-6 bg-destructive/5 border border-destructive/20 rounded-2xl space-y-4">
-                  <div className="flex items-start gap-4">
-                    <div className="p-3 rounded-full bg-destructive/10 shrink-0">
-                      <Trash2 className="h-6 w-6 text-destructive" />
-                    </div>
+                <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Trash2 className="h-5 w-5 text-destructive shrink-0" />
                     <div>
-                      <h4 className="font-black text-base">Delete Account</h4>
-                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                        Permanently delete your account and all associated data. This includes:
-                      </p>
-                      <ul className="text-xs text-muted-foreground mt-3 space-y-1.5 list-disc list-inside">
-                        <li>All leads, messages, and campaign data</li>
-                        <li>Connected email accounts and integrations</li>
-                        <li>OAuth tokens for Google, Calendly, etc.</li>
-                        <li>Billing information and API keys</li>
-                        <li>Brand knowledge and AI training data</li>
-                      </ul>
+                      <p className="text-sm font-medium">Delete account</p>
+                      <p className="text-xs text-muted-foreground">Permanent, cannot be undone</p>
                     </div>
                   </div>
 
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="destructive" className="rounded-xl font-bold h-11 w-full sm:w-auto">
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Request Account Deletion
+                      <Button variant="destructive" size="sm">
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete
                       </Button>
                     </AlertDialogTrigger>
-                    <AlertDialogContent className="rounded-2xl max-w-md border-destructive/30">
+                    <AlertDialogContent className="max-w-md">
                       <AlertDialogHeader>
-                        <AlertDialogTitle className="flex items-center gap-2 text-destructive">
-                          <AlertTriangle className="h-6 w-6 animate-pulse" />
-                          Are you absolutely sure?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-3">
-                          <p>
-                            This action <strong>cannot</strong> be undone. Your account will be scheduled
-                            for permanent deletion within <strong>24-48 hours</strong>.
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            You can cancel the deletion anytime before the scheduled time by visiting
-                            this same settings page.
-                          </p>
-                          <div className="p-3 bg-destructive/10 rounded-xl border border-destructive/20 mt-2">
-                            <p className="text-xs font-bold text-destructive flex items-center gap-2">
-                              <ShieldAlert className="h-4 w-4 shrink-0" />
-                              After deletion, all data will be permanently erased and cannot be recovered.
-                            </p>
-                          </div>
+                        <AlertDialogTitle>Delete account?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Your account will be scheduled for permanent deletion within 24-48 hours.
+                          You can cancel anytime before then.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
-                      <AlertDialogFooter className="flex-col sm:flex-row gap-2">
-                        <AlertDialogCancel className="rounded-xl mt-0">Cancel</AlertDialogCancel>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={() => requestDeletionMutation.mutate()}
                           disabled={requestDeletionMutation.isPending}
-                          className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold"
+                          className="bg-destructive hover:bg-destructive/90"
                         >
                           {requestDeletionMutation.isPending ? (
-                            <><Loader2 className="animate-spin h-4 w-4 mr-2" /> Scheduling...</>
+                            <><Loader2 className="animate-spin h-4 w-4 mr-1" /> Deleting</>
                           ) : (
-                            <><Trash2 className="h-4 w-4 mr-2" /> Yes, delete my account</>
+                            <>Delete</>
                           )}
                         </AlertDialogAction>
                       </AlertDialogFooter>

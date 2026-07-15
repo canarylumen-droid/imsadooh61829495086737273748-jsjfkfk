@@ -27,24 +27,16 @@ async function validateApiKey(rawKey: string): Promise<{ valid: boolean; userId?
   }
   const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
   const result = await db.execute(sql`
-    SELECT id, user_id, permission_level, scopes, is_active, scope FROM api_keys WHERE key = ${hashedKey}
+    SELECT id, user_id, scope, created_at FROM api_keys WHERE key = ${hashedKey}
   `);
   if (result.rows.length === 0) {
     return { valid: false, error: 'API key not found' };
   }
   const row = result.rows[0] as any;
-  if (!row.is_active) {
-    return { valid: false, error: 'API key is deactivated' };
-  }
-  let toolScopes: string[] = [];
-  if (row.scopes) {
-    try {
-      toolScopes = typeof row.scopes === 'string' ? JSON.parse(row.scopes) : row.scopes;
-    } catch { toolScopes = []; }
-  }
-  const permissionLevel = row.permission_level || row.scope || 'read_write';
+  const scopes: string[] = [];
+  const permissionLevel = row.scope || 'read_write';
   await db.execute(sql`UPDATE api_keys SET last_used_at = NOW() WHERE id = ${row.id}`);
-  return { valid: true, userId: row.user_id, apiKeyId: row.id, scopes: toolScopes, permissionLevel };
+  return { valid: true, userId: row.user_id, apiKeyId: row.id, scopes, permissionLevel };
 }
 
 function mcpError(code: number, message: string): any {
@@ -76,7 +68,7 @@ async function runTool(toolName: string, args: any, userId: string, permissionLe
       return { content: [{ type: 'text', text: JSON.stringify({ campaigns: campaigns.rows[0], leads: leads.rows[0] }) }] };
     }
     case 'get_inbox': {
-      const result = await db.execute(sql`SELECT id, from_addr, subject, snippet, date FROM messages WHERE user_id = ${userId} ORDER BY date DESC LIMIT 50`);
+      const result = await db.execute(sql`SELECT id, subject, LEFT(body, 100) as snippet, created_at, direction, provider FROM messages WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 50`);
       return { content: [{ type: 'text', text: JSON.stringify(result.rows) }] };
     }
     case 'send_message': {
@@ -136,15 +128,36 @@ router.post('/mcp', async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    const { tool, args } = req.body;
-    if (!tool) {
+    // Support both JSON-RPC 2.0 and simple { tool, args } formats
+    const body = req.body;
+    let tool: string;
+    let args: any;
+    if (body.tool) {
+      tool = body.tool;
+      args = body.args || {};
+    } else if (body.method === 'tools/call' && body.params?.name) {
+      tool = body.params.name;
+      args = body.params.arguments || {};
+    } else if (body.method === 'tools/list') {
+      tool = 'list_tools';
+      args = {};
+    } else {
       res.status(400).json({ error: 'Missing "tool" in request body' });
       return;
     }
 
-    const result = await runTool(tool, args || {}, validation.userId!, validation.permissionLevel!, validation.scopes || []);
+    if (tool === 'list_tools') {
+      res.json({
+        jsonrpc: '2.0',
+        id: req.body.id || 1,
+        result: { tools: Object.entries(MCP_TOOLS).map(([n, c]) => ({ name: n, description: c.description })) },
+      });
+      return;
+    }
+
+    const result = await runTool(tool, args, validation.userId!, validation.permissionLevel!, validation.scopes || []);
     const success = !result.isError;
-    await logMcpCall(validation.userId!, validation.apiKeyId!, tool, args || {}, success, result.isError ? result.content[0]?.text : null);
+    await logMcpCall(validation.userId!, validation.apiKeyId!, tool, args, success, result.isError ? result.content[0]?.text : null);
 
     res.json({
       jsonrpc: '2.0',
@@ -185,8 +198,8 @@ router.post('/api/mcp/key/create', requireAuth, async (req: Request, res: Respon
     const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
     await db.execute(sql`
-      INSERT INTO api_keys (user_id, name, key, permission_level, scope, scopes, is_active)
-      VALUES (${userId}, ${name.trim()}, ${hashedKey}, ${level}, ${level}, '[]'::jsonb, true)
+      INSERT INTO api_keys (user_id, name, key, scope)
+      VALUES (${userId}, ${name.trim()}, ${hashedKey}, ${level})
     `);
 
     const result = await db.execute(sql`
@@ -199,8 +212,8 @@ router.post('/api/mcp/key/create', requireAuth, async (req: Request, res: Respon
       name: name.trim(),
       permissionLevel: level,
       key: rawKey,
-      createdAt: created.created_at?.toISOString() || null,
-      message: 'Make sure to copy your API key now. You won\'t be able to see it again.',
+      createdAt: created.created_at || null,
+      message: 'Copy your API key now.',
     });
   } catch (error) {
     console.error('[MCP] Error creating key:', error);
@@ -244,7 +257,7 @@ router.post('/api/mcp/scopes', requireAuth, async (req: Request, res: Response):
 
     await db.execute(sql`
       UPDATE api_keys
-      SET scopes = ${JSON.stringify(scopes || [])}::jsonb, permission_level = ${level}, scope = ${level}
+      SET scope = ${level}
       WHERE id = ${id} AND user_id = ${userId}
     `);
 
@@ -262,9 +275,9 @@ router.get('/api/mcp/key/current', requireAuth, async (req: Request, res: Respon
     if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
 
     const result = await db.execute(sql`
-      SELECT id, name, permission_level, scopes, is_active, created_at, last_used_at
+      SELECT id, name, scope, created_at, last_used_at
       FROM api_keys
-      WHERE user_id = ${userId} AND is_active = true
+      WHERE user_id = ${userId}
       ORDER BY created_at DESC
       LIMIT 1
     `);
@@ -275,18 +288,14 @@ router.get('/api/mcp/key/current', requireAuth, async (req: Request, res: Respon
     }
 
     const row = result.rows[0] as any;
-    let parsedScopes: string[] = [];
-    if (row.scopes) {
-      try { parsedScopes = typeof row.scopes === 'string' ? JSON.parse(row.scopes) : row.scopes; } catch { parsedScopes = []; }
-    }
 
     res.json({
       key: {
         id: row.id,
         name: row.name,
-        permissionLevel: row.permission_level || 'read_write',
-        scopes: parsedScopes,
-        isActive: row.is_active,
+        permissionLevel: row.scope || 'read_write',
+        scopes: [],
+        isActive: true,
         createdAt: row.created_at?.toISOString() || null,
         lastUsedAt: row.last_used_at?.toISOString() || null,
       }
@@ -304,22 +313,19 @@ router.post('/api/mcp/test', requireAuth, async (req: Request, res: Response): P
     if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
 
     const result = await db.execute(sql`
-      SELECT id, permission_level, scopes FROM api_keys WHERE user_id = ${userId} AND is_active = true ORDER BY created_at DESC LIMIT 1
+      SELECT id, scope FROM api_keys WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 1
     `);
     if (result.rows.length === 0) {
-      res.status(400).json({ error: 'No active API key found. Create one first.' });
+      res.status(400).json({ error: 'No API key found. Create one first.' });
       return;
     }
     const row = result.rows[0] as any;
-    let parsedScopes: string[] = [];
-    if (row.scopes) {
-      try { parsedScopes = typeof row.scopes === 'string' ? JSON.parse(row.scopes) : row.scopes; } catch { parsedScopes = []; }
-    }
+    const parsedScopes: string[] = [];
 
     const { tool, args } = req.body;
     if (!tool) { res.status(400).json({ error: 'Missing tool name' }); return; }
 
-    const toolResult = await runTool(tool, args || {}, userId, row.permission_level || 'read_write', parsedScopes);
+    const toolResult = await runTool(tool, args || {}, userId, row.scope || 'read_write', parsedScopes);
     const success = !toolResult.isError;
     await logMcpCall(userId, row.id, tool, args || {}, success, toolResult.isError ? toolResult.content[0]?.text : null);
 

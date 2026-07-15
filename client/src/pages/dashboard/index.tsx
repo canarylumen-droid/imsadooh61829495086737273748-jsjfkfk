@@ -17,6 +17,7 @@ const LeadProfilePage = lazy(() => import("./lead-profile"));
 const LeadRecoveryPage = lazy(() => import("./lead-recovery"));
 const WarmupPage = lazy(() => import("./warmup"));
 const DeliverabilityPage = lazy(() => import("./deliverability"));
+const DeveloperPage = lazy(() => import("./developer"));
 
 export default function DashboardRoutes() {
   const [location] = useLocation();
@@ -42,6 +43,7 @@ export default function DashboardRoutes() {
           <Route path="/dashboard/lead-recovery" component={LeadRecoveryPage} />
           <Route path="/dashboard/warmup" component={WarmupPage} />
           <Route path="/dashboard/deliverability" component={DeliverabilityPage} />
+          <Route path="/dashboard/developer" component={DeveloperPage} />
           <Route component={NotFound} />
         </Switch>
       </Suspense>

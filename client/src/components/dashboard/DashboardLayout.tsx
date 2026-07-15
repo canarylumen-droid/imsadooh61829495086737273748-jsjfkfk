@@ -47,7 +47,8 @@ import {
   Terminal,
   LifeBuoy,
   Menu,
-  Code
+  Code,
+  Key
 } from "lucide-react";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -249,7 +250,8 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
         { label: "Warmup", icon: Shield, path: "/dashboard/warmup" },
-        { label: "Developer", icon: Code, path: "/dashboard/mcp-server" },
+        { label: "API Keys", icon: Key, path: "/dashboard/developer" },
+        { label: "MCP Server", icon: Terminal, path: "/dashboard/mcp-server" },
       ],
     },
     {
