@@ -254,6 +254,7 @@ export async function requireApiKey(req: Request, res: Response, next: NextFunct
     db.execute(sql`UPDATE api_keys SET last_used_at = NOW() WHERE key = ${hashedKey}`).catch(() => {});
 
     req.userId = keyData.user_id;
+    req.user = { id: keyData.user_id } as any;
     req.apiKeyScope = keyData.scope;
     req.isApiKey = true;
     next();
