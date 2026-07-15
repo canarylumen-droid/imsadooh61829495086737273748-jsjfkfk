@@ -192,6 +192,14 @@ function Router() {
   );
 }
 
+// Auto-reload on chunk load failures (deployment cache mismatch)
+window.addEventListener("unhandledrejection", (e) => {
+  if (e.reason?.message?.includes("dynamic") || e.reason?.message?.includes("Loading chunk") || e.type === "import") {
+    e.preventDefault();
+    window.location.reload();
+  }
+});
+
 function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>

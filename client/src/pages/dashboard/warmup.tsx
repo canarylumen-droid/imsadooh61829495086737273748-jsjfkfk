@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useRealtime } from "@/hooks/use-realtime";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,13 +25,23 @@ interface WarmupStatus {
 }
 
 export default function WarmupPage() {
-  useRealtime();
-  const { mailboxes } = useMailbox();
+  const { socket } = useRealtime();
+  const { mailboxes, selectedMailboxId } = useMailbox();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => queryClient.invalidateQueries({ queryKey: ["/api/warmup/status"] });
+    socket.on("warmup_update", handler);
+    socket.on("mailbox_updated", handler);
+    return () => { socket.off("warmup_update", handler); socket.off("mailbox_updated", handler); };
+  }, [socket, queryClient]);
 
   const { data: warmupData, isLoading } = useQuery<any>({
-    queryKey: ["/api/warmup/status"],
+    queryKey: ["/api/warmup/status", { integrationId: selectedMailboxId }],
     refetchOnWindowFocus: true,
     staleTime: 10_000,
+
   });
 
   const warmupStatuses: WarmupStatus[] = warmupData?.mailboxes || [];
@@ -226,13 +237,24 @@ export default function WarmupPage() {
         <Card>
           <CardContent className="p-12 text-center">
             <AlertTriangle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-medium mb-2">No mailboxes connected</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Connect a mailbox to start warming up your sender reputation.
-            </p>
-            <Link href="/dashboard/integrations" className="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
-              Connect Mailbox
-            </Link>
+            {mailboxes.length > 0 ? (
+              <>
+                <h3 className="text-lg font-medium mb-2">Warmup not started</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Mailbox connected but warmup hasn't started yet. It will begin automatically.
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="text-lg font-medium mb-2">No mailboxes connected</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Connect a mailbox to start warming up your sender reputation.
+                </p>
+                <Link href="/dashboard/integrations" className="inline-flex items-center justify-center h-9 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors">
+                  Connect Mailbox
+                </Link>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

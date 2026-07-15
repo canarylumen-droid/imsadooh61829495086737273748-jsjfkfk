@@ -161,11 +161,6 @@ export default function SettingsPage() {
     enabled: activeTab === "developer",
   });
 
-  const { data: deletionStatus, refetch: refetchDeletionStatus } = useQuery<DeletionStatus>({
-    queryKey: ["/api/developer/deletion-status"],
-    enabled: activeTab === "account",
-  });
-
   const [formData, setFormData] = useState({
     name: "",
     username: "",
@@ -328,34 +323,6 @@ export default function SettingsPage() {
     onError: () => toast({ title: "Failed", description: "Could not update key name.", variant: "destructive" })
   });
 
-  const requestDeletionMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/developer/request-deletion");
-    },
-    onSuccess: () => {
-      refetchDeletionStatus();
-      toast({
-        title: "Deletion Scheduled",
-        description: "Your account will be permanently deleted within 24-48 hours.",
-      });
-    },
-    onError: (err: any) => {
-      const msg = err.message || "Failed to schedule deletion.";
-      toast({ title: "Error", description: msg, variant: "destructive" });
-    }
-  });
-
-  const cancelDeletionMutation = useMutation({
-    mutationFn: async () => {
-      return apiRequest("POST", "/api/developer/cancel-deletion");
-    },
-    onSuccess: () => {
-      refetchDeletionStatus();
-      toast({ title: "Deletion Cancelled", description: "Your account is safe." });
-    },
-    onError: () => toast({ title: "Failed", description: "Could not cancel deletion.", variant: "destructive" })
-  });
-
   const handleFieldChange = (key: string, val: any) => {
     setFormData(prev => ({ ...prev, [key]: val }));
     setHasChanges(true);
@@ -366,16 +333,6 @@ export default function SettingsPage() {
     setCopiedField(fieldName);
     toast({ title: "Copied to clipboard", description: `${fieldName} has been copied.` });
     setTimeout(() => setCopiedField(null), 2000);
-  };
-
-  const formatRemainingTime = (ms: number) => {
-    const hours = Math.floor(ms / 3600000);
-    const minutes = Math.floor((ms % 3600000) / 60000);
-    if (hours > 24) {
-      const days = Math.floor(hours / 24);
-      return `${days}d ${hours % 24}h`;
-    }
-    return `${hours}h ${minutes}m`;
   };
 
   if (isLoading || !user) return <div className="flex justify-center p-20"><PremiumLoader text="Loading Settings..." /></div>;
@@ -1120,129 +1077,45 @@ curl -H "Authorization: Bearer audnix_..." \\
 
         {/* Account tab */}
         <TabsContent value="account" className="space-y-6">
-          <Card className="border-destructive/20 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-xl flex items-center gap-2 text-destructive">
-                <ShieldAlert className="h-5 w-5" />
-                Danger Zone
-              </CardTitle>
-              <CardDescription>Permanent actions that cannot be undone.</CardDescription>
+          <Card>
+            <CardHeader className="p-4">
+              <CardTitle className="text-sm">Delete account</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              {deletionStatus?.pending ? (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="p-6 bg-destructive/5 border-2 border-destructive/30 rounded-2xl space-y-4"
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-full bg-destructive/10">
-                      <Clock className="h-8 w-8 text-destructive" />
-                    </div>
-                    <div>
-                      <h4 className="font-black text-base">Deletion Scheduled</h4>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Your account is scheduled for permanent deletion.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-background/50 rounded-xl border border-border/30">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Time Remaining</span>
-                      <span className="text-sm font-bold text-destructive">
-                        {deletionStatus.remainingMs ? formatRemainingTime(deletionStatus.remainingMs) : 'Calculating...'}
-                      </span>
-                    </div>
-                    {deletionStatus.scheduledFor && (
-                      <p className="text-xs text-muted-foreground">
-                        Scheduled for {new Date(deletionStatus.scheduledFor).toLocaleString()}
-                      </p>
-                    )}
-                    <div className="mt-3 h-2 w-full bg-muted/30 rounded-full overflow-hidden">
-                      <motion.div
-                        initial={{ width: "0%" }}
-                        animate={{ width: "100%" }}
-                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                        className="h-full bg-gradient-to-r from-destructive/40 to-destructive rounded-full"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="outline" className="rounded-xl font-bold flex-1 h-11 border-destructive/30 hover:bg-destructive/5 hover:text-destructive">
-                          Cancel Deletion
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="rounded-2xl max-w-md">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle className="flex items-center gap-2">
-                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                            Keep Your Account?
-                          </AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Your account will be kept active and all pending deletion will be cancelled.
-                            You can continue using Audnix as before.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel className="rounded-xl">Go back</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => cancelDeletionMutation.mutate()}
-                            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
-                          >
-                            Keep Account
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </motion.div>
-              ) : (
-                <div className="p-4 bg-destructive/5 border border-destructive/20 rounded-xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Trash2 className="h-5 w-5 text-destructive shrink-0" />
-                    <div>
-                      <p className="text-sm font-medium">Delete account</p>
-                      <p className="text-xs text-muted-foreground">Permanent, cannot be undone</p>
-                    </div>
-                  </div>
-
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="destructive" size="sm">
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent className="max-w-md">
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Delete account?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Your account will be scheduled for permanent deletion within 24-48 hours.
-                          You can cancel anytime before then.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction
-                          onClick={() => requestDeletionMutation.mutate()}
-                          disabled={requestDeletionMutation.isPending}
-                          className="bg-destructive hover:bg-destructive/90"
-                        >
-                          {requestDeletionMutation.isPending ? (
-                            <><Loader2 className="animate-spin h-4 w-4 mr-1" /> Deleting</>
-                          ) : (
-                            <>Delete</>
-                          )}
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              )}
+            <CardContent className="p-4 pt-0">
+              <p className="text-xs text-muted-foreground mb-3">Permanently delete your account and all data.</p>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm">
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete account
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This is permanent and cannot be undone. All your data will be removed.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={async () => {
+                        try {
+                          await apiRequest("DELETE", "/api/account");
+                          toast({ title: "Account deleted" });
+                          window.location.href = "/";
+                        } catch {
+                          toast({ title: "Failed", variant: "destructive" });
+                        }
+                      }}
+                      className="bg-destructive hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </CardContent>
           </Card>
         </TabsContent>
