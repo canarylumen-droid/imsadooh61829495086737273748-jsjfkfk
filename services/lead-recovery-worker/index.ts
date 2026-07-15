@@ -1,6 +1,7 @@
 import { startWorkerHealthServer } from "@services/api-gateway/src/core/worker-health-server.js";
 import { startHeartbeat } from "@shared/lib/monitoring/health-heartbeat.js";
 import { ServiceRegistry } from "@shared/lib/monitoring/service-registry.js";
+import { connectMySql, ensureTables } from "@shared/lib/mysql.js";
 import { LeadRecoveryWorker } from "./src/worker.js";
 
 // ─── Global Process Safety Net ─────────────────────────────────────────────
@@ -21,6 +22,10 @@ async function startRecoveryService() {
 
   startWorkerHealthServer("lead-recovery", port);
 
+  await connectMySql();
+  await ensureTables();
+  console.log("[LeadRecoveryWorker] ✅ MySQL tables ensured");
+
   await worker.start();
   startHeartbeat('lead-recovery-worker');
 }
@@ -40,8 +45,16 @@ if (process.env.UNIFIED_MODE !== 'true') {
   process.on("SIGTERM", async () => { await shutdown("SIGTERM"); });
   process.on("SIGINT", async () => { await shutdown("SIGINT"); });
 
-  worker.start().catch((error) => {
-    console.error("[LeadRecoveryWorker] Fatal startup failure", error);
-    process.exit(1);
-  });
+  async function main() {
+    try {
+      await connectMySql();
+      await ensureTables();
+      console.log("[LeadRecoveryWorker] ✅ MySQL tables ensured");
+      await worker.start();
+    } catch (error) {
+      console.error("[LeadRecoveryWorker] Fatal startup failure", error);
+      process.exit(1);
+    }
+  }
+  main();
 }

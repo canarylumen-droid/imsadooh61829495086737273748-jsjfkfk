@@ -1,6 +1,5 @@
 import { EventEmitter } from "events";
-import { connectMongo } from "@shared/lib/mongo.js";
-import { RecoveryEventLog } from "@shared/lib/models/lead-recovery.js";
+import { connectMySql, createRecoveryEventLog } from "@shared/lib/mysql.js";
 
 export type RecoveryEventAction =
   | "SyncStarted"
@@ -33,13 +32,8 @@ export const recoveryEvents = new RecoveryEventBus();
 
 recoveryEvents.on("recovery:event", async (event: RecoveryEvent) => {
   try {
-    await connectMongo();
-    await RecoveryEventLog.create({
-      tenantId: event.tenantId,
-      action: event.action,
-      payload: event.payload || {},
-      timestamp: event.timestamp || new Date(),
-    });
+    await connectMySql();
+    await createRecoveryEventLog(event.tenantId, event.action, event.payload ?? {});
   } catch (error) {
     console.error("[LeadRecoveryEvents] Failed to persist event", error);
   }

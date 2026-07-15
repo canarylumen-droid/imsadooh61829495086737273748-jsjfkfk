@@ -182,7 +182,7 @@ services:
           memory: 1024M
     restart: always
 
-  # --- Lead Recovery Worker (Mongo-backed 90-day read-only sync) ---
+  # --- Lead Recovery Worker (MySQL-backed 90-day read-only sync) ---
   lead-recovery-worker:
     build:
       context: .
@@ -194,8 +194,11 @@ services:
       - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=lead-recovery
       - DATABASE_URL=${DATABASE_URL}
-      - MONGODB_URI=${MONGODB_URI}
-      - MONGO_URL=${MONGO_URL}
+      - MYSQL_HOST=${MYSQL_HOST:-localhost}
+      - MYSQL_PORT=${MYSQL_PORT:-3306}
+      - MYSQL_USER=${MYSQL_USER:-root}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${MYSQL_DATABASE:-lead_recovery}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
       - SESSION_SECRET=${SESSION_SECRET}
       - ENCRYPTION_KEY=${ENCRYPTION_KEY}

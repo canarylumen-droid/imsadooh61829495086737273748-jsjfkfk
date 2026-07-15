@@ -1,12 +1,20 @@
 import { Router } from "express";
-import { connectMongo, hasMongoUri } from "@shared/lib/mongo.js";
 import {
-  LeadRecoveryObjection,
-  LeadRecoveryState,
-  RecoveredLead,
-  RecoveryEventLog,
-  RecoveryPromptConfig,
-} from "@shared/lib/models/lead-recovery.js";
+  connectMySql,
+  hasMySqlUri,
+  getLeadRecoveryStates,
+  getActiveLeadRecoveryState,
+  promptConfigExists,
+  upsertRecoveryState,
+  deactivateAllRecoveryStates,
+  getRecoveredLeads,
+  getRecoveryEventLogs,
+  getRecoveryPromptConfig,
+  upsertRecoveryPromptConfig,
+  getRecoveredLeadById,
+  upsertRecoveredLead,
+  upsertRecoveryObjection,
+} from "@shared/lib/mysql.js";
 import { storage } from "@shared/lib/storage/storage.js";
 import { requireAuthOrApiKey } from "../middleware/auth.js";
 import { requireProPlan } from "../middleware/plan.js";
@@ -22,18 +30,18 @@ const SKIP_WARNING =
 router.use(requireAuthOrApiKey, requireProPlan);
 
 router.use(async (_req, res, next) => {
-  if (!hasMongoUri()) {
+  if (!hasMySqlUri()) {
     return res.status(503).json({
-      error: "MongoDB unavailable",
-      message: "MONGODB_URI is required before Lead Recovery can be used.",
+      error: "MySQL unavailable",
+      message: "MYSQL_HOST is required before Lead Recovery can be used.",
     });
   }
 
   try {
-    await connectMongo();
+    await connectMySql();
     next();
   } catch (error: any) {
-    res.status(503).json({ error: "MongoDB connection failed", message: error.message });
+    res.status(503).json({ error: "MySQL connection failed", message: error.message });
   }
 });
 
@@ -52,8 +60,10 @@ function renderTemplate(template: string, values: Record<string, string>): strin
 
 async function getMailboxDetails(tenantId: string) {
   const integrations = await storage.getIntegrations(tenantId);
-  const mailboxes = integrations.filter((integration) => EMAIL_PROVIDERS.has(integration.provider) && integration.connected);
-  const states = await LeadRecoveryState.find({ tenantId }).lean();
+  const mailboxes = integrations.filter(
+    (integration) => EMAIL_PROVIDERS.has(integration.provider) && integration.connected
+  );
+  const states = await getLeadRecoveryStates(tenantId);
   const stateByMailbox = new Map(states.map((state) => [state.mailboxId, state]));
 
   return Promise.all(
@@ -80,19 +90,22 @@ async function getMailboxDetails(tenantId: string) {
 
 async function getConnectedEmailMailboxes(tenantId: string) {
   const integrations = await storage.getIntegrations(tenantId);
-  return integrations.filter((integration) => EMAIL_PROVIDERS.has(integration.provider) && integration.connected);
+  return integrations.filter(
+    (integration) => EMAIL_PROVIDERS.has(integration.provider) && integration.connected
+  );
 }
 
 router.get("/status", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const mailboxDetails = await getMailboxDetails(tenantId);
   const hasAvailableMailbox = mailboxDetails.some((mailbox) => !mailbox.isBusy);
-  const state = await LeadRecoveryState.findOne({ tenantId, isActive: true }).sort({ updatedAt: -1 }).lean();
-  const promptConfigured = Boolean(await RecoveryPromptConfig.exists({ name: "email-lead-recovery" }));
-  const firstAvailableAt = mailboxDetails
-    .map((mailbox) => mailbox.availableAt)
-    .filter(Boolean)
-    .sort()[0] || null;
+  const state = await getActiveLeadRecoveryState(tenantId);
+  const promptConfigured = await promptConfigExists("email-lead-recovery");
+  const firstAvailableAt =
+    mailboxDetails
+      .map((mailbox) => mailbox.availableAt)
+      .filter(Boolean)
+      .sort()[0] || null;
 
   recoveryEvents.emitRecovery({
     tenantId,
@@ -114,25 +127,21 @@ router.post("/activate", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const mailboxId = typeof req.body?.mailboxId === "string" ? req.body.mailboxId : undefined;
   const mailboxes = await getConnectedEmailMailboxes(tenantId);
-  const selectedMailboxes = mailboxId ? mailboxes.filter((mailbox) => mailbox.id === mailboxId) : mailboxes;
+  const selectedMailboxes = mailboxId
+    ? mailboxes.filter((mailbox) => mailbox.id === mailboxId)
+    : mailboxes;
 
   if (selectedMailboxes.length === 0) {
     return res.status(400).json({ error: "No connected email mailbox is available." });
   }
 
   for (const mailbox of selectedMailboxes) {
-    await LeadRecoveryState.updateOne(
-      { tenantId, mailboxId: mailbox.id },
-      {
-        tenantId,
-        mailboxId: mailbox.id,
-        isActive: true,
-        isBusy: false,
-        availableAt: null,
-        syncStatus: "idle",
-      },
-      { upsert: true }
-    );
+    await upsertRecoveryState(tenantId, mailbox.id, {
+      isActive: true,
+      isBusy: false,
+      availableAt: null,
+      syncStatus: "idle",
+    });
   }
 
   recoveryEvents.emitRecovery({
@@ -151,7 +160,9 @@ router.post("/sync", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const mailboxId = typeof req.body?.mailboxId === "string" ? req.body.mailboxId : undefined;
   const mailboxes = await getConnectedEmailMailboxes(tenantId);
-  const selectedMailboxes = mailboxId ? mailboxes.filter((mailbox) => mailbox.id === mailboxId) : mailboxes;
+  const selectedMailboxes = mailboxId
+    ? mailboxes.filter((mailbox) => mailbox.id === mailboxId)
+    : mailboxes;
   const syncRequestedAt = new Date();
 
   if (selectedMailboxes.length === 0) {
@@ -159,26 +170,19 @@ router.post("/sync", async (req, res) => {
   }
 
   for (const mailbox of selectedMailboxes) {
-    await LeadRecoveryState.updateOne(
-      { tenantId, mailboxId: mailbox.id },
-      {
-        tenantId,
-        mailboxId: mailbox.id,
-        isActive: true,
-        isBusy: false,
-        availableAt: null,
-        syncRequestedAt,
-        syncStatus: "queued",
-      },
-      { upsert: true }
-    );
+    await upsertRecoveryState(tenantId, mailbox.id, {
+      isActive: true,
+      isBusy: false,
+      availableAt: null,
+      syncRequestedAt,
+      syncStatus: "queued",
+    });
   }
 
-  // Notify the lead-recovery-worker via Redis Pub/Sub (event-driven, no polling needed)
   try {
-    const { publish } = await import('@services/event-bus/src/redis-pubsub.js');
+    const { publish } = await import("@services/event-bus/src/redis-pubsub.js");
     for (const mb of selectedMailboxes) {
-      await publish('lead-recovery:sync-requested', { tenantId, mailboxId: mb.id }).catch(() => {});
+      await publish("lead-recovery:sync-requested", { tenantId, mailboxId: mb.id }).catch(() => {});
     }
   } catch {
     // Redis unavailable — worker will pick up on restart
@@ -195,12 +199,16 @@ router.post("/sync", async (req, res) => {
     },
   });
 
-  res.json({ success: true, queuedMailboxes: selectedMailboxes.length, message: "Lead Recovery sync queued for the worker." });
+  res.json({
+    success: true,
+    queuedMailboxes: selectedMailboxes.length,
+    message: "Lead Recovery sync queued for the worker.",
+  });
 });
 
 router.post("/deactivate", async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  await LeadRecoveryState.updateMany({ tenantId }, { isActive: false });
+  await deactivateAllRecoveryStates(tenantId);
   recoveryEvents.emitRecovery({ tenantId, action: "RecoveryDeactivated" });
   res.json({ success: true });
 });
@@ -208,19 +216,19 @@ router.post("/deactivate", async (req, res) => {
 router.get("/leads", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const limit = Math.min(Number(req.query.limit || 100), 250);
-  const leads = await RecoveredLead.find({ tenantId }).sort({ createdAt: -1 }).limit(limit).lean();
+  const leads = await getRecoveredLeads(tenantId, limit);
   res.json({ leads });
 });
 
 router.get("/events", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const limit = Math.min(Number(req.query.limit || 50), 100);
-  const events = await RecoveryEventLog.find({ tenantId }).sort({ timestamp: -1 }).limit(limit).lean();
+  const events = await getRecoveryEventLogs(tenantId, limit);
   res.json({ events });
 });
 
 router.get("/prompt-config/:name", async (req, res) => {
-  const prompt = await RecoveryPromptConfig.findOne({ name: req.params.name }).lean();
+  const prompt = await getRecoveryPromptConfig(req.params.name);
   if (!prompt) return res.status(404).json({ error: "Prompt configuration not found" });
   res.json({ prompt });
 });
@@ -231,29 +239,29 @@ router.put("/prompt-config/:name", async (req, res) => {
     return res.status(400).json({ error: "systemPrompt and userPromptTemplate are required" });
   }
 
-  const prompt = await RecoveryPromptConfig.findOneAndUpdate(
-    { name: req.params.name },
-    { name: req.params.name, systemPrompt, userPromptTemplate, updatedAt: new Date() },
-    { upsert: true, new: true }
-  ).lean();
+  await upsertRecoveryPromptConfig(req.params.name, systemPrompt, userPromptTemplate);
+  const prompt = await getRecoveryPromptConfig(req.params.name);
 
   res.json({ success: true, prompt });
 });
 
 router.post("/recover/:leadId", async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  const lead = await RecoveredLead.findOne({ _id: req.params.leadId, tenantId });
+  const lead = await getRecoveredLeadById(req.params.leadId, tenantId);
   if (!lead) return res.status(404).json({ error: "Lead not found" });
 
-  const prompt = await RecoveryPromptConfig.findOne({ name: "email-lead-recovery" }).lean();
+  const prompt = await getRecoveryPromptConfig("email-lead-recovery");
   if (!prompt) {
     return res.status(409).json({
       error: "Prompt configuration missing",
-      message: "Create a RecoveryPromptConfig named email-lead-recovery before generating recovery drafts.",
+      message:
+        "Create a RecoveryPromptConfig named email-lead-recovery before generating recovery drafts.",
     });
   }
 
-  const sourceMailbox = lead.mailboxId ? await storage.getIntegrationById(String(lead.mailboxId)) : null;
+  const sourceMailbox = lead.mailboxId
+    ? await storage.getIntegrationById(String(lead.mailboxId))
+    : null;
   const renderedPrompt = renderTemplate(prompt.userPromptTemplate, {
     email: lead.email,
     subject: lead.subject || "",
@@ -285,13 +293,12 @@ router.post("/recover/:leadId", async (req, res) => {
     draft = aiResult.text;
   }
 
-  lead.followUpDraft = draft;
-  await lead.save();
+  await upsertRecoveredLead(tenantId, lead.mailboxId, lead.email, { followUpDraft: draft });
 
   recoveryEvents.emitRecovery({
     tenantId,
     action: "DraftGenerated",
-    payload: { leadId: String(lead._id), promptConfig: prompt.name },
+    payload: { leadId: lead.id, promptConfig: prompt.name },
   });
 
   res.json({
@@ -299,47 +306,52 @@ router.post("/recover/:leadId", async (req, res) => {
     draft,
     lead,
     sendMailboxId: lead.mailboxId,
-    sendMailbox: sourceMailbox ? {
-      id: sourceMailbox.id,
-      provider: sourceMailbox.provider,
-      accountType: sourceMailbox.accountType,
-    } : null,
+    sendMailbox: sourceMailbox
+      ? {
+          id: sourceMailbox.id,
+          provider: sourceMailbox.provider,
+          accountType: sourceMailbox.accountType,
+        }
+      : null,
   });
 });
 
 router.post("/brainstorm-sync", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const leadIds = Array.isArray(req.body?.leadIds) ? req.body.leadIds : [];
-  const query = leadIds.length ? { tenantId, _id: { $in: leadIds } } : { tenantId };
-  const leads = await RecoveredLead.find(query);
+  const leads = await getRecoveredLeads(tenantId, 999);
+  const filteredLeads = leadIds.length
+    ? leads.filter((lead) => leadIds.includes(lead.id))
+    : leads;
   let synced = 0;
 
-  for (const lead of leads) {
-    for (const objection of lead.brainstormedObjections || []) {
-      if (objection.syncedAt) continue;
-      await LeadRecoveryObjection.updateOne(
-        { tenantId, rule: objection.rule },
-        {
-          $setOnInsert: {
-            tenantId,
-            category: objection.category,
-            rule: objection.rule,
-            evidence: objection.evidence,
-            sourceLeadId: lead._id,
-            createdBy: "ai",
-          },
-        },
-        { upsert: true }
+  for (const lead of filteredLeads) {
+    const objections = lead.brainstormedObjections || [];
+    let updated = false;
+    for (const objection of objections) {
+      if (objection.synced_at) continue;
+      await upsertRecoveryObjection(
+        tenantId,
+        objection.rule,
+        objection.category,
+        objection.evidence,
+        lead.id,
+        "ai"
       );
-      objection.syncedAt = new Date();
+      objection.synced_at = new Date().toISOString();
       synced += 1;
+      updated = true;
       recoveryEvents.emitRecovery({
         tenantId,
         action: "ObjectionDiscovered",
-        payload: { leadId: String(lead._id), category: objection.category, rule: objection.rule },
+        payload: { leadId: lead.id, category: objection.category, rule: objection.rule },
       });
     }
-    await lead.save();
+    if (updated) {
+      await upsertRecoveredLead(tenantId, lead.mailboxId, lead.email, {
+        brainstormedObjections: objections,
+      });
+    }
   }
 
   recoveryEvents.emitRecovery({
@@ -353,7 +365,7 @@ router.post("/brainstorm-sync", async (req, res) => {
 
 router.get("/preflight", async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  const state = await LeadRecoveryState.findOne({ tenantId, isActive: true }).lean();
+  const state = await getActiveLeadRecoveryState(tenantId);
   res.json({
     shouldSuggest: !state,
     isActive: Boolean(state),

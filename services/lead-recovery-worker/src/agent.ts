@@ -1,5 +1,5 @@
 import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
-import { RecoveryPromptConfig } from "@shared/lib/models/lead-recovery.js";
+import { connectMySql, getRecoveryPromptConfig, upsertRecoveryPromptConfig } from "@shared/lib/mysql.js";
 import type { RecoveryEmail } from "./mailbox.js";
 
 export type RecoveryIntent = "Converted" | "Ghosted" | "Not-Interested" | "Reply-Needed";
@@ -20,12 +20,10 @@ export async function ensurePromptConfigFromEnv(): Promise<void> {
 
   if (!systemPrompt || !userPromptTemplate) return;
 
-  await RecoveryPromptConfig.updateOne(
-      { name: "email-lead-recovery" },
-      {
-        $setOnInsert: {
-          name: "email-lead-recovery",
-          systemPrompt: `${systemPrompt}\n\n## IDENTITY
+  await connectMySql();
+  await upsertRecoveryPromptConfig(
+    "email-lead-recovery",
+    `${systemPrompt}\n\n## IDENTITY
 You are a lead recovery specialist. You revive cold/dead conversations by writing hyper-personalized recovery drafts.
 
 ## MISSION
@@ -42,11 +40,7 @@ Analyze the prior conversation, the lead's last message, their objection or stop
 3. Sound like a human following up on a real conversation — not a sequence resuming.
 4. Keep it to 3-4 sentences. This is a re-engagement, not a full pitch.
 5. Low pressure. The goal is to reopen the conversation, not close the deal immediately.`,
-          userPromptTemplate,
-          updatedAt: new Date(),
-        },
-      },
-    { upsert: true }
+    userPromptTemplate
   );
 }
 
@@ -73,7 +67,8 @@ function normalizeIntent(value: unknown): RecoveryIntent {
 }
 
 export async function analyzeRecoveryEmail(tenantId: string, email: RecoveryEmail): Promise<AnalyzedLead> {
-  const promptConfig = await RecoveryPromptConfig.findOne({ name: "email-lead-recovery" }).lean();
+  await connectMySql();
+  const promptConfig = await getRecoveryPromptConfig("email-lead-recovery");
   if (!promptConfig) {
     throw new Error("Missing RecoveryPromptConfig: email-lead-recovery");
   }

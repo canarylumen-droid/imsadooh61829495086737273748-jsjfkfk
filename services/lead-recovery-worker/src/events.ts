@@ -1,5 +1,5 @@
-import { connectMongo } from "@shared/lib/mongo.js";
-import { RecoveryEventLog, type RecoveryEventLogDocument } from "@shared/lib/models/lead-recovery.js";
+import { connectMySql, ensureTables } from "@shared/lib/mysql.js";
+import { createRecoveryEventLog } from "@shared/lib/mysql.js";
 
 export type LeadRecoveryWorkerEvent =
   | "SyncStarted"
@@ -20,12 +20,7 @@ export async function logRecoveryEvent(
   tenantId: string,
   action: LeadRecoveryWorkerEvent,
   payload: Record<string, unknown> = {}
-): Promise<RecoveryEventLogDocument> {
-  await connectMongo();
-  return RecoveryEventLog.create({
-    tenantId,
-    action,
-    payload,
-    timestamp: new Date(),
-  });
+): Promise<{ id: string }> {
+  await connectMySql();
+  return createRecoveryEventLog(tenantId, action, payload);
 }

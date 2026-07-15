@@ -4,15 +4,14 @@ import { eq, and, sql, gte } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { getQueueBacklogSnapshot, type QueueBacklogMetric } from '@services/api-gateway/src/core/queues.js';
 import { startWorkerHealthServer } from '@services/api-gateway/src/core/worker-health-server.js';
-import { connectMongo, hasMongoUri } from '@shared/lib/mongo.js';
-import { LeadRecoveryState } from '@shared/lib/models/lead-recovery.js';
+import { connectMySql, hasMySqlUri, getLeadRecoveryBacklog as getMySqlLeadRecoveryBacklog } from '@shared/lib/mysql.js';
 
 type QueueSnapshot = Awaited<ReturnType<typeof getQueueBacklogSnapshot>>;
 
 interface RailwayScaleTarget {
   service: string;
   queues: string[];
-  backlogSource?: 'bullmq' | 'lead-recovery-mongo';
+  backlogSource?: 'bullmq' | 'lead-recovery-mysql';
   webhookUrl?: string;
   minReplicas: number;
   maxReplicas: number;
@@ -285,7 +284,7 @@ export class RailwayQueueAutoscaler {
       {
         service: 'audnix-worker-lead-recovery',
         queues: [],
-        backlogSource: 'lead-recovery-mongo',
+        backlogSource: 'lead-recovery-mysql',
         webhookUrl: readWebhook('RAILWAY_SCALE_WEBHOOK_LEAD_RECOVERY'),
         minReplicas,
         maxReplicas: Math.min(maxReplicas, 20),
@@ -372,7 +371,7 @@ export class RailwayQueueAutoscaler {
   }
 
   private async getTargetBacklog(target: RailwayScaleTarget, snapshot: QueueSnapshot): Promise<number> {
-    if (target.backlogSource === 'lead-recovery-mongo') {
+    if (target.backlogSource === 'lead-recovery-mysql') {
       return this.getLeadRecoveryBacklog();
     }
 
@@ -380,21 +379,11 @@ export class RailwayQueueAutoscaler {
   }
 
   private async getLeadRecoveryBacklog(): Promise<number> {
-    if (!hasMongoUri()) return 0;
+    if (!hasMySqlUri()) return 0;
 
     try {
-      await connectMongo();
-      return LeadRecoveryState.countDocuments({
-        isActive: true,
-        isBusy: { $ne: true },
-        syncRequestedAt: { $ne: null },
-        $expr: {
-          $or: [
-            { $eq: ['$lastSyncAt', null] },
-            { $gt: ['$syncRequestedAt', '$lastSyncAt'] },
-          ],
-        },
-      });
+      await connectMySql();
+      return getMySqlLeadRecoveryBacklog();
     } catch (err) {
       this.warnLeadRecoveryBacklogUnavailable(err);
       return 0;

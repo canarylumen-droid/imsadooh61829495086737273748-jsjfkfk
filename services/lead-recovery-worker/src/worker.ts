@@ -1,11 +1,15 @@
-import { connectMongo } from "@shared/lib/mongo.js";
+import { connectMySql, ensureTables } from "@shared/lib/mysql.js";
 import {
-  LeadRecoveryObjection,
-  LeadRecoveryState,
-  RecoveredLead,
-} from "@shared/lib/models/lead-recovery.js";
+  getPendingSyncStates,
+  claimMailboxForSync,
+  completeMailboxSync,
+  failMailboxSync,
+  recoverStaleBusyState,
+  upsertRecoveredLead,
+  upsertRecoveryObjection,
+} from "@shared/lib/mysql.js";
 import { storage } from "@shared/lib/storage/storage.js";
-import { analyzeRecoveryEmail, ensurePromptConfigFromEnv } from "./agent.js";
+import { analyzeRecoveryEmail } from "./agent.js";
 import { checkDeliverability } from "./deliverability.js";
 import { shouldFilterEmail } from "./filter.js";
 import { fetchRecoveryEmails, type RecoveryEmail } from "./mailbox.js";
@@ -22,11 +26,10 @@ export class LeadRecoveryWorker {
   private interval: NodeJS.Timeout | null = null;
   private running = false;
   private processing = false;
-  private promptReady = false;
-  private lastMongoWarningAt = 0;
-  private mongoRetryCount = 0;
-  private mongoSkipped = false;
-  private readonly mongoWarningIntervalMs = readInt("LEAD_RECOVERY_MONGO_WARNING_INTERVAL_MS", 300_000);
+  private lastDbWarningAt = 0;
+  private dbRetryCount = 0;
+  private mysqlSkipped = false;
+  private readonly dbWarningIntervalMs = readInt("LEAD_RECOVERY_MONGO_WARNING_INTERVAL_MS", 300_000);
 
   async start() {
     this.running = true;
@@ -59,35 +62,23 @@ export class LeadRecoveryWorker {
 
   async runOnce() {
     if (!this.running || this.processing) return;
-    if (this.mongoSkipped) return;
+    if (this.mysqlSkipped) return;
     this.processing = true;
     try {
-      const ready = await this.ensureMongoReady();
+      const ready = await this.ensureDbReady();
       if (!ready) return;
 
-      this.mongoRetryCount = 0;
+      this.dbRetryCount = 0;
 
       const staleCutoff = new Date(Date.now() - 15 * 60 * 1000); // 15 min stale threshold
-      const states = await LeadRecoveryState.find({
-        isActive: true,
-        syncRequestedAt: { $ne: null },
-        $expr: {
-          $or: [
-            { $eq: ["$lastSyncAt", null] },
-            { $gt: ["$syncRequestedAt", "$lastSyncAt"] },
-          ],
-        },
-      }).lean();
+      const states = await getPendingSyncStates();
       for (const state of states) {
         // Stale detection: if isBusy is true but updatedAt is older than 15 min,
         // the worker likely crashed — reset isBusy so it can be picked up again.
         if (state.isBusy) {
           if (state.updatedAt && new Date(state.updatedAt).getTime() < staleCutoff.getTime()) {
             console.log(`[LeadRecoveryWorker] ⚠️ Recovering stale isBusy state for ${state.tenantId}/${state.mailboxId}`);
-            await LeadRecoveryState.updateOne(
-              { _id: state._id },
-              { isBusy: false, syncStatus: 'idle', availableAt: new Date() }
-            );
+            await recoverStaleBusyState(state.id);
           } else {
             continue; // Still within grace period — skip
           }
@@ -99,36 +90,33 @@ export class LeadRecoveryWorker {
     }
   }
 
-  private async ensureMongoReady(): Promise<boolean> {
+  private async ensureDbReady(): Promise<boolean> {
     try {
-      await connectMongo();
-      if (!this.promptReady) {
-        await ensurePromptConfigFromEnv();
-        this.promptReady = true;
-      }
+      await connectMySql();
+      await ensureTables();
       return true;
     } catch (error) {
-      this.warnMongoUnavailable(error);
+      this.warnDbUnavailable(error);
       return false;
     }
   }
 
-  private warnMongoUnavailable(error: unknown): void {
-    this.mongoRetryCount++;
-    if (this.mongoRetryCount >= 3) {
-      this.mongoSkipped = true;
-      console.error("[LeadRecoveryWorker] MongoDB unavailable after 3 retries — permanently skipping MongoDB work. Update MONGODB_URI or MONGO_URL in .env to re-enable.");
+  private warnDbUnavailable(error: unknown): void {
+    this.dbRetryCount++;
+    if (this.dbRetryCount >= 3) {
+      this.mysqlSkipped = true;
+      console.error("[LeadRecoveryWorker] MySQL unavailable after 3 retries — permanently skipping DB work. Update MYSQL_HOST and related env vars to re-enable.");
       return;
     }
 
     const now = Date.now();
-    if (now - this.lastMongoWarningAt < this.mongoWarningIntervalMs) return;
+    if (now - this.lastDbWarningAt < this.dbWarningIntervalMs) return;
 
-    this.lastMongoWarningAt = now;
+    this.lastDbWarningAt = now;
     const message = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-    console.error(`[LeadRecoveryWorker] MongoDB unavailable (attempt ${this.mongoRetryCount}/3); worker will retry`, {
+    console.error(`[LeadRecoveryWorker] MySQL unavailable (attempt ${this.dbRetryCount}/3); worker will retry`, {
       error: message,
-      retryInMs: this.mongoWarningIntervalMs,
+      retryInMs: this.dbWarningIntervalMs,
     });
   }
 
@@ -170,23 +158,7 @@ export class LeadRecoveryWorker {
     const maxMessages = Number(process.env.LEAD_RECOVERY_MAX_MESSAGES_PER_MAILBOX || 500);
     const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
-    const claimedState = await LeadRecoveryState.findOneAndUpdate(
-      {
-        tenantId,
-        mailboxId,
-        isActive: true,
-        isBusy: { $ne: true },
-        syncRequestedAt: { $ne: null },
-        $expr: {
-          $or: [
-            { $eq: ["$lastSyncAt", null] },
-            { $gt: ["$syncRequestedAt", "$lastSyncAt"] },
-          ],
-        },
-      },
-      { isBusy: true, syncStatus: "syncing" },
-      { new: true }
-    ).lean();
+    const claimedState = await claimMailboxForSync(tenantId, mailboxId);
 
     if (!claimedState) return;
 
@@ -209,18 +181,10 @@ export class LeadRecoveryWorker {
         analyzed += 1;
       }
 
-      await LeadRecoveryState.updateOne(
-        { tenantId, mailboxId },
-        { isBusy: false, availableAt: null, lastSyncAt: new Date(), syncStatus: "completed" },
-        { upsert: true }
-      );
+      await completeMailboxSync(tenantId, mailboxId);
       await logRecoveryEvent(tenantId, "SyncCompleted", { mailboxId, fetched: emails.length, analyzed, filtered });
     } catch (error: any) {
-      await LeadRecoveryState.updateOne(
-        { tenantId, mailboxId },
-        { isBusy: false, syncStatus: "failed", availableAt: new Date(Date.now() + 60 * 60 * 1000) },
-        { upsert: true }
-      );
+      await failMailboxSync(tenantId, mailboxId);
       await logRecoveryEvent(tenantId, "SyncFailed", { mailboxId, error: error.message });
     }
   }
@@ -294,64 +258,44 @@ export class LeadRecoveryWorker {
     const analysis = await analyzeRecoveryEmail(tenantId, enrichedEmail);
 
     const sourceMessageId = email.messageId || `${mailboxId}:${email.uid}`;
-    const lead = await RecoveredLead.findOneAndUpdate(
-      { tenantId, mailboxId, email: leadEmail.toLowerCase() },
-      {
-        $set: {
-          tenantId,
-          mailboxId,
-          sourceMailboxSnapshot: {
-            provider: integration.provider,
-            accountType: integration.accountType,
-          },
-          email: leadEmail.toLowerCase(),
-          subject: email.subject,
-          intent: analysis.intent,
-          deliverabilityStatus,
-          followUpDraft: analysis.followUpDraft,
-          conversationSummary: `Latest inbound message in ${integration.accountType || integration.provider} stopped at: ${email.subject || "No subject"}`,
-          lastMessageText: email.text.slice(0, 8000),
-          lastMessageAt: email.date || new Date(),
-        },
-        $addToSet: {
-          sourceMessageIds: sourceMessageId,
-          brainstormedObjections: { $each: analysis.brainstormedObjections },
-        },
-      },
-      { upsert: true, new: true }
-    );
+    const lead = await upsertRecoveredLead(tenantId, mailboxId, leadEmail.toLowerCase(), {
+      sourceMailboxProvider: integration.provider,
+      sourceMailboxAccountType: integration.accountType ?? undefined,
+      subject: email.subject,
+      intent: analysis.intent,
+      deliverabilityStatus,
+      followUpDraft: analysis.followUpDraft,
+      conversationSummary: `Latest inbound message in ${integration.accountType || integration.provider} stopped at: ${email.subject || "No subject"}`,
+      lastMessageText: email.text.slice(0, 8000),
+      lastMessageAt: email.date || new Date(),
+      sourceMessageIds: [sourceMessageId],
+      brainstormedObjections: analysis.brainstormedObjections,
+    });
 
     await logRecoveryEvent(tenantId, "LeadAnalyzed", {
       mailboxId,
-      leadId: String(lead._id),
+      leadId: String(lead.id),
       email: leadEmail,
       intent: analysis.intent,
     });
 
     for (const objection of analysis.brainstormedObjections) {
-      await LeadRecoveryObjection.updateOne(
-        { tenantId, rule: objection.rule },
-        {
-          $setOnInsert: {
-            tenantId,
-            category: objection.category,
-            rule: objection.rule,
-            evidence: objection.evidence,
-            sourceLeadId: lead._id,
-            createdBy: "ai",
-          },
-        },
-        { upsert: true }
+      await upsertRecoveryObjection(
+        tenantId,
+        objection.rule,
+        objection.category,
+        objection.evidence,
+        lead.id
       );
       await logRecoveryEvent(tenantId, "ObjectionDiscovered", {
-        leadId: String(lead._id),
+        leadId: String(lead.id),
         category: objection.category,
         rule: objection.rule,
       });
     }
 
     if (analysis.followUpDraft) {
-      await logRecoveryEvent(tenantId, "DraftGenerated", { leadId: String(lead._id), source: "worker" });
+      await logRecoveryEvent(tenantId, "DraftGenerated", { leadId: String(lead.id), source: "worker" });
     }
   }
 }
