@@ -390,10 +390,10 @@ export default function LeadImportPage() {
     <PageWrapper className="max-w-5xl mx-auto space-y-8">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight text-foreground">
-          Network Data Ingestion
+          Lead Import
         </h1>
         <p className="text-muted-foreground mt-1">
-          Synchronize your high-intent leads into the Audnix intelligence core.
+          Upload or paste leads for campaign targeting.
         </p>
       </div>
 
@@ -401,20 +401,22 @@ export default function LeadImportPage() {
         <Card className="border-border/40 shadow-sm bg-card">
           <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
             <div>
-              <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Pipeline Capacity</p>
+              <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Pipeline</p>
               <p className="text-base sm:text-lg font-bold tabular-nums">
-                {leadStats.total.toLocaleString()} <span className="text-muted-foreground text-xs sm:text-sm font-medium">/ {leadStats.planLimit.toLocaleString()}</span>
+                <span className="text-primary">{leadStats.total.toLocaleString()}</span> <span className="text-muted-foreground text-xs sm:text-sm font-medium">/ {leadStats.planLimit.toLocaleString()}</span>
               </p>
             </div>
             <div className="flex-1 w-full sm:max-w-xs">
-              <div className="h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden">
+              <div className="h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden relative">
                 <div
                   className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${Math.min(100, (leadStats.total / leadStats.planLimit) * 100)}%` }}
+                  style={{ width: `${Math.max(0.5, Math.min(100, (leadStats.total / leadStats.planLimit) * 100))}%` }}
                 />
               </div>
               <p className="text-[9px] sm:text-[10px] text-muted-foreground text-right mt-1">
-                {Math.round((leadStats.total / leadStats.planLimit) * 100)}% used
+                {leadStats.total > 0 && (leadStats.total / leadStats.planLimit) * 100 < 1
+                  ? '<1% used'
+                  : `${Math.round((leadStats.total / leadStats.planLimit) * 100)}% used`}
               </p>
             </div>
           </CardContent>

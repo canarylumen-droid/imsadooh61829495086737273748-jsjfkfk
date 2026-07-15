@@ -42,8 +42,9 @@ interface AnalyticsInsights {
 export default function InsightsPage() {
   useRealtime();
   const { canAccess: canAccessFullAnalytics } = useCanAccessFullAnalytics();
-  const { data: integrations } = useQuery<any[]>({ queryKey: ["/api/integrations"] });
+  const { data: integrationsRaw } = useQuery<any>({ queryKey: ["/api/integrations"] });
   const { data: campaigns } = useQuery<any[]>({ queryKey: ["/api/outreach/campaigns"], staleTime: 30_000 });
+  const integrations = (integrationsRaw as any)?.integrations || integrationsRaw || [];
 
   const { data: insightsData, isLoading, refetch, isFetching } = useQuery<AnalyticsInsights>({
     queryKey: ["/api/ai/insights"],
@@ -118,14 +119,14 @@ export default function InsightsPage() {
             transition={{ duration: 0.5 }}
             className="flex flex-col items-center justify-center py-20 text-center"
           >
-            {!hasMailbox ? (
+            {!hasMailbox && !hasCampaign ? (
               <>
                 <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
                   <BarChart3 className="h-10 w-10 text-indigo-400" />
                 </div>
                 <h3 className="text-xl font-bold text-foreground mb-2">No Insights Yet</h3>
                 <p className="text-muted-foreground font-medium max-w-sm mb-8 leading-relaxed">
-                  Insights appear once you connect a mailbox and send your first campaign.
+                  Insights appear once you connect a mailbox and run a campaign.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3">
                   <Link href="/dashboard/integrations">

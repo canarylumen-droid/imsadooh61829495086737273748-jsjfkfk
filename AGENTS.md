@@ -59,6 +59,7 @@ Audnix - email outreach/campaign platform.
 - mysql2: Lazy import so API gateway starts without the package
 - Warmup: Summary KPIs (Total/Warming/Warmed/Rep) always visible even before warmup starts; empty state now sits below KPIs; added reputation score to per-mailbox grid; explained what happens after warmup starts
 - Integrations: Mobile layout — removed `max-sm:hidden` on reputation/bounce/status stats so they show on mobile; increased email truncation from 120px→160px; reduced padding from p-8→p-4 on mobile
+- Deliverability: Now fetches `/api/stats/inbox-placement` for real spam/bounce/inbox rates per mailbox instead of static integration DB fields (which were always 0). Added Sent/Inbox Rate columns. Pie chart shows even with zero data (shows explanatory text). Real-time socket refresh on `leads_updated`/`warmup_update` events.
 
 ## Useful Commands
 
