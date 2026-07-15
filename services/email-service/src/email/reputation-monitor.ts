@@ -111,10 +111,10 @@ export async function calculateReputationScore(integrationId: string): Promise<n
   const { storage } = await import('@shared/lib/storage/storage.js');
   const stats = await storage.getDashboardStats(mailbox.userId, { integrationId });
   
-  if (stats.totalMessages > 30 && stats.openRate < 12) {
+  if (stats.totalMessages > 30 && (stats.openRate ?? 0) < 12) {
     const spamPenalty = 40; // Heavy hit
     score -= spamPenalty;
-    console.log(`⚠️ [Reputation Monitor] Mailbox ${mailbox.id} penalty: High likelihood of SPAM folder placement (Open Rate: ${stats.openRate.toFixed(2)}%) -> -${spamPenalty}`);
+    console.log(`⚠️ [Reputation Monitor] Mailbox ${mailbox.id} penalty: High likelihood of SPAM folder placement (Open Rate: ${(stats.openRate ?? 0).toFixed(2)}%) -> -${spamPenalty}`);
   }
 
     // 1.7 Bounce Rate Penalty (Dampened for low volume)
@@ -135,7 +135,7 @@ export async function calculateReputationScore(integrationId: string): Promise<n
   oneDayAgo.setDate(oneDayAgo.getDate() - 1);
   const last24hBounces = recentBounces.filter((b: any) => new Date(b.createdAt) > oneDayAgo);
 
-  if (last24hBounces.length === 0 && stats.openRate > 20 && stats.totalMessages > 5) {
+  if (last24hBounces.length === 0 && (stats.openRate ?? 0) > 20 && stats.totalMessages > 5) {
     score += 15; // Fast recovery boost
     console.log(`🚀 [Reputation Monitor] Fast Recovery Boost (+15) for mailbox ${mailbox.id} due to high engagement and 0 bounces.`);
   }

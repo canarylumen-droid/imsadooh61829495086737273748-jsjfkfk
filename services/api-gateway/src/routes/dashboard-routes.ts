@@ -436,7 +436,7 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
         avgLeadScore: globalAvgScore != null ? Number(globalAvgScore.toFixed(2)) : null,
         avgOpenRate: globalOpenRate,
         avgResponseRate: stats.responseRate ?? null,
-        marketSentiment: stats.totalLeads > 50 && stats.responseRate > 10 ? 'positive' : 'neutral'
+        marketSentiment: stats.totalLeads > 50 && (stats.responseRate ?? 0) > 10 ? 'positive' : 'neutral'
       },
       sync: {
         status: engineStatus,

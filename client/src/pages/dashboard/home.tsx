@@ -20,6 +20,7 @@ import {
   Info,
   TrendingUp,
   TrendingDown,
+  MessageSquare,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useLocation } from "wouter";

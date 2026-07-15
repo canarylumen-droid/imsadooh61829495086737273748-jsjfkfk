@@ -477,11 +477,11 @@ private async checkUserHasActiveCampaigns(userId: string): Promise<boolean> {
       const MIN_OPEN_RATE = 25.0; // 25%
 
       const isUnderperforming = 
-        (stats.responseRate < MIN_REPLY_RATE && stats.totalLeads > 50) ||
-        (stats.openRate < MIN_OPEN_RATE && stats.totalMessages > 50);
+        ((stats.responseRate ?? 0) < MIN_REPLY_RATE && stats.totalLeads > 50) ||
+        ((stats.openRate ?? 0) < MIN_OPEN_RATE && stats.totalMessages > 50);
 
       if (isUnderperforming) {
-        console.log(`[StrategicAudit] 🧠 User ${userId} is underperforming (Reply: ${stats.responseRate.toFixed(2)}%, Open: ${stats.openRate.toFixed(2)}%). Adjusting strategy...`);
+        console.log(`[StrategicAudit] 🧠 User ${userId} is underperforming (Reply: ${(stats.responseRate ?? 0).toFixed(2)}%, Open: ${(stats.openRate ?? 0).toFixed(2)}%). Adjusting strategy...`);
         
         const systemPrompt = `## IDENTITY
 You are the Audnix Strategic AI Observer — a sales performance analyst that turns data into actionable strategy.
@@ -501,8 +501,8 @@ Analyze outreach performance metrics and recommend ONE specific strategic change
 4. Output ONLY the strategic directive sentence. No labels, no formatting, no explanation.`;
         const auditPrompt = `
 AUDNIX AGENT REPORT:
-- Reply Rate: ${stats.responseRate.toFixed(2)}% (Target: >2%)
-- Open Rate: ${stats.openRate.toFixed(2)}% (Target: >25%)
+- Reply Rate: ${(stats.responseRate ?? 0).toFixed(2)}% (Target: >2%)
+- Open Rate: ${(stats.openRate ?? 0).toFixed(2)}% (Target: >25%)
 - Total Leads: ${stats.totalLeads}
 - Converted: ${stats.convertedLeads}
 

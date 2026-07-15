@@ -2979,9 +2979,9 @@ export class DrizzleStorage implements IStorage {
         replied,
         booked: conversions,
         leadsFiltered: user?.filteredLeadsCount || 0,
-        conversionRate: this.calculateRate(conversions, totalLeads),
-        responseRate: this.calculateRate(replied, totalLeads),
-        openRate: this.calculateRate(opened, sent),
+        conversionRate: this.calculateRate(conversions, totalLeads) ?? 0,
+        responseRate: this.calculateRate(replied, totalLeads) ?? 0,
+        openRate: this.calculateRate(opened, sent) ?? 0,
         closedRevenue: Number(Number(dealsStats?.closedRevenue || 0).toFixed(2)),
         pipelineValue: Number((Number(dealsStats?.pipelineValue || 0) + Number(predictedStats?.value || 0)).toFixed(2)),
         averageResponseTime: averageResponseTime

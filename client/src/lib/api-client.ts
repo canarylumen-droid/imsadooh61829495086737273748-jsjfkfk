@@ -40,7 +40,7 @@ export async function apiClient<T>(
         if (path.startsWith('/dashboard') || path.startsWith('/admin')) {
           toast({ variant: 'destructive', title, description, duration: 3000 });
           setTimeout(() => { window.location.href = '/auth'; }, 2000);
-          return;
+          throw new APIError(401, 'Session expired');
         }
       } else if (response.status === 403) {
         title = 'Access Denied';
