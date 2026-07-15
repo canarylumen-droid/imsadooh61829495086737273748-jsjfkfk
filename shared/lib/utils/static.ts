@@ -48,6 +48,17 @@ export function serveStatic(app: Express) {
     console.error(`❌ [Static] No valid static directory found!`);
   }
 
+  // Serve user uploads from public/uploads/ (avatars, PDFs, voice samples)
+  const uploadsDir = path.resolve(process.cwd(), "public", "uploads");
+  if (fs.existsSync(uploadsDir)) {
+    app.use('/uploads', express.static(uploadsDir, {
+      maxAge: '1d',
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
+    }));
+  }
+
   // Optimized static serving for production
   app.use(express.static(distPath, {
     dotfiles: 'allow',

@@ -9,6 +9,9 @@ import { decrypt } from '@shared/lib/crypto/encryption.js';
 import dns from 'dns';
 import { promisify } from 'util';
 import { LRUCache } from 'lru-cache';
+import { uploadAvatar, uploadToSupabase } from '@shared/lib/storage/file-upload.js';
+import path from 'path';
+import { promises as fs } from 'fs';
 
 const resolveMx = promisify(dns.resolveMx);
 const resolveTxt = promisify(dns.resolveTxt);
@@ -740,6 +743,55 @@ router.put('/user/voice-settings', requireAuthOrApiKey, async (req: Request, res
 });
 
 /**
+ * POST /api/user/avatar
+ * Upload user avatar — tries Supabase/S3 first, falls back to local disk.
+ */
+router.post('/user/avatar', requireAuthOrApiKey, uploadAvatar.single('avatar'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = req.session?.userId;
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No image file provided' });
+      return;
+    }
+
+    const ext = path.extname(file.originalname) || '.jpg';
+    const filename = `avatars/${userId}_${Date.now()}${ext}`;
+
+    let avatarUrl: string | null = null;
+
+    try {
+      avatarUrl = await uploadToSupabase('avatars', filename, file.buffer);
+    } catch (supaErr) {
+      console.warn('[Avatar] Supabase upload failed, saving locally:', supaErr);
+    }
+
+    if (!avatarUrl) {
+      const localDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
+      await fs.mkdir(localDir, { recursive: true });
+      const localPath = path.join(localDir, path.basename(filename));
+      await fs.writeFile(localPath, file.buffer);
+      avatarUrl = `/uploads/avatars/${path.basename(filename)}`;
+    }
+
+    await storage.updateUser(userId, { avatar: avatarUrl });
+
+    const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+    wsSync.notifySettingsUpdated(userId, { profileUpdated: true });
+
+    res.json({ avatar: avatarUrl });
+  } catch (error) {
+    console.error('[Avatar] Upload error:', error);
+    res.status(500).json({ error: 'Failed to upload avatar' });
+  }
+});
+
+/**
  * PUT /api/user/profile
  * Update user profile including CTA settings
  */
@@ -782,13 +834,14 @@ router.put('/user/profile', requireAuthOrApiKey, async (req: Request, res: Respo
     if (aiAdjustCopyEnabled !== undefined) (updates as any).aiAdjustCopyEnabled = aiAdjustCopyEnabled === true;
     if (pdfConfidenceThreshold !== undefined) (updates as any).pdfConfidenceThreshold = pdfConfidenceThreshold;
 
-    // Store CTA settings, Calendar Link, and Voice Settings in metadata
-    if (defaultCtaLink !== undefined || defaultCtaText !== undefined || calendarLink !== undefined || voiceNotesEnabled !== undefined) {
+    if (calendarLink !== undefined) updates.calendarLink = calendarLink;
+
+    // Store CTA settings and Voice Settings in metadata
+    if (defaultCtaLink !== undefined || defaultCtaText !== undefined || voiceNotesEnabled !== undefined) {
       updates.metadata = {
         ...existingMetadata,
         ...(defaultCtaLink !== undefined && { defaultCtaLink }),
         ...(defaultCtaText !== undefined && { defaultCtaText }),
-        ...(calendarLink !== undefined && { calendarLink }),
         ...(voiceNotesEnabled !== undefined && { voiceNotesEnabled: voiceNotesEnabled === true }),
       };
     }

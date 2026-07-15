@@ -418,13 +418,18 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     });
 
     // SETTINGS/USER UPDATES
-    socketInstance.on('settings_updated', () => {
+    socketInstance.on('settings_updated', (payload: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/user/profile'] });
       queryClient.invalidateQueries({ queryKey: ['/api/integrations'] });
       queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/channels/all'] });
       // Refresh inbox leads when a mailbox is connected/disconnected
       queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
+      // Emit a custom DOM event so individual settings pages can react
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('settings_updated', { detail: payload }));
+      }
     });
 
     socketInstance.on('insights_updated', (payload: any) => {
