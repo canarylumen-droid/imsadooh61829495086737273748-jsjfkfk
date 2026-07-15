@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { apiRequest } from "@/lib/queryClient";
+import { toast } from '@/hooks/use-toast';
 
 export interface LeadRecoveryMailbox {
   id: string;
@@ -99,6 +100,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       setPromptConfigured(Boolean(data.promptConfigured));
     } catch (e) {
       console.warn('[LeadRecovery] Failed to load status:', e);
+      toast({ title: 'Failed to load recovery status', variant: 'destructive' });
     }
   }, []);
 
@@ -109,6 +111,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       setLeads(data.leads || []);
     } catch (e) {
       console.warn('[LeadRecovery] Failed to load leads:', e);
+      toast({ title: 'Failed to load recovery leads', variant: 'destructive' });
     }
   }, []);
 
@@ -119,6 +122,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       setEvents(data.events || []);
     } catch (e) {
       console.warn('[LeadRecovery] Failed to load events:', e);
+      toast({ title: 'Failed to load recovery events', variant: 'destructive' });
     }
   }, []);
 
@@ -128,6 +132,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       await Promise.all([loadStatus(), loadLeads(), loadEvents()]);
     } catch (e) {
       console.warn('[LeadRecovery] loadAll failed:', e);
+      toast({ title: 'Failed to load recovery data', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -140,6 +145,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       await loadAll();
     } catch (e) {
       console.warn('[LeadRecovery] Activate failed:', e);
+      toast({ title: 'Failed to activate lead recovery', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -152,6 +158,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       await loadAll();
     } catch (e) {
       console.warn('[LeadRecovery] Deactivate failed:', e);
+      toast({ title: 'Failed to deactivate lead recovery', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -164,6 +171,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       await loadAll();
     } catch (e) {
       console.warn('[LeadRecovery] Sync failed:', e);
+      toast({ title: 'Failed to sync lead recovery', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -179,6 +187,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       await Promise.all([loadLeads(), loadEvents()]);
     } catch (e) {
       console.warn('[LeadRecovery] Recover failed:', e);
+      toast({ title: 'Failed to recover lead', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -193,6 +202,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       return Number(data.synced || 0);
     } catch (e) {
       console.warn('[LeadRecovery] Sync objections failed:', e);
+      toast({ title: 'Failed to sync objections', variant: 'destructive' });
       return 0;
     } finally {
       setLoading(false);

@@ -10,7 +10,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Select,
   SelectContent,
@@ -198,33 +197,33 @@ export default function CalendarPage() {
 
   const { data: settingsData, isLoading: settingsLoading } = useQuery<{ settings: CalendarSettings }>({
     queryKey: ["/api/calendar/settings"],
-    retry: false,
+    retry: 3,
   });
 
   const { data: bookingsData, isLoading: bookingsLoading } = useQuery<{ bookings: CalendarBooking[] }>({
     queryKey: ["/api/calendar/bookings"],
-    retry: false,
+    retry: 3,
   });
 
   const { data: aiLogsData } = useQuery<{ logs: AIActionLog[] }>({
     queryKey: ["/api/calendar/ai-logs"],
-    retry: false,
+    retry: 3,
   });
 
-  const { data: eventsData } = useQuery({
+  const { data: eventsData } = useQuery<{ events: Array<{ id: string; title?: string; summary?: string; startTime?: string; start?: { dateTime?: string }; endTime?: string; end?: { dateTime?: string }; meetingUrl?: string; hangoutLink?: string; isAiBooked?: boolean; leadName?: string | null }> }>({
     queryKey: ["/api/oauth/google-calendar/events"],
-    retry: false,
+    retry: 3,
   });
 
   const { data: slotsData } = useQuery<{ slots: Array<{ start: string; end: string; available: boolean }> }>({
     queryKey: ["/api/calendar/slots", { daysAhead: 14 }],
-    retry: false,
+    retry: 3,
   });
 
   const settings = settingsData?.settings;
   const bookings = bookingsData?.bookings || [];
   const aiLogs = aiLogsData?.logs || [];
-  const googleEvents = (eventsData as any)?.events || [];
+  const googleEvents = eventsData?.events || [];
   const availableSlots = slotsData?.slots || [];
 
   const allEvents: CalendarEvent[] = useMemo(() => [
@@ -264,10 +263,13 @@ export default function CalendarPage() {
     new Date(e.startTime) > new Date() && e.status === 'scheduled'
   ).length;
 
+  const toLocalDateStr = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
   const eventsForDate = useCallback((date: Date) => {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toLocalDateStr(date);
     return allEvents.filter(e => {
-      const eventDate = new Date(e.startTime).toISOString().split('T')[0];
+      const eventDate = toLocalDateStr(new Date(e.startTime));
       return eventDate === dateStr;
     });
   }, [allEvents]);

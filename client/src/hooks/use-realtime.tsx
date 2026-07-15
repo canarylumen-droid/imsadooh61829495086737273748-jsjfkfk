@@ -40,10 +40,8 @@ const playSentSound = () => {
     const audio = new Audio('/sounds/notification.mp3');
     audio.volume = 0.4; // Slightly quieter for sent sound
     audio.play().catch(() => {
-      // Fallback to synthesis if audio play fails
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
       if (audioCtx.state === 'suspended') return;
-      
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
       osc.connect(gain);
@@ -56,7 +54,7 @@ const playSentSound = () => {
       osc.stop(audioCtx.currentTime + 0.2);
     });
   } catch (err) {
-    // Sent sound playback failed
+    console.warn('[Realtime] Sent sound playback failed:', err);
   }
 };
 
@@ -125,7 +123,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       // Unlock audio context with a silent sound
       const audio = new Audio('/sounds/notification.mp3');
       audio.volume = 0.01;
-      audio.play().catch(() => { });
+      audio.play().catch(() => console.warn('[Realtime] Audio unlock failed'));
 
       toast({
         title: "Notifications Enabled",
@@ -140,7 +138,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
   }, []);
 
   useEffect(() => {
-    if (!userId) return;
+    if (!userId) { console.warn('[Realtime] No userId — socket not connecting'); return; }
 
     // Connect to Socket.IO server
     // Use relative path for production compatibility or configured URL

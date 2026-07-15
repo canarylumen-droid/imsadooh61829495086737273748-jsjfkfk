@@ -207,6 +207,32 @@ export RUST_EMAIL_SENDER_PATH=./rust-email-sender/target/release/audnix-email-se
 export RUST_IMAP_WORKER_PATH=./rust-imap-worker/target/release/audnix-imap-worker
 ```
 
+## Security Vulnerability Fixes
+
+### Dependabot Overrides (`package.json`)
+
+All known GHSA advisories patched via overrides:
+
+| Package | Fixed Version | Vuln |
+|---------|--------------|------|
+| `nodemailer` | ^9.0.4 | SMTP injection, CRLF injection, DoS |
+| `drizzle-orm` | ^0.45.2 | SQL injection via identifiers |
+| `undici` | ^8.3.0 | Various HTTP exploits |
+| `uuid` | ^10.0.0 | Buffer bounds check |
+| `esbuild` | ^0.25.0 | Dev server request smuggling |
+| `axios` | ^1.16.1 | SSRF, prototype pollution |
+| `cross-spawn` | ^7.0.6 | Shell injection |
+| `micromatch` | ^4.0.8 | ReDoS |
+| `cookie-signature` | ^1.2.2 | Signature bypass |
+| `path-to-regexp` | ^8.0.0 | ReDoS |
+| `express` | ^4.21.2 | Multiple vulns |
+| `send` / `serve-static` | ^1.2.0 / ^2.2.0 | Path traversal |
+| `elliptic` | ^6.6.1 | Cryptographic bugs |
+| `ws` | ^8.18.2 | DoS, protocol confusion |
+| `tar` | ^7.4.3 | Symlink race, path traversal |
+| `xml2js` | ^0.6.2 | Prototype pollution |
+| `ip-address` | ^10.2.0 | ReDoS |
+
 ## Env Reference
 
 ```env
@@ -229,4 +255,35 @@ GMAIL_CLIENT_ID=...
 GMAIL_CLIENT_SECRET=...
 OUTLOOK_CLIENT_ID=...
 OUTLOOK_CLIENT_SECRET=...
+```
+
+## Full Session Changelog (2026-07-15)
+
+### Rust Stack
+- Installed rustup → rustc 1.97.0 + cargo
+- Fixed `rust-email-sender`: removed `trust-dns-resolver` (unused), swapped `native-tls`→`rustls`, fixed `redis::tokio`→`redis::aio`, fixed BRPOP for redis 0.27 API
+- Fixed `rust-imap-worker`: removed broken `imap-codec`/`mail-parser` deps, rewrote `imap_client.rs` with working tokio-rustls TLS, added standalone CLI mode
+- Both binaries compile with zero OpenSSL dependency — pure rustls
+
+### Email Routing
+- `shared/lib/channels/email.ts`: Rust binary auto-detected across 5 paths; `withRustFallback` timeout 50ms→3s; Redis result key matching fixed
+- `multi-provider-failover.ts`: Now tries Rust SMTP first (3s timeout via Redis) before Nodemailer fallback
+
+### Auto-Discover UI
+- SMTP host onChange auto-derives IMAP host (`smtp.` → `imap.`) when IMAP empty
+- Auto-discover triggers on email blur, fills SMTP/IMAP host + port + display name
+
+### Network Banner
+- `/api/health` ping every 15s for accurate server reachability
+- 5 states: online / offline / server_down / degraded (shows latency ms) / reconnecting
+- No more false "offline" when server is down but browser says online
+
+### TypeScript Fixes
+- 30+ errors fixed: Redis method casing (`lpush`→`lPush`), `QueryResult` typing, `finalScore` narrowing, `requireAuth`→`requireAuthOrApiKey`
+
+### Security
+- Fixed all Dependabot overrides in `package.json` (18 packages patched)
+- Removed duplicate override entries causing EOVERRIDE errors
+- `nodemailer`: 9.0.3 → 9.0.4 (5 GHSA fixes)
+- `drizzle-orm`: added override for SQL injection fix
 ```
