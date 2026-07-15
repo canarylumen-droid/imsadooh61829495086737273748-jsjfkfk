@@ -72,10 +72,16 @@ interface InsightsApiResponse {
 export default function InsightsPage() {
   useRealtime();
   const { canAccess: canAccessFullAnalytics } = useCanAccessFullAnalytics();
+  const { data: integrations } = useQuery<any[]>({ queryKey: ["/api/integrations"] });
+  const { data: campaigns } = useQuery<any[]>({ queryKey: ["/api/outreach/campaigns"], staleTime: 30_000 });
+
   const { data: insightsData, isLoading, refetch, isFetching } = useQuery<InsightsApiResponse>({
     queryKey: ["/api/ai/insights"],
     retry: false,
   });
+
+  const hasMailbox = integrations?.some((i: any) => i.connected && (i.provider === 'gmail' || i.provider === 'outlook' || i.provider === 'custom_email'));
+  const hasCampaign = campaigns?.some((c: any) => c.status === 'active' || c.status === 'running' || c.status === 'completed');
 
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [selectedMailbox, setSelectedMailbox] = useState<string | undefined>("all");
@@ -160,25 +166,58 @@ export default function InsightsPage() {
             transition={{ duration: 0.5 }}
             className="flex flex-col items-center justify-center py-20 text-center"
           >
-            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
-              <BarChart3 className="h-10 w-10 text-indigo-400" />
-            </div>
-            <h3 className="text-xl font-bold text-foreground mb-2">No Insights Yet</h3>
-            <p className="text-muted-foreground font-medium max-w-sm mb-8 leading-relaxed">
-              Connect a mailbox and run a campaign to see insights.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Link href="/dashboard/integrations">
-                <Button className="rounded-xl h-11 px-6">
-                  Connect Mailbox <ArrowRight className="ml-2 h-4 w-4" />
+            {!hasMailbox ? (
+              <>
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 border border-indigo-500/20 flex items-center justify-center mb-6">
+                  <BarChart3 className="h-10 w-10 text-indigo-400" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">No Insights Yet</h3>
+                <p className="text-muted-foreground font-medium max-w-sm mb-8 leading-relaxed">
+                  Insights appear once you connect a mailbox and send your first campaign.
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link href="/dashboard/integrations">
+                    <Button className="rounded-xl h-11 px-6">
+                      Connect Mailbox <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/dashboard/outreach">
+                    <Button variant="outline" className="rounded-xl h-11 px-6">
+                      Create Campaign
+                    </Button>
+                  </Link>
+                </div>
+              </>
+            ) : !hasCampaign ? (
+              <>
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center mb-6">
+                  <Send className="h-10 w-10 text-amber-400" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">Awaiting Campaign Activity</h3>
+                <p className="text-muted-foreground font-medium max-w-sm mb-8 leading-relaxed">
+                  Your mailbox is connected! Insights will generate after your first campaign sends emails and receives replies.
+                </p>
+                <Link href="/dashboard/outreach">
+                  <Button className="rounded-xl h-11 px-6">
+                    Start a Campaign <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </Link>
+              </>
+            ) : (
+              <>
+                <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-sky-500/20 to-blue-500/20 border border-sky-500/20 flex items-center justify-center mb-6">
+                  <BarChart3 className="h-10 w-10 text-sky-400" />
+                </div>
+                <h3 className="text-xl font-bold text-foreground mb-2">No Insights Yet</h3>
+                <p className="text-muted-foreground font-medium max-w-sm mb-8 leading-relaxed">
+                  Insights are being generated for your campaign data. Check back after more activity accumulates.
+                </p>
+                <Button variant="outline" className="rounded-xl h-11 px-6" onClick={() => refetch()} disabled={isFetching}>
+                  <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+                  Refresh
                 </Button>
-              </Link>
-              <Link href="/dashboard/outreach">
-                <Button variant="outline" className="rounded-xl h-11 px-6">
-                  Create Campaign
-                </Button>
-              </Link>
-            </div>
+              </>
+            )}
           </motion.div>
         </div>
       ) : (

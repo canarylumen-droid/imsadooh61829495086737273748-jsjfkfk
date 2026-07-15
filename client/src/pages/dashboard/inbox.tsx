@@ -126,7 +126,8 @@ const DEFAULT_PERSONALIZATION_TAGS = [
 
 const statusStyles = {
   new: "bg-primary/20 text-primary border-primary/20",
-  open: "bg-primary/10 text-primary border-primary/10",
+  contacted: "bg-primary/10 text-primary border-primary/10",
+  opened: "bg-primary/10 text-primary border-primary/10",
   replied: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   booked: "bg-sky-500/10 text-sky-500 border-sky-500/20 shadow-[0_0_10px_rgba(14,165,233,0.15)]",
   converted: "bg-primary/20 text-primary border-primary/20 shadow-[0_0_15px_rgba(var(--primary),0.2)]",
@@ -551,8 +552,9 @@ export default function InboxPage() {
         } else if (filterStatus === "replied") {
           matchesStatus = ['replied', 'warm', 'booked'].includes(lead.status);
         } else if (filterStatus === "opened") {
-          // Catch any tracking format: opened=true, openedCount>0, or openedAt exists
-          matchesStatus = !!lead.metadata?.openedCount || !!lead.metadata?.openedAt || lead.metadata?.opened === true || lead.status === 'opened';
+          matchesStatus = !!lead.metadata?.openedCount || !!lead.metadata?.openedAt || lead.metadata?.opened === true || lead.status === 'opened' || lead.status === 'contacted';
+        } else if (filterStatus === "contacted") {
+          matchesStatus = lead.status === 'contacted' || lead.status === 'opened';
         } else if (filterStatus === "cold") {
           matchesStatus = lead.status === 'cold';
         } else if (filterStatus === "booked") {
@@ -681,7 +683,7 @@ export default function InboxPage() {
               ...lead,
               snippet: newContent,
               lastMessageAt: new Date().toISOString(),
-              status: lead.status === "new" ? "opened" : lead.status,
+              status: lead.status === "new" ? "contacted" : lead.status,
               metadata: { ...lead.metadata, isUnread: false },
             }
           : lead
@@ -1007,6 +1009,7 @@ export default function InboxPage() {
                     <DropdownMenuItem onClick={() => setFilterStatus("unread")} className="cursor-pointer font-medium">Unread</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus("read")} className="cursor-pointer font-medium">Read</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus("opened")} className="cursor-pointer font-medium text-sky-400">Opened (Pixel tracked)</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setFilterStatus("contacted")} className="cursor-pointer font-medium text-primary">Contacted</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus("replied")} className="cursor-pointer font-medium text-emerald-500">Replied</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus("warm")} className="cursor-pointer font-medium text-orange-500">Warm (Engaged)</DropdownMenuItem>
                     <DropdownMenuItem onClick={() => setFilterStatus("cold")} className="cursor-pointer font-medium text-muted-foreground">Cold (No Reply)</DropdownMenuItem>

@@ -371,7 +371,6 @@ export default function DashboardHome() {
     },
   ];
 
-  // Strict Render Guard: Block the entire tree if loading, to prevent flickering.
   if (statsLoading || userLoading) {
     return (
       <div className="h-[60vh] flex items-center justify-center">
@@ -381,6 +380,7 @@ export default function DashboardHome() {
   }
 
   const hasAnyActivity = stats && (stats.leads > 0 || stats.messages > 0 || stats.aiReplies > 0);
+  const showEmptyState = !statsLoading && stats && (stats.leads === 0 && stats.messages === 0) && !isSmtpConnected;
   const cleanInsightSummary = insightsData?.summary ? insightsData.summary.split('**').join('') : "";
 
   return (
@@ -471,7 +471,33 @@ export default function DashboardHome() {
           </motion.div>
         )}
 
+        {/* Empty state when no data and no mailbox connected */}
+        {showEmptyState && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col items-center justify-center py-16 text-center rounded-2xl border border-dashed border-border/40 bg-muted/10"
+          >
+            <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+              <Mail className="h-10 w-10 text-primary/60" />
+            </div>
+            <h3 className="text-lg font-bold mb-2">No Data Yet</h3>
+            <p className="text-sm text-muted-foreground max-w-md mb-6">
+              Connect a mailbox and start your first campaign to see your KPIs, activity feed, and insights here.
+            </p>
+            <div className="flex gap-3">
+              <Button onClick={() => setLocation('/dashboard/integrations')}>
+                <Mail className="h-4 w-4 mr-2" /> Connect Mailbox
+              </Button>
+              <Button variant="outline" onClick={() => setLocation('/dashboard/outreach')}>
+                <Send className="h-4 w-4 mr-2" /> Create Campaign
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
         {/* Premium Minimalist 5-Column Horizontal Summary */}
+        {!showEmptyState && (
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -530,8 +556,10 @@ export default function DashboardHome() {
             );
           })}
         </motion.div>
+        )}
 
         {/* Main Content Split */}
+        {!showEmptyState && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-5">
             {activities.length > 0 && insightsData?.summary && (
@@ -634,6 +662,7 @@ export default function DashboardHome() {
             </Card>
           </div>
         </div>
+        )}
     </PageWrapper>
   );
 }
