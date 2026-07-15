@@ -12,7 +12,7 @@
     "aws-sdk": "^2.1693.0",
     "bullmq": "^5.0.0",
     "dotenv": "^16.3.0",
-    "drizzle-orm": "^0.45.0",
+    "drizzle-orm": "^0.45.2",
     "drizzle-zod": "^0.7.0",
     "imapflow": "^1.0.0",
     "mailauth": "^4.13.2",
