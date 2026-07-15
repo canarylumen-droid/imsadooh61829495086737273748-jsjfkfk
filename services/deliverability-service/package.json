@@ -22,7 +22,7 @@
     "mailparser": "^3.7.1",
     "node-cron": "^4.6.0",
     "postgres": "^3.4.9",
-    "uuid": "^10.0.0"
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.17",
