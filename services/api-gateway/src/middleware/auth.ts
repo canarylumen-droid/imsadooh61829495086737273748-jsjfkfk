@@ -10,6 +10,8 @@ declare module "express-session" {
     userId?: string;
     userEmail?: string;
     supabaseId?: string;
+    email?: string;
+    isAdmin?: boolean;
   }
 }
 

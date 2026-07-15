@@ -240,27 +240,33 @@ router.post('/verify-otp', async (req: Request, res: Response): Promise<void> =>
       console.log(`✅ User promoted to admin: ${normalizedEmail}`);
     }
 
-    req.session.userId = user.id;
-    req.session.email = normalizedEmail;
-    req.session.isAdmin = true;
-    req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+    req.session.regenerate((err) => {
+      if (err) {
+        console.error('[AdminAuth] Session regenerate failed:', err);
+        return res.status(500).json({ error: 'Session error' });
+      }
 
-    failedAttempts.delete(getAttemptsKey(normalizedEmail, ip));
+      req.session.userId = user.id;
+      req.session.email = normalizedEmail;
+      req.session.isAdmin = true;
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
 
-    res.json({
-      success: true,
-      message: 'Admin logged in successfully',
-      user: {
-        id: user.id,
-        email: user.email,
-        username: user.username,
-        role: 'admin',
-      },
-      sessionExpiresIn: '30 days',
+      failedAttempts.delete(getAttemptsKey(normalizedEmail, ip));
+
+      res.json({
+        success: true,
+        message: 'Admin logged in successfully',
+        user: {
+          id: user.id,
+          email: user.email,
+          username: user.username,
+          role: 'admin',
+        },
+        sessionExpiresIn: '30 days',
+      });
+
+      console.log(`✅ Admin logged in: ${normalizedEmail}`);
     });
-
-    console.log(`✅ Admin logged in: ${normalizedEmail}`);
-
   } catch (error: unknown) {
     console.error('Admin OTP verification error:', error);
     res.status(500).json({ error: 'OTP verification failed' });

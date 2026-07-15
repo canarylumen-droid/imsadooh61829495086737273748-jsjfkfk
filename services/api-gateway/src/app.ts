@@ -29,7 +29,8 @@ export function createApp() {
   });
 
   app.get('/api/csrf-token', (_req, res) => {
-    res.status(200).json({ csrfToken: 'mocked-csrf-token' });
+    const token = crypto.randomBytes(32).toString('hex');
+    res.status(200).json({ csrfToken: token });
   });
 
   app.use(quotaService.getSentinelMiddleware());
@@ -88,18 +89,19 @@ export function createApp() {
     process.env.SESSION_SECRET = generated;
   }
   
-  // Auto-generate ENCRYPTION_KEY if missing (both dev and production)
+  // Auto-generate ENCRYPTION_KEY if missing
   if (!process.env.ENCRYPTION_KEY) {
     if (process.env.NODE_ENV === 'production') {
       console.error("CRITICAL: ENCRYPTION_KEY must be set in production. Data cannot be decrypted without it.");
       process.exit(1);
     }
-    console.warn("ENCRYPTION_KEY not set — using development fallback");
-    process.env.ENCRYPTION_KEY = "audnix-dev-key-32-chars-long-!!!";
+    const generated = crypto.randomBytes(32).toString('hex');
+    console.warn("ENCRYPTION_KEY not set — auto-generated. Set it in env for persistence across restarts.");
+    process.env.ENCRYPTION_KEY = generated;
   }
 
   app.use("/api/", apiLimiter);
-  app.use("/api/auth/", authLimiter);
+  app.use(["/api/auth/", "/api/admin/auth/"], authLimiter);
   app.use("/*/webhook/*", express.json({
     verify: (req: any, _res, buf) => {
       req.rawBody = buf;
