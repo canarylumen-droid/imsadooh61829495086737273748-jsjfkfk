@@ -7,6 +7,14 @@ const router = Router();
 
 const ADMIN_WHITELIST = (process.env.ADMIN_WHITELIST_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
 
+// Rate limiter for admin auth endpoints
+const adminAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many admin auth attempts. Please try again later.' },
+});
+
 console.log(`✅ Admin whitelist loaded: ${ADMIN_WHITELIST.length} emails`);
 
 interface FailedAttemptRecord {
@@ -69,7 +77,7 @@ function getClientIp(req: Request): string {
   return req.ip || req.socket?.remoteAddress || 'unknown';
 }
 
-router.post('/check-email', async (req: Request, res: Response): Promise<void> => {
+router.post('/check-email', adminAuthLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body as EmailRequestBody;
     const ip = getClientIp(req);
@@ -119,7 +127,7 @@ router.post('/check-email', async (req: Request, res: Response): Promise<void> =
   }
 });
 
-router.post('/request-otp', async (req: Request, res: Response): Promise<void> => {
+router.post('/request-otp', adminAuthLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body as EmailRequestBody;
     const ip = getClientIp(req);
@@ -181,7 +189,7 @@ router.post('/request-otp', async (req: Request, res: Response): Promise<void> =
   }
 });
 
-router.post('/verify-otp', async (req: Request, res: Response): Promise<void> => {
+router.post('/verify-otp', adminAuthLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, otp } = req.body as VerifyOTPBody;
     const ip = getClientIp(req);

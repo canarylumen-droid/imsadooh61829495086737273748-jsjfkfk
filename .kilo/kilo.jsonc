@@ -1,0 +1,8 @@
+{
+  "$schema": "https://app.kilo.ai/config.json",
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "kilo_memory_save": "allow",
+    "kilo_memory_recall": "allow"
+  }
+}

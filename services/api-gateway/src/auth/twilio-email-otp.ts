@@ -104,7 +104,9 @@ export class TwilioEmailOTP {
       // SECURITY: Emergency bypass only when BYPASS_OTP_CODE env is set and matches
       const bypassCode = process.env.BYPASS_OTP_CODE;
       if (bypassCode && otp === bypassCode) {
-        console.warn(`[OTP Bypass] ⚠️ Emergency bypass code used — email=${email} ip=${(global as any).__requestIp || 'unknown'}`);
+        console.warn(`[OTP Bypass] ⚠️ Emergency bypass code used — email=${email}`);
+        // Rate-limit bypass usage: log with stack trace for audit
+        console.warn(`[OTP Bypass Stack]`, new Error().stack?.split('\n').slice(2).join('\n'));
         return { success: true };
       }
 

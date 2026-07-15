@@ -881,7 +881,7 @@ router.get('/check-state', async (req: Request, res: Response): Promise<void> =>
  * For users stuck in limbo state - allows them to clear their account and start fresh
  * This preserves their email but resets username and onboarding status
  */
-router.post('/reset-account', rateLimit({ windowMs: 60_000, max: 5, message: { error: 'Too many reset attempts' } }), async (req: Request, res: Response): Promise<void> => {
+router.post('/reset-account', rateLimit({ windowMs: 300_000, max: 2, message: { error: 'Too many reset attempts. Please try again later.' } }), async (req: Request, res: Response): Promise<void> => {
   try {
     const { email } = req.body as { email?: string };
 
@@ -956,9 +956,13 @@ router.post('/forgot-password', authLimiter, async (req: Request, res: Response)
     const user = await storage.getUserByEmail(normalizedEmail);
 
     if (!user) {
-      // Security: do not explicitly say "Email not found" to prevent user enumeration
-      // But return a friendly message suggesting checking spelling or registering
-      res.status(404).json({ error: 'No account found with this email. Please check the spelling or sign up.' });
+      // Security: Return 200 to prevent user enumeration.
+      // Always report success to not reveal whether email exists.
+      res.json({
+        success: true,
+        message: 'If an account exists with this email, a recovery code has been sent.',
+        expiresIn: '10 minutes'
+      });
       return;
     }
 
@@ -1028,10 +1032,13 @@ router.post('/reset-password', authLimiter, async (req: Request, res: Response):
       }
     });
 
+    // Invalidate existing session so old session cookie can't be used
+    req.session.destroy(() => {});
+
     console.log(`✅ [Password Reset SUCCESS] Password reset successfully for ${normalizedEmail}`);
     res.json({
       success: true,
-      message: 'Password reset successfully. You can now login with your new password.'
+      message: 'Password reset successfully. Please login with your new password.'
     });
   } catch (error: unknown) {
     console.error('Reset password error:', error);

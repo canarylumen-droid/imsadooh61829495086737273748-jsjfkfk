@@ -109,9 +109,8 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   // Mount all other routes
   app.use("/api/organizations", organizationRouter);
 
-  // Consolidate Auth routes to prevent session fragmentation
+  // Auth routes — single mount per router to prevent duplicate path handling
   app.use("/api/user/auth", userAuthRouter);
-  app.use("/api/user", userAuthRouter);
   app.use("/api/auth", authClean);
   app.use("/api/auth/username", authUsernameOnboarding);
 

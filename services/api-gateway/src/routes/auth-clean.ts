@@ -129,10 +129,18 @@ router.post('/signup/verify-otp', authLimiter, async (req: Request, res: Respons
       subscriptionTier: isVip ? 'enterprise' : undefined,
     });
 
+    // Regenerate session to prevent fixation
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+
     req.session.userId = user.id;
     req.session.email = email;
     if (req.session.cookie) {
-      req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000;
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
     }
 
     // Explicitly save session before responding for serverless reliability
@@ -159,7 +167,7 @@ router.post('/signup/verify-otp', authLimiter, async (req: Request, res: Respons
         username: user.username,
         plan: user.plan,
       },
-      sessionExpiresIn: '7 days',
+      sessionExpiresIn: '30 days',
     });
 
     console.log(`✅ New user signed up: ${email}`);
@@ -216,7 +224,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
     req.session.userId = user.id;
     req.session.email = email;
     if (req.session.cookie) {
-      req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000;
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
     }
 
     // Explicitly save session before responding for serverless reliability
@@ -243,7 +251,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
         username: user.username,
         plan: user.plan,
       },
-      sessionExpiresIn: '7 days',
+      sessionExpiresIn: '30 days',
     });
 
     console.log(`✅ User logged in: ${email}`);
@@ -263,7 +271,7 @@ router.post('/refresh-session', async (req: Request, res: Response): Promise<voi
     }
 
     if (req.session.cookie) {
-      req.session.cookie.maxAge = 7 * 24 * 60 * 60 * 1000;
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
     }
 
     // Persist the session changes so the extended maxAge is saved to the store
@@ -281,7 +289,7 @@ router.post('/refresh-session', async (req: Request, res: Response): Promise<voi
     res.json({
       success: true,
       message: 'Session extended',
-      sessionExpiresIn: '7 days',
+      sessionExpiresIn: '30 days',
     });
   } catch (error: unknown) {
     res.status(500).json({ error: 'Failed to refresh session' });
@@ -317,7 +325,11 @@ router.post('/forgot-password', authLimiter, async (req: Request, res: Response)
     const user = await storage.getUserByEmail(normalizedEmail);
 
     if (!user) {
-      res.status(404).json({ error: 'No account found with this email. Please check the spelling or sign up.' });
+      res.json({
+        success: true,
+        message: 'If an account exists with this email, a recovery code has been sent.',
+        expiresIn: '10 minutes'
+      });
       return;
     }
 
@@ -387,10 +399,13 @@ router.post('/reset-password', authLimiter, async (req: Request, res: Response):
       }
     });
 
+    // Invalidate existing session so old session cookie can't be used
+    req.session.destroy(() => {});
+
     console.log(`✅ [Password Reset SUCCESS - Clean] Password reset successfully for ${normalizedEmail}`);
     res.json({
       success: true,
-      message: 'Password reset successfully. You can now login with your new password.'
+      message: 'Password reset successfully. Please login with your new password.'
     });
   } catch (error: unknown) {
     console.error('Reset password error:', error);

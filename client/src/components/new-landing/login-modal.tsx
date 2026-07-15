@@ -31,14 +31,9 @@ export function LoginModal({ isOpen, onClose }: LoginModalProps) {
         return;
       }
 
-      // Store user in localStorage
-      localStorage.setItem(
-        'audnix_user',
-        JSON.stringify({
-          email,
-          loginTime: new Date().toISOString(),
-        })
-      );
+      // NOTE: This is a demo/landing page login facade only.
+      // Real auth happens server-side via session cookies (POST /api/auth/login).
+      // No credentials are stored — this just closes the modal.
 
       // Close modal and reset
       setEmail('');

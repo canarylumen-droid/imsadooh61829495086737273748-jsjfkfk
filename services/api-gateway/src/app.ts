@@ -49,6 +49,17 @@ export function createApp() {
   }));
   app.use(securityHeaders);
 
+  // Enforce HTTPS in production
+  if (process.env.NODE_ENV === 'production') {
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.headers['x-forwarded-proto'] === 'http' || req.headers['x-forwarded-proto'] === 'https' && !req.secure) {
+        const host = req.headers['x-forwarded-host'] || req.headers.host || 'audnixai.com';
+        return res.redirect(301, `https://${host}${req.originalUrl}`);
+      }
+      next();
+    });
+  }
+
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     const allowedOrigins = [
@@ -60,7 +71,7 @@ export function createApp() {
       ...(process.env.RAILWAY_STATIC_URL ? [`https://${process.env.RAILWAY_STATIC_URL}`] : []),
     ];
 
-    if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.audnixai.com') || origin.endsWith('.railway.app'))) {
+    if (origin && (allowedOrigins.includes(origin) || origin.endsWith('.audnixai.com'))) {
       res.setHeader("Access-Control-Allow-Origin", origin);
       res.setHeader("Access-Control-Allow-Credentials", "true");
     }
@@ -71,7 +82,7 @@ export function createApp() {
 
     if (req.method === "OPTIONS") return res.sendStatus(204);
 
-    if (process.env.NODE_ENV === "production" && origin && !allowedOrigins.includes(origin) && !origin.endsWith('.audnixai.com') && !origin.endsWith('.railway.app')) {
+    if (process.env.NODE_ENV === "production" && origin && !allowedOrigins.includes(origin) && !origin.endsWith('.audnixai.com')) {
       return res.status(403).json({ error: "Forbidden" });
     }
 
@@ -82,10 +93,14 @@ export function createApp() {
   app.set("env", nodeEnv);
   app.set("trust proxy", 1);
 
-  // Auto-generate SESSION_SECRET if missing (both dev and production)
+  // Auto-generate SESSION_SECRET if missing
   if (!process.env.SESSION_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error("CRITICAL: SESSION_SECRET is not set in production. All sessions will be invalidated on restart.");
+      // Generate one anyway so the server can start, but warn aggressively
+    }
     const generated = crypto.randomBytes(32).toString('hex');
-    console.warn(`SESSION_SECRET not set — auto-generated. Set it in env for persistence across restarts.`);
+    console.warn(`SESSION_SECRET not set — auto-generated. Set SESSION_SECRET in environment variables for persistence across restarts.`);
     process.env.SESSION_SECRET = generated;
   }
   

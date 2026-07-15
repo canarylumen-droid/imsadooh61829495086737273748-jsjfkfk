@@ -12,6 +12,9 @@ declare module "express-session" {
     supabaseId?: string;
     email?: string;
     isAdmin?: boolean;
+    oauthState?: string;
+    lastRegeneration?: number;
+    user?: { id: string; email: string; role?: string; name?: string };
   }
 }
 
@@ -257,10 +260,6 @@ export async function requireApiKey(req: Request, res: Response, next: NextFunct
     req.user = { id: keyData.user_id } as any;
     req.apiKeyScope = keyData.scope;
     req.isApiKey = true;
-    // Ensure session is available for routes that check req.session?.userId
-    if (req.session) {
-      req.session.userId = keyData.user_id;
-    }
     next();
   } catch (error) {
     console.error('API key auth error:', error);

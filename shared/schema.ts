@@ -154,7 +154,7 @@ export const leads = pgTable("leads", {
   lastMessagePreview: text("last_message_preview"),
   lastMessageAt: timestamp("last_message_at"),
   lastEnrichedAt: timestamp("last_enriched_at"),
-  aiPaused: boolean("ai_paused").notNull().default(false),
+  aiPaused: boolean("ai_paused").notNull().default(true),
   pdfConfidence: real("pdf_confidence"),
   archived: boolean("archived").notNull().default(false),
   tags: jsonb("tags").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
@@ -494,7 +494,9 @@ export const notifications = pgTable("notifications", {
   integrationId: uuid("integration_id").references(() => integrations.id, { onDelete: "set null" }),
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  notificationsUserCreatedIdx: index("notifications_user_created_idx").on(table.userId, table.createdAt),
+}));
 
 export const notificationsSelect = createSelectSchema(notifications);
 export const notificationsInsert = createInsertSchema(notifications);
@@ -698,7 +700,9 @@ export const insights = pgTable("insights", {
     percentage: number;
   }>>().notNull(),
   generatedAt: timestamp("generated_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  insightsUserIdIdx: index("insights_user_id_idx").on(table.userId),
+}));
 
 
 export const emailTracking = pgTable("email_tracking", {
@@ -720,6 +724,7 @@ export const emailTracking = pgTable("email_tracking", {
   emailTrackingUserIdIdx: index("email_tracking_user_id_idx").on(table.userId),
   emailTrackingIntegrationIdIdx: index("email_tracking_integration_id_idx").on(table.integrationId),
   emailTrackingTokenIdx: index("email_tracking_token_idx").on(table.token),
+  emailTrackingLeadIdIdx: index("email_tracking_lead_id_idx").on(table.leadId),
 }));
 
 export const emailEvents = pgTable("email_events", {
@@ -963,7 +968,9 @@ export const aiActionLogs = pgTable("ai_action_logs", {
   outcome: text("outcome"),
   metadata: jsonb("metadata").$type<Record<string, any>>().notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  aiActionLogsLeadCreatedIdx: index("ai_action_logs_lead_created_idx").on(table.leadId, table.createdAt),
+}));
 
 export const calendarBookings = pgTable("calendar_bookings", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
