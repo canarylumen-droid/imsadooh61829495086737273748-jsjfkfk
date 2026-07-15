@@ -637,13 +637,19 @@ export default function InboxPage() {
   }, [replyMessage]);
 
   const sendMutation = useMutation({
-    mutationFn: (content: string) => {
-      return apiRequest("POST", `/api/messages/${leadId}`, { content, channel: activeLead?.channel });
+    mutationFn: async (content: string) => {
+      const body: any = { content, channel: activeLead?.channel };
+      // Send a fallback subject so backend doesn't need AI generation
+      if (activeLead?.subject && !activeLead.subject.includes('{{')) {
+        body.subject = activeLead.subject.replace(/^Re:\s*/i, 'Re: ');
+      } else {
+        body.subject = `Re: ${activeLead?.name || 'Follow up'}`;
+      }
+      return apiRequest("POST", `/api/messages/${leadId}`, body);
     },
     onMutate: async (newContent) => {
       sendInFlightRef.current = true;
       await queryClient.cancelQueries({ queryKey: ["/api/messages", leadId] });
-      await queryClient.cancelQueries({ queryKey: ["/api/leads"] });
 
       const previousMessages = queryClient.getQueriesData({ queryKey: ["/api/messages", leadId] });
       const previousLeads = allLeads;
@@ -657,6 +663,7 @@ export default function InboxPage() {
         createdAt: new Date().toISOString(),
         userId: user?.id,
         leadId,
+        subject: activeLead?.subject?.replace(/^{{[^}]+}}$/g, '') || undefined,
         metadata: { optimistic: true }
       };
 
@@ -699,15 +706,13 @@ export default function InboxPage() {
         (oldData: any) => ({
           ...(oldData || { messages: [], total: 0, hasMore: false }),
           messages: (oldData?.messages || []).map((msg: any) =>
-            msg.id === context.tempId ? data.message : msg
+            msg.id === context.tempId ? { ...data.message, subject: msg.subject } : msg
           ),
         })
       );
     },
     onSettled: () => {
       sendInFlightRef.current = false;
-      queryClient.invalidateQueries({ queryKey: ["/api/messages", leadId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
     }
   });
 
@@ -1405,7 +1410,7 @@ export default function InboxPage() {
                       >
                         <SheetHeader className="p-6 border-b border-border/30 shrink-0">
                           <SheetTitle className="text-xl font-black text-foreground uppercase tracking-tighter flex items-center gap-3">
-                            <Brain className="h-6 w-6 text-primary" />
+                            <Sparkles className="h-6 w-6 text-primary animate-pulse" />
                             Lead Intelligence
                           </SheetTitle>
                         </SheetHeader>
@@ -1710,7 +1715,7 @@ export default function InboxPage() {
                       className="h-10 w-10 text-primary lg:hidden hover:bg-primary/10 transition-colors"
                       onClick={() => setShowDetails(true)}
                     >
-                      <Brain className="h-5 w-5" />
+                      <User className="h-5 w-5" />
                     </Button>
                   </div>
                 </div>

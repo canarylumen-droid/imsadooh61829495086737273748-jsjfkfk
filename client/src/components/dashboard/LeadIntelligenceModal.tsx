@@ -184,21 +184,29 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                         <p className="text-sm text-muted-foreground">Checking intent signals, email reputation, and conversion probability.</p>
                     </div>
                 ) : intelligence ? (
-                    <div className="space-y-6 pt-2">
+                    <motion.div
+                      initial="hidden"
+                      animate="visible"
+                      variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+                      className="space-y-6 pt-2"
+                    >
                         {/* Executive AI Summary / Key Takeaway */}
                         <motion.div
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="p-5 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 relative overflow-hidden group"
+                            variants={{ hidden: { opacity: 0, y: 20 }, visible: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 120, damping: 14 } } }}
+                            className="p-5 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 relative overflow-hidden group hover:border-indigo-500/30 transition-all"
                         >
                             <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
-                                <Sparkles className="h-20 w-20 text-indigo-500" />
+                                <Sparkles className="h-20 w-20 text-indigo-500 animate-pulse" style={{ animationDuration: '3s' }} />
                             </div>
+                            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/5 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                             <div className="relative z-10 space-y-3">
                                 <div className="flex items-center gap-2">
                                     <Badge className="bg-indigo-500 text-white border-0 text-[9px] font-black tracking-[0.2em] px-2 py-0.5">AI EXECUTIVE SUMMARY</Badge>
                                     <div className="h-1 w-1 rounded-full bg-indigo-300/30" />
-                                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest leading-none">Real-time Synthesis</span>
+                                    <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest leading-none flex items-center gap-1.5">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                      Real-time Synthesis
+                                    </span>
                                 </div>
                                 <p className="text-base font-semibold leading-relaxed text-foreground tracking-tight">
                                     {intelligence.intent.intentLevel === 'high'
@@ -208,19 +216,19 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                 </p>
                                 <div className="flex items-center gap-4 text-[10px] font-bold text-muted-foreground/60">
                                     <span className="flex items-center gap-1.5"><Shield className="h-3 w-3" /> Identity Verified</span>
-                                    <span className="flex items-center gap-1.5"><Zap className="h-3 w-3" /> Response Probability: {intelligence.intent.intentScore}%</span>
+                                    <span className="flex items-center gap-1.5"><Zap className="h-3 w-3 text-orange-400" /> Response Probability: {intelligence.intent.intentScore}%</span>
                                 </div>
                             </div>
                         </motion.div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                             {/* Section 1: Core Performance & Prediction */}
-                            <div className="space-y-4">
+                            <motion.div variants={{ hidden: { opacity: 0, x: -20 }, visible: { opacity: 1, x: 0 } }} className="space-y-4">
                                 <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 ml-1">Market Sentiment & Value</h4>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                     {/* Predicted Deal Value */}
-                                    <div className="bg-card/40 border border-border/40 rounded-3xl p-5 space-y-4 hover:border-primary/20 transition-colors">
-                                        <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center">
+                                    <motion.div whileHover={{ scale: 1.02, y: -2 }} className="bg-card/40 border border-border/40 rounded-3xl p-5 space-y-4 hover:border-primary/30 hover:shadow-[0_8px_24px_-8px] hover:shadow-primary/10 transition-all">
+                                        <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:scale-110 transition-transform">
                                             <DollarSign className="h-5 w-5 text-primary" />
                                         </div>
                                         <div className="space-y-1">
@@ -229,10 +237,10 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                             </p>
                                             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-primary/60">Projected Pipeline Value</p>
                                         </div>
-                                    </div>
+                                    </motion.div>
 
                                     {/* Engagement Rank */}
-                                    <div className="bg-card/40 border border-border/40 rounded-3xl p-5 space-y-4 hover:border-orange-500/20 transition-colors">
+                                    <motion.div whileHover={{ scale: 1.02, y: -2 }} className="bg-card/40 border border-border/40 rounded-3xl p-5 space-y-4 hover:border-orange-500/30 hover:shadow-[0_8px_24px_-8px] hover:shadow-orange-500/10 transition-all">
                                         <div className="h-10 w-10 rounded-2xl bg-orange-500/10 flex items-center justify-center">
                                             <TrendingUp className="h-5 w-5 text-orange-500" />
                                         </div>
@@ -242,10 +250,10 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                             </p>
                                             <p className="text-[9px] font-black uppercase tracking-[0.2em] text-orange-500/60">Engagement Affinity</p>
                                         </div>
-                                    </div>
+                                    </motion.div>
                                 </div>
 
-                                <div className="bg-indigo-500/5 border border-indigo-500/10 rounded-3xl p-4 flex items-center justify-between">
+                                <motion.div whileHover={{ x: 2 }} className="bg-indigo-500/5 border border-indigo-500/10 rounded-3xl p-4 flex items-center justify-between hover:border-indigo-500/20 transition-all">
                                     <div className="flex items-center gap-3">
                                         <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
                                             <BarChart3 className="h-5 w-5" />
@@ -259,13 +267,13 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                         <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/40 leading-none mb-1">Benchmarked</p>
                                         <p className="text-sm font-bold text-foreground">Top 15%</p>
                                     </div>
-                                </div>
-                            </div>
+                                </motion.div>
+                            </motion.div>
 
                             {/* Section 2: Intent Analysis */}
-                            <div className="space-y-4">
+                            <motion.div variants={{ hidden: { opacity: 0, x: 20 }, visible: { opacity: 1, x: 0 } }} className="space-y-4">
                                 <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 ml-1">Intent Analytics</h4>
-                                <div className="bg-card/40 border border-border/40 rounded-3xl overflow-hidden">
+                                <motion.div whileHover={{ y: -1 }} className="bg-card/40 border border-border/40 rounded-3xl overflow-hidden hover:border-primary/20 transition-all">
                                     <div className="p-4 border-b border-border/20 flex items-center justify-between">
                                         <div className="flex items-center gap-2">
                                             <Zap className="h-3 w-3 text-orange-500" />
@@ -279,51 +287,49 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                         <div className="space-y-2">
                                             <div className="flex justify-between text-[10px] font-bold uppercase text-muted-foreground/50">
                                                 <span>Validation Confidence</span>
-                                                <span>{Math.round((intelligence.intent.confidence || 0) * 100)}%</span>
+                                                <span className="text-primary">{Math.round((intelligence.intent.confidence || 0) * 100)}%</span>
                                             </div>
-                                            <Progress value={(intelligence.intent.confidence || 0) * 100} className="h-1 bg-white/5" />
+                                            <Progress value={(intelligence.intent.confidence || 0) * 100} className="h-1.5 bg-white/5 [&>div]:bg-gradient-to-r [&>div]:from-primary [&>div]:to-indigo-500" />
                                         </div>
                                         <div className="grid grid-cols-1 gap-1.5">
                                             {(intelligence.intent.signals || []).map((signal, i) => (
-                                                <div
+                                                <motion.div
                                                     key={i}
+                                                    initial={{ opacity: 0, x: -10 }}
+                                                    animate={{ opacity: 1, x: 0 }}
+                                                    transition={{ delay: i * 0.05 }}
                                                     className="flex items-center gap-2 py-1 px-2 rounded-lg hover:bg-white/5 transition-colors group"
                                                 >
                                                     <div className="h-1.5 w-1.5 rounded-full bg-orange-500/40 group-hover:bg-orange-500 shrink-0" />
                                                     <span className="text-[11px] font-medium text-foreground/70">{signal}</span>
-                                                </div>
+                                                </motion.div>
                                             ))}
                                             {(!intelligence.intent.signals || !intelligence.intent.signals.length) && (
                                                 <p className="text-[10px] text-muted-foreground/40 italic py-2">Discovering intent signals...</p>
                                             )}
                                         </div>
                                     </div>
-                                </div>
-                            </div>
+                                </motion.div>
+                            </motion.div>
                         </div>
 
                         {/* Middle Stat Bar: Unified & Compact */}
-                        <div className="grid grid-cols-4 gap-4 p-4 rounded-[2rem] bg-muted/20 border border-border/40">
-                            <div className="text-center space-y-1 border-r border-border/20">
-                                <p className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-widest">Inbound</p>
-                                <p className="text-xl font-black text-foreground leading-none">{intelligence.stats?.totalInbound || 0}</p>
-                            </div>
-                            <div className="text-center space-y-1 border-r border-border/20">
-                                <p className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-widest">Outbound</p>
-                                <p className="text-xl font-black text-foreground leading-none">{intelligence.stats?.totalOutbound || 0}</p>
-                            </div>
-                            <div className="text-center space-y-1 border-r border-border/20">
-                                <p className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-widest">Recency</p>
-                                <p className="text-xl font-black text-foreground leading-none">{intelligence.stats?.lastInteractionDays || 0}d</p>
-                            </div>
-                            <div className="text-center space-y-1">
-                                <p className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-widest">Success</p>
-                                <p className="text-xl font-black text-emerald-500 leading-none">{intelligence.stats?.hasReplied ? "YES" : "NO"}</p>
-                            </div>
-                        </div>
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }} className="grid grid-cols-4 gap-4 p-4 rounded-[2rem] bg-muted/20 border border-border/40 hover:border-border/60 transition-all">
+                            {[
+                              { label: "Inbound", value: intelligence.stats?.totalInbound || 0, c: "text-foreground" },
+                              { label: "Outbound", value: intelligence.stats?.totalOutbound || 0, c: "text-foreground" },
+                              { label: "Recency", value: `${intelligence.stats?.lastInteractionDays || 0}d`, c: "text-foreground" },
+                              { label: "Success", value: intelligence.stats?.hasReplied ? "YES" : "NO", c: intelligence.stats?.hasReplied ? "text-emerald-500" : "text-muted-foreground" },
+                            ].map((stat, i) => (
+                              <motion.div key={stat.label} whileHover={{ y: -2 }} className={`text-center space-y-1 ${i < 3 ? 'border-r border-border/20' : ''}`}>
+                                <p className="text-[9px] font-black text-muted-foreground/40 uppercase tracking-widest">{stat.label}</p>
+                                <p className={`text-xl font-black leading-none ${stat.c}`}>{stat.value}</p>
+                              </motion.div>
+                            ))}
+                        </motion.div>
 
                         {/* Lead Intelligence & Data Hub */}
-                        <div className="space-y-4">
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }} className="space-y-4">
                             <h4 className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground/40 ml-1">Intelligence Hub & Linked Assets</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                 {lead?.metadata && Object.entries(lead.metadata).map(([key, val]: [string, any]) => {
@@ -335,28 +341,29 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                     const colorClass = type === 'google_maps' ? 'text-emerald-500 bg-emerald-500/10' : type === 'linkedin' ? 'text-blue-500 bg-blue-500/10' : 'text-primary bg-primary/10';
 
                                     return (
-                                        <a 
+                                        <motion.a whileHover={{ y: -2, scale: 1.01 }}
                                             key={key} 
                                             href={val} 
                                             target="_blank" 
                                             rel="noreferrer"
                                             className="p-4 rounded-2xl bg-card/40 border border-border/40 hover:border-primary/40 transition-all group flex items-center gap-3"
                                         >
-                                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${colorClass}`}>
+                                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${colorClass} group-hover:scale-110 transition-transform`}>
                                                 <Icon className="h-5 w-5" />
                                             </div>
                                             <div className="min-w-0">
                                                 <p className="text-[9px] font-black uppercase opacity-40 truncate">{key.replace(/_/g, ' ')}</p>
                                                 <p className="text-[11px] font-bold text-foreground truncate">{val}</p>
                                             </div>
-                                        </a>
+                                        </motion.a>
                                     );
                                 })}
 
                                 {lead?.metadata?.businessPersona && (
-                                    <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 col-span-full">
+                                    <motion.div whileHover={{ y: -1 }} className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 col-span-full hover:border-indigo-500/20 transition-all">
                                         <div className="flex items-center gap-2 mb-2">
                                             <Badge className="bg-indigo-500 text-white border-0 text-[8px] font-black">AI PERSONA</Badge>
+                                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                                         </div>
                                         <p className="text-sm font-bold leading-snug">{lead.metadata.businessPersona}</p>
                                         {lead.metadata.optimalContactTime && (
@@ -365,14 +372,14 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                                 <span className="flex items-center gap-1.5"><Activity className="h-3 w-3" /> Confidence: High</span>
                                             </div>
                                         )}
-                                    </div>
+                                    </motion.div>
                                 )}
                             </div>
-                        </div>
+                        </motion.div>
 
                         {/* Email & Contact Ribbon */}
-                        <div className="flex flex-col md:flex-row items-center gap-4">
-                            <div className="flex-1 w-full p-4 rounded-3xl bg-background/40 border border-border/40 flex items-center justify-between">
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }} className="flex flex-col md:flex-row items-center gap-4">
+                            <motion.div whileHover={{ scale: 1.01 }} className="flex-1 w-full p-4 rounded-3xl bg-background/40 border border-border/40 flex items-center justify-between hover:border-primary/20 transition-all">
                                 <div className="flex items-center gap-3">
                                     <div className="h-10 w-10 rounded-2xl bg-primary/5 border border-primary/10 flex items-center justify-center">
                                         <Mail className="h-5 w-5 text-primary" />
@@ -392,20 +399,22 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                         );
                                     })}
                                 </div>
-                            </div>
+                            </motion.div>
 
                             {/* Call to Action Button */}
-                            <Button
-                                size="lg"
-                                onClick={() => window.location.href = `/dashboard/inbox/${lead.id}`}
-                                className="w-full md:w-auto px-8 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest shadow-xl shadow-primary/20 h-14"
-                            >
-                                {intelligence.intent.intentLevel === 'high' ? "Execute Follow-up" : "Open Journey"}
-                                <ArrowRight className="ml-2 h-4 w-4" />
-                            </Button>
-                        </div>
+                            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                                <Button
+                                    size="lg"
+                                    onClick={() => window.location.href = `/dashboard/inbox/${lead.id}`}
+                                    className="w-full md:w-auto px-8 rounded-[1.5rem] bg-primary hover:bg-primary/90 text-primary-foreground font-black uppercase tracking-widest shadow-xl shadow-primary/20 h-14"
+                                >
+                                    {intelligence.intent.intentLevel === 'high' ? "Execute Follow-up" : "Open Journey"}
+                                    <ArrowRight className="ml-2 h-4 w-4 group-hover:translate-x-1 transition-transform" />
+                                </Button>
+                            </motion.div>
+                        </motion.div>
 
-                        <div className="pt-2 flex items-center justify-center gap-6">
+                        <motion.div variants={{ hidden: { opacity: 0 }, visible: { opacity: 1 } }} className="pt-2 flex items-center justify-center gap-6">
                             <div className="flex items-center gap-2 opacity-50 grayscale hover:grayscale-0 transition-all cursor-default">
                                 <Badge variant="secondary" className="text-[10px] bg-background/50 border-border/50"><Building2 className="h-3 w-3 mr-1" /> Company Matched</Badge>
                                 <Badge variant="secondary" className="text-[10px] bg-background/50 border-border/50"><User className="h-3 w-3 mr-1" /> Role Identified</Badge>
@@ -413,9 +422,9 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                             <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/30 flex items-center gap-2">
                                 <Shield className="h-3 w-3" /> Audnix Intel Engine V2.4
                             </div>
-                        </div>
+                        </motion.div>
 
-                    </div>
+                    </motion.div>
                 ) : (
                     <div className="py-12 text-center text-muted-foreground">
                         <AlertTriangle className="h-10 w-10 mx-auto mb-2 opacity-50" />

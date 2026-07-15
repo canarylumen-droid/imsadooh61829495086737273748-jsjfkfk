@@ -51,6 +51,21 @@ const DEFAULT_PERSONALIZATION_TAGS = [
   { label: "Revenue", value: "{{revenue}}" },
 ];
 
+const PREBUILT_TEMPLATES = [
+  { id: "cold", label: "Cold Outreach", cat: "Outreach", subject: "Quick question, {{firstName}}?", body: "Hi {{firstName}},\n\nI came across {{company}} and was impressed by {{industry}}.\n\nI have an idea that could help {{company}} increase outreach efficiency by 3x.\n\nWould you be open to a quick 10-min call this week?\n\nBest,\n{{sender_name}}" },
+  { id: "followup", label: "Follow-up Sequence", cat: "Follow-up", subject: "Re: Quick question", body: "Hi {{firstName}},\n\nJust circling back on my previous message. I know you're busy, but I'd love to connect.\n\nWe've helped companies like {{company}} achieve great results with our outreach solution.\n\nWorth a quick chat?\n\nBest,\n{{sender_name}}" },
+  { id: "partnership", label: "Partnership Proposal", cat: "Business", subject: "Partnership opportunity with {{company}}", body: "Hi {{firstName}},\n\nI've been following {{company}}'s growth in the {{industry}} space and I think there's a strong synergy between us.\n\nWe help companies automate sales outreach and {{company}} could greatly benefit.\n\nWould you be open to exploring a partnership?\n\nCheers,\n{{sender_name}}" },
+  { id: "breakup", label: "Breakup Email", cat: "Follow-up", subject: "Closing the loop", body: "Hi {{firstName}},\n\nI've reached out a few times without hearing back, so I'll assume the timing isn't right.\n\nIf things change at {{company}}, feel free to reach out. I'd be happy to help.\n\nWishing you all the best,\n{{sender_name}}" },
+  { id: "referral", label: "Referral Request", cat: "Business", subject: "Who else at {{company}}?", body: "Hi {{firstName}},\n\nLoved our conversation! I was wondering — who else at {{company}} might benefit from what we discussed?\n\nA warm intro would mean a lot.\n\nThanks,\n{{sender_name}}" },
+  { id: "webinar", label: "Event Invite", cat: "Outreach", subject: "Join us: Outreach Masterclass", body: "Hi {{firstName}},\n\nWe're hosting a free webinar on scaling sales outreach with AI.\n\nGiven {{company}}'s focus on {{industry}}, I think you'd find it valuable.\n\nSeats are limited — would you like a spot?\n\nBest,\n{{sender_name}}" },
+];
+
+const VARIABLE_GROUPS = [
+  { label: "Contact", vars: ["{{firstName}}", "{{lastName}}", "{{name}}", "{{phone}}", "{{role}}"] },
+  { label: "Company", vars: ["{{company}}", "{{businessName}}", "{{industry}}", "{{niche}}", "{{revenue}}", "{{website}}", "{{city}}", "{{country}}"] },
+  { label: "System", vars: ["{{sender_name}}", "{{senderName}}", "{{sender.email}}"] },
+];
+
 export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, initialLeads = [] }: UnifiedCampaignWizardProps) {
   const { toast } = useToast();
   const { data: user } = useUser();
@@ -109,6 +124,10 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [followups, setFollowups] = useState<Array<{ subject: string, body: string, delayDays: string, isBreakup?: boolean }>>([]);
 
   const [autoReplyBody, setAutoReplyBody] = useState("");
+  const [selTemplate, setSelTemplate] = useState("");
+  const [varGroup, setVarGroup] = useState("Contact");
+  const [activeVarField, setActiveVarField] = useState("body");
+  const [launchProgress, setLaunchProgress] = useState<{ id: string; name: string; sent: number; total: number; status: string } | null>(null);
 
   // Fetch only email mailboxes (not calendar/instagram) — reduces payload from 500-item full list
   const { data: integrations = [] } = useQuery<any[]>({
@@ -269,6 +288,26 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
     }
   }, [campaignName, subject, body, followups, autoReplyBody, totalDailyVolume, targetDays, excludeWeekends, isOpen]);
 
+  // Poll campaign progress on step 3
+  useEffect(() => {
+    if (step !== 3 || !launchProgress?.id) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/outreach/campaigns/${launchProgress.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          setLaunchProgress(prev => prev ? {
+            ...prev,
+            sent: data.stats?.sent || prev.sent,
+            total: data.stats?.total || prev.total,
+            status: data.status || prev.status,
+          } : prev);
+        }
+      } catch {}
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [step, launchProgress?.id]);
+
   const variants = {
     enter: (direction: number) => ({ x: direction > 0 ? 50 : -50, opacity: 0 }),
     center: { x: 0, opacity: 1 },
@@ -394,8 +433,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
       toast({ title: "Campaign Launched!", description: `${campaignName} has started successfully.` });
       localStorage.removeItem("campaign_draft");
       localStorage.removeItem(`campaign_draft_${userId}`);
+      setLaunchProgress({ id: campaign.id, name: campaignName, sent: 0, total: campaign.leadCount || leads.length, status: 'starting' });
       onSuccess?.();
-      onClose();
     } catch (err: any) {
       toast({ 
         title: "Launch failed", 
@@ -459,37 +498,83 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   };
 
   const insertTag = (tag: string, field: string) => {
-    if (field === "subject") setSubject(prev => prev + tag);
-    else if (field === "body") setBody(prev => prev + tag);
-    else if (field === "auto") setAutoReplyBody(prev => prev + tag);
+    const t = tag.includes("{{") ? tag : `{{${tag}}}`;
+    if (field === "subject") setSubject(prev => prev + t);
+    else if (field === "body") setBody(prev => prev + t);
+    else if (field === "auto") setAutoReplyBody(prev => prev + t);
     else if (field.startsWith("fs")) {
       const idx = parseInt(field.replace("fs", ""));
       const newF = [...followups];
-      newF[idx].subject = (newF[idx].subject || "") + tag;
+      newF[idx].subject = (newF[idx].subject || "") + t;
       setFollowups(newF);
     }
     else if (field.startsWith("fb")) {
       const idx = parseInt(field.replace("fb", ""));
       const newF = [...followups];
-      newF[idx].body = (newF[idx].body || "") + tag;
+      newF[idx].body = (newF[idx].body || "") + t;
       setFollowups(newF);
     }
   };
 
-  const renderTagBar = (field: string) => (
+  const applyTemplate = (id: string) => {
+    const t = PREBUILT_TEMPLATES.find(t => t.id === id);
+    if (!t) return;
+    setSubject(t.subject);
+    setBody(t.body);
+    setSelTemplate(id);
+    setStep(2);
+  };
+
+  const renderVarDropdown = (field: string) => (
     <div className="flex flex-wrap gap-2 mb-3 items-center">
       <Tags className="w-3 h-3 text-muted-foreground mr-1" />
-      {allTags.map(tag => (
-        <button
-          key={tag.value}
-          onClick={() => insertTag(tag.value, field)}
-          className="text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full bg-primary/5 hover:bg-primary/15 border border-primary/10 text-primary transition-all active:scale-95"
-        >
-          {tag.label}
-        </button>
-      ))}
+      <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground mr-2">Insert:</span>
+      <Select value={varGroup} onValueChange={setVarGroup}>
+        <SelectTrigger className="h-7 w-[100px] text-[10px] bg-muted/10 border-border/20 rounded-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {VARIABLE_GROUPS.map(g => <SelectItem key={g.label} value={g.label} className="text-xs">{g.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <div className="flex gap-1 flex-wrap">
+        {(VARIABLE_GROUPS.find(g => g.label === varGroup)?.vars || []).map(tag => (
+          <button
+            key={tag}
+            onClick={() => insertTag(tag.replace(/[{}]/g, ""), field)}
+            className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary transition-all active:scale-95"
+          >
+            {tag.replace(/[{}]/g, "")}
+          </button>
+        ))}
+      </div>
+      {allTags.length > 0 && (
+        <div className="flex gap-1 flex-wrap">
+          <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground/50 mr-1">Custom:</span>
+          {allTags.filter(t => !VARIABLE_GROUPS.some(g => g.vars.includes(t.value))).map(t => (
+            <button
+              key={t.value}
+              onClick={() => insertTag(t.value.replace(/[{}]/g, ""), field)}
+              className="text-[9px] px-2 py-1 rounded-md bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 transition-all active:scale-95"
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
+
+  const highlightVars = (text: string) => {
+    if (!text) return null;
+    const parts = text.split(/({{[^}]+}})/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("{{") && part.endsWith("}}")) {
+        return <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/15 border border-primary/30 text-primary font-mono text-[10px] font-bold">{part}</span>;
+      }
+      return <span key={i}>{part}</span>;
+    });
+  };
 
   const renderPreview = (subj: string, content: string) => {
     const sampleLead = leads[0] || { 
@@ -1088,13 +1173,34 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         </div>
 
                         <TabsContent value="S1" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
-                           <div className="space-y-2">
-                             {renderTagBar("subject")}
-                             <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="SUBJECT LINE" className="h-12 bg-muted/20 border border-border/40 font-semibold text-sm rounded-xl px-6" />
+                           <div className="flex items-center gap-2 mb-4">
+                             <FileText className="w-4 h-4 text-muted-foreground" />
+                             <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Template</span>
+                             <Select value={selTemplate} onValueChange={applyTemplate}>
+                               <SelectTrigger className="h-8 w-[200px] text-[11px] bg-muted/10 border-border/20 rounded-full">
+                                 <SelectValue placeholder="Pre-built templates..." />
+                               </SelectTrigger>
+                               <SelectContent>
+                                 {["Outreach", "Follow-up", "Business"].map(cat => (
+                                   <div key={cat}>
+                                     <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/50">{cat}</div>
+                                     {PREBUILT_TEMPLATES.filter(t => t.cat === cat).map(t => (
+                                       <SelectItem key={t.id} value={t.id} className="text-xs">{t.label}</SelectItem>
+                                     ))}
+                                   </div>
+                                 ))}
+                               </SelectContent>
+                             </Select>
                            </div>
                            <div className="space-y-2">
-                             {renderTagBar("body")}
+                             {renderVarDropdown("subject")}
+                             <Input value={subject} onChange={e => setSubject(e.target.value)} placeholder="SUBJECT LINE" className="h-12 bg-muted/20 border border-border/40 font-semibold text-sm rounded-xl px-6" />
+                             {subject && <div className="px-3 py-1.5 bg-muted/5 rounded-lg text-xs font-mono">{highlightVars(subject)}</div>}
+                           </div>
+                           <div className="space-y-2">
+                             {renderVarDropdown("body")}
                              <Textarea value={body} onChange={e => setBody(e.target.value)} className="min-h-[350px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm leading-relaxed resize-none font-sans" placeholder="Craft the perfect proposal..." />
+                             {body && <div className="px-3 py-2 bg-muted/5 rounded-lg text-xs leading-relaxed font-mono whitespace-pre-wrap max-h-24 overflow-y-auto">{highlightVars(body)}</div>}
                            </div>
                         </TabsContent>
 
@@ -1151,7 +1257,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                              </div>
                            </div>
                               <div className="space-y-2">
-                                {renderTagBar(`fs${i}`)}
+                                {renderVarDropdown(`fs${i}`)}
                                 <div className="relative">
                                   <Input 
                                     value={threadFollowUp ? (subject || "Original subject will be inherited") : f.subject} 
@@ -1175,11 +1281,12 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                     <div className="absolute -top-2 right-2 px-2 py-0.5 bg-primary/10 rounded-full text-[8px] font-bold text-primary uppercase tracking-wider border border-primary/20">
                                       Auto-threaded
                                     </div>
-                                  )}
-                                </div>
-                              </div>
-                             <div className="space-y-2">
-                               {renderTagBar(`fb${i}`)}
+                                   )}
+                                 </div>
+                                 {f.subject && !threadFollowUp && <div className="px-3 py-1.5 bg-muted/5 rounded-lg text-xs font-mono">{highlightVars(f.subject)}</div>}
+                               </div>
+                              <div className="space-y-2">
+                                {renderVarDropdown(`fb${i}`)}
                                <Textarea 
                                  value={f.body} 
                                  onChange={e => {
@@ -1188,31 +1295,58 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                    setFollowups(newF);
                                  }} 
                                  className="min-h-[300px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans"
-                                 placeholder={`FOLLOW UP #${i+1} MESSAGE...`} 
-                               />
-                             </div>
-                          </TabsContent>
-                        ))}
+                                  placeholder={`FOLLOW UP #${i+1} MESSAGE...`} 
+                                />
+                                {f.body && <div className="px-3 py-2 bg-muted/5 rounded-lg text-xs leading-relaxed font-mono whitespace-pre-wrap max-h-20 overflow-y-auto">{highlightVars(f.body)}</div>}
+                              </div>
+                           </TabsContent>
+                         ))}
 
-                        {!aiAutonomousMode && (
-                        <TabsContent value="Auto" className="space-y-6">
-                             <div className="p-4 bg-muted/10 border border-border/10 rounded-2xl text-[10px] font-bold">Static Auto-Reply: Sent when a lead first replies (only used when AI mode is off).</div>
-                             <div className="space-y-2">
-                               {renderTagBar("auto")}
-                               <Textarea value={autoReplyBody} onChange={e => setAutoReplyBody(e.target.value)} className="min-h-[250px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans" placeholder="Thanks for reaching out! We'll be with you soon..." />
-                             </div>
-                        </TabsContent>
-                        )}
-                      </Tabs>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                         {!aiAutonomousMode && (
+                         <TabsContent value="Auto" className="space-y-6">
+                              <div className="p-4 bg-muted/10 border border-border/10 rounded-2xl text-[10px] font-bold">Static Auto-Reply: Sent when a lead first replies (only used when AI mode is off).</div>
+                              <div className="space-y-2">
+                                {renderVarDropdown("auto")}
+                                <Textarea value={autoReplyBody} onChange={e => setAutoReplyBody(e.target.value)} className="min-h-[250px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans" placeholder="Thanks for reaching out! We'll be with you soon..." />
+                                {autoReplyBody && <div className="px-3 py-2 bg-muted/5 rounded-lg text-xs leading-relaxed font-mono whitespace-pre-wrap max-h-20 overflow-y-auto">{highlightVars(autoReplyBody)}</div>}
+                              </div>
+                         </TabsContent>
+                          )}
+                       </Tabs>
+                     </motion.div>
+                   )}
+                   {step === 3 && launchProgress && (
+                     <motion.div key="step3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-4">
+                       <div className="p-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-center space-y-3">
+                         <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto">
+                           <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+                         </div>
+                         <h3 className="text-lg font-black tracking-tight">Campaign Launched</h3>
+                         <p className="text-sm text-muted-foreground">{launchProgress.name} is now active</p>
+                       </div>
+                       <div className="space-y-3">
+                         <div className="flex justify-between text-xs">
+                           <span className="font-bold text-muted-foreground">Progress</span>
+                           <span className="font-mono text-primary">{launchProgress.sent} / {launchProgress.total}</span>
+                         </div>
+                         <Progress value={(launchProgress.sent / Math.max(launchProgress.total, 1)) * 100} className="h-2 bg-muted/20 [&>div]:bg-gradient-to-r [&>div]:from-primary [&>div]:to-emerald-500" />
+                         <p className="text-[10px] text-muted-foreground text-center">Queue processing — updates in real-time</p>
+                       </div>
+                       <div className="flex gap-3">
+                         <Button className="flex-1" variant="outline" onClick={onClose}>Close</Button>
+                         <Button className="flex-1" onClick={() => { onClose(); setTimeout(() => window.location.href = '/dashboard/inbox', 100); }}>
+                           View in Inbox <ArrowRight className="h-4 w-4 ml-2" />
+                         </Button>
+                       </div>
+                     </motion.div>
+                   )}
+                 </AnimatePresence>
               </div>
             </div>
 
             <div className="p-4 sm:p-6 md:p-8 border-t border-border/20 bg-card/95 backdrop-blur-2xl flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between shrink-0 sticky bottom-0 z-30 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pb-6 md:pb-8">
-              <Button variant="ghost" onClick={() => step > 1 ? setStep(step - 1) : onClose()} className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-wider hover:bg-muted/50 transition-all font-sans w-full sm:w-auto">{step === 1 ? 'Discard' : 'Back'}</Button>
-              {step < 2 ? (
+              <Button variant="ghost" onClick={() => step > 1 && step < 3 ? setStep(step - 1) : onClose()} className="h-12 px-8 rounded-xl font-bold uppercase text-[10px] tracking-wider hover:bg-muted/50 transition-all font-sans w-full sm:w-auto">{step === 1 ? 'Discard' : step === 3 ? 'Close' : 'Back'}</Button>
+              {step === 1 ? (
                 <Button 
                   disabled={leads.length === 0 || !campaignName || selectedMailboxes.length === 0 || isLoadingLeads} 
                   onClick={() => setStep(2)} 
@@ -1233,11 +1367,11 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                     {isLoadingLeads ? "SYNCING DATABASE..." : (leads.length === 0 ? "ADD LEADS TO CONTINUE" : (selectedMailboxes.length === 0 ? "SELECT AN INBOX TO CONTINUE" : "NEXT: CRAFT YOUR AI OUTREACH SEQUENCE"))}
                   </span>
                 </Button>
-              ) : (
+              ) : step === 2 ? (
                 <Button onClick={() => handleLaunch()} disabled={isLoading || !subject || !body || launchIssues.length > 0} className="h-12 px-12 rounded-xl font-bold uppercase tracking-wider bg-emerald-600 hover:bg-emerald-700 text-white text-xs gap-3 transition-all font-sans relative w-full sm:w-auto">
                   {isLoading ? "LAUNCHING..." : "LAUNCH CAMPAIGN"} <Plus className="h-4 w-4" />
                 </Button>
-              )}
+              ) : null}
             </div>
           </div>
 

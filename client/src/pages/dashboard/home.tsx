@@ -19,7 +19,9 @@ import {
   Sparkles,
   Send,
   Brain,
-  Info
+  Info,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Link, useLocation } from "wouter";
@@ -481,12 +483,14 @@ export default function DashboardHome() {
                 key={metric.label}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
+                whileHover={{ y: -2, transition: { type: "spring", stiffness: 300 } }}
                 transition={{ delay: index * 0.05, duration: 0.3, ease: "easeOut" }}
                 className={cn(
-                  "relative overflow-hidden rounded-lg border border-border/40 bg-card/40 backdrop-blur-sm p-4 transition-all hover:border-primary/30",
-                  metric.bgColor
+                  "relative overflow-hidden rounded-lg border border-border/40 bg-card/40 backdrop-blur-sm p-4 transition-all",
+                  metric.glow || "hover:border-primary/30"
                 )}
               >
+                <div className="absolute top-2 right-2 h-1.5 w-1.5 rounded-full bg-emerald-500/50 animate-pulse" style={{ animationDuration: '2s' }} />
                 <div className="flex items-center gap-2 mb-2">
                   <div className={cn("p-1.5 rounded-md", metric.bgColor, metric.borderColor)}>
                     <Icon className={cn("h-3.5 w-3.5", metric.color)} />
@@ -505,11 +509,20 @@ export default function DashboardHome() {
                     )}
                   </span>
                 </div>
-                <div className="text-xl font-bold text-foreground">
+                <div className="text-xl font-bold text-foreground tabular-nums">
                   {metric.value}
                   <span className="text-sm font-medium text-muted-foreground/60 ml-1">
                     {metric.suffix}
                   </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  {metric.trend === 'up' && <TrendingUp className="h-3 w-3 text-emerald-500" />}
+                  {metric.trend === 'down' && <TrendingDown className="h-3 w-3 text-red-500" />}
+                  {metric.percentage !== undefined && metric.percentage !== null && (
+                    <span className={cn("text-[9px] font-bold", metric.trend === 'up' ? 'text-emerald-500' : metric.trend === 'down' ? 'text-red-500' : 'text-muted-foreground/50')}>
+                      {metric.percentage > 0 ? '+' : ''}{metric.percentage?.toFixed(1)}%
+                    </span>
+                  )}
                 </div>
               </motion.div>
             );

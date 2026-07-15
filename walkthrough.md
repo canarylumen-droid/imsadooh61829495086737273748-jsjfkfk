@@ -777,6 +777,11 @@ curl -X POST "https://api.audnixai.com/mcp" \
 - Connection code with 3 sub-tabs per LLM: **cURL**, **Languages** (12 languages), **Test** (live test)
 - Tool permissions with collapsible groups, "Blocked" and "Dangerous" badges
 - Profile picture animated ring glow in sidebar
+- Inbox AI icons deduplicated (Brain → Sparkles/User); instant optimistic message send with subject
+- Campaign Wizard: 6 pre-built templates (cold/followup/partnership/breakup/referral/webinar), categorized variable insert dropdown (Contact/Company/System), live variable syntax highlighting with colored `{{...}}` badges, launch queue progress view with polling
+- Lead Intelligence Modal: staggered spring entrance animations, `whileHover` lift on all cards, live pulse indicators, gradient progress bars
+- Dashboard KPI cards: live WebSocket pulse dots, hover lift, trend arrows (up/down), percentage change badges
+- Profile avatar animated gradient spin ring in sidebar
 
 ---
 
