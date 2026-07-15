@@ -423,11 +423,8 @@ router.delete('/account', requireAuthOrApiKey, async (req: Request, res: Respons
       return;
     }
 
-    // 1. Perform full centralized OAuth token revocation & user deletion
-    // This will hit Calendly, Google Calendar, etc. to revoke third-party access
     await revocationService.revokeAllAndDestroyUser(userId);
 
-    // 2. Destroy user session safely
     try {
       (req as any).logout?.((err: any) => {
         if (err) console.error("Error during logout:", err);
@@ -438,10 +435,10 @@ router.delete('/account', requireAuthOrApiKey, async (req: Request, res: Respons
       req.session.destroy(() => {});
     }
 
-    res.json({ success: true, message: 'Account, data, and OAuth tokens successfully destroyed.' });
+    res.json({ success: true, message: 'Account deleted.' });
   } catch (error) {
-    console.error('Critical Error during account deletion:', error);
-    res.status(500).json({ error: 'Failed to completely delete account.' });
+    console.error('Error during account deletion:', error);
+    res.status(500).json({ error: 'Failed to delete account.' });
   }
 });
 

@@ -173,6 +173,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({
     "Engagement": true,
     "Tools": true,
+    "Developer": true,
     "Reports": true
   });
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
@@ -250,6 +251,11 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
         { label: "Warmup", icon: Shield, path: "/dashboard/warmup" },
+      ],
+    },
+    {
+      label: "Developer",
+      items: [
         { label: "API Keys", icon: Key, path: "/dashboard/developer" },
         { label: "MCP Server", icon: Terminal, path: "/dashboard/mcp-server" },
       ],

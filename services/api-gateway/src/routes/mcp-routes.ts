@@ -193,13 +193,23 @@ router.post('/api/mcp/key/create', requireAuth, async (req: Request, res: Respon
       return;
     }
 
-    const level = permission_level === 'read' ? 'read_only' : 'read_write';
-    const rawKey = `audnix_${crypto.randomBytes(32).toString('hex')}`;
+    const trimmedName = name.trim();
+
+    const existing = await db.execute(sql`
+      SELECT id FROM api_keys WHERE user_id = ${userId} AND name = ${trimmedName}
+    `);
+    if (existing.rows.length > 0) {
+      res.status(409).json({ error: 'An API key with this name already exists' });
+      return;
+    }
+
+    const level = permission_level === 'read' ? 'read_only' : (permission_level === 'read_only' || permission_level === 'read_write' ? permission_level : 'read_write');
+    const rawKey = `audnix_${crypto.randomBytes(8).toString('hex')}`;
     const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
     await db.execute(sql`
       INSERT INTO api_keys (user_id, name, key, scope)
-      VALUES (${userId}, ${name.trim()}, ${hashedKey}, ${level})
+      VALUES (${userId}, ${trimmedName}, ${hashedKey}, ${level})
     `);
 
     const result = await db.execute(sql`
@@ -209,7 +219,7 @@ router.post('/api/mcp/key/create', requireAuth, async (req: Request, res: Respon
 
     res.status(201).json({
       id: created.id,
-      name: name.trim(),
+      name: trimmedName,
       permissionLevel: level,
       key: rawKey,
       createdAt: created.created_at || null,
@@ -265,6 +275,50 @@ router.post('/api/mcp/scopes', requireAuth, async (req: Request, res: Response):
   } catch (error) {
     console.error('[MCP] Error updating scopes:', error);
     res.status(500).json({ error: 'Failed to update permissions' });
+  }
+});
+
+// GET /api/mcp/keys — List all API keys for the current user
+router.get('/api/mcp/keys', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
+    const result = await db.execute(sql`
+      SELECT id, name, scope, created_at, last_used_at
+      FROM api_keys
+      WHERE user_id = ${userId}
+      ORDER BY created_at DESC
+    `);
+
+    const keys = result.rows.map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      permissionLevel: row.scope || 'read_write',
+      createdAt: row.created_at?.toISOString() || null,
+      lastUsedAt: row.last_used_at?.toISOString() || null,
+    }));
+
+    res.json({ keys });
+  } catch (error) {
+    console.error('[MCP] Error fetching keys:', error);
+    res.status(500).json({ error: 'Failed to fetch keys' });
+  }
+});
+
+// DELETE /api/mcp/key/:id — Delete an API key
+router.delete('/api/mcp/key/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
+
+    const { id } = req.params;
+    await db.execute(sql`DELETE FROM api_keys WHERE id = ${id} AND user_id = ${userId}`);
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[MCP] Error deleting key:', error);
+    res.status(500).json({ error: 'Failed to delete key' });
   }
 });
 
