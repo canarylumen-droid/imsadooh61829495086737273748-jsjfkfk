@@ -1,5 +1,12 @@
-import mysql from "mysql2/promise";
 import crypto from "crypto";
+import { createRequire } from "module";
+
+let mysql: any;
+try {
+  mysql = createRequire(import.meta.url)("mysql2/promise");
+} catch {
+  mysql = null;
+}
 
 // ─── Column name conversion ────────────────────────────────────────────────
 
@@ -165,6 +172,7 @@ export function getMySqlPool(): mysql.Pool {
 }
 
 export async function connectMySql(): Promise<mysql.Pool> {
+  if (!mysql) throw new Error("mysql2 package not available - install it with: npm install mysql2");
   if (pool) return pool;
 
   const host = process.env.MYSQL_HOST || "localhost";
