@@ -96,14 +96,20 @@ Integrations for `team.replyflow`:
 
 ---
 
-## 7. Known Issues
+## 7. Known Issues (present)
 
-1. **Session cookies on localhost** — `secure: true` in prod; cookies work through nginx HTTPS only.
-2. **Redis not configured** — REDIS_URL missing, infra-scaler errors every 30s. WebSocket offline buffer unavailable.
-3. **Forgot-password fails (500)** — SendGrid credits exceeded, Resend domain not verified. Needs email provider fix.
-4. **npm install fails on server** — Replit package firewall (EAI_AGAIN). Must SCP node_modules.
-5. **`/api/ai/insights` 404** — Route mounted under different prefix (leads routes are at `/api/leads`).
-6. **Signup uses OTP flow** — `POST /api/user/auth/signup/request-otp` (not bare `/signup`). Direct signup disabled.
+1. **Redis not configured** — REDIS_URL missing, infra-scaler errors every 30s. WebSocket offline buffer unavailable.
+2. **Forgot-password fails (500)** — SendGrid credits exceeded, Resend domain not verified. Needs email provider fix.
+3. **npm install fails on server** — Replit package firewall (EAI_AGAIN). Must SCP node_modules.
+4. **Signup uses OTP flow** — `POST /api/user/auth/signup/request-otp` (not bare `/signup`). Direct signup disabled.
+
+## 8. Issues Fixed
+
+| Date | Issue | Fix |
+|------|-------|-----|
+| 2026-07-15 | Dashboard 500 crash (`column email_tracking.placement does not exist`) | Added `placement` column to `email_tracking` table |
+| 2026-07-15 | API key auth crash (`Cannot read id of undefined` in prospecting) | `requireApiKey` now sets `req.user` and `req.session.userId` |
+| 2026-07-15 | Dashboard stats "Not authenticated" with API key | Session shim added to `requireApiKey` middleware |
 
 ---
 
