@@ -3,7 +3,7 @@ name: Deployment Status
 on:
   deployment_status:
   workflow_run:
-    workflows: ["CI Pipeline", "CI/CD Pipeline", "ECS Deploy — Build, Push & Register Task Definitions"]
+    workflows: ["CI Pipeline", "CI/CD Pipeline"]
     types: [completed]
 
 permissions:

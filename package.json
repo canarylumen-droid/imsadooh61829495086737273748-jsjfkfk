@@ -159,7 +159,7 @@
     "@zxcvbn-ts/language-common": "^3.0.4",
     "@zxcvbn-ts/language-en": "^3.0.2",
     "autoprefixer": "^10.4.20",
-
+    "aws-sdk": "2.1693.0",
     "axios": "^1.16.1",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.70.1",
@@ -210,7 +210,7 @@
     "nanoid": "^5.1.6",
     "next-themes": "^0.4.6",
     "node-fetch": "^3.3.2",
-    "nodemailer": "^8.0.5",
+    "nodemailer": "^9.0.3",
     "ogl": "^1.0.11",
     "openai": "^6.7.0",
     "p-limit": "^7.2.0",
