@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,12 +9,16 @@ import {
   DialogFooter, DialogTrigger, DialogClose,
 } from "@/components/ui/dialog";
 import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRealtime } from "@/hooks/use-realtime";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
-import { Key, Copy, Check, Trash2, Loader2, Plus, Eye } from "lucide-react";
+import { Key, Copy, Check, Trash2, Loader2, Plus, Eye, EyeOff, Shield } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 
@@ -27,11 +31,20 @@ type ApiKey = {
 };
 
 function DeveloperPage() {
+  const { socket } = useRealtime();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createName, setCreateName] = useState("");
-  const [newKeyData, setNewKeyData] = useState<{ key: string; name: string } | null>(null);
+  const [createPermission, setCreatePermission] = useState("read_write");
+  const [newKeyData, setNewKeyData] = useState<{ key: string; name: string; permissionLevel: string } | null>(null);
   const [showFullKey, setShowFullKey] = useState(false);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handler = () => qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
+    socket.on("leads_updated", handler);
+    return () => { socket.off("leads_updated", handler); };
+  }, [socket, qc]);
 
   const { data: keysData, isLoading } = useQuery<{ keys: ApiKey[] }>({
     queryKey: ["/api/mcp/keys"],
@@ -40,7 +53,7 @@ function DeveloperPage() {
   const keys = keysData?.keys || [];
 
   const createKey = useMutation({
-    mutationFn: (d: { name: string }) =>
+    mutationFn: (d: { name: string; permission_level: string }) =>
       apiRequest("POST", "/api/mcp/key/create", d).then(async r => {
         if (!r.ok) {
           const err = await r.json();
@@ -49,10 +62,11 @@ function DeveloperPage() {
         return r.json();
       }),
     onSuccess: (d) => {
-      setNewKeyData({ key: d.key, name: d.name });
+      setNewKeyData({ key: d.key, name: d.name, permissionLevel: d.permissionLevel || createPermission });
       setShowFullKey(true);
       setDialogOpen(false);
       setCreateName("");
+      setCreatePermission("read_write");
       toast({ title: "API key created" });
       qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
     },
@@ -79,10 +93,6 @@ function DeveloperPage() {
     }
   };
 
-  const maskedKey = newKeyData?.key
-    ? `${newKeyData.key.substring(0, 12)}...${newKeyData.key.slice(-4)}`
-    : null;
-
   return (
     <PageWrapper className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -100,23 +110,50 @@ function DeveloperPage() {
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Create API key</DialogTitle>
-              <DialogDescription>Name your key and we'll generate one for you.</DialogDescription>
+              <DialogDescription>Name your key and choose its permission level.</DialogDescription>
             </DialogHeader>
-            <div className="py-3">
-              <Label>Name</Label>
-              <Input
-                value={createName}
-                onChange={e => setCreateName(e.target.value)}
-                placeholder="My API key"
-                className="mt-1.5"
-              />
+            <div className="py-3 space-y-4">
+              <div>
+                <Label>Name</Label>
+                <Input
+                  value={createName}
+                  onChange={e => setCreateName(e.target.value)}
+                  placeholder="My API key"
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label>Permission</Label>
+                <Select value={createPermission} onValueChange={setCreatePermission}>
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="read_only">
+                      <span className="flex items-center gap-2">
+                        <Shield className="h-3.5 w-3.5 text-sky-500" />
+                        Read only — can view data
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="read_write">
+                      <span className="flex items-center gap-2">
+                        <Shield className="h-3.5 w-3.5 text-amber-500" />
+                        Read & Write — can view and modify data
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
               <Button
-                onClick={() => createKey.mutate({ name: createName || "My API key" })}
+                onClick={() => createKey.mutate({
+                  name: createName || "My API key",
+                  permission_level: createPermission,
+                })}
                 disabled={createKey.isPending || !createName.trim()}
               >
                 {createKey.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
@@ -128,7 +165,7 @@ function DeveloperPage() {
       </div>
 
       {newKeyData && showFullKey && (
-        <Card className="border-emerald-500/30">
+        <Card className="border-emerald-500/30 bg-emerald-500/[0.02]">
           <CardContent className="p-5">
             <div className="flex items-start gap-4">
               <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
@@ -136,12 +173,17 @@ function DeveloperPage() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium text-emerald-300">{newKeyData.name}</p>
+                <p className="text-xs text-muted-foreground mb-1">
+                  <Badge variant="outline" className="text-[9px]">
+                    {newKeyData.permissionLevel === "read_only" ? "Read only" : "Read & Write"}
+                  </Badge>
+                </p>
                 <p className="text-sm text-muted-foreground mb-3">Copy this key now. You won't see it again.</p>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 p-2.5 bg-black/50 rounded-lg border font-mono text-sm break-all select-all">
                     {newKeyData.key}
                   </code>
-                  <Button onClick={() => copyKey(newKeyData.key)}>
+                  <Button onClick={() => copyKey(newKeyData.key)} size="sm">
                     <Copy className="h-4 w-4 mr-2" />
                     Copy
                   </Button>
@@ -150,8 +192,9 @@ function DeveloperPage() {
               <button
                 onClick={() => setShowFullKey(false)}
                 className="text-muted-foreground hover:text-foreground mt-1"
+                title="Dismiss"
               >
-                <Eye className="h-4 w-4" />
+                <EyeOff className="h-4 w-4" />
               </button>
             </div>
           </CardContent>
@@ -190,7 +233,7 @@ function DeveloperPage() {
                     <TableCell className="font-medium">{k.name}</TableCell>
                     <TableCell>
                       <code className="text-xs font-mono text-muted-foreground">
-                        {k.id ? `audnix_${k.id.substring(0, 4)}...${k.id.slice(-4)}` : "—"}
+                        audnix_{k.id?.substring(0, 4)}...{k.id?.slice(-4)}
                       </code>
                     </TableCell>
                     <TableCell>
