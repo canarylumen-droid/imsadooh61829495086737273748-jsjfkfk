@@ -13,6 +13,7 @@
       "essential": true,
       "environment": [
         { "name": "NODE_ENV", "value": "production" },
+        { "name": "NEW_EMAIL_BACKEND", "value": "rust" },
         { "name": "UNIFIED_MODE", "value": "false" },
         { "name": "IS_WORKER", "value": "true" },
         { "name": "ECS_ENABLE_CONTAINER_METADATA", "value": "true" },

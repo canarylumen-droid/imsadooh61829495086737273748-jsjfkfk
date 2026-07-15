@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { db } from '@shared/lib/db/db.js';
 import { automationRules, contentLibrary, aiActionLogs } from '@audnix/shared';
 import { eq, and, desc } from 'drizzle-orm';
@@ -12,7 +12,7 @@ function getCurrentUserId(req: Request): string | null {
 
 // ========== AUTOMATION RULES ==========
 
-router.get('/rules', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/rules', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     
@@ -42,7 +42,7 @@ router.get('/rules', requireAuth, async (req: Request, res: Response): Promise<v
   }
 });
 
-router.post('/rules', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/rules', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { 
@@ -104,7 +104,7 @@ router.post('/rules', requireAuth, async (req: Request, res: Response): Promise<
   }
 });
 
-router.put('/rules/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/rules/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { id } = req.params;
@@ -128,7 +128,7 @@ router.put('/rules/:id', requireAuth, async (req: Request, res: Response): Promi
   }
 });
 
-router.delete('/rules/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/rules/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { id } = req.params;
@@ -146,7 +146,7 @@ router.delete('/rules/:id', requireAuth, async (req: Request, res: Response): Pr
 
 // ========== CONTENT LIBRARY ==========
 
-router.get('/content', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/content', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { type } = req.query;
@@ -182,7 +182,7 @@ router.get('/content', requireAuth, async (req: Request, res: Response): Promise
   }
 });
 
-router.post('/content', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/content', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { 
@@ -236,7 +236,7 @@ router.post('/content', requireAuth, async (req: Request, res: Response): Promis
   }
 });
 
-router.put('/content/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/content/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { id } = req.params;
@@ -260,7 +260,7 @@ router.put('/content/:id', requireAuth, async (req: Request, res: Response): Pro
   }
 });
 
-router.delete('/content/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/content/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { id } = req.params;
@@ -278,7 +278,7 @@ router.delete('/content/:id', requireAuth, async (req: Request, res: Response): 
 
 // ========== AI DECISIONS ==========
 
-router.get('/decisions', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/decisions', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const limit = parseInt(req.query.limit as string) || 50;

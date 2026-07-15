@@ -4,14 +4,14 @@ import { prospects } from '@audnix/shared';
 import { eq, sql } from 'drizzle-orm';
 import { AudnixIngestor } from '@shared/lib/scraping/audnix-ingestor.js';
 
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 
 const router = Router();
 
 /**
  * Start Intelligent Scan (NO MOCK DATA)
  */
-router.post('/scan', requireAuth, async (req: Request, res: Response) => {
+router.post('/scan', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = req.user!.id;
 
@@ -43,7 +43,7 @@ router.post('/scan', requireAuth, async (req: Request, res: Response) => {
 /**
  * Get Leads (REAL DATA ONLY)
  */
-router.get('/leads', requireAuth, async (req: Request, res: Response) => {
+router.get('/leads', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = req.user!.id;
         const integrationId = req.query.integrationId as string | undefined;
@@ -72,7 +72,7 @@ router.get('/leads', requireAuth, async (req: Request, res: Response) => {
 /**
  * Verify Lead (REAL SMTP)
  */
-router.post('/verify/:id', requireAuth, async (req: Request, res: Response) => {
+router.post('/verify/:id', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = req.user!.id;
 

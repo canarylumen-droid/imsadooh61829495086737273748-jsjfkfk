@@ -6,7 +6,16 @@ RUN npm ci
 COPY . .
 RUN npm run build:client
 
-# --- Stage 2: Production Image ---
+# --- Stage 2: Build Rust Workers (amd64) ---
+FROM rust:1.85-slim-bookworm AS rust-builder
+WORKDIR /build
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+COPY rust-email-sender/ ./rust-email-sender/
+COPY rust-imap-worker/ ./rust-imap-worker/
+RUN cargo build --release --manifest-path ./rust-email-sender/Cargo.toml && \
+    cargo build --release --manifest-path ./rust-imap-worker/Cargo.toml
+
+# --- Stage 3: Production Image ---
 FROM node:22-alpine
 WORKDIR /app
 
@@ -19,6 +28,10 @@ RUN npm ci --omit=dev
 
 # Copy built frontend assets
 COPY --from=frontend-builder /app/dist/public ./dist/public
+
+# Copy Rust binaries
+COPY --from=rust-builder /build/rust-email-sender/target/release/audnix-email-sender /usr/local/bin/audnix-email-sender
+COPY --from=rust-builder /build/rust-imap-worker/target/release/audnix-imap-worker /usr/local/bin/audnix-imap-worker
 
 # Copy only the source needed at runtime (tsx compiles on the fly)
 COPY --chown=nodejs:nodejs client ./client
@@ -39,6 +52,9 @@ USER nodejs
 
 # Environment variables
 ENV NODE_ENV=production
+ENV NEW_EMAIL_BACKEND=rust
+ENV RUST_EMAIL_SENDER_PATH=/usr/local/bin/audnix-email-sender
+ENV RUST_IMAP_WORKER_PATH=/usr/local/bin/audnix-imap-worker
 ENV PORT=5000
 ENV UNIFIED_MODE=true
 ENV AI_WORKER_PORT=8082

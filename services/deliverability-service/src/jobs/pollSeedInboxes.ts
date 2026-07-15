@@ -110,6 +110,8 @@ async function evaluateCampaignRates(): Promise<void> {
       await notifyCore({ campaignId, userId, source: 'seed', inboxRate, spamRate, action: 'pause' });
     } else if (inboxRate < config.thresholds.inboxRateWarn) {
       await notifyCore({ campaignId, userId, source: 'seed', inboxRate, spamRate, action: 'warn' });
+    } else {
+      await notifyCore({ campaignId, userId, source: 'seed', inboxRate, spamRate, action: 'completed' });
     }
   }
 }

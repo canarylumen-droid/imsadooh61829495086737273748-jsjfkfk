@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import {
   getAvailableTimeSlots,
   sendBookingLinkToLead,
@@ -29,7 +29,7 @@ import('@shared/lib/calendar/calendly-sync-worker.js').then(({ startAutomaticCal
 /**
  * Get calendar settings for user
  */
-router.get('/settings', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/settings', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -85,7 +85,7 @@ router.get('/settings', requireAuth, async (req: Request, res: Response): Promis
 /**
  * Update calendar settings
  */
-router.patch('/settings', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.patch('/settings', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const updates = req.body;
@@ -119,7 +119,7 @@ router.patch('/settings', requireAuth, async (req: Request, res: Response): Prom
 /**
  * Get calendar bookings
  */
-router.get('/bookings', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/bookings', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -140,7 +140,7 @@ router.get('/bookings', requireAuth, async (req: Request, res: Response): Promis
 /**
  * Get AI action logs for calendar
  */
-router.get('/ai-logs', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/ai-logs', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -161,7 +161,7 @@ router.get('/ai-logs', requireAuth, async (req: Request, res: Response): Promise
 /**
  * Connect Calendly with token
  */
-router.post('/connect-calendly', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/connect-calendly', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { token } = req.body;
@@ -258,7 +258,7 @@ router.post('/connect-calendly', requireAuth, async (req: Request, res: Response
  * Disconnect Calendly
  * Cleans up ALL Calendly traces across users, integrations, and calendar_settings.
  */
-router.post('/disconnect-calendly', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/disconnect-calendly', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -304,7 +304,7 @@ router.post('/disconnect-calendly', requireAuth, async (req: Request, res: Respo
 /**
  * Get available time slots for booking
  */
-router.get('/slots', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/slots', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const daysAhead = req.query.daysAhead as string | undefined;
@@ -336,7 +336,7 @@ router.get('/slots', requireAuth, async (req: Request, res: Response): Promise<v
 /**
  * Send booking link to lead
  */
-router.post('/send-link', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/send-link', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadEmail, leadName, leadId, campaignId, duration } = req.body as {
@@ -381,7 +381,7 @@ router.post('/send-link', requireAuth, async (req: Request, res: Response): Prom
 /**
  * Book meeting when lead accepts
  */
-router.post('/book', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/book', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadEmail, leadName, startTime, endTime, duration } = req.body as {
@@ -429,7 +429,7 @@ router.post('/book', requireAuth, async (req: Request, res: Response): Promise<v
 /**
  * Get formatted message for sending booking link
  */
-router.post('/format-message', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/format-message', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadName, bookingLink, channel } = req.body as {
       leadName?: string;
@@ -468,7 +468,7 @@ router.post('/format-message', requireAuth, async (req: Request, res: Response):
 /**
  * Get calendar status (which provider is connected)
  */
-router.get('/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const integrations = await storage.getIntegrations(userId);

@@ -46,7 +46,8 @@ import {
   Clock,
   Terminal,
   LifeBuoy,
-  Menu
+  Menu,
+  Code
 } from "lucide-react";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -637,7 +638,10 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                       <User className="mr-3 h-4 w-4" />
                       Profile Settings
                     </DropdownMenuItem>
-
+                    <DropdownMenuItem onClick={() => handleNavigate('/dashboard/settings?tab=developer')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
+                      <Code className="mr-3 h-4 w-4" />
+                      API Keys
+                    </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator className="my-1 mx-2" />
                   <DropdownMenuGroup>
@@ -697,7 +701,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                     <div className="flex items-center gap-4 p-4 rounded-3xl bg-background border border-border/40">
                       <Avatar className="h-12 w-12 rounded-full">
                         <AvatarImage src={user?.avatar} />
-                        <AvatarFallback className="font-black bg-primary text-black rounded-full">{(user?.name || "U")[0]}</AvatarFallback>
+                        <AvatarFallback className="font-black bg-primary text-primary-foreground rounded-full">{(user?.name || "U")[0]}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-black truncate">{user?.name || "Member"}</p>
@@ -789,7 +793,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                   <Button variant="ghost" size="icon" className="relative text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted/50 transition-all hover:scale-105 active:scale-95">
                     <Bell className="h-5 w-5" />
                     {unreadNotifications > 0 && (
-                      <span className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-primary text-[10px] font-black text-black border-2 border-background animate-in fade-in zoom-in duration-300">
+                      <span className="absolute -top-1 -right-1 h-5 min-w-[20px] px-1.5 flex items-center justify-center rounded-full bg-primary text-[10px] font-black text-primary-foreground border-2 border-background animate-in fade-in zoom-in duration-300">
                         {unreadNotifications > 99 ? '99+' : unreadNotifications}
                       </span>
                     )}
@@ -800,7 +804,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                     <div className="flex items-center justify-between mb-3">
                       <h4 className="text-lg font-black uppercase italic">Notifications</h4>
                       {unreadNotifications > 0 && (
-                        <Badge className="bg-primary text-black font-black uppercase text-[10px] px-3 py-1">
+                        <Badge className="bg-primary text-primary-foreground font-black uppercase text-[10px] px-3 py-1">
                           {unreadNotifications} NEW
                         </Badge>
                       )}
@@ -818,7 +822,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                             className={cn(
                               "h-7 px-4 rounded-full text-[10px] font-bold uppercase tracking-widest transition-all border border-transparent",
                               notifDateFilter === f
-                                ? "bg-primary text-black border-primary shadow-[0_0_15px_rgba(var(--primary),0.3)]"
+                                ? "bg-primary text-primary-foreground border-primary shadow-[0_0_15px_rgba(var(--primary),0.3)]"
                                 : "hover:bg-muted text-muted-foreground border-border/10"
                             )}
                           >
@@ -1075,7 +1079,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                 <Button
                   onClick={subscribe}
                   disabled={pushLoading}
-                  className="flex-1 h-10 rounded-xl bg-primary text-black font-black text-[10px] uppercase tracking-widest hover:bg-primary/90"
+                  className="flex-1 h-10 rounded-xl bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest hover:bg-primary/90"
                 >
                   {pushLoading ? "Enabling..." : "Enable Alerts"}
                 </Button>

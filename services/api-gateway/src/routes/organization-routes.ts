@@ -1,13 +1,13 @@
 import { Router, Request, Response } from "express";
 import { storage } from "@shared/lib/storage/storage.js";
-import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
+import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { insertOrganizationSchema, insertTeamMemberSchema } from "@audnix/shared";
 import { z } from "zod";
 
 const router = Router();
 
 // GET /api/organizations - Get all organizations the current user belongs to
-router.get("/", requireAuth, async (req: Request, res: Response) => {
+router.get("/", requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = getCurrentUserId(req);
         const orgs = await storage.getUserOrganizations(userId!);
@@ -18,7 +18,7 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
 });
 
 // POST /api/organizations - Create a new organization
-router.post("/", requireAuth, async (req: Request, res: Response) => {
+router.post("/", requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = getCurrentUserId(req);
         const validatedData = insertOrganizationSchema.parse({
@@ -45,7 +45,7 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
 });
 
 // GET /api/organizations/:orgId/members - Get all members of an organization
-router.get("/:orgId/members", requireAuth, async (req: Request, res: Response) => {
+router.get("/:orgId/members", requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = getCurrentUserId(req);
         const { orgId } = req.params;
@@ -64,7 +64,7 @@ router.get("/:orgId/members", requireAuth, async (req: Request, res: Response) =
 });
 
 // POST /api/organizations/:orgId/members - Invite/Add a member to an organization
-router.post("/:orgId/members", requireAuth, async (req: Request, res: Response) => {
+router.post("/:orgId/members", requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const adminId = getCurrentUserId(req);
         const { orgId } = req.params;

@@ -47,7 +47,7 @@ export function DocumentationLayout({ title, subtitle, sections }: Documentation
                                 key={section.id}
                                 onClick={() => setActiveSection(section.id)}
                                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all group ${activeSection === section.id
-                                    ? "bg-primary text-black shadow-[0_10px_20px_rgba(0,210,255,0.2)]"
+                                    ? "bg-primary text-primary-foreground shadow-[0_10px_20px_rgba(0,210,255,0.2)]"
                                     : "text-white/40 hover:text-white hover:bg-white/5"
                                     }`}
                             >

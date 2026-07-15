@@ -93,7 +93,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
             </p>
           </div>
           <a href="/dashboard/integrations">
-            <Badge className="bg-primary text-black font-bold text-xs tracking-wider px-4 py-1.5 hover:bg-primary/80 cursor-pointer">
+            <Badge className="bg-primary text-primary-foreground font-bold text-xs tracking-wider px-4 py-1.5 hover:bg-primary/80 cursor-pointer">
               Connect
             </Badge>
           </a>

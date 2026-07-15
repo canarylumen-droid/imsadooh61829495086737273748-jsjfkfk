@@ -13,6 +13,7 @@ const LINKS = {
     { name: "Niche Vault", href: "/resources/niche-vault" },
     { name: "Outreach Playbooks", href: "/resources/outreach-playbooks" },
     { name: "API Documentation", href: "/resources/api-docs" },
+    { name: "Developer API", href: "/developer", badge: "NEW" },
   ],
   COMPANY: [
     { name: "Sign Up Free", href: "/signup" },

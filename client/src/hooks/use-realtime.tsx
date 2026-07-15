@@ -322,6 +322,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/seed-placement'] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
       if (payload?.subject) {
         toast({ title: '📧 New Email', description: payload.subject });
@@ -331,6 +332,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     // SPAM DETECTED — immediate alert + analytics refresh
     socketInstance.on('spam_detected', (payload: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/seed-placement'] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
@@ -358,12 +360,14 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     socketInstance.on('integration_reputation_updated', (payload: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/seed-placement'] });
       queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
     });
 
     socketInstance.on('deliverability_updated', (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/seed-placement'] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });

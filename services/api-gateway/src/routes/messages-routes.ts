@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { storage } from "@shared/lib/storage/storage.js";
-import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
+import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { sendEmail } from "@shared/lib/channels/email.js";
 import { sendInstagramMessage } from "@shared/lib/channels/instagram.js";
 
@@ -15,7 +15,7 @@ function normalizeReplySubject(subject?: string | null, fallback?: string): stri
  * GET /api/messages/:leadId
  * Get messages for a lead with pagination
  */
-router.get("/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;
@@ -49,7 +49,7 @@ router.get("/:leadId", requireAuth, async (req: Request, res: Response): Promise
  * POST /api/messages/:leadId
  * Send a message to a lead
  */
-router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;
@@ -239,7 +239,7 @@ router.post("/:leadId", requireAuth, async (req: Request, res: Response): Promis
  * POST /api/messages/:leadId/read
  * Mark all notifications for this lead as read
  */
-router.post("/:leadId/read", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/:leadId/read", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;

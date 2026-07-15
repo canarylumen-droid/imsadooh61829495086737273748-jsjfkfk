@@ -334,7 +334,7 @@ class WebSocketSyncServer {
     domain?: string;
     inboxRate?: number;
     spamRate?: number;
-    action?: 'warn' | 'pause';
+    action?: 'warn' | 'pause' | 'completed';
     folder?: string;
     source?: string;
   }) {

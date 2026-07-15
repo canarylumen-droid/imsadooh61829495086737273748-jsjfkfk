@@ -179,7 +179,7 @@ export default function PricingPage() {
                         ${isCurrentPlan
                         ? "bg-muted text-muted-foreground cursor-default border-border"
                         : isPopular
-                          ? "bg-primary text-black hover:bg-primary/90 shadow-[0_20px_40px_rgba(var(--primary),0.2)]"
+                          ? "bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_20px_40px_rgba(var(--primary),0.2)]"
                           : "bg-foreground text-background hover:bg-foreground/90"
                       }
                     `}

@@ -5,6 +5,7 @@ const navLinks = [
   { name: "FEATURES",     href: "/#features" },
   { name: "HOW IT WORKS", href: "/#how-it-works" },
   { name: "COMPARISON",   href: "/#metrics" },
+  { name: "DEVELOPERS",   href: "/developer" },
   { name: "PRICING",      href: "/pricing" },
 ];
 
@@ -106,6 +107,16 @@ export function Navigation() {
               </span>
             </a>
           ))}
+          {/* Extra mobile-only nav items */}
+          <a
+            href="/dashboard/settings?tab=developer"
+            onClick={() => setOpen(false)}
+            className="border-b border-[#1e1e1e] px-8 py-7 font-display text-4xl tracking-wider text-[#2196f3] hover:text-white transition-all duration-300 flex items-center justify-between"
+            style={{ transitionDelay: open ? `${navLinks.length * 60}ms` : "0ms" }}
+          >
+            API KEY
+            <span className="font-mono text-xs text-[#7a7a7a]">→</span>
+          </a>
         </div>
         <div className="mt-auto p-8 border-t border-[#1e1e1e] space-y-4">
           <a

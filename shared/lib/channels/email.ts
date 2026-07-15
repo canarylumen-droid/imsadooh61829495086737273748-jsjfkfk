@@ -3,8 +3,57 @@ import { storage } from '@shared/lib/storage/storage.js';
 import * as cheerio from 'cheerio';
 import { type Integration } from '@audnix/shared';
 import dns from 'dns';
+import { existsSync } from 'fs';
 
-const USE_KUMOMTA = process.env.NEW_EMAIL_BACKEND === 'kumomta';
+const USE_RUST_BACKEND = process.env.NEW_EMAIL_BACKEND !== 'node';
+const RUST_BINARY = process.env.RUST_EMAIL_SENDER_PATH || '/usr/local/bin/audnix-email-sender';
+const RUST_IMAP_BINARY = process.env.RUST_IMAP_WORKER_PATH || '/usr/local/bin/audnix-imap-worker';
+
+// Check common paths for Rust binary
+const RUST_PATHS = [
+  RUST_BINARY,
+  '/usr/local/bin/audnix-email-sender',
+  '/usr/bin/audnix-email-sender',
+  'rust-email-sender/target/release/audnix-email-sender',
+  './rust-email-sender/target/release/audnix-email-sender',
+];
+const RUST_IMAP_PATHS = [
+  RUST_IMAP_BINARY,
+  '/usr/local/bin/audnix-imap-worker',
+  '/usr/bin/audnix-imap-worker',
+  'rust-imap-worker/target/release/audnix-imap-worker',
+  './rust-imap-worker/target/release/audnix-imap-worker',
+];
+
+let RUST_AVAILABLE = false;
+let RUST_ACTUAL_PATH = '';
+for (const p of RUST_PATHS) {
+  try {
+    if (existsSync(p)) {
+      RUST_AVAILABLE = true;
+      RUST_ACTUAL_PATH = p;
+      break;
+    }
+  } catch {}
+}
+if (!RUST_AVAILABLE) {
+  console.warn('[Email] Rust email sender binary not found — using NodeMailer fallback');
+}
+
+let RUST_IMAP_AVAILABLE = false;
+let RUST_IMAP_ACTUAL_PATH = '';
+for (const p of RUST_IMAP_PATHS) {
+  try {
+    if (existsSync(p)) {
+      RUST_IMAP_AVAILABLE = true;
+      RUST_IMAP_ACTUAL_PATH = p;
+      break;
+    }
+  } catch {}
+}
+if (!RUST_IMAP_AVAILABLE) {
+  console.warn('[Email] Rust IMAP worker binary not found — using Node.js IMAP fallback');
+}
 
 
 /**
@@ -149,69 +198,48 @@ export function autoDiscoverSettings(email: string): Partial<EmailConfig> {
 // DELETED local tracking functions - moving to centralized lib/email/email-tracking.ts
 
 /**
- * Send email via KumoMTA MTA daemon (localhost:2525).
- * Submits via SMTP — KumoMTA holds persistent TLS connections per recipient MX.
- * No connection pool, no DNS resolve, no port cycling, no auth needed.
+ * Global 50ms fallback: try Rust binary first via Redis queue.
+ * If timeout >50ms or error, instantly switch to Node/TS implementation.
  */
-async function sendViaKumoMTA(
-  config: EmailConfig,
-  to: string,
-  subject: string,
-  body: string,
-  isHtml: boolean,
-  integrationId?: string,
-  inReplyTo?: string,
-  references?: string,
-  replyTo?: string
-): Promise<{ messageId: string }> {
-  const nodemailer = await import('nodemailer');
+async function withRustFallback<T>(
+  operationName: string,
+  redisTask: () => Promise<string>,
+  nodeImpl: () => Promise<T>,
+  timeoutMs: number = 3000
+): Promise<T> {
+  const useRust = USE_RUST_BACKEND && RUST_AVAILABLE;
+  if (!useRust) return nodeImpl();
 
-  const fromAddress = config.from_name
-    ? `"${config.from_name}" <${config.smtp_user}>`
-    : config.smtp_user;
+  try {
+    const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+    const redis = await getRedisClient();
+    if (!redis) throw new Error('Redis unavailable');
 
-  const headers: Record<string, string> = {};
-  if (integrationId) headers['X-Integration-Id'] = integrationId;
-
-  let lastError: Error | null = null;
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    let transporter: any = null;
-    try {
-      transporter = nodemailer.createTransport({
-        host: '127.0.0.1',
-        port: 2525,
-        secure: false,
-        tls: { rejectUnauthorized: false },
-        connectionTimeout: 15000,
-        greetingTimeout: 15000,
-        socketTimeout: 30000,
-      });
-
-      const info = await transporter.sendMail({
-        from: fromAddress,
-        to,
-        subject,
-        [isHtml ? 'html' : 'text']: body,
-        ...(inReplyTo && { inReplyTo }),
-        ...(references && { references }),
-        ...(replyTo && { replyTo }),
-        headers,
-      });
-
-      transporter.close();
-      return { messageId: info.messageId || `<${Date.now()}@${config.smtp_user?.split('@')[1] || 'audnixai.com'}>` };
-    } catch (err: any) {
-      lastError = err;
-      if (transporter) try { transporter.close(); } catch {}
-      if (attempt < 3) {
-        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
-        console.warn(`[KumoMTA] Attempt ${attempt}/3 failed for ${to}, retrying in ${delay}ms:`, err.message);
-        await new Promise(r => setTimeout(r, delay));
+    const jobId = await redisTask();
+    const pollStart = Date.now();
+    while (Date.now() - pollStart < timeoutMs) {
+      // Rust email sender pushes to "email-send-results" list (not keyed by jobId)
+      // Pop all results looking for our jobId
+      const result = await (redis as any).brPop('email-send-results', 0.1);
+      if (result) {
+        const parsed = JSON.parse(result[1]);
+        if (parsed.job_id === jobId) {
+          if (parsed.status === 'sent') return { messageId: parsed.job_id } as T;
+          throw new Error(parsed.error || 'Rust send failed');
+        }
+        // Not our job — push back for another consumer
+        await (redis as any).lPush('email-send-results', result[1]);
       }
     }
+    throw new Error('timeout');
+  } catch (err: any) {
+    if (err.message === 'timeout' || err.message === 'Redis unavailable') {
+      console.warn(`[Fallback] ${operationName}: Rust backend (>${timeoutMs}ms), switching to Node`);
+    } else {
+      console.warn(`[Fallback] ${operationName}: Rust error (${err.message}), switching to Node`);
+    }
+    return nodeImpl();
   }
-
-  throw lastError || new Error('KumoMTA send failed after 3 attempts');
 }
 
 /**
@@ -883,22 +911,47 @@ export async function sendEmail(
       } catch { /* non-critical */ }
     }
 
-    const result = USE_KUMOMTA
-      ? await sendViaKumoMTA(credentials, recipientEmail, subject, emailBody, true, integration.id, options.inReplyTo, options.references, options.replyTo)
-      : await sendCustomSMTP(
-          userId,
-          credentials,
-          recipientEmail,
+    const result = await withRustFallback(
+      'send-custom-smtp',
+      async () => {
+        const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+        const redis = await getRedisClient();
+        if (!redis) throw new Error('Redis unavailable');
+        const jobId = crypto.randomUUID();
+        await (redis as any).lPush('email-send-queue', JSON.stringify({
+          id: jobId,
+          recipient: recipientEmail,
+          from: credentials.smtp_user,
           subject,
-          emailBody,
-          true,
-          trackingId,
-          integration.id,
-          options.inReplyTo,
-          options.references,
-          options.replyTo,
-          options.leadId
-        );
+          body: emailBody,
+          smtp_host: credentials.smtp_host,
+          smtp_port: credentials.smtp_port,
+          smtp_user: credentials.smtp_user,
+          smtp_pass: credentials.smtp_pass,
+          campaign_id: options.campaignId || null,
+          mailbox_id: integration.id || null,
+          lead_id: options.leadId || null,
+          created_at: new Date().toISOString(),
+          retry_count: 0,
+          max_retries: 3,
+        }));
+        return jobId;
+      },
+      () => sendCustomSMTP(
+        userId,
+        credentials,
+        recipientEmail,
+        subject,
+        emailBody,
+        true,
+        trackingId,
+        integration.id,
+        options.inReplyTo,
+        options.references,
+        options.replyTo,
+        options.leadId
+      )
+    );
 
     // Only create tracking record AFTER successful send, so sentAt reflects
     // actual delivery time and we don't record sends that never happened.

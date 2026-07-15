@@ -18,8 +18,60 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { User, Loader2, Upload, Mic, Settings, Save, Globe, Palette, Lock, Brain, Mail, RefreshCw, Activity, CheckCircle2, Plus, Phone, ArrowLeft, Building2, Sparkles, Copy, Check, Download, Construction } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
+  User,
+  Loader2,
+  Upload,
+  Mic,
+  Settings,
+  Save,
+  Globe,
+  Palette,
+  Lock,
+  Brain,
+  Mail,
+  RefreshCw,
+  Activity,
+  CheckCircle2,
+  Plus,
+  Phone,
+  ArrowLeft,
+  Building2,
+  Sparkles,
+  Copy,
+  Check,
+  Download,
+  Construction,
+  Key,
+  Terminal,
+  Trash2,
+  AlertTriangle,
+  ShieldAlert,
+  Clock,
+  Eye,
+  EyeOff,
+  X,
+  ChevronDown,
+  ExternalLink,
+  Code,
+  Server,
+  BookOpen,
+  Edit3,
+  Shield,
+} from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRealtime } from "@/hooks/use-realtime";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -33,6 +85,8 @@ import { PremiumLoader } from "@/components/ui/premium-loader";
 import { BrandKnowledgeBase } from "@/components/admin/BrandKnowledgeBase";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
+import { Separator } from "@/components/ui/separator";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface UserProfile {
   id: string;
@@ -57,14 +111,41 @@ interface UserProfile {
   pdfConfidenceThreshold?: number;
 }
 
+interface ApiKey {
+  id: string;
+  name: string;
+  key: string;
+  scope: string;
+  lastUsedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string | null;
+}
+
+interface DeletionStatus {
+  pending: boolean;
+  scheduledFor?: string;
+  remainingMs?: number;
+}
+
 export default function SettingsPage() {
   useRealtime();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const voiceInputRef = useRef<HTMLInputElement>(null);
-  const [activeTab, setActiveTab] = useState("profile");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tab = params.get('tab');
+      if (tab && ['profile', 'brand', 'ai', 'developer', 'voice', 'account'].includes(tab)) return tab;
+    }
+    return "profile";
+  });
   const [hasChanges, setHasChanges] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showNewKey, setShowNewKey] = useState<string | null>(null);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [showCreateKey, setShowCreateKey] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
 
   const { data: user, isLoading } = useQuery<UserProfile | null>({
     queryKey: ["/api/user/profile"],
@@ -74,6 +155,16 @@ export default function SettingsPage() {
   const { data: smtpData } = useQuery<any[]>({ queryKey: ["/api/smtp/settings"] });
   const { data: customEmailStatus } = useQuery<any>({ queryKey: ["/api/custom-email/status"] });
   const { canAccess: canAccessVoiceNotes } = useCanAccessVoiceNotes();
+
+  const { data: apiKeys, refetch: refetchApiKeys } = useQuery<ApiKey[]>({
+    queryKey: ["/api/developer/api-keys"],
+    enabled: activeTab === "developer",
+  });
+
+  const { data: deletionStatus, refetch: refetchDeletionStatus } = useQuery<DeletionStatus>({
+    queryKey: ["/api/developer/deletion-status"],
+    enabled: activeTab === "account",
+  });
 
   const [formData, setFormData] = useState({
     name: "",
@@ -125,7 +216,6 @@ export default function SettingsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
-      // Ensure we nest config if it's in the data
       const { autonomousMode, discoverInboundLeads, prioritizeCalls, ...rest } = data;
       const payload = {
         ...rest,
@@ -162,8 +252,6 @@ export default function SettingsPage() {
     }
   });
 
-
-
   const cloneVoiceMutation = useMutation({
     mutationFn: async (files: FileList) => {
       const formData = new FormData();
@@ -190,7 +278,6 @@ export default function SettingsPage() {
       if (!customEmailStatus?.integrations) throw new Error("No mailboxes found.");
       const connected = customEmailStatus.integrations.filter((i: any) => i.connected);
       if (connected.length === 0) throw new Error("Please connect a custom domain mailbox first.");
-      
       for (const i of connected) {
         await apiRequest("POST", "/api/custom-email/sync-history", { days: 30, integrationId: i.id });
       }
@@ -202,6 +289,71 @@ export default function SettingsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
     },
     onError: (err: any) => toast({ title: "Sync Failed", description: err.message, variant: "destructive" })
+  });
+
+  const createApiKeyMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const res = await apiRequest("POST", "/api/developer/api-keys", { name });
+      return res;
+    },
+    onSuccess: (data: any) => {
+      setShowNewKey(data.key);
+      setNewKeyName("");
+      setShowCreateKey(false);
+      refetchApiKeys();
+      toast({ title: "API Key Created", description: "Copy your key now — you won't see it again." });
+    },
+    onError: () => toast({ title: "Failed", description: "Could not create API key.", variant: "destructive" })
+  });
+
+  const deleteApiKeyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("DELETE", `/api/developer/api-keys/${id}`);
+    },
+    onSuccess: () => {
+      refetchApiKeys();
+      toast({ title: "API Key Deleted" });
+    },
+    onError: () => toast({ title: "Failed", description: "Could not delete API key.", variant: "destructive" })
+  });
+
+  const editKeyNameMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      return apiRequest("PATCH", `/api/developer/api-keys/${id}`, { name });
+    },
+    onSuccess: () => {
+      refetchApiKeys();
+      toast({ title: "Key Name Updated" });
+    },
+    onError: () => toast({ title: "Failed", description: "Could not update key name.", variant: "destructive" })
+  });
+
+  const requestDeletionMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/developer/request-deletion");
+    },
+    onSuccess: () => {
+      refetchDeletionStatus();
+      toast({
+        title: "Deletion Scheduled",
+        description: "Your account will be permanently deleted within 24-48 hours.",
+      });
+    },
+    onError: (err: any) => {
+      const msg = err.message || "Failed to schedule deletion.";
+      toast({ title: "Error", description: msg, variant: "destructive" });
+    }
+  });
+
+  const cancelDeletionMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/developer/cancel-deletion");
+    },
+    onSuccess: () => {
+      refetchDeletionStatus();
+      toast({ title: "Deletion Cancelled", description: "Your account is safe." });
+    },
+    onError: () => toast({ title: "Failed", description: "Could not cancel deletion.", variant: "destructive" })
   });
 
   const handleFieldChange = (key: string, val: any) => {
@@ -216,11 +368,21 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  const formatRemainingTime = (ms: number) => {
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    if (hours > 24) {
+      const days = Math.floor(hours / 24);
+      return `${days}d ${hours % 24}h`;
+    }
+    return `${hours}h ${minutes}m`;
+  };
+
   if (isLoading || !user) return <div className="flex justify-center p-20"><PremiumLoader text="Loading Settings..." /></div>;
 
   return (
-    <PageWrapper className="space-y-10">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+    <PageWrapper className="space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <Badge variant="secondary" className="rounded-md font-bold text-[10px] uppercase tracking-wider bg-primary/10 text-primary border-primary/20">
@@ -230,22 +392,24 @@ export default function SettingsPage() {
           <h1 className="text-3xl md:text-4xl font-bold tracking-tight">
             Settings
           </h1>
+          <p className="text-sm text-muted-foreground mt-1">Manage your account, integrations, and developer tools.</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Export dropdown remains */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="rounded-xl px-6 h-12 font-bold border-primary/30 hover:bg-primary/5">
+              <Button variant="outline" className="rounded-xl px-5 h-11 font-bold border-border/50 hover:bg-muted/30">
                 <Download className="mr-2 h-4 w-4" />
-                Export Leads
+                Export
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64 rounded-xl">
               {([
-                ['replied', 'text-emerald-500', 'Leads That Have Replied'],
-                ['booked', 'text-blue-500', 'Leads That Have Booked Call'],
-                ['no_show', 'text-red-500', 'Leads That Booked But Didn\'t Show Up'],
-                ['no_reply', 'text-orange-500', 'Leads That Haven\'t Replied'],
-                ['ghosted', 'text-purple-500', 'Positive Replies But Ghosted'],
+                ['replied', 'text-emerald-500', 'Leads That Replied'],
+                ['booked', 'text-blue-500', 'Leads That Booked Call'],
+                ['no_show', 'text-red-500', 'No Show'],
+                ['no_reply', 'text-orange-500', 'No Reply'],
+                ['ghosted', 'text-purple-500', 'Ghosted'],
               ] as const).map(([cat, color, label]) => (
                 <DropdownMenuItem
                   key={cat}
@@ -254,7 +418,7 @@ export default function SettingsPage() {
                     try {
                       const res = await fetch(`/api/bulk/export-category?category=${cat}`, { credentials: 'include' });
                       if (!res.ok) {
-                        toast({ title: 'No Leads', description: `No leads found in "${label}" category.`, variant: 'default' });
+                        toast({ title: 'No Leads', description: `No leads found in "${label}".`, variant: 'default' });
                         return;
                       }
                       const blob = await res.blob();
@@ -264,9 +428,9 @@ export default function SettingsPage() {
                       a.download = `audnix_${cat}_${Date.now()}.csv`;
                       a.click();
                       URL.revokeObjectURL(url);
-                      toast({ title: 'Exported', description: `${label} CSV downloaded.`, variant: 'default' });
+                      toast({ title: 'Exported', description: `${label} CSV downloaded.` });
                     } catch {
-                      toast({ title: 'Export Failed', description: 'Could not export leads. Please try again.', variant: 'destructive' });
+                      toast({ title: 'Failed', description: 'Could not export leads.', variant: 'destructive' });
                     }
                   }}
                 >
@@ -280,7 +444,7 @@ export default function SettingsPage() {
                   try {
                     const res = await fetch('/api/bulk/export-category?category=converted', { credentials: 'include' });
                     if (!res.ok) {
-                      toast({ title: 'No Leads', description: 'No leads found in "Leads That Paid / Converted" category.', variant: 'default' });
+                      toast({ title: 'No Leads', description: 'No converted leads found.' });
                       return;
                     }
                     const blob = await res.blob();
@@ -290,13 +454,13 @@ export default function SettingsPage() {
                     a.download = `audnix_converted_${Date.now()}.csv`;
                     a.click();
                     URL.revokeObjectURL(url);
-                    toast({ title: 'Exported', description: 'Converted leads CSV downloaded.', variant: 'default' });
+                    toast({ title: 'Exported', description: 'Converted leads CSV downloaded.' });
                   } catch {
-                    toast({ title: 'Export Failed', description: 'Could not export leads. Please try again.', variant: 'destructive' });
+                    toast({ title: 'Failed', description: 'Could not export leads.', variant: 'destructive' });
                   }
                 }}
               >
-                <span className="text-yellow-500 mr-2">●</span> Leads That Paid / Converted
+                <span className="text-yellow-500 mr-2">●</span> Converted / Paid
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -304,7 +468,7 @@ export default function SettingsPage() {
           {hasChanges && (
             <Button
               onClick={() => saveMutation.mutate(formData)}
-              className="rounded-xl px-8 h-12 font-bold shadow-lg shadow-primary/20"
+              className="rounded-xl px-6 h-11 font-bold shadow-lg shadow-primary/20"
             >
               {saveMutation.isPending ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
               Save Changes
@@ -314,33 +478,47 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full" onValueChange={setActiveTab}>
-        <TabsList className="bg-muted p-1 rounded-xl mb-8 w-full flex overflow-x-auto no-scrollbar justify-start md:justify-center">
-          <TabsTrigger value="profile" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Profile</TabsTrigger>
-          <TabsTrigger value="brand" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Intelligence Memory</TabsTrigger>
-          <TabsTrigger value="ai" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap">Automation</TabsTrigger>
-
-          <TabsTrigger value="voice" className="flex-1 rounded-lg px-4 md:px-8 py-2 font-bold text-xs md:text-sm whitespace-nowrap flex items-center gap-2">
-            <Mic className="h-3 w-3" /> Voice AI
-            {!canAccessVoiceNotes && <Lock className="h-3 w-3 opacity-60" />}
+        <TabsList className="bg-muted/50 p-1 rounded-xl mb-8 w-full flex overflow-x-auto no-scrollbar justify-start md:justify-start gap-1 border border-border/30">
+          <TabsTrigger value="profile" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <User className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Profile
+          </TabsTrigger>
+          <TabsTrigger value="brand" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Brain className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Intelligence
+          </TabsTrigger>
+          <TabsTrigger value="ai" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Settings className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Automation
+          </TabsTrigger>
+          <TabsTrigger value="developer" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Code className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Developer
+          </TabsTrigger>
+          <TabsTrigger value="voice" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Mic className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Voice
+          </TabsTrigger>
+          <TabsTrigger value="account" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm data-[state=active]:text-destructive">
+            <ShieldAlert className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Account
           </TabsTrigger>
         </TabsList>
 
+        {/* Profile tab */}
         <TabsContent value="profile" className="space-y-6">
-          <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-8">
-            <Card className="border-border/50 shadow-sm rounded-2xl">
+          <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-6">
+            <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
               <CardContent className="flex flex-col items-center p-4 sm:p-8">
                 <div className="relative group mb-6">
-                  <Avatar className="h-32 w-32 border-2 border-border shadow-md">
-                    <AvatarImage src={user.avatar} className="object-cover" />
-                    <AvatarFallback className="text-3xl bg-muted text-muted-foreground font-bold">
-                      {user.name?.[0]?.toUpperCase() || 'O'}
-                    </AvatarFallback>
-                  </Avatar>
+                  <div className="relative">
+                    <Avatar className="h-28 w-28 sm:h-32 sm:w-32 border-2 border-border/50 shadow-md ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
+                      <AvatarImage src={user.avatar} className="object-cover" />
+                      <AvatarFallback className="text-3xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold">
+                        {user.name?.[0]?.toUpperCase() || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-[3px] border-background" />
+                  </div>
                   <Button
                     size="icon"
                     variant="secondary"
                     onClick={() => fileInputRef.current?.click()}
-                    className="absolute bottom-0 right-0 rounded-full shadow-lg border border-border"
+                    className="absolute bottom-0 right-0 rounded-full shadow-lg border border-border/40 bg-background hover:bg-muted h-9 w-9"
                   >
                     <Upload className="h-4 w-4" />
                   </Button>
@@ -350,24 +528,28 @@ export default function SettingsPage() {
                   <h3 className="text-xl font-bold">{user.name || 'Set your name'}</h3>
                   <p className="text-sm text-muted-foreground">{user.email}</p>
                 </div>
-                <Badge variant="outline" className="px-4 py-1 rounded-full font-bold uppercase tracking-wider text-[10px]">
+                <Badge variant="outline" className="px-4 py-1.5 rounded-full font-bold uppercase tracking-wider text-[10px] border-primary/20 bg-primary/5 text-primary">
                   {user.plan || 'Free'} Plan
                 </Badge>
               </CardContent>
             </Card>
 
-            <Card className="lg:col-span-2 border-border/50 shadow-sm rounded-2xl">
-              <CardHeader>
-                <CardTitle className="text-xl">Profile Details</CardTitle>
+            <Card className="lg:col-span-2 border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <User className="h-5 w-5 text-primary" />
+                  Profile Details
+                </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 gap-6">
+                <ResponsiveGrid className="grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Full Name</Label>
                     <Input
                       value={formData.name}
                       onChange={e => handleFieldChange('name', e.target.value)}
-                      className="rounded-xl h-11"
+                      className="rounded-xl h-11 bg-background border-border/40"
+                      placeholder="Your name"
                     />
                   </div>
                   <div className="space-y-2">
@@ -375,7 +557,8 @@ export default function SettingsPage() {
                     <Input
                       value={formData.username}
                       onChange={e => handleFieldChange('username', e.target.value)}
-                      className="rounded-xl h-11"
+                      className="rounded-xl h-11 bg-background border-border/40"
+                      placeholder="username"
                     />
                   </div>
                   <div className="space-y-2">
@@ -383,20 +566,21 @@ export default function SettingsPage() {
                     <Input
                       value={formData.company}
                       onChange={e => handleFieldChange('company', e.target.value)}
-                      className="rounded-xl h-11"
+                      className="rounded-xl h-11 bg-background border-border/40"
+                      placeholder="Your company"
                     />
                   </div>
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground mr-2">Calendar Booking Link</Label>
+                      <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Calendar Link</Label>
                       {(user as any).calendlyAccessToken ? (
                         <Badge variant="outline" className="text-[9px] font-black uppercase tracking-widest text-emerald-500 border-emerald-500/20 bg-emerald-500/5 h-5">
-                          <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> Calendly Connected
+                          <CheckCircle2 className="h-2.5 w-2.5 mr-1" /> Calendly
                         </Badge>
                       ) : (
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           className="h-5 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/5 p-0"
                           onClick={() => {
                             fetch('/api/oauth/connect/calendly')
@@ -404,7 +588,7 @@ export default function SettingsPage() {
                               .then(data => { if (data.authUrl) window.location.href = data.authUrl; });
                           }}
                         >
-                          <Plus className="h-2.5 w-2.5 mr-1" /> Connect Calendly
+                          <Plus className="h-2.5 w-2.5 mr-1" /> Connect
                         </Button>
                       )}
                     </div>
@@ -412,58 +596,59 @@ export default function SettingsPage() {
                       value={formData.calendarLink}
                       onChange={e => handleFieldChange('calendarLink', e.target.value)}
                       placeholder="https://calendly.com/your-link"
-                      className="rounded-xl h-11"
+                      className="rounded-xl h-11 bg-background border-border/40"
                     />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Timezone</Label>
                     <Select value={formData.timezone} onValueChange={v => handleFieldChange('timezone', v)}>
-                      <SelectTrigger className="rounded-xl h-11">
+                      <SelectTrigger className="rounded-xl h-11 bg-background border-border/40">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="America/New_York">Eastern (ET)</SelectItem>
                         <SelectItem value="America/Los_Angeles">Pacific (PT)</SelectItem>
                         <SelectItem value="Europe/London">London (GMT)</SelectItem>
-                        <SelectItem value="Africa/Lagos">West Africa Time (WAT / Lagos)</SelectItem>
+                        <SelectItem value="Africa/Lagos">West Africa (WAT)</SelectItem>
                         <SelectItem value="Asia/Dubai">Dubai (GST)</SelectItem>
                         <SelectItem value="Asia/Singapore">Singapore (SGT)</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </ResponsiveGrid>
-
-
               </CardContent>
             </Card>
           </ResponsiveGrid>
         </TabsContent>
 
+        {/* Brand Intelligence tab */}
         <TabsContent value="brand" className="space-y-6">
           <BrandKnowledgeBase embedded={true} />
         </TabsContent>
 
-
-
+        {/* Automation tab */}
         <TabsContent value="ai" className="space-y-6">
-          <Card className="border-border/50 shadow-sm rounded-2xl">
-            <CardHeader>
-              <CardTitle className="text-xl">Automation Controls</CardTitle>
-              <CardDescription>Manage how the system interact with leads.</CardDescription>
+          <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Settings className="h-5 w-5 text-primary" />
+                Automation Controls
+              </CardTitle>
+              <CardDescription>Manage how the system interacts with leads across all channels.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-gradient-to-br from-primary/5 to-purple-500/5 rounded-2xl border border-primary/20 hover:border-primary/40 transition-all gap-4">
-                <div className="flex gap-4">
-                  <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 shrink-0">
-                    <Brain className="w-8 h-8 text-primary" />
+            <CardContent className="space-y-4">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-gradient-to-br from-primary/5 to-purple-500/5 rounded-2xl border border-primary/15 hover:border-primary/30 transition-all gap-4">
+                <div className="flex gap-4 items-start">
+                  <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 shrink-0 mt-1">
+                    <Brain className="w-7 h-7 text-primary" />
                   </div>
                   <div>
-                    <h4 className="font-black text-base uppercase tracking-tight flex items-center gap-2">
+                    <h4 className="font-black text-sm uppercase tracking-tight flex items-center gap-2">
                       AI Autonomous Orchestrator
-                      <Badge className="bg-primary text-black text-[9px] font-black uppercase px-2 py-0 border-0">V3.5</Badge>
+                      <Badge className="bg-primary text-primary-foreground text-[9px] font-black uppercase px-2 py-0 border-0">V3.5</Badge>
                     </h4>
-                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                      Enable the global AI engine to handle outreach, replies, and follow-ups 24/7.
+                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed mt-1">
+                      Enable global AI engine to handle outreach, replies, and follow-ups 24/7.
                     </p>
                   </div>
                 </div>
@@ -476,117 +661,452 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
-                <div className="flex gap-4">
-                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
-                    <Mail className="w-8 h-8 text-primary" />
+              {[
+                {
+                  icon: Mail,
+                  title: "Inbound Lead Discovery",
+                  badge: "CRM Controls",
+                  desc: "Auto-create leads when unknown contacts send inbound emails. Disable to only sync existing contacts.",
+                  key: "discoverInboundLeads",
+                },
+                {
+                  icon: Phone,
+                  title: "Prioritize Booked Calls",
+                  badge: "Closing Strategy",
+                  desc: "Force AI to prioritize booking calls/demos over discussing pricing in email.",
+                  key: "prioritizeCalls",
+                },
+                {
+                  icon: Sparkles,
+                  title: "AI Dynamic Copy Adjustment",
+                  badge: "Advanced",
+                  desc: "Auto-rewrite message sequences when default copy underperforms.",
+                  key: "aiAdjustCopyEnabled",
+                },
+              ].map((item, i) => (
+                <div key={i} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-muted/20 rounded-2xl border border-border/30 hover:border-border/60 transition-all gap-4">
+                  <div className="flex gap-4 items-start">
+                    <div className="p-3 rounded-2xl bg-background border border-border/40 shrink-0 mt-1">
+                      <item.icon className="w-7 h-7 text-primary" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm flex items-center gap-2">
+                        {item.title}
+                        <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary/30">{item.badge}</Badge>
+                      </h4>
+                      <p className="text-sm text-muted-foreground max-w-md leading-relaxed mt-1">{item.desc}</p>
+                    </div>
+                  </div>
+                  <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
+                    <Switch
+                      checked={(formData as any)[item.key]}
+                      onCheckedChange={c => handleFieldChange(item.key, c)}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </div>
+                </div>
+              ))}
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-5 bg-muted/20 rounded-2xl border border-border/30 hover:border-border/60 transition-all gap-4">
+                <div className="flex gap-4 items-start">
+                  <div className="p-3 rounded-2xl bg-background border border-border/40 shrink-0 mt-1">
+                    <RefreshCw className="w-7 h-7 text-primary" />
                   </div>
                   <div>
-                    <h4 className="font-bold text-base flex items-center gap-2">
-                      Inbound Lead Discovery
-                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">CRM Controls</Badge>
-                    </h4>
-                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                      Automatically create leads in your CRM when unknown contacts send real-time inbound emails to your connected mailboxes. If disabled, Audnix will only sync threads for existing database contacts.
-                    </p>
-                  </div>
-                </div>
-                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
-                  <Switch
-                    checked={formData.discoverInboundLeads}
-                    onCheckedChange={c => handleFieldChange('discoverInboundLeads', c)}
-                    className="data-[state=checked]:bg-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
-                <div className="flex gap-4">
-                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
-                    <Phone className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-base flex items-center gap-2">
-                      Prioritize Booked Calls
-                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">Closing Strategy</Badge>
-                    </h4>
-                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                      Force the AI to prioritize getting leads onto a booked call or demo instead of discussing pricing or negotiating discounts directly over email/DMs.
-                    </p>
-                  </div>
-                </div>
-                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
-                  <Switch
-                    checked={formData.prioritizeCalls}
-                    onCheckedChange={c => handleFieldChange('prioritizeCalls', c)}
-                    className="data-[state=checked]:bg-primary"
-                  />
-                </div>
-              </div>
-
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
-                <div className="flex gap-4">
-                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
-                    <Sparkles className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-base flex items-center gap-2">
-                      AI Dynamic Copy Adjustment
-                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">Advanced</Badge>
-                    </h4>
-                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                      Enable the AI to autonomously rewrite message sequences for specific leads if the default copy is performing poorly or doesn't match the sentiment.
-                    </p>
-                  </div>
-                </div>
-                <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
-                  <Switch
-                    checked={formData.aiAdjustCopyEnabled}
-                    onCheckedChange={c => handleFieldChange('aiAdjustCopyEnabled', c)}
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-6 bg-muted/30 rounded-2xl border border-border hover:border-border/80 transition-all gap-4">
-                <div className="flex gap-4">
-                  <div className="p-3 rounded-2xl bg-background border border-border shrink-0">
-                    <RefreshCw className="w-8 h-8 text-primary" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-base flex items-center gap-2">
+                    <h4 className="font-bold text-sm flex items-center gap-2">
                       Historical Email Sync
-                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary">Mailboxes</Badge>
+                      <Badge variant="outline" className="text-[9px] uppercase font-bold text-primary border-primary/30">Mailboxes</Badge>
                     </h4>
-                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed">
-                      Manually synchronize past email history (up to 30 days) from connected custom domains to populate your inbox and lead database.
+                    <p className="text-sm text-muted-foreground max-w-md leading-relaxed mt-1">
+                      Sync past 30 days of email history from connected domains.
                     </p>
                   </div>
                 </div>
                 <div className="sm:shrink-0 w-full sm:w-auto flex justify-end">
-                  <Button 
-                    variant="outline" 
-                    onClick={() => syncEmailMutation.mutate()} 
+                  <Button
+                    variant="outline"
+                    onClick={() => syncEmailMutation.mutate()}
                     disabled={syncEmailMutation.isPending}
                     className="rounded-xl font-bold h-11 border-primary/20 hover:bg-primary/5 text-primary"
                   >
                     {syncEmailMutation.isPending ? <Loader2 className="animate-spin mr-2 h-4 w-4"/> : <RefreshCw className="mr-2 h-4 w-4"/>}
-                    Sync History Now
+                    Sync Now
                   </Button>
                 </div>
               </div>
-
-
-
             </CardContent>
           </Card>
         </TabsContent>
 
+        {/* Developer tab */}
+        <TabsContent value="developer" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* API Keys */}
+            <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm lg:col-span-2">
+              <CardHeader className="pb-4 flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl flex items-center gap-2">
+                    <Key className="h-5 w-5 text-primary" />
+                    API Keys
+                  </CardTitle>
+                  <CardDescription>Authenticate API requests with a Bearer token. Keys start with <code className="text-primary font-mono text-xs">audnix_</code> for brand consistency.</CardDescription>
+                </div>
+                <Button
+                  onClick={() => setShowCreateKey(true)}
+                  className="rounded-xl font-bold text-xs h-10"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Key
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {showCreateKey && (
+                  <div className="mb-6 p-5 bg-muted/20 rounded-2xl border border-border/30 space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Key Name</Label>
+                        <Input
+                          value={newKeyName}
+                          onChange={e => setNewKeyName(e.target.value)}
+                          placeholder="e.g. Production API"
+                          className="rounded-xl h-11 bg-background border-border/40"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && newKeyName.trim() && !createApiKeyMutation.isPending) {
+                              createApiKeyMutation.mutate(newKeyName.trim());
+                            }
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Permissions</Label>
+                        <Select defaultValue="read_write" onValueChange={() => {}}>
+                          <SelectTrigger className="rounded-xl h-11 bg-background border-border/40">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="read_write">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                                <span>Read & Write</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="read_only">
+                              <div className="flex items-center gap-2">
+                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span>Read Only</span>
+                              </div>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button variant="ghost" onClick={() => { setShowCreateKey(false); setNewKeyName(""); }} className="rounded-xl">
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          if (newKeyName.trim()) createApiKeyMutation.mutate(newKeyName.trim());
+                        }}
+                        disabled={!newKeyName.trim() || createApiKeyMutation.isPending}
+                        className="rounded-xl font-bold"
+                      >
+                        {createApiKeyMutation.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : <>Generate Key</>}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {showNewKey && (
+                  <div className="mb-6 p-5 bg-primary/5 rounded-2xl border border-primary/20 space-y-4">
+                    <div className="flex items-center gap-2 text-primary">
+                      <Key className="h-5 w-5" />
+                      <span className="font-bold text-sm">Your API Key</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Copy this key now. <strong>You won't be able to see it again</strong> for security reasons.
+                      If you lose it, delete and recreate.
+                    </p>
+                    <div className="flex gap-2">
+                      <code className="flex-1 p-3 bg-background rounded-xl border border-border/40 text-xs font-mono break-all select-all">
+                        {showNewKey}
+                      </code>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => {
+                          navigator.clipboard.writeText(showNewKey);
+                          setCopiedField('API Key');
+                          toast({
+                            title: "API Key Copied",
+                            description: "Paste it somewhere safe — you won't see it again.",
+                          });
+                          setTimeout(() => setCopiedField(null), 2000);
+                        }}
+                        className="rounded-xl shrink-0 h-11 w-11"
+                      >
+                        {copiedField === 'API Key' ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+                      <ShieldAlert className="h-4 w-4 text-amber-500 shrink-0" />
+                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                        Treat this like a password. Never share it or commit it to code.
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowNewKey(null)}
+                      className="text-xs font-bold"
+                    >
+                      I've saved it — Done
+                    </Button>
+                  </div>
+                )}
+
+                {apiKeys && apiKeys.length > 0 ? (
+                  <div className="space-y-3">
+                    {apiKeys.map((apiKey) => (
+                      <ApiKeyRow
+                        key={apiKey.id}
+                        apiKey={apiKey}
+                        onDelete={(id) => deleteApiKeyMutation.mutate(id)}
+                        onEdit={(id, name) => editKeyNameMutation.mutate({ id, name })}
+                        onCopy={(text) => {
+                          navigator.clipboard.writeText(text);
+                          toast({ title: "Copied", description: "API key fingerprint copied." });
+                        }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Key className="h-10 w-10 mx-auto mb-4 opacity-20" />
+                    <p className="font-bold text-sm">No API keys yet</p>
+                    <p className="text-xs mt-1">Create your first key to access the Audnix API programmatically.</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Quick Start Example */}
+            <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <Terminal className="h-5 w-5 text-primary" />
+                  Quick Start
+                </CardTitle>
+                <CardDescription>Use your API key with curl from anywhere — no IP whitelist needed.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="p-4 bg-muted/10 rounded-xl border border-border/20">
+                  <code className="text-xs font-mono leading-relaxed block whitespace-pre-wrap text-foreground">{`# List your leads
+curl -H "Authorization: Bearer audnix_..." \\
+  ${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/leads
+
+# Get campaign stats
+curl -H "Authorization: Bearer audnix_..." \\
+  ${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/outreach/campaigns
+
+# Dashboard analytics
+curl -H "Authorization: Bearer audnix_..." \\
+  ${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/dashboard/stats`}</code>
+                </div>
+                <div className="p-3 bg-primary/5 rounded-xl border border-primary/10">
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    <strong className="text-foreground">No IP restrictions.</strong> Your API key is your identity.
+                    All endpoints return data scoped to your account. Auth/login endpoints are not accessible via API key.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* MCP Server */}
+            <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm lg:col-span-2">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl flex items-center gap-2">
+                  <Server className="h-5 w-5 text-primary" />
+                  MCP Server
+                </CardTitle>
+                <CardDescription>Connect any LLM agent — Claude, GPT, Gemini, Cursor, and 5000+ more MCP-compatible clients.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* LLM Provider Badges */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 mr-2">Compatible:</span>
+                  {[
+                    ["Claude", "#d97706"],
+                    ["Gemini", "#4285F4"],
+                    ["ChatGPT", "#10a37f"],
+                    ["Cursor", "#6c47ff"],
+                    ["Copilot", "#0078d4"],
+                    ["Cline", "#f97316"],
+                    ["Continue", "#7c3aed"],
+                    ["Windsurf", "#06b6d4"],
+                    ["OpenCode", "#06b6d4"],
+                    ["Claude Code", "#d97706"],
+                  ].map(([name, color]) => (
+                    <div key={name} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border/30" style={{backgroundColor: `${color}08`}}>
+                      <div className="w-2 h-2 rounded-full" style={{backgroundColor: color}} />
+                      <span className="text-[10px] font-bold text-muted-foreground">{name}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Server URL */}
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Server URL</Label>
+                  <div className="flex gap-2">
+                    <code className="flex-1 p-3 bg-muted/20 rounded-xl border border-border/40 text-xs font-mono select-all">
+                      {typeof window !== 'undefined' ? `${window.location.origin}/api/mcp` : 'https://audnixai.com/api/mcp'}
+                    </code>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleCopyToClipboard(`${window.location.origin}/api/mcp`, 'MCP URL')}
+                      className="rounded-xl shrink-0 h-11 w-11"
+                    >
+                      {copiedField === 'MCP URL' ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Config Blocks for Different LLMs */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {[
+                    {
+                      title: "Claude Desktop",
+                      code: `{
+  "mcpServers": {
+    "audnix": {
+      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}`,
+                      key: "claude-config"
+                    },
+                    {
+                      title: "VS Code / Cursor",
+                      code: `{
+  "mcp": {
+    "servers": {
+      "audnix": {
+        "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+        "headers": {
+          "Authorization": "Bearer YOUR_API_KEY"
+        }
+      }
+    }
+  }
+}`,
+                      key: "vscode-config"
+                    },
+                    {
+                      title: "OpenAI GPT (Custom GPT)",
+                      code: `{
+  "actions": [{
+    "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+    "headers": {
+      "Authorization": "Bearer YOUR_API_KEY"
+    }
+  }]
+}`,
+                      key: "openai-config"
+                    },
+                    {
+                      title: "OpenCode / Cline",
+                      code: `{
+  "mcpServers": {
+    "audnix": {
+      "type": "url",
+      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_API_KEY"
+      }
+    }
+  }
+}`,
+                      key: "opencode-config"
+                    },
+                  ].map((config) => (
+                    <div key={config.key} className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">{config.title}</h4>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 rounded-lg"
+                          onClick={() => handleCopyToClipboard(config.code, config.key)}
+                        >
+                          {copiedField === config.key ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
+                      <div className="p-3 bg-muted/10 rounded-xl border border-border/20 relative group">
+                        <code className="text-[10px] font-mono leading-relaxed block whitespace-pre-wrap text-foreground/80">{config.code}</code>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Separator className="bg-border/20" />
+
+                {/* Available MCP Tools */}
+                <div>
+                  <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-3">Available Tools</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {[
+                      { name: "get_leads", desc: "Query leads by status, date, category", danger: false },
+                      { name: "get_campaigns", desc: "List campaigns and performance", danger: false },
+                      { name: "get_analytics", desc: "Dashboard analytics data", danger: false },
+                      { name: "get_inbox", desc: "Read inbox messages", danger: false },
+                      { name: "send_message", desc: "Send outreach messages", danger: true },
+                      { name: "manage_webhooks", desc: "Create & manage webhooks", danger: true },
+                    ].map((tool) => (
+                      <div key={tool.name} className="flex items-center gap-2 p-2.5 bg-muted/5 rounded-xl border border-border/20">
+                        <div className={`p-1 rounded-lg ${tool.danger ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
+                          <Terminal className={`h-3 w-3 ${tool.danger ? 'text-amber-500' : 'text-primary'}`} />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <code className="text-[10px] font-bold font-mono truncate">{tool.name}</code>
+                            {tool.danger && <span className="text-[7px] font-bold uppercase text-amber-500 shrink-0">⚠️</span>}
+                          </div>
+                          <p className="text-[9px] text-muted-foreground truncate">{tool.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Permission Info */}
+                <div className="p-4 bg-gradient-to-br from-primary/5 to-purple-500/5 rounded-2xl border border-primary/15">
+                  <div className="flex items-start gap-3">
+                    <Shield className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-bold text-sm mb-1">Permissions & Safety</h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        <strong className="text-foreground">Account deletion is NOT possible</strong> via MCP or API key — there is no tool or endpoint for it.
+                        Deleting leads requires user confirmation. Auth, billing, and admin endpoints are blocked.
+                        A skill file is available for LLM agents (<code className="text-[9px] font-mono bg-primary/10 px-1 rounded">audnix-mcp.md</code>) that explains all rules automatically.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Voice AI tab */}
         <TabsContent value="voice" className="space-y-6">
-          <Card className="border-border/50 shadow-sm rounded-2xl">
+          <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
             <CardContent className="p-12 text-center">
               <div className="flex justify-center mb-6">
-                <div className="p-4 rounded-full bg-muted">
+                <div className="p-4 rounded-full bg-muted/30 border border-border/20">
                   <Construction className="w-12 h-12 text-muted-foreground" />
                 </div>
               </div>
@@ -597,7 +1117,276 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Account tab */}
+        <TabsContent value="account" className="space-y-6">
+          <Card className="border-destructive/20 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-xl flex items-center gap-2 text-destructive">
+                <ShieldAlert className="h-5 w-5" />
+                Danger Zone
+              </CardTitle>
+              <CardDescription>Permanent actions that cannot be undone.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {deletionStatus?.pending ? (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-6 bg-destructive/5 border-2 border-destructive/30 rounded-2xl space-y-4"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-full bg-destructive/10">
+                      <Clock className="h-8 w-8 text-destructive" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-base">Deletion Scheduled</h4>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Your account is scheduled for permanent deletion.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 bg-background/50 rounded-xl border border-border/30">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Time Remaining</span>
+                      <span className="text-sm font-bold text-destructive">
+                        {deletionStatus.remainingMs ? formatRemainingTime(deletionStatus.remainingMs) : 'Calculating...'}
+                      </span>
+                    </div>
+                    {deletionStatus.scheduledFor && (
+                      <p className="text-xs text-muted-foreground">
+                        Scheduled for {new Date(deletionStatus.scheduledFor).toLocaleString()}
+                      </p>
+                    )}
+                    <div className="mt-3 h-2 w-full bg-muted/30 rounded-full overflow-hidden">
+                      <motion.div
+                        initial={{ width: "0%" }}
+                        animate={{ width: "100%" }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                        className="h-full bg-gradient-to-r from-destructive/40 to-destructive rounded-full"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" className="rounded-xl font-bold flex-1 h-11 border-destructive/30 hover:bg-destructive/5 hover:text-destructive">
+                          Cancel Deletion
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent className="rounded-2xl max-w-md">
+                        <AlertDialogHeader>
+                          <AlertDialogTitle className="flex items-center gap-2">
+                            <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                            Keep Your Account?
+                          </AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Your account will be kept active and all pending deletion will be cancelled.
+                            You can continue using Audnix as before.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel className="rounded-xl">Go back</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => cancelDeletionMutation.mutate()}
+                            className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+                          >
+                            Keep Account
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                </motion.div>
+              ) : (
+                <div className="p-6 bg-destructive/5 border border-destructive/20 rounded-2xl space-y-4">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 rounded-full bg-destructive/10 shrink-0">
+                      <Trash2 className="h-6 w-6 text-destructive" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-base">Delete Account</h4>
+                      <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                        Permanently delete your account and all associated data. This includes:
+                      </p>
+                      <ul className="text-xs text-muted-foreground mt-3 space-y-1.5 list-disc list-inside">
+                        <li>All leads, messages, and campaign data</li>
+                        <li>Connected email accounts and integrations</li>
+                        <li>OAuth tokens for Google, Calendly, etc.</li>
+                        <li>Billing information and API keys</li>
+                        <li>Brand knowledge and AI training data</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" className="rounded-xl font-bold h-11 w-full sm:w-auto">
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Request Account Deletion
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="rounded-2xl max-w-md border-destructive/30">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+                          <AlertTriangle className="h-6 w-6 animate-pulse" />
+                          Are you absolutely sure?
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3">
+                          <p>
+                            This action <strong>cannot</strong> be undone. Your account will be scheduled
+                            for permanent deletion within <strong>24-48 hours</strong>.
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            You can cancel the deletion anytime before the scheduled time by visiting
+                            this same settings page.
+                          </p>
+                          <div className="p-3 bg-destructive/10 rounded-xl border border-destructive/20 mt-2">
+                            <p className="text-xs font-bold text-destructive flex items-center gap-2">
+                              <ShieldAlert className="h-4 w-4 shrink-0" />
+                              After deletion, all data will be permanently erased and cannot be recovered.
+                            </p>
+                          </div>
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                        <AlertDialogCancel className="rounded-xl mt-0">Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => requestDeletionMutation.mutate()}
+                          disabled={requestDeletionMutation.isPending}
+                          className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold"
+                        >
+                          {requestDeletionMutation.isPending ? (
+                            <><Loader2 className="animate-spin h-4 w-4 mr-2" /> Scheduling...</>
+                          ) : (
+                            <><Trash2 className="h-4 w-4 mr-2" /> Yes, delete my account</>
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
     </PageWrapper>
+  );
+}
+
+function ApiKeyRow({
+  apiKey,
+  onDelete,
+  onEdit,
+  onCopy,
+}: {
+  apiKey: ApiKey;
+  onDelete: (id: string) => void;
+  onEdit: (id: string, name: string) => void;
+  onCopy: (text: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editName, setEditName] = useState(apiKey.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) inputRef.current.focus();
+  }, [editing]);
+
+  return (
+    <div className="flex items-center justify-between p-4 bg-muted/10 rounded-xl border border-border/20 hover:border-border/40 transition-all group">
+      <div className="flex items-center gap-4 min-w-0 flex-1">
+        <div className="p-2 rounded-lg bg-primary/10 shrink-0">
+          <Key className="h-4 w-4 text-primary" />
+        </div>
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="flex items-center gap-2">
+              <Input
+                ref={inputRef}
+                value={editName}
+                onChange={e => setEditName(e.target.value)}
+                className="h-8 rounded-lg text-sm font-bold bg-background border-border/40 max-w-[200px]"
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && editName.trim()) {
+                    onEdit(apiKey.id, editName.trim());
+                    setEditing(false);
+                  }
+                  if (e.key === 'Escape') setEditing(false);
+                }}
+              />
+              <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg" onClick={() => {
+                if (editName.trim() && editName !== apiKey.name) {
+                  onEdit(apiKey.id, editName.trim());
+                }
+                setEditing(false);
+              }}>
+                <Check className="h-3.5 w-3.5 text-emerald-500" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <p className="font-bold text-sm truncate">{apiKey.name}</p>
+              <button
+                onClick={() => { setEditName(apiKey.name); setEditing(true); }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-muted"
+              >
+                <Edit3 className="h-3 w-3 text-muted-foreground" />
+              </button>
+              <Badge className={`text-[8px] font-bold uppercase px-1.5 py-0 border-0 ${apiKey.scope === 'read_only' ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'}`}>
+                {apiKey.scope === 'read_only' ? 'Read' : 'Read/Write'}
+              </Badge>
+            </div>
+          )}
+          <div className="flex items-center gap-3 mt-0.5">
+            <code className="text-xs font-mono text-muted-foreground/70">{apiKey.key}</code>
+            <button
+              onClick={() => onCopy(apiKey.key)}
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <Copy className="h-3 w-3 text-muted-foreground/40 hover:text-foreground" />
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+            Created {apiKey.createdAt ? new Date(apiKey.createdAt).toLocaleDateString() : 'Unknown'}
+            {apiKey.lastUsedAt ? ` · Used ${new Date(apiKey.lastUsedAt).toLocaleDateString()}` : ' · Never used'}
+          </p>
+        </div>
+      </div>
+      <AlertDialog>
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-xl text-muted-foreground hover:text-destructive shrink-0 opacity-60 group-hover:opacity-100 transition-opacity"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent className="rounded-2xl max-w-sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Delete API Key?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently revoke <strong>{apiKey.name}</strong>. Any services using this key will immediately lose access.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Keep Key</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => onDelete(apiKey.id)}
+              className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold"
+            >
+              Delete Key
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }

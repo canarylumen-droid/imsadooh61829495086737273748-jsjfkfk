@@ -4,7 +4,7 @@
 
 import { Router } from 'express';
 import { createOutreachCampaign, validateCampaignSafety, formatCampaignMetrics } from '@services/outreach-worker/src/sales-engine/outreach-engine.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { isValidUUID } from '@shared/lib/utils/validation.js';
 import { verifyDomainDns } from '@services/email-service/src/email/dns-verification.js';
 import { generateExpertOutreach, generateCampaignTemplateSequence } from '@services/brain-worker/src/ai-lib/core/conversation-ai.js';
@@ -35,7 +35,7 @@ const router = Router();
  * POST /api/outreach/preview
  * Generate a high-fidelity outreach preview for a lead
  */
-router.post('/preview', requireAuth, async (req, res) => {
+router.post('/preview', requireAuthOrApiKey, async (req, res) => {
   try {
     const userId = req.session?.userId!;
     const { lead } = req.body;
@@ -59,7 +59,7 @@ router.post('/preview', requireAuth, async (req, res) => {
  * POST /api/outreach/generate-template
  * Generate a complete AI-driven sequence using Brand PDF context
  */
-router.post('/generate-template', requireAuth, async (req, res) => {
+router.post('/generate-template', requireAuthOrApiKey, async (req, res) => {
   let timeoutId: NodeJS.Timeout;
   try {
     const userId = req.session?.userId!;
@@ -91,7 +91,7 @@ router.post('/generate-template', requireAuth, async (req, res) => {
  * GET /api/outreach/campaigns
  * List all campaigns for the user
  */
-router.get('/campaigns', requireAuth, async (req, res) => {
+router.get('/campaigns', requireAuthOrApiKey, async (req, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -106,7 +106,7 @@ router.get('/campaigns', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) => {
+router.post('/campaigns', requireAuthOrApiKey, campaignCreateLimiter, async (req, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -449,7 +449,7 @@ router.post('/campaigns', requireAuth, campaignCreateLimiter, async (req, res) =
  * POST /api/outreach/campaigns/:id/start
  * Start a draft campaign
  */
-router.post('/campaigns/:id/start', requireAuth, async (req, res) => {
+router.post('/campaigns/:id/start', requireAuthOrApiKey, async (req, res) => {
   try {
     const userId = req.session?.userId;
     const { id } = req.params;
@@ -522,7 +522,7 @@ router.post('/campaigns/:id/start', requireAuth, async (req, res) => {
  * POST /api/outreach/campaigns/:id/pause
  * Pause an active campaign
  */
-router.post('/campaigns/:id/pause', requireAuth, async (req, res) => {
+router.post('/campaigns/:id/pause', requireAuthOrApiKey, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.session?.userId;
@@ -554,7 +554,7 @@ router.post('/campaigns/:id/pause', requireAuth, async (req, res) => {
  * POST /api/outreach/campaigns/:id/resume
  * Resume a paused campaign
  */
-router.post('/campaigns/:id/resume', requireAuth, async (req, res) => {
+router.post('/campaigns/:id/resume', requireAuthOrApiKey, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.session?.userId;
@@ -586,7 +586,7 @@ router.post('/campaigns/:id/resume', requireAuth, async (req, res) => {
  * POST /api/outreach/campaigns/:id/abort
  * Abort a campaign
  */
-router.post('/campaigns/:id/abort', requireAuth, async (req, res) => {
+router.post('/campaigns/:id/abort', requireAuthOrApiKey, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.session?.userId;
@@ -653,7 +653,7 @@ router.post('/campaigns/:id/abort', requireAuth, async (req, res) => {
  * POST /api/outreach/campaigns/:id/force-requeue
  * Manually release stuck 'processing' leads back to 'pending' for immediate re-assignment.
  */
-router.post('/campaigns/:id/force-requeue', requireAuth, async (req, res) => {
+router.post('/campaigns/:id/force-requeue', requireAuthOrApiKey, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.session?.userId;
@@ -690,7 +690,7 @@ router.post('/campaigns/:id/force-requeue', requireAuth, async (req, res) => {
  * DELETE /api/outreach/campaigns/:id
  * Delete a campaign and all its data
  */
-router.delete('/campaigns/:id', requireAuth, async (req, res) => {
+router.delete('/campaigns/:id', requireAuthOrApiKey, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.session?.userId;
@@ -746,7 +746,7 @@ router.delete('/campaigns/:id', requireAuth, async (req, res) => {
  * GET /api/outreach/campaigns/:id
  * Get campaign details with live stats
  */
-router.get('/campaigns/:id', requireAuth, async (req, res) => {
+router.get('/campaigns/:id', requireAuthOrApiKey, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.session?.userId;
@@ -791,7 +791,7 @@ router.get('/campaigns/:id', requireAuth, async (req, res) => {
  * GET /api/outreach/strategy
  * Get current outreach strategy info
  */
-router.get('/strategy', requireAuth, async (req, res) => {
+router.get('/strategy', requireAuthOrApiKey, async (req, res) => {
   try {
     const { OUTREACH_STRATEGY, REVENUE_PROJECTION } = await import('@services/outreach-worker/src/sales-engine/outreach-strategy.js');
 
@@ -809,7 +809,7 @@ router.get('/strategy', requireAuth, async (req, res) => {
  * POST /api/outreach/projections
  * Predict campaign duration and revenue based on selected mailboxes
  */
-router.post('/projections', requireAuth, async (req, res) => {
+router.post('/projections', requireAuthOrApiKey, async (req, res) => {
   try {
     const { mailboxIds, leadCount } = req.body;
     const userId = req.session?.userId!;
@@ -1249,7 +1249,7 @@ const healthRouter = Router();
  * GET /api/outreach/mailbox-health
  * Get health status of all connected mailboxes
  */
-healthRouter.get('/mailbox-health', requireAuth, async (req, res) => {
+healthRouter.get('/mailbox-health', requireAuthOrApiKey, async (req, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -1265,7 +1265,7 @@ healthRouter.get('/mailbox-health', requireAuth, async (req, res) => {
  * POST /api/outreach/mailbox-health/:id/check
  * Force a health check on a specific mailbox
  */
-healthRouter.post('/mailbox-health/:id/check', requireAuth, async (req, res) => {
+healthRouter.post('/mailbox-health/:id/check', requireAuthOrApiKey, async (req, res) => {
   try {
     const userId = req.session?.userId;
     const { id } = req.params;
@@ -1287,7 +1287,7 @@ healthRouter.post('/mailbox-health/:id/check', requireAuth, async (req, res) => 
  * POST /api/outreach/mailbox-health/reassign
  * Manually reassign leads from one mailbox to another
  */
-healthRouter.post('/mailbox-health/reassign', requireAuth, async (req, res) => {
+healthRouter.post('/mailbox-health/reassign', requireAuthOrApiKey, async (req, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -1308,7 +1308,7 @@ healthRouter.post('/mailbox-health/reassign', requireAuth, async (req, res) => {
  * POST /api/outreach/mailbox-health/redistribute
  * Manually trigger lead redistribution from failed mailboxes
  */
-healthRouter.post('/mailbox-health/redistribute', requireAuth, async (req, res) => {
+healthRouter.post('/mailbox-health/redistribute', requireAuthOrApiKey, async (req, res) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Unauthorized' });

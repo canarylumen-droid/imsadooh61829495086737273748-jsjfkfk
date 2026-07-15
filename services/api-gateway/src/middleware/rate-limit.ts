@@ -155,6 +155,40 @@ export const smtpRateLimiter = rateLimit(
   )
 );
 
+export const developerLimiter = rateLimit(
+  createRateLimiterOptions(
+    {
+      windowMs: 15 * 60 * 1000,
+      max: 30,
+      message: { error: 'Too many developer API requests. Max 30 per 15 minutes.' },
+      keyGenerator: createUserKeyGenerator('dev'),
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: false
+    },
+    'rl:dev:'
+  )
+);
+
+export const apiKeyRateLimiter = rateLimit(
+  createRateLimiterOptions(
+    {
+      windowMs: 60 * 1000,
+      max: 60,
+      message: { error: 'API rate limit exceeded. Max 60 requests per minute.' },
+      keyGenerator: (req: Request): string => {
+        const apiKeyUser = (req as any).userId;
+        if (apiKeyUser) return `apikey:${apiKeyUser}`;
+        return `ip:${req.ip || 'unknown'}`;
+      },
+      standardHeaders: true,
+      legacyHeaders: false,
+      validate: false
+    },
+    'rl:apikey:'
+  )
+);
+
 export const emailImportLimiter = rateLimit(
   createRateLimiterOptions(
     {

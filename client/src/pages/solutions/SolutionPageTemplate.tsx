@@ -111,7 +111,7 @@ export function SolutionPageTemplate({
 
                             <div className="flex flex-wrap gap-4">
                                 <Link href="/signup">
-                                    <Button size="lg" className="h-14 px-8 rounded-full bg-primary text-black font-black uppercase tracking-widest shadow-[0_0_30px_rgba(0,210,255,0.3)] hover:scale-105 transition-all text-xs">
+                                    <Button size="lg" className="h-14 px-8 rounded-full bg-primary text-primary-foreground font-black uppercase tracking-widest shadow-[0_0_30px_rgba(0,210,255,0.3)] hover:scale-105 transition-all text-xs">
                                         Get Started <ArrowRight className="ml-2 w-4 h-4" />
                                     </Button>
                                 </Link>
@@ -303,7 +303,7 @@ export function SolutionPageTemplate({
                             <motion.div
                                 initial={{ y: 20, opacity: 0 }}
                                 whileInView={{ y: 0, opacity: 1 }}
-                                className="absolute bottom-10 right-10 bg-primary text-black p-4 rounded-2xl shadow-[0_10px_40px_rgba(0,210,255,0.4)] flex items-center gap-3 scale-110"
+                                className="absolute bottom-10 right-10 bg-primary text-primary-foreground p-4 rounded-2xl shadow-[0_10px_40px_rgba(0,210,255,0.4)] flex items-center gap-3 scale-110"
                             >
                                 <MessageSquare className="w-5 h-5" />
                                 <span className="text-[10px] font-black uppercase tracking-widest">Lead Verified</span>
@@ -358,7 +358,7 @@ export function SolutionPageTemplate({
                             </div>
                             <button
                                 onClick={() => document.getElementById('expert-chat-trigger')?.click()}
-                                className="h-10 px-6 rounded-lg bg-primary text-black font-black uppercase tracking-widest text-[9px] hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-primary/20 active:scale-95"
+                                className="h-10 px-6 rounded-lg bg-primary text-primary-foreground font-black uppercase tracking-widest text-[9px] hover:brightness-110 transition-all flex items-center gap-2 shadow-lg shadow-primary/20 active:scale-95"
                             >
                                 <MessageSquare className="w-4 h-4" />
                                 Chat with an expert
@@ -371,7 +371,7 @@ export function SolutionPageTemplate({
                     <h2 className="text-3xl md:text-5xl font-black tracking-tight leading-tight uppercase">Start Your <br /> <span className="text-primary">Evolution.</span></h2>
                     <p className="text-white/40 max-w-lg mx-auto text-sm font-medium">Join the top 1% of agencies and creators who have automated their revenue growth.</p>
                     <Link href="/auth">
-                        <Button size="lg" className="h-14 px-10 rounded-full bg-primary text-black font-black uppercase tracking-widest shadow-xl shadow-primary/30 hover:scale-105 transition-all text-xs">
+                        <Button size="lg" className="h-14 px-10 rounded-full bg-primary text-primary-foreground font-black uppercase tracking-widest shadow-xl shadow-primary/30 hover:scale-105 transition-all text-xs">
                             Initialize Access
                         </Button>
                     </Link>

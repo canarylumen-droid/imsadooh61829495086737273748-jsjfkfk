@@ -319,7 +319,7 @@ export function Navigation() {
               </div>
 
               <div className="mt-4 flex gap-2">
-                <Button className="flex-1 h-10 rounded-xl text-xs font-bold uppercase tracking-widest bg-primary text-black"
+                <Button className="flex-1 h-10 rounded-xl text-xs font-bold uppercase tracking-widest bg-primary text-primary-foreground"
                   onClick={() => { setMobileMenuOpen(false); window.location.href = '/auth'; }}>
                   Get Started
                 </Button>

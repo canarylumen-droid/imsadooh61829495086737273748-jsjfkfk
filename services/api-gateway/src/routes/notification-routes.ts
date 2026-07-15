@@ -3,13 +3,13 @@ import { db } from "@shared/lib/db/db.js";
 import { pushSubscriptions } from "@audnix/shared";
 import { eq } from "drizzle-orm";
 import { storage } from "@shared/lib/storage/storage.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuthOrApiKey } from "../middleware/auth.js";
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
 
 const router = Router();
 
 // Get list of notifications for the current user (with pagination + date filter)
-router.get("/", requireAuth, async (req, res) => {
+router.get("/", requireAuthOrApiKey, async (req, res) => {
     try {
         const userId = req.session?.userId || (req.user as any)?.id;
         if (!userId) {
@@ -36,7 +36,7 @@ router.get("/", requireAuth, async (req, res) => {
 });
 
 // Mark a specific notification as read
-router.patch("/:id/read", requireAuth, async (req, res) => {
+router.patch("/:id/read", requireAuthOrApiKey, async (req, res) => {
     try {
         const userId = req.session?.userId || (req.user as any)?.id;
         const notificationId = req.params.id;
@@ -58,7 +58,7 @@ router.patch("/:id/read", requireAuth, async (req, res) => {
 });
 
 // Mark all notifications as read
-router.post("/mark-all-read", requireAuth, async (req, res) => {
+router.post("/mark-all-read", requireAuthOrApiKey, async (req, res) => {
     try {
         const userId = req.session?.userId || (req.user as any)?.id;
         if (!userId) {
@@ -78,7 +78,7 @@ router.post("/mark-all-read", requireAuth, async (req, res) => {
 });
 
 // Clear all notifications (permanently delete from DB)
-router.post("/clear-all", requireAuth, async (req, res) => {
+router.post("/clear-all", requireAuthOrApiKey, async (req, res) => {
     try {
         const userId = req.session?.userId || (req.user as any)?.id;
         if (!userId) {
@@ -98,7 +98,7 @@ router.post("/clear-all", requireAuth, async (req, res) => {
 });
 
 // Delete a single notification
-router.delete("/:id", requireAuth, async (req, res) => {
+router.delete("/:id", requireAuthOrApiKey, async (req, res) => {
     try {
         const userId = req.session?.userId || (req.user as any)?.id;
         const notificationId = req.params.id;

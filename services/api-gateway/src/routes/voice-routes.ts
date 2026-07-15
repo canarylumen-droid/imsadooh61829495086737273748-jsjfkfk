@@ -1,5 +1,5 @@
 ﻿import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { voiceAI } from '@services/brain-worker/src/ai-lib/specialized/voice-ai-service.js';
 import { uploadVoice } from '@shared/lib/storage/file-upload.js';
 import type { User } from '@audnix/shared';
@@ -18,7 +18,7 @@ const planLimits: Record<PlanType, number> = {
  * Upload voice samples and clone user's voice
  * POST /api/voice/clone
  */
-router.post('/clone', requireAuth, uploadVoice.array('voice_samples', 3), async (req: Request, res: Response): Promise<void> => {
+router.post('/clone', requireAuthOrApiKey, uploadVoice.array('voice_samples', 3), async (req: Request, res: Response): Promise<void> => {
   try {
     const user = req.user as User;
     const userId = user.id;
@@ -53,7 +53,7 @@ router.post('/clone', requireAuth, uploadVoice.array('voice_samples', 3), async 
  * Generate and send voice note to a specific lead
  * POST /api/voice/send/:leadId
  */
-router.post('/send/:leadId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/send/:leadId', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const user = req.user as User;
     const userId = user.id;
@@ -82,7 +82,7 @@ router.post('/send/:leadId', requireAuth, async (req: Request, res: Response): P
  * Batch send voice notes to all warm leads
  * POST /api/voice/send-to-warm-leads
  */
-router.post('/send-to-warm-leads', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/send-to-warm-leads', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const user = req.user as User;
     const userId = user.id;
@@ -104,7 +104,7 @@ router.post('/send-to-warm-leads', requireAuth, async (req: Request, res: Respon
  * Check voice usage and limits (in minutes)
  * GET /api/voice/usage
  */
-router.get('/usage', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/usage', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const user = req.user as User;
 

@@ -5,7 +5,7 @@ import { calculateLeadScore, findDuplicateLeads, enrichLeadCompany, addTimelineE
 import { detectLeadIntent, suggestSmartReply, detectObjection, predictDealAmount, assessChurnRisk, generateLeadIntelligenceDashboard } from "@services/brain-worker/src/ai-lib/context/lead-intelligence.js";
 import { generateOptimizedMessage } from "@services/brain-worker/src/orchestrator/agents/universal-sales-agent.js";
 import { generateContextAwareMessage } from "@services/brain-worker/src/orchestrator/agents/universal-sales-agent-integrated.js";
-import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
+import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { storage } from "@shared/lib/storage/storage.js";
 
 const router: Router = express.Router();
@@ -100,7 +100,7 @@ interface GenerateMessageRequestBody {
 }
 
 // ============ LEAD SCORING ============
-router.post("/score", requireAuth, async (req: Request<any, any, ScoreRequestBody>, res: Response): Promise<void> => {
+router.post("/score", requireAuthOrApiKey, async (req: Request<any, any, ScoreRequestBody>, res: Response): Promise<void> => {
   try {
     const { lead, messages } = req.body;
     const score = await calculateLeadScore(lead, messages);
@@ -118,7 +118,7 @@ router.post("/score", requireAuth, async (req: Request<any, any, ScoreRequestBod
 });
 
 // ============ LEAD INTENT DETECTION ============
-router.post("/intent", requireAuth, async (req: Request<any, any, IntentRequestBody>, res: Response): Promise<void> => {
+router.post("/intent", requireAuthOrApiKey, async (req: Request<any, any, IntentRequestBody>, res: Response): Promise<void> => {
   try {
     const { lead, messages } = req.body;
     const intent = await detectLeadIntent(messages || [], lead);
@@ -135,7 +135,7 @@ router.post("/intent", requireAuth, async (req: Request<any, any, IntentRequestB
 });
 
 // ============ SMART REPLY SUGGESTIONS ============
-router.post("/smart-reply", requireAuth, async (req: Request<any, any, SmartReplyRequestBody>, res: Response): Promise<void> => {
+router.post("/smart-reply", requireAuthOrApiKey, async (req: Request<any, any, SmartReplyRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     const { lead, lastMessageFromLead, conversationHistory } = req.body;
@@ -168,7 +168,7 @@ router.post("/smart-reply", requireAuth, async (req: Request<any, any, SmartRepl
 });
 
 // ============ OBJECTION DETECTION ============
-router.post("/detect-objection", requireAuth, async (req: Request<any, any, ObjectionRequestBody>, res: Response): Promise<void> => {
+router.post("/detect-objection", requireAuthOrApiKey, async (req: Request<any, any, ObjectionRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { messageText, leadId } = req.body;
@@ -192,7 +192,7 @@ router.post("/detect-objection", requireAuth, async (req: Request<any, any, Obje
 });
 
 // ============ DEAL AMOUNT PREDICTION ============
-router.post("/predict-deal", requireAuth, async (req: Request<any, any, DealPredictionRequestBody>, res: Response): Promise<void> => {
+router.post("/predict-deal", requireAuthOrApiKey, async (req: Request<any, any, DealPredictionRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { lead, messages } = req.body;
@@ -220,7 +220,7 @@ router.post("/predict-deal", requireAuth, async (req: Request<any, any, DealPred
 });
 
 // ============ CHURN RISK ASSESSMENT ============
-router.post("/churn-risk", requireAuth, async (req: Request<any, any, ChurnRiskRequestBody>, res: Response): Promise<void> => {
+router.post("/churn-risk", requireAuthOrApiKey, async (req: Request<any, any, ChurnRiskRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { lead, messages, daysAsCustomer } = req.body;
@@ -247,7 +247,7 @@ router.post("/churn-risk", requireAuth, async (req: Request<any, any, ChurnRiskR
 });
 
 // ============ COMPLETE LEAD INTELLIGENCE DASHBOARD ============
-router.post("/intelligence-dashboard", requireAuth, async (req: Request<any, any, IntelligenceDashboardRequestBody>, res: Response): Promise<void> => {
+router.post("/intelligence-dashboard", requireAuthOrApiKey, async (req: Request<any, any, IntelligenceDashboardRequestBody>, res: Response): Promise<void> => {
   try {
     const { lead, messages } = req.body;
     
@@ -321,7 +321,7 @@ router.post("/intelligence-dashboard", requireAuth, async (req: Request<any, any
 });
 
 // ============ FIND DUPLICATES ============
-router.post("/find-duplicates", requireAuth, async (req: Request<any, any, DuplicatesRequestBody>, res: Response): Promise<void> => {
+router.post("/find-duplicates", requireAuthOrApiKey, async (req: Request<any, any, DuplicatesRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { lead, userLeads } = req.body;
@@ -353,7 +353,7 @@ router.post("/find-duplicates", requireAuth, async (req: Request<any, any, Dupli
 });
 
 // ============ COMPANY ENRICHMENT ============
-router.post("/enrich-company", requireAuth, async (req: Request<any, any, EnrichCompanyRequestBody>, res: Response): Promise<void> => {
+router.post("/enrich-company", requireAuthOrApiKey, async (req: Request<any, any, EnrichCompanyRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { lead } = req.body;
@@ -398,7 +398,7 @@ router.post("/enrich-company", requireAuth, async (req: Request<any, any, Enrich
 });
 
 // ============ ADD TAG ============
-router.post("/tag", requireAuth, async (req: Request<any, any, TagRequestBody>, res: Response): Promise<void> => {
+router.post("/tag", requireAuthOrApiKey, async (req: Request<any, any, TagRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId, tagName } = req.body;
@@ -422,7 +422,7 @@ router.post("/tag", requireAuth, async (req: Request<any, any, TagRequestBody>, 
 });
 
 // ============ SET CUSTOM FIELD ============
-router.post("/custom-field", requireAuth, async (req: Request<any, any, CustomFieldRequestBody>, res: Response): Promise<void> => {
+router.post("/custom-field", requireAuthOrApiKey, async (req: Request<any, any, CustomFieldRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId, fieldName, value } = req.body;
@@ -447,7 +447,7 @@ router.post("/custom-field", requireAuth, async (req: Request<any, any, CustomFi
 });
 
 // ============ LOG TIMELINE EVENT ============
-router.post("/timeline-event", requireAuth, async (req: Request<any, any, TimelineEventRequestBody>, res: Response): Promise<void> => {
+router.post("/timeline-event", requireAuthOrApiKey, async (req: Request<any, any, TimelineEventRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId, actionType, actionData, actorId } = req.body;
@@ -471,7 +471,7 @@ router.post("/timeline-event", requireAuth, async (req: Request<any, any, Timeli
 });
 
 // ============ GENERATE OPTIMIZED MESSAGE WITH INTELLIGENCE ============
-router.post("/generate-message-with-intelligence", requireAuth, async (req: Request<any, any, GenerateMessageRequestBody>, res: Response): Promise<void> => {
+router.post("/generate-message-with-intelligence", requireAuthOrApiKey, async (req: Request<any, any, GenerateMessageRequestBody>, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     const { lead, testimonials, stage } = req.body;
@@ -525,7 +525,7 @@ router.post("/generate-message-with-intelligence", requireAuth, async (req: Requ
 });
 
 // ============ FATHOM CALL HISTORY ============
-router.get("/:id/fathom-calls", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/:id/fathom-calls", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const leadId = req.params.id;

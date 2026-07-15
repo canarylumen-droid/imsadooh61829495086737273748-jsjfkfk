@@ -1026,17 +1026,24 @@ export default function IntegrationsPage() {
                     <div className="space-y-1.5 md:col-span-2">
                       <Label className="text-xs font-semibold text-muted-foreground ml-1">Account Email</Label>
                       <div className="flex gap-2">
-                        <Input
-                          placeholder="your@email.com"
-                          value={customEmailConfig.email}
-                          onChange={(e) => setCustomEmailConfig({ ...customEmailConfig, email: e.target.value })}
-                          onBlur={() => {
-                            if (customEmailConfig.email.includes('@') && customEmailConfig.email.includes('.')) {
-                              discoverSettingsMutation.mutate(customEmailConfig.email);
-                            }
-                          }}
-                          className="rounded-xl border-border/50 focus:ring-primary/20"
-                        />
+        <Input
+          placeholder="your@email.com"
+          value={customEmailConfig.email}
+          onChange={(e) => {
+            const upd = { ...customEmailConfig, email: e.target.value };
+            // Auto-derive IMAP host from SMTP host when user types SMTP
+            if (!upd.imapHost && upd.smtpHost) {
+              upd.imapHost = upd.smtpHost.replace(/^smtp\./i, 'imap.');
+            }
+            setCustomEmailConfig(upd);
+          }}
+          onBlur={() => {
+            if (customEmailConfig.email.includes('@') && customEmailConfig.email.includes('.')) {
+              discoverSettingsMutation.mutate(customEmailConfig.email);
+            }
+          }}
+          className="rounded-xl border-border/50 focus:ring-primary/20"
+        />
                         <Button
                           variant="outline"
                           className="rounded-xl px-4 text-xs font-bold gap-2"
@@ -1108,15 +1115,22 @@ export default function IntegrationsPage() {
                       </div>
                     
                     {[
-                      { label: "SMTP Host", key: "smtpHost", placeholder: "e.g. smtp.gmail.com" },
+                      { label: "SMTP Host", key: "smtpHost", placeholder: "e.g. smtp.gmail.com", onChange: (val: string, prev: typeof customEmailConfig) => {
+                        const upd = { ...prev, smtpHost: val };
+                        if (!upd.imapHost && val) upd.imapHost = val.replace(/^smtp\./i, 'imap.');
+                        return upd;
+                      }},
                       { label: "SMTP Port", key: "smtpPort", placeholder: "587" },
-                    ].map((field) => (
+                    ].map((field: any) => (
                       <div key={field.key} className="space-y-1.5">
                         <Label className="text-xs font-semibold text-muted-foreground ml-1">{field.label}</Label>
                         <Input
                           placeholder={field.placeholder}
                           value={(customEmailConfig as any)[field.key]}
-                          onChange={(e) => setCustomEmailConfig({ ...customEmailConfig, [field.key]: e.target.value })}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setCustomEmailConfig(prev => field.onChange ? field.onChange(val, prev) : { ...prev, [field.key]: val });
+                          }}
                           className="rounded-xl border-border/50 focus:ring-primary/20"
                         />
                       </div>

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
@@ -42,7 +42,7 @@ interface UserSettings {
   brandContext: any;
 }
 
-router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -118,7 +118,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   }
 });
 
-router.put('/smtp', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/smtp', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -182,7 +182,7 @@ router.put('/smtp', requireAuth, async (req: Request, res: Response): Promise<vo
 });
 
 
-router.post('/smtp/test', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/smtp/test', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -260,7 +260,7 @@ router.post('/smtp/test', requireAuth, async (req: Request, res: Response): Prom
   }
 });
 
-router.put('/notifications', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/notifications', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -290,7 +290,7 @@ router.put('/notifications', requireAuth, async (req: Request, res: Response): P
   }
 });
 
-router.put('/automation', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/automation', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -320,7 +320,7 @@ router.put('/automation', requireAuth, async (req: Request, res: Response): Prom
   }
 });
 
-router.put('/profile', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/profile', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -357,7 +357,7 @@ router.put('/profile', requireAuth, async (req: Request, res: Response): Promise
   }
 });
 
-router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/sync', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -376,7 +376,7 @@ router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<v
   }
 });
 
-router.post('/sync/force', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/sync/force', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -415,7 +415,7 @@ router.post('/sync/force', requireAuth, async (req: Request, res: Response): Pro
   }
 });
 
-router.delete('/account', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/account', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -428,11 +428,12 @@ router.delete('/account', requireAuth, async (req: Request, res: Response): Prom
     await revocationService.revokeAllAndDestroyUser(userId);
 
     // 2. Destroy user session safely
-    (req as any).logout && (req as any).logout((err: any) => {
-      if (err) console.error("Error during logout:", err);
-    });
+    try {
+      (req as any).logout?.((err: any) => {
+        if (err) console.error("Error during logout:", err);
+      });
+    } catch {}
     
-    // Fallback if req.session.destroy exists
     if (req.session) {
       req.session.destroy(() => {});
     }

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import {
   getCustomObjections,
   saveCustomObjections,
@@ -15,7 +15,7 @@ import { objectionService } from '@services/brain-worker/src/ai-lib/analyzers/ob
 const router = Router();
 
 // GET /api/custom-training/objections
-router.get('/objections', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/objections', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -32,7 +32,7 @@ router.get('/objections', requireAuth, async (req: Request, res: Response): Prom
 });
 
 // POST /api/custom-training/objections
-router.post('/objections', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/objections', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -66,7 +66,7 @@ router.post('/objections', requireAuth, async (req: Request, res: Response): Pro
 });
 
 // GET /api/custom-training/knowledge
-router.get('/knowledge', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/knowledge', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -83,7 +83,7 @@ router.get('/knowledge', requireAuth, async (req: Request, res: Response): Promi
 });
 
 // POST /api/custom-training/knowledge
-router.post('/knowledge', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/knowledge', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -115,7 +115,7 @@ router.post('/knowledge', requireAuth, async (req: Request, res: Response): Prom
 });
 
 // POST /api/custom-training/simulate
-router.post('/simulate', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/simulate', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {

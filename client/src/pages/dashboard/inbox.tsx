@@ -1169,7 +1169,7 @@ export default function InboxPage() {
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
-            ) : filteredLeads.length === 0 && !leadsFetching && hasLoadedLeadsRef.current ? (
+            ) : filteredLeads.length === 0 && !leadsFetching && hasLoadedLeadsRef.current && !channelsLoading ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
                 {/* Only show "Connect Sources" if loading is DONE and ABSOLUTELY no channels are connected AND no leads exist */}
                 {!channelsLoading && hasAnyChannel === false && allLeads.length === 0 ? (

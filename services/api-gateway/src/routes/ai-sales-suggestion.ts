@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuthOrApiKey } from "../middleware/auth.js";
 import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
 import { MODELS } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
 
@@ -43,7 +43,7 @@ interface SuggestFollowUpRequestBody {
  * INSTANT: Generate best sales-ready copy based on context
  * (No waiting for 7 days - works RIGHT NOW)
  */
-router.post("/suggest-best", requireAuth, async (req: Request<unknown, unknown, SuggestBestRequestBody>, res: Response): Promise<void> => {
+router.post("/suggest-best", requireAuthOrApiKey, async (req: Request<unknown, unknown, SuggestBestRequestBody>, res: Response): Promise<void> => {
   try {
     const { leadProfile, brandContext, analysisData, messageType } = req.body;
 
@@ -122,7 +122,7 @@ For each, include 2-line reasoning why it works.`;
  * POST /api/ai/suggest-instant-follow-up
  * Generate instant follow-up based on lead response
  */
-router.post("/suggest-instant-follow-up", requireAuth, async (req: Request<unknown, unknown, SuggestFollowUpRequestBody>, res: Response): Promise<void> => {
+router.post("/suggest-instant-follow-up", requireAuthOrApiKey, async (req: Request<unknown, unknown, SuggestFollowUpRequestBody>, res: Response): Promise<void> => {
   try {
     const { lastMessage, leadProfile, brandContext } = req.body;
 

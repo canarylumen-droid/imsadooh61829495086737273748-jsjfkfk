@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { processCommentAutomation, detectCommentIntent } from '@services/brain-worker/src/ai-lib/analyzers/comment-detection.js';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -8,7 +8,7 @@ const router = Router();
  * Process a comment and trigger DM automation
  * POST /api/automation/comment
  */
-router.post('/comment', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/comment', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { comment, username, channel, postContext } = req.body;
     const userId = getCurrentUserId(req)!;
@@ -53,7 +53,7 @@ router.post('/comment', requireAuth, async (req: Request, res: Response): Promis
  * Analyze a comment to see if it indicates DM intent
  * POST /api/automation/analyze-comment
  */
-router.post('/analyze-comment', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/analyze-comment', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { comment } = req.body;
 
@@ -83,7 +83,7 @@ router.post('/analyze-comment', requireAuth, async (req: Request, res: Response)
  * Manually trigger comment automation for a specific comment
  * POST /api/automation/manual-trigger
  */
-router.post('/manual-trigger', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/manual-trigger', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadId } = req.body;
     getCurrentUserId(req);

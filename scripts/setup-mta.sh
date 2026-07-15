@@ -31,7 +31,9 @@ if [ ! -f .env ]; then
   warn "EDIT .env NOW: nano .env"
   warn "Fill in: DATABASE_URL, DATABASE_URL_DIRECT, REDIS_URL, ENCRYPTION_KEY,"
   warn "SESSION_SECRET, GMAIL_CLIENT_ID/SECRET, OUTLOOK_CLIENT_ID/SECRET, etc."
-  warn "Then add: NEW_EMAIL_BACKEND=kumomta"
+  warn ""
+  warn "NOTE: KumoMTA is INACTIVE. We use Rust Email Sender (default) with user SMTP credentials."
+  warn "NEW_EMAIL_BACKEND is set to 'rust' automatically on deploy — no manual change needed."
   warn ""
   read -p "Press Enter after editing .env (or Ctrl+C to abort)..."
 fi

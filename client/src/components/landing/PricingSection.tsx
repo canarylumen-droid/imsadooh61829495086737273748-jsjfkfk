@@ -84,7 +84,7 @@ export function PricingSection() {
                   <Link href="/signup">
                     <Button
                       className={`h-10 w-full rounded-lg text-xs font-black uppercase tracking-widest transition-all duration-300 active:scale-95 group relative overflow-hidden ${isPopular
-                        ? "bg-primary text-black shadow-2xl shadow-primary/30 hover:brightness-110"
+                        ? "bg-primary text-primary-foreground shadow-2xl shadow-primary/30 hover:brightness-110"
                         : "bg-muted text-muted-foreground hover:text-foreground hover:bg-muted/80 border-border/50"
                         }`}
                     >

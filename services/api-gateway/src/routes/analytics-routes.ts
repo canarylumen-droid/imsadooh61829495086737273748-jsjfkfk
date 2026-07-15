@@ -1,6 +1,6 @@
 import type { Express, Request, Response } from 'express';
 import { statsService } from '@shared/lib/analytics/stats-service.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 
 /**
  * Phase 14: Analytics & KPI Dashboard Routes
@@ -11,7 +11,7 @@ import { requireAuth } from '../middleware/auth.js';
  */
 export function registerAnalyticsRoutes(app: Express): void {
   // GET /api/analytics/stats
-  app.get('/api/analytics/stats', requireAuth, async (req: Request, res: Response) => {
+  app.get('/api/analytics/stats', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.id || (req as any).session?.userId;
       if (!userId) {
@@ -30,7 +30,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   });
 
   // POST /api/analytics/persist – Persist current stats as an insights snapshot
-  app.post('/api/analytics/persist', requireAuth, async (req: Request, res: Response) => {
+  app.post('/api/analytics/persist', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
       const userId = (req as any).user?.id || (req as any).session?.userId;
       if (!userId) {

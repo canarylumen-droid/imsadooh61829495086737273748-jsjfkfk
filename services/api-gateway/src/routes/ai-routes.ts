@@ -7,7 +7,7 @@ import csvParser from "csv-parser";
 import { Readable } from "stream";
 import path from "path";
 import { storage } from "@shared/lib/storage/storage.js";
-import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
+import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
 import { getUserLeadsLimit } from "@shared/plan-utils.js";
 
@@ -73,7 +73,7 @@ const router = Router();
  * GET /api/leads
  * Get all leads for the authenticated user with pagination and filtering
  */
-router.get("/", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { channel, status, limit = "50", offset = "0", search, includeArchived, integrationId, excludeActiveCampaignLeads } = req.query;
@@ -125,7 +125,7 @@ router.get("/", requireAuth, async (req: Request, res: Response): Promise<void> 
  * Get advanced AI insights
  * GET /api/ai/insights
  */
-router.get("/insights", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/insights", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
@@ -191,7 +191,7 @@ function generateTemplateSummary(insights: any, period: string): string | null {
  * Get AI-powered insights and analytics
  * GET /api/ai/analytics
  */
-router.get("/analytics", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/analytics", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
@@ -233,7 +233,7 @@ router.get("/analytics", requireAuth, async (req: Request, res: Response): Promi
  * Generate a comprehensive weekly report
  * GET /api/ai/weekly-report
  */
-router.get("/weekly-report", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/weekly-report", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const startDate = new Date();
@@ -267,7 +267,7 @@ router.get("/weekly-report", requireAuth, async (req: Request, res: Response): P
  * Update all lead scores
  * POST /api/ai/score-all
  */
-router.post("/score-all", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/score-all", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -289,7 +289,7 @@ router.post("/score-all", requireAuth, async (req: Request, res: Response): Prom
  * Import leads from CSV file upload — STREAMING for 50k+ scale
  * POST /api/leads/import-csv
  */
-router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Request, res: Response): Promise<void> => {
+router.post("/import-csv", requireAuthOrApiKey, upload.single('csv'), async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const file = req.file;
@@ -679,7 +679,7 @@ router.post("/import-csv", requireAuth, upload.single('csv'), async (req: Reques
  * Update lead details (status, aiPaused, etc.)
  * PATCH /api/leads/:leadId
  */
-router.patch("/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.patch("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;
@@ -735,7 +735,7 @@ router.patch("/:leadId", requireAuth, async (req: Request, res: Response): Promi
  * GET /api/leads/:leadId
  * Get a single lead by ID
  */
-router.get("/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;
@@ -760,7 +760,7 @@ router.get("/:leadId", requireAuth, async (req: Request, res: Response): Promise
  * Phase 39: Manually trigger deep research for a lead
  * POST /api/leads/:leadId/research
  */
-router.post("/:leadId/research", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/:leadId/research", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;
@@ -796,7 +796,7 @@ router.post("/:leadId/research", requireAuth, async (req: Request, res: Response
  * Send AI-generated reply to a lead
  * POST /api/ai/reply/:leadId
  */
-router.post("/reply/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/reply/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadId } = req.params;
     const { manualMessage } = req.body;
@@ -964,7 +964,7 @@ router.post("/reply/:leadId", requireAuth, async (req: Request, res: Response): 
  * Generate AI-drafted reply to a lead (does not send or save to DB)
  * POST /api/ai/draft-reply/:leadId
  */
-router.post("/draft-reply/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/draft-reply/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadId } = req.params;
     const userId = getCurrentUserId(req)!;
@@ -1026,7 +1026,7 @@ router.post("/draft-reply/:leadId", requireAuth, async (req: Request, res: Respo
  * Generate voice note script for warm lead
  * POST /api/ai/voice/:leadId
  */
-router.post("/voice/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/voice/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadId } = req.params;
     const userId = getCurrentUserId(req)!;
@@ -1060,7 +1060,7 @@ router.post("/voice/:leadId", requireAuth, async (req: Request, res: Response): 
  * Import leads from connected platforms
  * POST /api/ai/import/:provider
  */
-router.post("/import/:provider", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/import/:provider", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { provider } = req.params;
     const userId = getCurrentUserId(req)!;
@@ -1127,7 +1127,7 @@ router.post("/import/:provider", requireAuth, async (req: Request, res: Response
  * Bulk import leads from JSON
  * POST /api/ai/import-bulk
  */
-router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/import-bulk", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leads: leadsData, channel = 'email', aiPaused = false, integrationId } = req.body as {
@@ -1288,7 +1288,7 @@ router.post("/import-bulk", requireAuth, async (req: Request, res: Response): Pr
  * Parse raw email body into structured JSON
  * POST /api/ai/parse-body
  */
-router.post("/parse-body", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/parse-body", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { body } = req.body;
     if (!body) {
@@ -1311,7 +1311,7 @@ router.post("/parse-body", requireAuth, async (req: Request, res: Response): Pro
  * Create calendar booking link for lead
  * POST /api/ai/calendar/:leadId
  */
-router.post("/calendar/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/calendar/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadId } = req.params;
     const { sendMessage = true, createEvent = false, startTime, duration = 30 } = req.body;
@@ -1442,7 +1442,7 @@ router.post("/calendar/:leadId", requireAuth, async (req: Request, res: Response
  * Generate smart reply suggestions
  * GET /api/ai/smart-replies/:leadId
  */
-router.get("/smart-replies/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/smart-replies/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadId } = req.params;
     const userId = getCurrentUserId(req)!;
@@ -1485,7 +1485,7 @@ router.get("/smart-replies/:leadId", requireAuth, async (req: Request, res: Resp
  * Get lead score
  * GET /api/ai/score/:leadId
  */
-router.get("/score/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/score/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadId } = req.params;
     const userId = getCurrentUserId(req)!;
@@ -1517,7 +1517,7 @@ router.get("/score/:leadId", requireAuth, async (req: Request, res: Response): P
  * Get competitor analytics
  * GET /api/ai/competitor-analytics
  */
-router.get("/competitor-analytics", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/competitor-analytics", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -1536,7 +1536,7 @@ router.get("/competitor-analytics", requireAuth, async (req: Request, res: Respo
  * Get optimal discount percentage
  * GET /api/ai/optimal-discount
  */
-router.get("/optimal-discount", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get("/optimal-discount", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -1558,7 +1558,7 @@ router.get("/optimal-discount", requireAuth, async (req: Request, res: Response)
  * Update brand info (re-upload brand context)
  * POST /api/ai/brand-info
  */
-router.post("/brand-info", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/brand-info", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { brandSnippets, promotions, siteUrl } = req.body;
@@ -1608,7 +1608,7 @@ router.post("/brand-info", requireAuth, async (req: Request, res: Response): Pro
  * Import leads from PDF file upload
  * POST /api/leads/import-pdf
  */
-router.post("/import-pdf", requireAuth, uploadPdf.single("pdf"), async (req: Request, res: Response): Promise<void> => {
+router.post("/import-pdf", requireAuthOrApiKey, uploadPdf.single("pdf"), async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -1673,7 +1673,7 @@ router.post("/import-pdf", requireAuth, uploadPdf.single("pdf"), async (req: Req
  * With Redis: enqueues the campaign as a BullMQ job (crash-safe, resumes on restart).
  * Without Redis: falls back to synchronous execution.
  */
-router.post("/run-outreach", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/run-outreach", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leads, brandContext, runDemo = false } = req.body;
@@ -1762,7 +1762,7 @@ router.post("/run-outreach", requireAuth, async (req: Request, res: Response): P
  * AI Grammar Check
  * POST /api/ai/check-grammar
  */
-router.post("/check-grammar", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/check-grammar", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { text } = req.body;
     if (!text) {
@@ -1782,7 +1782,7 @@ router.post("/check-grammar", requireAuth, async (req: Request, res: Response): 
  * AI Magic Pencil (Rewrite / Polish)
  * POST /api/ai/magic-pencil
  */
-router.post("/magic-pencil", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/magic-pencil", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { text, tone = "professional", context = "" } = req.body;
     if (!text) {
@@ -1812,7 +1812,7 @@ Provide ONLY the rewritten message.`;
  * POST /api/ai/draft-reply/:leadId
  * Generate an AI draft reply for a lead conversation
  */
-router.post("/draft-reply/:leadId", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/draft-reply/:leadId", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;

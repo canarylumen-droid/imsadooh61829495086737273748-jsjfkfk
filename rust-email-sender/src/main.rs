@@ -4,7 +4,6 @@ use anyhow::Result;
 use redis::AsyncCommands;
 use tokio::sync::Semaphore;
 
-mod dns;
 mod mailer;
 mod queue;
 mod config;
@@ -24,10 +23,7 @@ async fn main() -> Result<()> {
 
     // Connect to Redis
     let redis_client = redis::Client::open(config.redis_url.as_str())?;
-    let redis_conn = redis::tokio::ConnectionManager::new(redis_client.clone()).await?;
-
-    // Initialize DNS resolver with caching
-    let dns_resolver = Arc::new(dns::CachedResolver::new().await?);
+    let redis_conn = redis::aio::ConnectionManager::new(redis_client.clone()).await?;
 
     // Initialize mailer pool
     let mailer_pool = Arc::new(mailer::MailerPool::new(&config)?);
@@ -44,10 +40,9 @@ async fn main() -> Result<()> {
         interval.tick().await;
 
         // Pop a job from the Redis list (non-blocking with BRPOP timeout)
-        let job: Option<(String, String)> = {
-            let mut conn = redis_conn.clone();
-            conn.brpop(&config.queue_name, 0.1).await.ok()
-        };
+        let job_opt: Option<(String, Vec<u8>)> = redis_conn.clone()
+            .brpop(&config.queue_name, 0.1).await.ok();
+        let job = job_opt.map(|(q, v)| (q, String::from_utf8_lossy(&v).to_string()));
 
         if let Some((_queue_name, job_json)) = job {
             let job: EmailJob = match serde_json::from_str(&job_json) {
@@ -59,13 +54,12 @@ async fn main() -> Result<()> {
             };
 
             let permit = semaphore.clone().acquire_owned().await?;
-            let dns = dns_resolver.clone();
             let pool = mailer_pool.clone();
             let redis = redis_conn.clone();
             let result_queue = config.result_queue_name.clone();
 
             tokio::spawn(async move {
-                let result = send_email_job(&job, &dns, &pool).await;
+                let result = send_email_job(&job, &pool).await;
 
                 // Write result back to Redis
                 let result_json = serde_json::json!({
@@ -100,30 +94,7 @@ async fn main() -> Result<()> {
 
 async fn send_email_job(
     job: &EmailJob,
-    dns: &dns::CachedResolver,
     pool: &mailer::MailerPool,
 ) -> Result<()> {
-    // Resolve MX for recipient domain
-    let domain = job.recipient.split('@').last()
-        .ok_or_else(|| anyhow::anyhow!("Invalid recipient: {}", job.recipient))?;
-
-    let mx_records = dns.resolve_mx(domain).await?;
-
-    if mx_records.is_empty() {
-        anyhow::bail!("No MX records for {}", domain);
-    }
-
-    // Try each MX in priority order
-    let mut last_error = None;
-    for mx in &mx_records {
-        match pool.send_via_mx(&job.recipient, &job.from, &job.subject, &job.body, mx).await {
-            Ok(()) => return Ok(()),
-            Err(e) => {
-                log::debug!("MX {} failed: {}", mx, e);
-                last_error = Some(e);
-            }
-        }
-    }
-
-    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("All MX records failed for {}", domain)))
+    pool.send_via_job(job).await
 }

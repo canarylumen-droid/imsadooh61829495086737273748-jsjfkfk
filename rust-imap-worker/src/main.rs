@@ -1,128 +1,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 use anyhow::Result;
-use redis::AsyncCommands;
-use tokio::sync::{Semaphore, RwLock};
+use tokio::sync::Semaphore;
 use dashmap::DashMap;
+use tokio::sync::RwLock;
 
-mod config;
 mod imap_client;
-mod idle_manager;
-mod mail_parser;
-mod redis_bridge;
 
-use config::Config;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    env_logger::init();
-
-    let config = Config::from_env()?;
-    log::info!("Audnix IMAP Worker starting...");
-    log::info!("Max connections: {}", config.max_connections);
-    log::info!("Heartbeat interval: {}s", config.heartbeat_secs);
-    log::info!("Idle timeout: {}s", config.idle_timeout_secs);
-
-    // Connect to Redis
-    let redis_client = redis::Client::open(config.redis_url.as_str())?;
-    let redis_conn = redis::tokio::ConnectionManager::new(redis_client.clone()).await?;
-
-    // Connect to PostgreSQL
-    let pg_pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(config.pg_max_connections)
-        .connect(&config.database_url)
-        .await?;
-
-    // Shared state
-    let state = Arc::new(WorkerState::new(config.clone()));
-
-    // Start the idle manager
-    let idle_manager = Arc::new(idle_manager::IdleManager::new(
-        state.clone(),
-        redis_conn.clone(),
-        pg_pool.clone(),
-    ));
-
-    // Start heartbeat task
-    let heartbeat_state = state.clone();
-    let heartbeat_redis = redis_conn.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(30));
-        loop {
-            interval.tick().await;
-            heartbeat_state.update_heartbeat(&heartbeat_redis).await;
-        }
-    });
-
-    // Start connection monitor
-    let monitor_manager = idle_manager.clone();
-    tokio::spawn(async move {
-        let mut interval = tokio::time::interval(Duration::from_secs(15));
-        loop {
-            interval.tick().await;
-            monitor_manager.check_zombies().await;
-        }
-    });
-
-    // Main loop: poll Redis for IMAP jobs
-    let mut interval = tokio::time::interval(Duration::from_millis(config.poll_interval_ms));
-
-    log::info!("Listening for IMAP jobs...");
-
-    loop {
-        interval.tick().await;
-
-        // Pop a job from the Redis list
-        let job: Option<(String, String)> = {
-            let mut conn = redis_conn.clone();
-            conn.brpop(&config.queue_name, 0.1).await.ok()
-        };
-
-        if let Some((_queue_name, job_json)) = job {
-            let job: ImapJob = match serde_json::from_str(&job_json) {
-                Ok(j) => j,
-                Err(e) => {
-                    log::error!("Failed to deserialize IMAP job: {}", e);
-                    continue;
-                }
-            };
-
-            match job.command.as_str() {
-                "connect" => {
-                    let manager = idle_manager.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = manager.connect_mailbox(job).await {
-                            log::error!("Connect failed: {}", e);
-                        }
-                    });
-                }
-                "disconnect" => {
-                    let manager = idle_manager.clone();
-                    tokio::spawn(async move {
-                        manager.disconnect_mailbox(&job.integration_id).await;
-                    });
-                }
-                "fetch" => {
-                    let manager = idle_manager.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = manager.fetch_now(job).await {
-                            log::error!("Fetch failed: {}", e);
-                        }
-                    });
-                }
-                "recycle" => {
-                    let manager = idle_manager.clone();
-                    tokio::spawn(async move {
-                        manager.recycle_connection(&job.integration_id).await;
-                    });
-                }
-                unknown => {
-                    log::warn!("Unknown IMAP command: {}", unknown);
-                }
-            }
-        }
-    }
-}
+use imap_client::ImapConnection;
 
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct ImapJob {
@@ -150,34 +35,75 @@ pub struct ImapResult {
 }
 
 pub struct WorkerState {
-    pub config: Config,
-    pub active_connections: DashMap<String, Arc<RwLock<imap_client::ImapConnection>>>,
+    pub active_connections: DashMap<String, Arc<RwLock<ImapConnection>>>,
     pub semaphore: Semaphore,
 }
 
 impl WorkerState {
-    pub fn new(config: Config) -> Self {
-        let max_concurrent = config.max_concurrent_operations;
+    pub fn new(max_concurrent: usize) -> Self {
         Self {
-            config,
             active_connections: DashMap::new(),
             semaphore: Semaphore::new(max_concurrent),
         }
     }
+}
 
-    pub async fn update_heartbeat(&self, redis: &redis::aio::ConnectionManager) {
-        let mut conn = redis.clone();
-        let _: () = conn.setex(
-            format!("imap-worker:{}:heartbeat", self.config.worker_id),
-            30,
-            chrono::Utc::now().to_rfc3339(),
-        ).await.unwrap_or_default();
+/// Quick standalone test: connect to an IMAP server and authenticate
+pub async fn test_imap_connect(
+    host: &str,
+    port: u16,
+    username: &str,
+    password: &str,
+    folder: &str,
+) -> Result<String> {
+    let mut conn = ImapConnection::new(folder.to_string());
 
-        let active = self.active_connections.len();
-        let _: () = conn.setex(
-            format!("imap-worker:{}:connections", self.config.worker_id),
-            30,
-            active.to_string(),
-        ).await.unwrap_or_default();
+    conn.connect(host, port, true).await?;
+    log::info!("Connected to {}:{}", host, port);
+
+    conn.authenticate(username, password).await?;
+    log::info!("Authenticated as {}", username);
+
+    conn.select(folder).await?;
+    log::info!("Selected folder: {}", folder);
+
+    // Fetch recent messages
+    let result = conn.fetch(0).await?;
+    log::info!("Fetch completed");
+
+    conn.logout().await?;
+    log::info!("Logged out");
+
+    Ok(result)
+}
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    env_logger::init();
+    log::info!("Audnix IMAP Worker starting...");
+
+    // If command-line args provided, run as standalone test
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() >= 4 {
+        let host = &args[1];
+        let port: u16 = args[2].parse()?;
+        let username = &args[3];
+        let password = &args[4];
+        let folder = args.get(5).map(|s| s.as_str()).unwrap_or("INBOX");
+
+        match test_imap_connect(host, port, username, password, folder).await {
+            Ok(data) => {
+                println!("✅ IMAP Test Successful!");
+                println!("Server response:\n{}", &data[..data.len().min(500)]);
+            }
+            Err(e) => {
+                eprintln!("❌ IMAP Test Failed: {}", e);
+                std::process::exit(1);
+            }
+        }
+        return Ok(());
     }
+
+    log::info!("No IMAP credentials provided. Run with: cargo run --release -- <host> <port> <username> <password> [folder]");
+    Ok(())
 }

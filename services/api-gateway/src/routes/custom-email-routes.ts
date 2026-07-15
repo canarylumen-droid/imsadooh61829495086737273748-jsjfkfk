@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { encrypt } from '@shared/lib/crypto/encryption.js';
 import { pagedEmailImport } from '@shared/lib/imports/paged-email-importer.js';
@@ -19,7 +19,7 @@ const router = Router();
 /**
  * Auto-discover SMTP/IMAP settings
  */
-router.post('/discover', requireAuth, async (req: Request, res: Response) => {
+router.post('/discover', requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     let { email } = req.body;
     email = email?.trim();
@@ -80,7 +80,7 @@ router.post('/discover', requireAuth, async (req: Request, res: Response) => {
  * POST /custom-email/test
  * Test SMTP + IMAP connection without saving
  */
-router.post('/test', requireAuth, async (req: Request, res: Response) => {
+router.post('/test', requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const { smtpHost, smtpPort, imapHost, imapPort, email, password } = req.body;
     if (!smtpHost || !email || !password) {
@@ -307,7 +307,7 @@ function isEnterpriseUser(user: any): boolean {
 /**
  * Connect custom email domain
  */
-router.post('/connect', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/connect', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     let { smtpHost, smtpPort, imapHost, imapPort, email, password, passwordType, fromName } = req.body as ConnectRequestBody;
@@ -572,7 +572,7 @@ router.post('/connect', requireAuth, async (req: Request, res: Response): Promis
  * Enterprise bulk import for custom SMTP/IMAP mailboxes.
  * The browser parses CSV/XLS-exported text and posts normalized rows here.
  */
-router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/bulk-import', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const user = await storage.getUserById(userId);
@@ -776,7 +776,7 @@ router.post('/bulk-import', requireAuth, async (req: Request, res: Response): Pr
 /**
  * Import emails from custom domain (paged + abuse protection)
  */
-router.post('/import', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/import', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -853,7 +853,7 @@ router.post('/import', requireAuth, async (req: Request, res: Response): Promise
 /**
  * Test SMTP connection without saving
  */
-router.post('/test', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/test', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { smtpHost, smtpPort, email, password } = req.body;
 
@@ -932,7 +932,7 @@ router.post('/test', requireAuth, async (req: Request, res: Response): Promise<v
 /**
  * Disconnect custom email
  */
-router.post('/disconnect', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/disconnect', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { integrationId } = req.body;
@@ -1006,7 +1006,7 @@ router.post('/disconnect', requireAuth, async (req: Request, res: Response): Pro
  * Returns ALL connected email mailboxes: SMTP, Gmail, and Outlook.
  * This is the single endpoint the frontend uses to build the unified mailbox list.
  */
-router.get('/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const allIntegrations = await storage.getIntegrations(userId);
@@ -1096,7 +1096,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
  * Send a test email through any connected mailbox.
  * Accepts optional `integrationId` to test a specific mailbox.
  */
-router.post('/send-test', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/send-test', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { recipientEmail, subject, content, integrationId } = req.body;
@@ -1143,7 +1143,7 @@ router.post('/send-test', requireAuth, async (req: Request, res: Response): Prom
 /**
  * Get SMTP settings for the current user
  */
-router.get('/settings', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/settings', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const settings = await storage.getSmtpSettings(userId);
@@ -1157,7 +1157,7 @@ router.get('/settings', requireAuth, async (req: Request, res: Response): Promis
 /**
  * Get discovered folders for the connected account
  */
-router.get('/folders', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/folders', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { integrationId } = req.query;
@@ -1202,7 +1202,7 @@ router.get('/folders', requireAuth, async (req: Request, res: Response): Promise
 /**
  * Trigger an immediate sync for both Inbox and Sent folders
  */
-router.post('/sync-now', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/sync-now', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
@@ -1224,7 +1224,7 @@ router.post('/sync-now', requireAuth, async (req: Request, res: Response): Promi
 /**
  * Trigger historical sync (e.g. last 30 days)
  */
-router.post('/sync-history', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/sync-history', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { days, integrationId } = req.body;

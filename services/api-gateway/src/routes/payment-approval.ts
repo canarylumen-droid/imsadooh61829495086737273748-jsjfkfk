@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { storage } from "@shared/lib/storage/storage.js";
-import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
+import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { paymentAutoApprovalWorker } from "@services/billing-service/src/billing-lib/payment-auto-approval-worker.js";
 
 const router = Router();
@@ -9,7 +9,7 @@ const router = Router();
  * GET /api/payment-approval/pending
  * Admin: Get all pending payment approvals (NO API KEY NEEDED)
  */
-router.get("/pending", requireAuth, async (req: Request, res: Response) => {
+router.get("/pending", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const adminId = getCurrentUserId(req);
     const admin = await storage.getUserById(adminId!);
@@ -45,7 +45,7 @@ router.get("/pending", requireAuth, async (req: Request, res: Response) => {
  * GET /api/payment-approval/stats
  * Admin: Get payment statistics
  */
-router.get("/stats", requireAuth, async (req: Request, res: Response) => {
+router.get("/stats", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const adminId = getCurrentUserId(req);
     const admin = await storage.getUserById(adminId!);
@@ -69,7 +69,7 @@ router.get("/stats", requireAuth, async (req: Request, res: Response) => {
  * Admin: Approve a pending payment and upgrade user
  * NO API KEY NEEDED - only database operations
  */
-router.post("/approve/:userId", requireAuth, async (req: Request, res: Response) => {
+router.post("/approve/:userId", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const adminId = getCurrentUserId(req);
     const { userId } = req.params;
@@ -133,7 +133,7 @@ router.post("/approve/:userId", requireAuth, async (req: Request, res: Response)
  * POST /api/payment-approval/reject/:userId
  * Admin: Reject a pending payment
  */
-router.post("/reject/:userId", requireAuth, async (req: Request, res: Response) => {
+router.post("/reject/:userId", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const adminId = getCurrentUserId(req);
     const { userId } = req.params;
@@ -181,7 +181,7 @@ router.post("/reject/:userId", requireAuth, async (req: Request, res: Response) 
  * Called by the client after Stripe checkout is initiated.
  * Auth required — userId is taken from the verified session, not the request body.
  */
-router.post("/mark-pending", requireAuth, async (req: Request, res: Response) => {
+router.post("/mark-pending", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = getCurrentUserId(req);
     const { plan, amount, sessionId, subscriptionId } = req.body;
@@ -227,7 +227,7 @@ router.post("/mark-pending", requireAuth, async (req: Request, res: Response) =>
  * GET /api/payment-approval/worker/stats
  * Check auto-approval worker status (admin only)
  */
-router.get("/worker/stats", requireAuth, async (req: Request, res: Response) => {
+router.get("/worker/stats", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = getCurrentUserId(req);
     const user = await storage.getUserById(userId!);

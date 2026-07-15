@@ -30,6 +30,7 @@ const ObjectionHandlingLanding = lazy(() => import("./pages/objection-handling-l
 const NicheVaultPage = lazy(() => import("./pages/resources/niche-vault"));
 const PlaybooksPage = lazy(() => import("./pages/resources/outreach-playbooks"));
 const ApiDocsPage = lazy(() => import("./pages/resources/api-docs"));
+const DeveloperDocsPage = lazy(() => import("./pages/developer-docs"));
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthGuard } from '@/components/auth-guard';
@@ -44,6 +45,7 @@ const AdminLeads = lazy(() => import("./pages/admin/leads"));
 const AdminSettings = lazy(() => import("./pages/admin/settings"));
 
 import { ThemeProvider } from "next-themes";
+import { LenisScroll } from "@/components/LenisScroll";
 
 // Loading fallback component for Suspense boundaries
 const LoadingFallback = () => (
@@ -91,6 +93,14 @@ function Router() {
       </Route>
       <Route path="/resources/api-docs">
         {() => <Suspense fallback={<LoadingFallback />}><ApiDocsPage /></Suspense>}
+      </Route>
+
+      {/* Developer Docs */}
+      <Route path="/docs">
+        {() => <Suspense fallback={<LoadingFallback />}><DeveloperDocsPage /></Suspense>}
+      </Route>
+      <Route path="/developer">
+        {() => <Suspense fallback={<LoadingFallback />}><DeveloperDocsPage /></Suspense>}
       </Route>
 
       {/* Solutions */}
@@ -189,12 +199,13 @@ function App() {
         <QueryClientProvider client={queryClient}>
           <MailboxProvider>
             <TooltipProvider>
-              <InternetConnectionBanner />
-              <Toaster />
-              <Router />
-              <NotificationSound />
-              {/* <ExpertChat /> Removed as requested */}
-              <PrivacyModal />
+              <LenisScroll>
+                <InternetConnectionBanner />
+                <Toaster />
+                <Router />
+                <NotificationSound />
+                <PrivacyModal />
+              </LenisScroll>
             </TooltipProvider>
           </MailboxProvider>
         </QueryClientProvider>

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { evaluateLeadDealValue } from '@services/brain-worker/src/ai-lib/engines/deal-evaluator.js';
 import { db } from '@shared/lib/db/db.js';
@@ -9,7 +9,7 @@ import pLimit from 'p-limit';
 
 const router = Router();
 
-router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -33,7 +33,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
   }
 });
 
-router.get('/analytics', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/analytics', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -105,7 +105,7 @@ router.get('/analytics', requireAuth, async (req: Request, res: Response): Promi
   }
 });
 
-router.post('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -130,7 +130,7 @@ router.post('/', requireAuth, async (req: Request, res: Response): Promise<void>
   }
 });
 
-router.patch('/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -156,7 +156,7 @@ router.patch('/:id', requireAuth, async (req: Request, res: Response): Promise<v
   }
 });
 
-router.post('/sync', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/sync', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {

@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { storage } from '@shared/lib/storage/storage.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { getAIStatus } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
 import { learnUserStyle } from "@services/brain-worker/src/ai-lib/context/personality-learner.js";
 import type { Lead, Message } from '@audnix/shared';
@@ -33,7 +33,7 @@ export function invalidateStatsCache(userId: string) {
 
 const router = Router();
 
-router.get('/', requireAuth, async (req: Request, res: Response) => {
+router.get('/', requireAuthOrApiKey, async (req: Request, res: Response) => {
   const userId = req.session?.userId;
   if (!userId) return res.status(401).json({ error: 'Not authenticated' });
   res.json({ status: 'ok', userId, message: 'Dashboard API is operational' });
@@ -43,7 +43,7 @@ router.get('/', requireAuth, async (req: Request, res: Response) => {
  * POST /api/dns/verify
  * Force a DNS/reputation check for a domain
  */
-router.post('/dns/verify', requireAuth, async (req: Request, res: Response) => {
+router.post('/dns/verify', requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = req.session?.userId;
     if (!userId) return res.status(401).json({ error: 'Not authenticated' });
@@ -109,7 +109,7 @@ router.post('/dns/verify', requireAuth, async (req: Request, res: Response) => {
  * GET /api/dashboard/stats
  * Get current period stats for dashboard
  */
-router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -461,7 +461,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
  * GET /api/dashboard/stats/previous
  * Get previous period stats for comparison
  */
-router.get('/stats/previous', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/stats/previous', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -500,7 +500,7 @@ router.get('/stats/previous', requireAuth, async (req: Request, res: Response): 
  * GET /api/dashboard/activity
  * Get recent activity feed for dashboard (Audit Trail)
  */
-router.get('/activity', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/activity', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -546,7 +546,7 @@ router.get('/activity', requireAuth, async (req: Request, res: Response): Promis
  * GET /api/dashboard/ai-actions
  * Get recent AI Action Logs for the autonomous dashboard feed
  */
-router.get('/ai-actions', requireAuth, async (req: Request, res: Response) => {
+router.get('/ai-actions', requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = req.session?.userId;
     if (!userId) { res.status(401).json({ error: 'Not authenticated' }); return; }
@@ -595,7 +595,7 @@ router.get('/ai-actions', requireAuth, async (req: Request, res: Response) => {
  * GET /api/user
  * Get current user (simple alias)
  */
-router.get('/user', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/user', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -643,7 +643,7 @@ router.get('/user', requireAuth, async (req: Request, res: Response): Promise<vo
  * GET /api/user/profile
  * Get current user profile (alias for /api/auth/me)
  */
-router.get('/user/profile', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/user/profile', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -705,7 +705,7 @@ router.get('/user/profile', requireAuth, async (req: Request, res: Response): Pr
  * PUT /api/user/voice-settings
  * Update voice notes settings
  */
-router.put('/user/voice-settings', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/user/voice-settings', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -743,7 +743,7 @@ router.put('/user/voice-settings', requireAuth, async (req: Request, res: Respon
  * PUT /api/user/profile
  * Update user profile including CTA settings
  */
-router.put('/user/profile', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.put('/user/profile', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -815,7 +815,7 @@ router.put('/user/profile', requireAuth, async (req: Request, res: Response): Pr
  * GET /api/dashboard/instagram/media
  * Get user's recent Instagram media for video automation
  */
-router.get('/instagram/media', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/instagram/media', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -858,7 +858,7 @@ router.get('/instagram/media', requireAuth, async (req: Request, res: Response):
  * GET /api/dashboard/analytics/outreach
  * Get daily outreach stats (sent/received) for analytics charts
  */
-router.get('/analytics/outreach', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/analytics/outreach', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {
@@ -932,7 +932,7 @@ router.get('/analytics/outreach', requireAuth, async (req: Request, res: Respons
  * GET /api/dashboard/analytics/full
  * Consistently high-performance consolidated analytics node
  */
-router.get('/analytics/full', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/analytics/full', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId!;
     const range = parseInt(req.query.days as string) || 7;
@@ -959,7 +959,7 @@ router.get('/analytics/full', requireAuth, async (req: Request, res: Response): 
  * GET /api/dashboard/integrations/:id/health
  * Get DNS and connection health for a specific integration
  */
-router.get('/integrations/:id/health', requireAuth, async (req: Request, res: Response) => {
+router.get('/integrations/:id/health', requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = req.session?.userId!;
     const integrationId = req.params.id;
@@ -1042,7 +1042,7 @@ router.get('/integrations/:id/health', requireAuth, async (req: Request, res: Re
  * GET /api/dashboard/integrations/:id/stats
  * Get performance stats for a specific mailbox
  */
-router.get('/integrations/:id/stats', requireAuth, async (req: Request, res: Response) => {
+router.get('/integrations/:id/stats', requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = req.session?.userId!;
     const integrationId = req.params.id;
@@ -1058,7 +1058,7 @@ router.get('/integrations/:id/stats', requireAuth, async (req: Request, res: Res
  * GET /api/dashboard/ai/status
  * Get health status of AI providers
  */
-router.get('/ai/status', requireAuth, async (req: Request, res: Response) => {
+router.get('/ai/status', requireAuthOrApiKey, async (req: Request, res: Response) => {
     const status = getAIStatus();
     res.json(status);
 });
@@ -1067,7 +1067,7 @@ router.get('/ai/status', requireAuth, async (req: Request, res: Response) => {
  * POST /api/dashboard/ai/learn-style
  * Manually trigger style learning from past messages
  */
-router.post('/ai/learn-style', requireAuth, async (req: Request, res: Response) => {
+router.post('/ai/learn-style', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = req.session?.userId!;
         const markers = await learnUserStyle(userId);
@@ -1081,7 +1081,7 @@ router.post('/ai/learn-style', requireAuth, async (req: Request, res: Response) 
  * GET /api/dashboard/warmup-status
  * Returns warmup progress for all connected mailboxes
  */
-router.get('/warmup-status', requireAuth, async (req: Request, res: Response) => {
+router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = req.session?.userId!;
         const integrations = await storage.getIntegrations(userId);

@@ -433,7 +433,7 @@ export default function AnalyticsPage() {
                                         <div className="flex items-center gap-2">
                                             <p className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors truncate">{event.description}</p>
                                             {(event as any).isNew && (
-                                                <Badge className="h-4 px-1.5 text-[8px] font-semibold bg-primary text-black border-0 animate-in fade-in zoom-in">NEW</Badge>
+                                                <Badge className="h-4 px-1.5 text-[8px] font-semibold bg-primary text-primary-foreground border-0 animate-in fade-in zoom-in">NEW</Badge>
                                             )}
                                         </div>
                                         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/40 mt-1">{event.time}</p>

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 
 const router = Router();
@@ -18,7 +18,7 @@ interface AllChannelsResponse {
   calendly: ChannelStatus;
 }
 
-router.get('/all', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/all', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -59,7 +59,7 @@ router.get('/all', requireAuth, async (req: Request, res: Response): Promise<voi
   }
 });
 
-router.get('/email', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/email', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const integrations = await storage.getIntegrations(userId);
@@ -79,7 +79,7 @@ router.get('/email', requireAuth, async (req: Request, res: Response): Promise<v
   }
 });
 
-router.get('/instagram', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/instagram', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const integration = await storage.getIntegration(userId, 'instagram');
@@ -96,7 +96,7 @@ router.get('/instagram', requireAuth, async (req: Request, res: Response): Promi
   }
 });
 
-router.get('/calendly', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/calendly', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const integration = await storage.getIntegration(userId, 'calendly');

@@ -3,7 +3,7 @@ import { recordEmailEvent, getEmailStats } from '@services/email-service/src/ema
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import { isValidUUID } from '@shared/lib/utils/validation.js';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -207,7 +207,7 @@ router.get('/track/click/:token', async (req: Request, res: Response): Promise<v
   }
 });
 
-router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const days = parseInt(req.query.days as string) || 30;
@@ -225,7 +225,7 @@ router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<v
   }
 });
 
-router.get('/tracking/:leadId', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/tracking/:leadId', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leadId } = req.params;

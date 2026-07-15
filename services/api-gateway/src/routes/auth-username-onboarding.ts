@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { storage } from '@shared/lib/storage/storage.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -95,7 +95,7 @@ router.post('/set-username', async (req: Request<object, object, SetUsernameBody
  * POST /api/auth/complete-onboarding
  * After onboarding → User goes to dashboard
  */
-router.post('/complete-onboarding', requireAuth, async (req: Request<object, object, CompleteOnboardingBody>, res: Response): Promise<void> => {
+router.post('/complete-onboarding', requireAuthOrApiKey, async (req: Request<object, object, CompleteOnboardingBody>, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     const { userRole, source, useCase, businessSize, tags, companyName } = req.body;
@@ -162,7 +162,7 @@ router.post('/complete-onboarding', requireAuth, async (req: Request<object, obj
  * GET /api/auth/me
  * Get current user (for dashboard)
  */
-router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/me', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
 
@@ -197,7 +197,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response): Promise<void
 /**
  * POST /api/auth/mark-celebration-complete
  */
-router.post('/mark-celebration-complete', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/mark-celebration-complete', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = req.session?.userId;
     if (!userId) {

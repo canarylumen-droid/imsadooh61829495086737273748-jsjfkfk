@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { verifyDomainDns } from '@services/email-service/src/email/dns-verification.js';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { apiLimiter } from '../middleware/rate-limit.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
@@ -19,7 +19,7 @@ function pruneCache() {
   }
 }
 
-router.post('/verify', requireAuth, apiLimiter, async (req: Request, res: Response): Promise<void> => {
+router.post('/verify', requireAuthOrApiKey, apiLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const { domain, dkimSelector, force } = req.body;
 
@@ -80,7 +80,7 @@ router.post('/verify', requireAuth, apiLimiter, async (req: Request, res: Respon
   }
 });
 
-router.get('/history', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/history', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
@@ -18,7 +18,7 @@ export function getWebhookStats(): { lastEvent: Date | null; eventCount: number 
   return { lastEvent: lastWebhookEvent, eventCount: webhookEventCount };
 }
 
-router.get('/status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     
@@ -89,7 +89,7 @@ router.get('/status', requireAuth, async (req: Request, res: Response): Promise<
   }
 });
 
-router.post('/test-webhook', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/test-webhook', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     recordWebhookEvent();
     

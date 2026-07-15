@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
 import { videoAssets, aiActionLogs, processedComments, videoMonitors } from '@audnix/shared';
@@ -27,7 +27,7 @@ const router = Router();
  * Get user's Instagram reels with thumbnails and auto-extracted brand knowledge
  * GET /api/video-automation/reels
  */
-router.get('/reels', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/reels', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -89,7 +89,7 @@ function extractBrandKnowledgeFromCaption(caption: string): string {
  * Get user's Instagram videos for selection (deprecated - use /reels)
  * GET /api/video-automation/videos
  */
-router.get('/videos', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/videos', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -139,7 +139,7 @@ router.get('/videos', requireAuth, async (req: Request, res: Response): Promise<
  * Create new video monitor configuration
  * POST /api/video-automation/monitors
  */
-router.post('/monitors', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/monitors', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { videoId, videoUrl, productLink, ctaText, metadata } = req.body as {
@@ -200,7 +200,7 @@ router.post('/monitors', requireAuth, async (req: Request, res: Response): Promi
  * Get all video monitors for user
  * GET /api/video-automation/monitors
  */
-router.get('/monitors', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/monitors', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const monitors = await storage.getVideoMonitors(userId);
@@ -216,7 +216,7 @@ router.get('/monitors', requireAuth, async (req: Request, res: Response): Promis
  * Update video monitor
  * PATCH /api/video-automation/monitors/:id
  */
-router.patch('/monitors/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.patch('/monitors/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = getCurrentUserId(req)!;
@@ -266,7 +266,7 @@ router.patch('/monitors/:id', requireAuth, async (req: Request, res: Response): 
  * Delete video monitor
  * DELETE /api/video-automation/monitors/:id
  */
-router.delete('/monitors/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.delete('/monitors/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
     const userId = getCurrentUserId(req)!;
@@ -300,7 +300,7 @@ router.delete('/monitors/:id', requireAuth, async (req: Request, res: Response):
  * Test comment intent detection
  * POST /api/video-automation/test-intent
  */
-router.post('/test-intent', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/test-intent', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { comment, videoContext } = req.body as { comment?: string; videoContext?: string };
 
@@ -328,7 +328,7 @@ router.post('/test-intent', requireAuth, async (req: Request, res: Response): Pr
  * Get video assets for user
  * GET /api/video-automation/assets
  */
-router.get('/assets', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/assets', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -350,7 +350,7 @@ router.get('/assets', requireAuth, async (req: Request, res: Response): Promise<
  * Sync video assets from Instagram
  * POST /api/video-automation/assets/sync
  */
-router.post('/assets/sync', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/assets/sync', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -411,7 +411,7 @@ router.post('/assets/sync', requireAuth, async (req: Request, res: Response): Pr
  * Update video asset with AI context
  * PATCH /api/video-automation/assets/:id
  */
-router.patch('/assets/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.patch('/assets/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { id } = req.params;
@@ -445,7 +445,7 @@ router.patch('/assets/:id', requireAuth, async (req: Request, res: Response): Pr
  * Get single video asset
  * GET /api/video-automation/assets/:id
  */
-router.get('/assets/:id', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/assets/:id', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { id } = req.params;
@@ -472,7 +472,7 @@ router.get('/assets/:id', requireAuth, async (req: Request, res: Response): Prom
  * Get AI action logs for video
  * GET /api/video-automation/ai-logs
  */
-router.get('/ai-logs', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/ai-logs', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 
@@ -497,7 +497,7 @@ router.get('/ai-logs', requireAuth, async (req: Request, res: Response): Promise
  * Get video automation stats including intent accuracy
  * GET /api/video-automation/stats
  */
-router.get('/stats', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
 

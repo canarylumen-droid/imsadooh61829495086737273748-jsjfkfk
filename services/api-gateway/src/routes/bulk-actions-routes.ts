@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { generateAIReply } from '@services/brain-worker/src/ai-lib/core/conversation-ai.js';
 import { calculateLeadScore } from '@services/brain-worker/src/ai-lib/engines/lead-scoring.js';
@@ -12,7 +12,7 @@ import { getUserLeadsLimit } from '@shared/plan-utils.js';
 const router = Router();
 
 // Add missing import-bulk endpoint for compatibility
-router.post('/import-bulk', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { leads: leadsData, channel = 'email', aiPaused = false, integrationId } = req.body as {
@@ -228,7 +228,7 @@ function channelToProvider(channel: ChannelType): ProviderType {
  * Bulk update lead status
  * POST /api/bulk/update-status
  */
-router.post('/update-status', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/update-status', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadIds, status } = req.body as { leadIds: string[]; status: LeadStatus };
     const userId = getCurrentUserId(req)!;
@@ -275,7 +275,7 @@ router.post('/update-status', requireAuth, async (req: Request, res: Response): 
  * Bulk add tags
  * POST /api/bulk/add-tags
  */
-router.post('/add-tags', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/add-tags', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadIds, tags } = req.body as { leadIds: string[]; tags: string[] };
     const userId = getCurrentUserId(req)!;
@@ -332,7 +332,7 @@ router.post('/add-tags', requireAuth, async (req: Request, res: Response): Promi
  * Bulk send AI message
  * POST /api/bulk/send-message
  */
-router.post('/send-message', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/send-message', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadIds, message } = req.body as { leadIds: string[]; message?: string };
     const userId = getCurrentUserId(req)!;
@@ -398,7 +398,7 @@ router.post('/send-message', requireAuth, async (req: Request, res: Response): P
  * Bulk score leads
  * POST /api/bulk/score-leads
  */
-router.post('/score-leads', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/score-leads', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadIds } = req.body as { leadIds: string[] };
     const userId = getCurrentUserId(req)!;
@@ -465,7 +465,7 @@ router.post('/score-leads', requireAuth, async (req: Request, res: Response): Pr
  * Bulk archive leads
  * POST /api/bulk/archive
  */
-router.post('/archive', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/archive', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadIds, archived = true } = req.body as { leadIds: string[]; archived?: boolean };
     const userId = getCurrentUserId(req)!;
@@ -497,7 +497,7 @@ router.post('/archive', requireAuth, async (req: Request, res: Response): Promis
  * Bulk delete leads
  * POST /api/bulk/delete
  */
-router.post('/delete', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/delete', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const { leadIds } = req.body as { leadIds: string[] };
     const userId = getCurrentUserId(req)!;
@@ -529,7 +529,7 @@ router.post('/delete', requireAuth, async (req: Request, res: Response): Promise
  * Export all leads as CSV
  * GET /api/bulk/export
  */
-router.get('/export', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/export', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const leads = await storage.getLeads({ userId, limit: 10000 });
@@ -575,7 +575,7 @@ router.get('/export', requireAuth, async (req: Request, res: Response): Promise<
  * GET /api/bulk/export-category?category=replied
  * Categories: replied, booked, no_show, no_reply, ghosted, converted
  */
-router.get('/export-category', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/export-category', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { category } = req.query as { category?: string };

@@ -23,6 +23,7 @@ services:
     container_name: audnix-api-gateway
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - PORT=5000
       - APP_ROLE=api
       - DATABASE_URL=${DATABASE_URL}
@@ -52,6 +53,7 @@ services:
     container_name: audnix-email-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=email
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -78,6 +80,7 @@ services:
     container_name: audnix-imap-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=imap
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -104,6 +107,7 @@ services:
     container_name: audnix-socket-server
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - PORT=5001
       - APP_ROLE=socket
       - DATABASE_URL=${DATABASE_URL}
@@ -133,6 +137,7 @@ services:
     container_name: audnix-ai-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=ai
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -159,6 +164,7 @@ services:
     container_name: audnix-outreach-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=outreach
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -185,6 +191,7 @@ services:
     container_name: audnix-lead-recovery-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=lead-recovery
       - DATABASE_URL=${DATABASE_URL}
       - MONGODB_URI=${MONGODB_URI}
@@ -218,6 +225,7 @@ services:
     container_name: audnix-social-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=social
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -244,6 +252,7 @@ services:
     container_name: audnix-billing-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=billing
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -270,6 +279,7 @@ services:
     container_name: audnix-orchestrator-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=orchestrator
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -296,6 +306,7 @@ services:
     container_name: audnix-rag-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=rag
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -322,6 +333,7 @@ services:
     container_name: audnix-vector-db-service
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=vectordb
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -343,6 +355,7 @@ services:
     container_name: audnix-audit-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=audit
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379
@@ -369,6 +382,7 @@ services:
     container_name: audnix-infra-scaler
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=infra-scaler
       - QUEUE_AUTOSCALER_ENABLED=true
       - DATABASE_URL=${DATABASE_URL}
@@ -409,6 +423,7 @@ services:
     container_name: audnix-warmup-worker
     environment:
       - NODE_ENV=production
+      - NEW_EMAIL_BACKEND=rust
       - APP_ROLE=warmup
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_URL=redis://default:${REDIS_PASSWORD}@redis:6379

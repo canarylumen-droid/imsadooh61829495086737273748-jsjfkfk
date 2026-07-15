@@ -6,7 +6,7 @@ export interface WebhookPayload {
   source: 'seed' | 'postmaster' | 'snds';
   inboxRate: number;
   spamRate: number;
-  action: 'warn' | 'pause';
+  action: 'warn' | 'pause' | 'completed';
 }
 
 export async function notifyCore(payload: WebhookPayload): Promise<boolean> {

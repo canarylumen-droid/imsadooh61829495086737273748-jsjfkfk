@@ -30,6 +30,11 @@ jobs:
       - name: Security Audit (non-blocking)
         run: npm audit --audit-level=critical || echo "::warning::Security audit found issues — review needed"
 
+      - name: Compile Rust workers
+        run: |
+          cargo build --release --manifest-path ./rust-email-sender/Cargo.toml
+          cargo build --release --manifest-path ./rust-imap-worker/Cargo.toml
+
       - name: Type check
         run: npm run check
 

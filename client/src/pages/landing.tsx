@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
 import { Navigation } from "@/components/new-landing/navigation";
 import { HeroSection } from "@/components/new-landing/hero-section";
 import { FeaturesSection } from "@/components/new-landing/features-section";
@@ -16,6 +17,12 @@ import { ROICalculator } from "@/components/new-landing/roi-calculator";
 import { FooterSection } from "@/components/new-landing/footer-section";
 import { useLocation } from "wouter";
 import { useUser } from "@/hooks/use-user";
+import { ScrollReveal } from "@/components/animations/advanced-animations";
+
+const sectionVariants = {
+  hidden: { opacity: 0, y: 60 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.25, 0.1, 0.25, 1] } },
+};
 
 export default function LandingPage() {
   const [, setLocation] = useLocation();
@@ -58,18 +65,42 @@ export default function LandingPage() {
     <main className="relative min-h-screen overflow-x-hidden bg-[#050505]">
       <Navigation />
       <HeroSection />
-      <FeaturesSection />
-      <HowItWorksSection />
-      <InfrastructureSection />
-      <MetricsSection />
-      <IntegrationsSection />
-      <SecuritySection />
-      <DevelopersSection />
-      <TestimonialsSection />
-      <FAQSection />
-      <PricingSection />
-      <ROICalculator />
-      <CtaSection />
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <FeaturesSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <HowItWorksSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <InfrastructureSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-80px" }}>
+        <MetricsSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <IntegrationsSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <SecuritySection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <DevelopersSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <TestimonialsSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <FAQSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <PricingSection />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <ROICalculator />
+      </motion.div>
+      <motion.div variants={sectionVariants} initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }}>
+        <CtaSection />
+      </motion.div>
       <FooterSection />
     </main>
   );

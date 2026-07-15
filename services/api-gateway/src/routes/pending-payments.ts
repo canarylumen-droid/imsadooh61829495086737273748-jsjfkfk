@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { storage } from "@shared/lib/storage/storage.js";
-import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
+import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { db } from "@shared/lib/db/db.js";
 import { pendingPayments, leads, auditTrail } from "@audnix/shared";
 import { eq, and } from "drizzle-orm";
@@ -12,7 +12,7 @@ const router = Router();
  * GET /api/pending-payments
  * Fetch all pending payments for the current user.
  */
-router.get("/", requireAuth, async (req: Request, res: Response) => {
+router.get("/", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
@@ -30,7 +30,7 @@ router.get("/", requireAuth, async (req: Request, res: Response) => {
  * PATCH /api/pending-payments/:id/link
  * Update the custom payment link for a specific payment.
  */
-router.patch("/:id/link", requireAuth, async (req: Request, res: Response) => {
+router.patch("/:id/link", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = getCurrentUserId(req);
     const { id } = req.params;
@@ -61,7 +61,7 @@ router.patch("/:id/link", requireAuth, async (req: Request, res: Response) => {
  * Manually confirm a payment was received.
  * This triggers the conversion logic and unpauses campaigns.
  */
-router.post("/:id/confirm", requireAuth, async (req: Request, res: Response) => {
+router.post("/:id/confirm", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = getCurrentUserId(req);
     const { id } = req.params;
@@ -125,7 +125,7 @@ router.post("/:id/confirm", requireAuth, async (req: Request, res: Response) => 
  * POST /api/pending-payments/:id/resend
  * Manually trigger the checkout email again.
  */
-router.post("/:id/resend", requireAuth, async (req: Request, res: Response) => {
+router.post("/:id/resend", requireAuthOrApiKey, async (req: Request, res: Response) => {
   try {
     const userId = getCurrentUserId(req);
     const { id } = req.params;

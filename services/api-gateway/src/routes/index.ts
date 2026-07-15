@@ -49,6 +49,7 @@ import customTrainingRoutes from "./custom-training-routes.js";
 import expertChatRoutes from "./expert-chat.js";
 import userSettingsRoutes from "./user-settings-routes.js";
 import prospectingRoutes from "./prospecting.js";
+import developerRoutes from "./developer-routes.js";
 import { organizationRouter } from "./organization-routes.js";
 import adminMigrationsRouter from "./admin-migrations.js";
 import notificationRoutes from "./notification-routes.js";
@@ -171,6 +172,7 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/health", healthRoutes);
   app.use("/api/unsubscribe", unsubscribeRoutes);
   app.use("/api/sse", sseRouter); // Server-Sent Events for real-time updates
+  app.use("/api/developer", developerRoutes); // API keys, account deletion queue, MCP config
   // Feature flags: SSE stream + polling + deploy ping
   const { registerRoutes: registerFeatureFlagRoutes } = await import("@shared/lib/realtime/feature-flags.js");
   const featureFlagRouter = (await import("express")).Router();

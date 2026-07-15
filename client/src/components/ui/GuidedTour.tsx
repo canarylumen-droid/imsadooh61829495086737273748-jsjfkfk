@@ -314,7 +314,7 @@ export function GuidedTour({ isOpen, onComplete, onSkip }: GuidedTourProps) {
             <Button
               onClick={handleNext}
               size="sm"
-              className="h-9 px-5 rounded-lg bg-primary text-black font-bold hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
+              className="h-9 px-5 rounded-lg bg-primary text-primary-foreground font-bold hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-primary/20"
             >
               {currentStep === TOUR_STEPS.length - 1 ? 'Finish' : 'Next'}
               <ChevronRight className="ml-1.5 w-3.5 h-3.5" />

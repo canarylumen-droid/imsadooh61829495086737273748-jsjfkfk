@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { generateReply } from '@services/brain-worker/src/ai-lib/core/ai-service.js';
 import { MODELS } from '@services/brain-worker/src/ai-lib/utils/model-config.js';
 import ObjectionHandler from '@services/outreach-worker/src/sales-engine/objection-handler.js';
-import { requireAuth } from '../middleware/auth.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { LRUCache } from 'lru-cache';
 
 const router = Router();
@@ -41,7 +41,7 @@ const IDENTITY_UPGRADE_MAP: Record<string, string> = {
  * POST /api/sales-engine/analyze-objection
  * Analyze prospect objection and return response strategy
  */
-router.post('/analyze-objection', requireAuth, async (req: Request, res: Response) => {
+router.post('/analyze-objection', requireAuthOrApiKey, async (req: Request, res: Response) => {
   const startTime = Date.now();
   try {
     const { objection, prospectMessage, industry = 'all' } = req.body;

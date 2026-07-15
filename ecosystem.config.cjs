@@ -10,6 +10,7 @@ module.exports = {
       dotenv: '.env',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'api',
         PORT: 5000,
         API_DISABLE_SOCKET: 'true',
@@ -33,6 +34,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'socket',
         PORT: 5001
       },
@@ -54,6 +56,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'email'
       },
       error_file: './logs/email-error.log',
@@ -74,6 +77,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'imap'
       },
       error_file: './logs/imap-error.log',
@@ -94,6 +98,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'ai'
       },
       error_file: './logs/ai-error.log',
@@ -114,6 +119,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'outreach'
       },
       error_file: './logs/outreach-error.log',
@@ -134,6 +140,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'lead-recovery'
       },
       error_file: './logs/lead-recovery-error.log',
@@ -154,6 +161,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'social'
       },
       error_file: './logs/social-error.log',
@@ -174,6 +182,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'billing'
       },
       error_file: './logs/billing-error.log',
@@ -194,6 +203,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'orchestrator'
       },
       error_file: './logs/orchestrator-error.log',
@@ -214,6 +224,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'rag'
       },
       error_file: './logs/rag-error.log',
@@ -234,6 +245,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'knowledge'
       },
       error_file: './logs/knowledge-error.log',
@@ -254,6 +266,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'audit'
       },
       error_file: './logs/audit-error.log',
@@ -274,6 +287,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'vectordb'
       },
       error_file: './logs/vectordb-error.log',
@@ -294,6 +308,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'warmup'
       },
       error_file: './logs/warmup-error.log',
@@ -313,6 +328,7 @@ module.exports = {
       env_file: './.env',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'deliverability',
         PORT: '3100'
       },
@@ -334,6 +350,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
+        NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'infra-scaler',
         QUEUE_AUTOSCALER_ENABLED: 'true'
       },

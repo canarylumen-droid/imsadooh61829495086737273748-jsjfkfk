@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import crypto from "crypto";
 import { quotaService } from "@shared/lib/monitoring/quota-service.js";
 import { apiLimiter, authLimiter } from "@services/api-gateway/src/middleware/rate-limit.js";
 import { securityHeaders } from "@services/api-gateway/src/middleware/security-headers.js";
@@ -80,26 +81,21 @@ export function createApp() {
   app.set("env", nodeEnv);
   app.set("trust proxy", 1);
 
-  if (process.env.NODE_ENV === "production") {
-    if (!process.env.SESSION_SECRET || !process.env.ENCRYPTION_KEY) {
-      console.error("CRITICAL ERROR: SESSION_SECRET or ENCRYPTION_KEY missing in production.");
+  // Auto-generate SESSION_SECRET if missing (both dev and production)
+  if (!process.env.SESSION_SECRET) {
+    const generated = crypto.randomBytes(32).toString('hex');
+    console.warn(`SESSION_SECRET not set — auto-generated. Set it in env for persistence across restarts.`);
+    process.env.SESSION_SECRET = generated;
+  }
+  
+  // Auto-generate ENCRYPTION_KEY if missing (both dev and production)
+  if (!process.env.ENCRYPTION_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error("CRITICAL: ENCRYPTION_KEY must be set in production. Data cannot be decrypted without it.");
       process.exit(1);
     }
-  } else {
-    if (!process.env.SESSION_SECRET) {
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error("SESSION_SECRET must be set in production.");
-      }
-      console.warn("SESSION_SECRET not set - using development fallback");
-      process.env.SESSION_SECRET = "audnix-dev-secret-do-not-use-in-prod";
-    }
-    if (!process.env.ENCRYPTION_KEY) {
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error("ENCRYPTION_KEY must be set in production.");
-      }
-      console.warn("ENCRYPTION_KEY not set - using development fallback");
-      process.env.ENCRYPTION_KEY = "audnix-dev-key-32-chars-long-!!!";
-    }
+    console.warn("ENCRYPTION_KEY not set — using development fallback");
+    process.env.ENCRYPTION_KEY = "audnix-dev-key-32-chars-long-!!!";
   }
 
   app.use("/api/", apiLimiter);

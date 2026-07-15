@@ -13,6 +13,18 @@ import nodemailer from 'nodemailer';
 import type { SentMessageInfo } from 'nodemailer';
 import { storage } from '@shared/lib/storage/storage.js';
 import type { ProviderResult } from '@shared/types.js';
+import { getRedisClient } from '@shared/lib/redis/redis.js';
+import { existsSync } from 'fs';
+
+const USE_RUST = process.env.NEW_EMAIL_BACKEND !== 'node';
+const RUST_BINARY = process.env.RUST_EMAIL_SENDER_PATH || '/usr/local/bin/audnix-email-sender';
+const RUST_PATHS = [
+  RUST_BINARY,
+  '/usr/local/bin/audnix-email-sender',
+  'rust-email-sender/target/release/audnix-email-sender',
+  './rust-email-sender/target/release/audnix-email-sender',
+];
+const RUST_AVAILABLE = RUST_PATHS.some(p => { try { return existsSync(p); } catch { return false; } });
 
 interface EmailPayload {
   to: string;
@@ -113,8 +125,6 @@ class MultiProviderEmailFailover {
       const integrations = await storage.getIntegrations(userId);
       const emailIntegrations = integrations.filter(i => i.provider === 'custom_email' && i.connected);
       
-      // If we have a 'from' address, find the exact matching integration
-      // Otherwise, fall back to the first available custom_email integration
       const targetInt = email.from 
         ? emailIntegrations.find(i => i.accountType === email.from)
         : emailIntegrations[0];
@@ -125,7 +135,6 @@ class MultiProviderEmailFailover {
           smtpConfig = decryptToJSON<SmtpConfig>(targetInt.encryptedMeta);
         } catch (decErr: any) {
           console.error(`[Outreach Engine] Failed to decrypt SMTP config for ${targetInt.accountType}:`, decErr.message);
-          // Fall through to throw if no config remains
         }
       }
     }
@@ -134,6 +143,46 @@ class MultiProviderEmailFailover {
       throw new Error('SMTP configuration not found');
     }
 
+    // Try Rust backend first if available
+    if (USE_RUST && RUST_AVAILABLE) {
+      try {
+        const redis = await getRedisClient();
+        if (redis) {
+          const jobId = crypto.randomUUID();
+          await (redis as any).lPush('email-send-queue', JSON.stringify({
+            id: jobId,
+            recipient: email.to,
+            from: email.from || smtpConfig.smtp_user,
+            subject: email.subject,
+            body: email.html,
+            smtp_host: smtpConfig.smtp_host,
+            smtp_port: smtpConfig.smtp_port || 587,
+            smtp_user: smtpConfig.smtp_user,
+            smtp_pass: smtpConfig.smtp_pass,
+            created_at: new Date().toISOString(),
+            retry_count: 0,
+            max_retries: 3,
+          }));
+          const pollStart = Date.now();
+          while (Date.now() - pollStart < 3000) {
+            const result = await (redis as any).brPop('email-send-results', 0.1);
+            if (result) {
+              const parsed = JSON.parse(result[1]);
+              if (parsed.job_id === jobId) {
+                if (parsed.status === 'sent') return;
+                throw new Error(parsed.error || 'Rust SMTP send failed');
+              }
+              await (redis as any).lPush('email-send-results', result[1]);
+            }
+          }
+          console.warn(`[MultiProviderFailover] Rust backend timeout — falling back to Nodemailer`);
+        }
+      } catch (rustErr: any) {
+        console.warn(`[MultiProviderFailover] Rust backend error (${rustErr.message}) — falling back to Nodemailer`);
+      }
+    }
+
+    // Nodemailer fallback
     const transporter = nodemailer.createTransport({
       host: smtpConfig.smtp_host,
       port: parseInt(String(smtpConfig.smtp_port)) || 587,
@@ -142,8 +191,6 @@ class MultiProviderEmailFailover {
         user: smtpConfig.smtp_user,
         pass: smtpConfig.smtp_pass
       },
-      // Force IPv4 to avoid EDNS / EAI_AGAIN DNS failures in cloud environments
-      // that have misconfigured or restricted IPv6 DNS resolution.
       family: 4,
       tls: { rejectUnauthorized: false },
       connectionTimeout: 20000,

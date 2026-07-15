@@ -8,7 +8,7 @@ import {
   RecoveryPromptConfig,
 } from "@shared/lib/models/lead-recovery.js";
 import { storage } from "@shared/lib/storage/storage.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuthOrApiKey } from "../middleware/auth.js";
 import { requireProPlan } from "../middleware/plan.js";
 import { recoveryEvents } from "../lib/events.js";
 import { checkMailboxCampaignStatus } from "../services/lead-recovery-mailbox.js";
@@ -19,7 +19,7 @@ const EMAIL_PROVIDERS = new Set(["custom_email", "gmail", "outlook"]);
 const SKIP_WARNING =
   "If you skip this now, you may not be able to activate Lead Recovery until this campaign is finished and mailboxes are free again. However, we will notify you when the campaign completes so you can activate it then.";
 
-router.use(requireAuth, requireProPlan);
+router.use(requireAuthOrApiKey, requireProPlan);
 
 router.use(async (_req, res, next) => {
   if (!hasMongoUri()) {

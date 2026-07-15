@@ -547,7 +547,7 @@ export default function ComparePage() {
                                         <p className={`text-lg font-bold ${currentCompetitor.colorClass}`}>{currentCompetitor.tagline}</p>
                                     </div>
                                     <Link href="/auth">
-                                        <Button className="bg-primary text-black font-black px-6 h-12 rounded-xl text-xs uppercase tracking-widest shadow-[0_0_30px_rgba(0,210,255,0.3)]">
+                                        <Button className="bg-primary text-primary-foreground font-black px-6 h-12 rounded-xl text-xs uppercase tracking-widest shadow-[0_0_30px_rgba(0,210,255,0.3)]">
                                             Try Audnix Free <ArrowRight className="ml-2 w-4 h-4" />
                                         </Button>
                                     </Link>
@@ -577,7 +577,7 @@ export default function ComparePage() {
                                     Stop paying for tools that save time. Start investing in an AI that makes money.
                                 </p>
                                 <Link href="/auth">
-                                    <Button size="lg" className="bg-primary text-black font-black h-14 px-10 rounded-xl text-sm uppercase tracking-widest shadow-[0_0_40px_rgba(0,210,255,0.4)]">
+                                    <Button size="lg" className="bg-primary text-primary-foreground font-black h-14 px-10 rounded-xl text-sm uppercase tracking-widest shadow-[0_0_40px_rgba(0,210,255,0.4)]">
                                         Deploy Your AI Sales Rep
                                     </Button>
                                 </Link>

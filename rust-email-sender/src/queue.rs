@@ -14,6 +14,10 @@ pub struct EmailJob {
     pub created_at: DateTime<Utc>,
     pub retry_count: u32,
     pub max_retries: u32,
+    pub smtp_host: Option<String>,
+    pub smtp_port: Option<u16>,
+    pub smtp_user: Option<String>,
+    pub smtp_pass: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

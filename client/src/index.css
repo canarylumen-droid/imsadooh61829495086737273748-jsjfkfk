@@ -540,6 +540,14 @@ html:not(.dark) .glass-premium,
   }
 
 @layer utilities {
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .bg-brand-gradient {
     @apply bg-gradient-to-b from-background via-background to-primary/5;
   }
@@ -713,6 +721,17 @@ html:not(.dark) .glass-premium,
   .text-4xl { font-size: clamp(1.75rem, 7vw, 2.5rem) !important; }
   .text-3xl { font-size: clamp(1.5rem, 6vw, 2rem) !important; }
   section[id], div[id] { scroll-margin-top: 4rem; }
+
+  /* Better mobile toggles - full width touch targets */
+  .theme-toggle, button:has(.switch), label:has(.switch) {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Stack settings grid on mobile */
+  .settings-grid-mobile {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 @layer utilities {

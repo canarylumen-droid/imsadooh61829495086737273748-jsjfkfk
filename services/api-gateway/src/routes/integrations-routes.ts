@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
+import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { encrypt } from '@shared/lib/crypto/encryption.js';
 import { db } from '@shared/lib/db/db.js';
@@ -12,7 +12,7 @@ const router = Router();
  * GET /api/integrations
  * Returns all integrations for the current user (safe, no secrets).
  */
-router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.get('/', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -76,7 +76,7 @@ router.get('/', requireAuth, async (req: Request, res: Response): Promise<void> 
  * POST /api/integrations/:provider/connect
  * Generic integration connect (for non-OAuth providers).
  */
-router.post('/:provider/connect', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:provider/connect', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -175,7 +175,7 @@ router.post('/:provider/connect', requireAuth, async (req: Request, res: Respons
  * 2. Delete from oauth_accounts table (for Gmail/Outlook)
  * 3. Delete from integrations table
  */
-router.post('/:provider/disconnect', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post('/:provider/disconnect', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {
@@ -348,7 +348,7 @@ router.post('/:provider/disconnect', requireAuth, async (req: Request, res: Resp
  * Users can increase or decrease their per-mailbox limit.
  * The reputation system may still apply gracefulDailyLimit throttles on top.
  */
-router.patch('/:integrationId/daily-limit', requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.patch('/:integrationId/daily-limit', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
     if (!userId) {

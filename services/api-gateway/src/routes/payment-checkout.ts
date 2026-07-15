@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { storage } from "@shared/lib/storage/storage.js";
 import { db } from "@shared/lib/db/db.js";
-import { requireAuth, getCurrentUserId } from "../middleware/auth.js";
+import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { sql } from "drizzle-orm";
 
 const router = Router();
@@ -30,7 +30,7 @@ const PLAN_AMOUNTS: Record<string, number> = {
  * Create Stripe checkout session for user
  * SECURITY: Uses parameterized queries to prevent SQL injection
  */
-router.post("/checkout-session", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/checkout-session", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { plan } = req.body as { plan: unknown };
@@ -128,7 +128,7 @@ router.post("/checkout-session", requireAuth, async (req: Request, res: Response
  * Verify payment session and mark user as pending approval
  * SECURITY: Uses parameterized queries to prevent SQL injection
  */
-router.post("/verify-session", requireAuth, async (req: Request, res: Response): Promise<void> => {
+router.post("/verify-session", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
     const { sessionId } = req.body as { sessionId: unknown };

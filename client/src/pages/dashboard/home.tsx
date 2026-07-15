@@ -581,7 +581,7 @@ export default function DashboardHome() {
                 isLoading={statsLoading}
                 hasIntegrations={isSmtpConnected}
               />
-              <ReputationTrendChart data={stats?.reputationTrend || []} />
+              <ReputationTrendChart />
             </div>
 
             <Card className="border-border/50 rounded-lg">

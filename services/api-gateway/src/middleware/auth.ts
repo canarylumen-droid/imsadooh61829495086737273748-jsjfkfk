@@ -2,6 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { storage } from "@shared/lib/storage/storage.js";
 import type { User } from "@audnix/shared";
 import { SESSION_COOKIE_NAME } from "../config/session.js";
+import crypto from "crypto";
 
 // Extend Express session to include our custom fields
 declare module "express-session" {
@@ -17,6 +18,9 @@ declare global {
   namespace Express {
     interface Request {
       user?: User;
+      userId?: string;
+      apiKeyScope?: string;
+      isApiKey?: boolean;
     }
   }
 }
@@ -213,6 +217,75 @@ export async function requireActiveSubscription(req: Request, res: Response, nex
 }
 
 /**
+ * API Key Authentication Middleware
+ * Validates Bearer token from Authorization header.
+ * Sets req.userId on success.
+ */
+export async function requireApiKey(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid Authorization header. Use: Bearer audnix_...' });
+  }
+
+  const rawKey = authHeader.slice(7).trim();
+  if (!rawKey.startsWith('audnix_')) {
+    return res.status(401).json({ error: 'Invalid API key format. Key must start with audnix_' });
+  }
+
+  const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+
+  try {
+    const { db } = await import('@shared/lib/db/db.js');
+    const { sql } = await import('drizzle-orm');
+
+    const result = await db.execute(sql`
+      SELECT user_id, name, scope FROM api_keys WHERE key = ${hashedKey}
+    `);
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'API key not found or has been revoked.' });
+    }
+
+    const keyData = result.rows[0] as any;
+
+    // Update last used timestamp (fire-and-forget)
+    db.execute(sql`UPDATE api_keys SET last_used_at = NOW() WHERE key = ${hashedKey}`).catch(() => {});
+
+    req.userId = keyData.user_id;
+    req.apiKeyScope = keyData.scope;
+    req.isApiKey = true;
+    next();
+  } catch (error) {
+    console.error('API key auth error:', error);
+    res.status(500).json({ error: 'Authentication failed.' });
+  }
+}
+
+/**
+ * Combined auth middleware — accepts session OR API key
+ * Session takes priority. API key must start with "audnix_"
+ */
+export async function requireAuthOrApiKey(req: Request, res: Response, next: NextFunction) {
+  // Try session first
+  if (req.session?.userId) {
+    return requireAuth(req, res, next);
+  }
+
+  // Fall back to API key
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer audnix_')) {
+    return requireApiKey(req, res, next);
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 100));
+  return res.status(401).json({
+    error: "Unauthorized",
+    message: "Authentication required. Provide session cookie or Authorization: Bearer audnix_... header.",
+    code: "AUTH_REQUIRED"
+  });
+}
+
+/**
  * Helper function to get current user from request
  */
 export function getCurrentUser(req: Request) {
@@ -221,7 +294,9 @@ export function getCurrentUser(req: Request) {
 
 /**
  * Helper function to get current user ID from request
+ * Works with both session auth and API key auth
  */
 export function getCurrentUserId(req: Request): string | undefined {
+  if (req.isApiKey && req.userId) return req.userId;
   return req.session?.userId;
 }

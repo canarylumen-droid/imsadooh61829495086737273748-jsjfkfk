@@ -45,7 +45,7 @@ export function NotificationPrompt({ onAccept, onDecline }: NotificationPromptPr
             <div className="flex gap-2">
               <Button 
                 onClick={onAccept}
-                className="flex-1 h-10 rounded-xl bg-primary text-black font-black text-[10px] uppercase tracking-widest hover:bg-primary/90"
+                className="flex-1 h-10 rounded-xl bg-primary text-primary-foreground font-black text-[10px] uppercase tracking-widest hover:bg-primary/90"
               >
                 Enable Alerts
               </Button>
