@@ -333,7 +333,7 @@ export async function getLeadRecoveryStates(
   tenantId: string
 ): Promise<LeadRecoveryStateRow[]> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT * FROM lead_recovery_state WHERE tenant_id = ?",
     [tenantId]
   );
@@ -344,7 +344,7 @@ export async function getActiveLeadRecoveryState(
   tenantId: string
 ): Promise<LeadRecoveryStateRow | null> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT * FROM lead_recovery_state WHERE tenant_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1",
     [tenantId]
   );
@@ -354,7 +354,7 @@ export async function getActiveLeadRecoveryState(
 
 export async function getPendingSyncStates(): Promise<LeadRecoveryStateRow[]> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     `SELECT * FROM lead_recovery_state
      WHERE is_active = 1
        AND sync_requested_at IS NOT NULL
@@ -372,7 +372,7 @@ export async function claimMailboxForSync(
   try {
     await conn.beginTransaction();
 
-    const [rows] = await conn.query<any[]>(
+    const [rows] = await conn.query(
       `SELECT * FROM lead_recovery_state
        WHERE tenant_id = ? AND mailbox_id = ?
          AND is_active = 1 AND is_busy = 0
@@ -394,7 +394,7 @@ export async function claimMailboxForSync(
       [tenantId, mailboxId]
     );
 
-    const [updated] = await conn.query<any[]>(
+    const [updated] = await conn.query(
       "SELECT * FROM lead_recovery_state WHERE tenant_id = ? AND mailbox_id = ?",
       [tenantId, mailboxId]
     );
@@ -496,7 +496,7 @@ export async function getRecoveredLeads(
   limit: number
 ): Promise<RecoveredLeadRow[]> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT * FROM recovered_leads WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?",
     [tenantId, limit]
   );
@@ -516,7 +516,7 @@ export async function getRecoveredLeadById(
   tenantId: string
 ): Promise<RecoveredLeadRow | null> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT * FROM recovered_leads WHERE id = ? AND tenant_id = ?",
     [leadId, tenantId]
   );
@@ -551,7 +551,7 @@ export async function upsertRecoveredLead(
 ): Promise<RecoveredLeadRow> {
   const p = getMySqlPool();
 
-  const existingRows = await p.query<any[]>(
+  const existingRows = await p.query(
     "SELECT * FROM recovered_leads WHERE tenant_id = ? AND mailbox_id = ? AND email = ?",
     [tenantId, mailboxId, email]
   );
@@ -638,7 +638,7 @@ export async function upsertRecoveredLead(
     );
   }
 
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT * FROM recovered_leads WHERE tenant_id = ? AND mailbox_id = ? AND email = ?",
     [tenantId, mailboxId, email]
   );
@@ -658,7 +658,7 @@ export async function getRecoveryPromptConfig(
   name: string
 ): Promise<RecoveryPromptConfigRow | null> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT * FROM recovery_prompt_config WHERE name = ?",
     [name]
   );
@@ -682,7 +682,7 @@ export async function upsertRecoveryPromptConfig(
 
 export async function promptConfigExists(name: string): Promise<boolean> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT 1 FROM recovery_prompt_config WHERE name = ? LIMIT 1",
     [name]
   );
@@ -696,7 +696,7 @@ export async function getRecoveryEventLogs(
   limit: number
 ): Promise<RecoveryEventLogRow[]> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     "SELECT * FROM recovery_event_logs WHERE tenant_id = ? ORDER BY timestamp DESC LIMIT ?",
     [tenantId, limit]
   );
@@ -758,7 +758,7 @@ export async function upsertRecoveryObjection(
 
 export async function getLeadRecoveryBacklog(): Promise<number> {
   const p = getMySqlPool();
-  const [rows] = await p.query<any[]>(
+  const [rows] = await p.query(
     `SELECT COUNT(*) AS count FROM lead_recovery_state
      WHERE is_active = 1
        AND is_busy = 0
