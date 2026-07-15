@@ -21,7 +21,23 @@ import {
   Menu,
   X,
   Search,
+  Loader2,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Play,
+  FileCode,
+  Languages,
+  Sparkles,
+  TestTube,
+  Grip,
 } from "lucide-react";
+import {
+  SiPython, SiJavascript, SiTypescript, SiGo, SiRust,
+  SiSwift, SiRuby, SiPhp, SiDotnet,
+} from "react-icons/si";
 
 interface EndpointItem {
   method: string;
@@ -375,11 +391,31 @@ const API_ENDPOINTS: EndpointSection[] = [
 
 const SECTIONS = API_ENDPOINTS.map((s) => s.section);
 
+interface LangSnippet { id: string; name: string; icon: React.ReactNode; code: (url: string, key: string) => string }
+
+const LANG_SNIPPETS: LangSnippet[] = [
+  { id: "curl", name: "cURL", icon: <Terminal className="h-4 w-4 text-green-400" />, code: (u, k) => `curl -H "Authorization: Bearer ${k}" \\\n  ${u}/api/leads?limit=5` },
+  { id: "python", name: "Python", icon: <SiPython className="h-4 w-4 text-blue-400" />, code: (u, k) => `import requests\n\nheaders = {"Authorization": "Bearer ${k}"}\nresponse = requests.get("${u}/api/leads", params={"limit": 5}, headers=headers)\nprint(response.json())` },
+  { id: "javascript", name: "JavaScript", icon: <SiJavascript className="h-4 w-4 text-yellow-400" />, code: (u, k) => `const response = await fetch("${u}/api/leads?limit=5", {\n  headers: { Authorization: "Bearer ${k}" }\n});\nconst data = await response.json();\nconsole.log(data);` },
+  { id: "typescript", name: "TypeScript", icon: <SiTypescript className="h-4 w-4 text-blue-400" />, code: (u, k) => `import axios from "axios";\n\nconst { data } = await axios.get("${u}/api/leads", {\n  params: { limit: 5 },\n  headers: { Authorization: "Bearer ${k}" }\n});\nconsole.log(data);` },
+  { id: "go", name: "Go", icon: <SiGo className="h-4 w-4 text-cyan-400" />, code: (u, k) => `package main\n\nimport ("fmt";"net/http";"io")\n\nfunc main() {\n  req, _ := http.NewRequest("GET", "${u}/api/leads?limit=5", nil)\n  req.Header.Set("Authorization", "Bearer ${k}")\n  resp, _ := http.DefaultClient.Do(req)\n  defer resp.Body.Close()\n  body, _ := io.ReadAll(resp.Body)\n  fmt.Println(string(body))\n}` },
+  { id: "rust", name: "Rust", icon: <SiRust className="h-4 w-4 text-orange-400" />, code: (u, k) => `use reqwest;\n\n#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {\n    let client = reqwest::Client::new();\n    let resp = client.get("${u}/api/leads")\n        .query(&[("limit", "5")])\n        .header("Authorization", "Bearer ${k}")\n        .send().await?;\n    println!("{:#}", resp.json::<serde_json::Value>().await?);\n    Ok(())\n}` },
+  { id: "swift", name: "Swift", icon: <SiSwift className="h-4 w-4 text-orange-400" />, code: (u, k) => `import Foundation\n\nvar req = URLRequest(url: URL(string: "${u}/api/leads?limit=5")!)\nreq.setValue("Bearer ${k}", forHTTPHeaderField: "Authorization")\nURLSession.shared.dataTask(with: req) { d,_,_ in\n  if let d=d {print(String(data:d,encoding:.utf8)!)}\n}.resume()` },
+  { id: "ruby", name: "Ruby", icon: <SiRuby className="h-4 w-4 text-red-400" />, code: (u, k) => `require 'net/http'; require 'uri'\n\nuri = URI("${u}/api/leads?limit=5")\nhttp = Net::HTTP.new(uri.host, uri.port); http.use_ssl = uri.scheme == 'https'\nreq = Net::HTTP::Get.new(uri)\nreq["Authorization"] = "Bearer ${k}"\nputs http.request(req).body` },
+  { id: "php", name: "PHP", icon: <SiPhp className="h-4 w-4 text-indigo-400" />, code: (u, k) => `<?php\n$ch = curl_init("${u}/api/leads?limit=5");\ncurl_setopt($ch, CURLOPT_HTTPHEADER, ["Authorization: Bearer ${k}"]);\ncurl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\necho curl_exec($ch);\ncurl_close($ch);` },
+  { id: "csharp", name: "C#", icon: <SiDotnet className="h-4 w-4 text-green-400" />, code: (u, k) => `using System.Net.Http;\n\nvar client = new HttpClient();\nclient.DefaultRequestHeaders.Add("Authorization", "Bearer ${k}");\nvar response = await client.GetAsync("${u}/api/leads?limit=5");\nConsole.WriteLine(await response.Content.ReadAsStringAsync());` },
+];
+
 export default function DeveloperDocsPage() {
   const [activeSection, setActiveSection] = useState("Authentication");
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [testKey, setTestKey] = useState("");
+  const [testResult, setTestResult] = useState<{ valid: boolean; keyInfo?: any; error?: string; message?: string } | null>(null);
+  const [testLoading, setTestLoading] = useState(false);
+  const [showTestKey, setShowTestKey] = useState(false);
+  const [snippetLang, setSnippetLang] = useState("curl");
 
   useEffect(() => {
     document.title = "AUDNIX — Developer API Documentation";
@@ -390,6 +426,52 @@ export default function DeveloperDocsPage() {
     setCopied(id);
     setTimeout(() => setCopied(null), 2000);
   };
+
+  const verifyKey = async () => {
+    if (!testKey.trim()) return;
+    setTestLoading(true);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/developer/verify-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: testKey.trim() }),
+      });
+      const data = await res.json();
+      setTestResult(data);
+    } catch {
+      setTestResult({ valid: false, error: "Network error. Check your connection." });
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  function TerminalBlock({ code, fileName }: { code: string; fileName?: string }) {
+    const [copiedInner, setCopiedInner] = useState(false);
+    return (
+      <div className="relative group rounded-lg overflow-hidden border border-border/20 bg-[#0d1117] transition-all duration-300 hover:border-primary/30 hover:shadow-[0_0_20px_-5px] hover:shadow-primary/10">
+        <div className="flex items-center justify-between px-4 py-2 bg-[#161b22] border-b border-white/5">
+          <div className="flex items-center gap-2.5">
+            <div className="flex gap-1.5">
+              <div className="w-3 h-3 rounded-full bg-red-500/60" />
+              <div className="w-3 h-3 rounded-full bg-yellow-500/60" />
+              <div className="w-3 h-3 rounded-full bg-green-500/60" />
+            </div>
+            {fileName && <span className="text-[11px] text-muted-foreground/60 ml-2 font-mono truncate max-w-[200px]">{fileName}</span>}
+          </div>
+          <button onClick={() => { navigator.clipboard.writeText(code); setCopiedInner(true); setTimeout(() => setCopiedInner(false), 1500); }} className="h-7 w-7 flex items-center justify-center rounded-md opacity-0 group-hover:opacity-100 hover:bg-white/10 transition-all">
+            {copiedInner ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
+          </button>
+        </div>
+        <div className="flex overflow-x-auto">
+          <div className="select-none text-right pr-3 pl-2 py-3 text-[11px] leading-5 text-muted-foreground/25 font-mono border-r border-white/5 bg-[#0d1117] min-w-[2.5rem]">
+            {code.split("\n").map((_, i) => <div key={i} className="hover:text-muted-foreground/60 transition-colors">{i + 1}</div>)}
+          </div>
+          <pre className="flex-1 p-3 overflow-x-auto"><code className="text-[12px] font-mono leading-5 text-gray-200 whitespace-pre">{code}</code></pre>
+              </div>
+            </div>
+    ); // end TerminalBlock
+  }
 
   const filteredSections = API_ENDPOINTS.map((section) => ({
     ...section,
@@ -596,6 +678,27 @@ export default function DeveloperDocsPage() {
               </div>
             </div>
 
+            {/* Code Snippets by Language */}
+            <div className="mb-10">
+              <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+                <Languages className="h-5 w-5 text-primary" />
+                Code Snippets
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">Pre-built API calls in 10 languages. Copy and paste into your project.</p>
+              <div className="flex flex-wrap gap-1.5 mb-4">
+                {LANG_SNIPPETS.map(l => (
+                  <button key={l.id} onClick={() => setSnippetLang(l.id)} className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border transition-all ${snippetLang === l.id ? "bg-primary/10 border-primary/30 text-primary font-bold" : "bg-muted/5 border-border/20 text-muted-foreground hover:text-foreground"}`}>
+                    {l.icon}
+                    {l.name}
+                  </button>
+                ))}
+              </div>
+              <TerminalBlock
+                code={LANG_SNIPPETS.find(l => l.id === snippetLang)?.code("https://audnixai.com", "audnix_YOUR_API_KEY") || ""}
+                fileName={`api-request.${snippetLang}`}
+              />
+            </div>
+
             {/* API Key Format */}
             <div className="mb-10">
               <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
@@ -620,7 +723,57 @@ export default function DeveloperDocsPage() {
               </div>
             </div>
 
-            {/* Rate Limiting */}
+            {/* API Key Tester */}
+            <div className="mb-10 p-6 bg-gradient-to-br from-emerald-500/5 to-teal-500/5 rounded-2xl border border-emerald-500/15">
+              <h2 className="font-bold text-lg mb-3 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-500" />
+                Test Your API Key
+              </h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Paste your API key below to verify it's valid and see its permissions. Your key is sent securely to our server — never shared or stored.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                  <input
+                    type={showTestKey ? "text" : "password"}
+                    value={testKey}
+                    onChange={e => setTestKey(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && verifyKey()}
+                    placeholder="audnix_..."
+                    className="w-full h-11 pl-4 pr-10 rounded-xl bg-background/50 border border-border/30 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500/30 transition-all"
+                  />
+                  <button onClick={() => setShowTestKey(!showTestKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    {showTestKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                <button onClick={verifyKey} disabled={!testKey.trim() || testLoading} className="h-11 px-6 rounded-xl font-bold text-xs gap-2 shrink-0 inline-flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {testLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                  <span className="ml-2">Verify Key</span>
+                </button>
+              </div>
+              {testResult && (
+                <div className={`mt-4 p-4 rounded-xl border ${testResult.valid ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"} animate-in fade-in slide-in-from-top-2`}>
+                  <div className="flex items-start gap-3">
+                    {testResult.valid ? <CheckCircle2 className="h-5 w-5 text-emerald-500 mt-0.5 shrink-0" /> : <AlertTriangle className="h-5 w-5 text-red-500 mt-0.5 shrink-0" />}
+                    <div className="min-w-0">
+                      <p className={`font-bold text-sm ${testResult.valid ? "text-emerald-500" : "text-red-500"}`}>
+                        {testResult.valid ? "Valid API Key" : "Invalid Key"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{testResult.message || testResult.error}</p>
+                      {testResult.valid && testResult.keyInfo && (
+                        <div className="flex flex-wrap gap-3 mt-2">
+                          <span className="text-[11px] font-mono bg-muted/30 px-2 py-1 rounded">Name: {testResult.keyInfo.name}</span>
+                          <span className="text-[11px] font-mono bg-muted/30 px-2 py-1 rounded">Scope: {testResult.keyInfo.scope}</span>
+                          {testResult.keyInfo.createdAt && (
+                            <span className="text-[11px] font-mono bg-muted/30 px-2 py-1 rounded">Created: {new Date(testResult.keyInfo.createdAt).toLocaleDateString()}</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="mb-10 p-6 bg-muted/10 rounded-2xl border border-border/20">
               <h2 className="font-bold text-lg mb-3 flex items-center gap-2">
                 <Zap className="h-5 w-5 text-primary" />
@@ -878,6 +1031,49 @@ export default function DeveloperDocsPage() {
                       A skill file (<code className="text-[10px] font-mono bg-muted/50 px-1 rounded">audnix-mcp.skill.md</code>) is available for LLM agents to understand these rules automatically.
                     </p>
                   </div>
+                </div>
+              </div>
+
+              {/* MCP Quick Start */}
+              <div className="mt-6 p-6 bg-muted/10 rounded-2xl border border-border/20 space-y-4">
+                <h3 className="font-bold text-base flex items-center gap-2">
+                  <Terminal className="h-4 w-4 text-primary" />
+                  Quick Start
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-4 bg-background/50 rounded-xl border border-border/20">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Claude Desktop</p>
+                    <code className="text-[10px] font-mono block whitespace-pre-wrap text-foreground">{`{
+  "mcpServers": {
+    "audnix": {
+      "url": "https://audnixai.com/mcp",
+      "headers": {
+        "Authorization": "Bearer audnix_your_api_key"
+      }
+    }
+  }
+}`}</code>
+                  </div>
+                  <div className="p-4 bg-background/50 rounded-xl border border-border/20">
+                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">VS Code / Cursor</p>
+                    <code className="text-[10px] font-mono block whitespace-pre-wrap text-foreground">{`{
+  "mcpServers": {
+    "audnix": {
+      "url": "https://audnixai.com/mcp",
+      "headers": {
+        "Authorization": "Bearer audnix_your_api_key"
+      }
+    }
+  }
+}`}</code>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 mt-4">
+                  <Globe className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">
+                    MCP endpoint: <code className="text-[11px] font-mono text-primary">POST https://audnixai.com/mcp</code>
+                    {" · "}JSON-RPC 2.0 · Full list of compatible LLMs at <a href="/dashboard/mcp-server" className="text-primary hover:underline font-bold">MCP Dashboard</a>
+                  </p>
                 </div>
               </div>
             </div>

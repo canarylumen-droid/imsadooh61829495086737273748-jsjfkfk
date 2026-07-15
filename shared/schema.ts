@@ -592,11 +592,30 @@ export const apiKeys = pgTable("api_keys", {
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   key: text("key").notNull().unique(),
+  permission_level: text("permission_level").notNull().default('read_write'),
   scope: text("scope").notNull().default('read_write'),
+  scopes: jsonb("scopes").default('[]'),
+  isActive: boolean("is_active").notNull().default(true),
   lastUsedAt: timestamp("last_used_at"),
   expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+}, (table) => ({
+  apiKeyUserIdIdx: index("api_key_user_id_idx").on(table.userId),
+}));
+
+export const mcpLogs = pgTable("mcp_logs", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  apiKeyId: uuid("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
+  toolName: text("tool_name").notNull(),
+  input: jsonb("input"),
+  success: boolean("success").notNull(),
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => ({
+  mcpLogUserIdIdx: index("mcp_log_user_id_idx").on(table.userId),
+  mcpLogToolNameIdx: index("mcp_log_tool_name_idx").on(table.toolName),
+}));
 
 export const prospects = pgTable("prospects", {
   id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -1223,6 +1242,9 @@ export type Webhook = typeof webhooks.$inferSelect;
 export type InsertWebhook = typeof webhooks.$inferInsert;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type InsertApiKey = typeof apiKeys.$inferInsert;
+export const insertMcpLogSchema = createInsertSchema(mcpLogs);
+export type McpLog = typeof mcpLogs.$inferSelect;
+export type InsertMcpLog = typeof mcpLogs.$inferInsert;
 export type Insight = typeof insights.$inferSelect;
 export type InsertInsight = typeof insights.$inferInsert;
 export type Payment = typeof payments.$inferSelect;

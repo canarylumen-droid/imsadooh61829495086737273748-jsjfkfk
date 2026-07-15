@@ -749,7 +749,7 @@ export default function SettingsPage() {
                     <Key className="h-5 w-5 text-primary" />
                     API Keys
                   </CardTitle>
-                  <CardDescription>Authenticate API requests with a Bearer token. Keys start with <code className="text-primary font-mono text-xs">audnix_</code> for brand consistency.</CardDescription>
+                  <CardDescription>Authenticate API requests with a Bearer token. Keys start with <code className="text-primary font-mono text-xs">audnix_</code> for brand consistency. <a href="/developer" className="text-primary hover:underline font-bold" target="_blank" rel="noopener noreferrer">View full API docs →</a></CardDescription>
                 </div>
                 <Button
                   onClick={() => setShowCreateKey(true)}

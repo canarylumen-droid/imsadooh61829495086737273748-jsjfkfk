@@ -652,6 +652,8 @@ Push to main → CI (lint + typecheck + build + test)
 | Rust workers | ✅ **Compiled** | Rust workers compiled and integrated into Docker build |
 | Deletion queue import alias | ⏳ | Uses `@shared/lib/queues/deletion-queue.js` — verify tsconfig paths resolve at runtime |
 | API key scope on all routes | ✅ **DONE** | Swapped `requireAuth` → `requireAuthOrApiKey` on all public API endpoints |
+| MCP Server UI | ✅ **DONE** | `/dashboard/mcp-server` — credentials, 25 LLM tabs (with brand logos), 12 language tabs (with brand logos), tool permissions, test connection, terminal-style code blocks with animations, nodemailer/Mail icon, Claude by Anthropic dual logo, 8 IDE tabs (Xcode, Android Studio, IntelliJ, PyCharm, Vim, Neovim, Sublime, Custom), search/filter, mobile responsive |
+| Developer docs SEO & live key tester | ✅ **DONE** | `/developer` added to sitemap.xml + JSON-LD WebPage structured data in index.html. Public `POST /api/developer/verify-key` endpoint (SHA-256 lookup, rate-limited). Widget on dev page to paste + verify key in real-time. 10-language code snippet browser (cURL, Python, JS, TS, Go, Rust, Swift, Ruby, PHP, C#). Settings Developer tab links to /developer. |
 | No real users at scale | ⚠️ | Unproven at production traffic |
 
 ---
@@ -689,8 +691,92 @@ open https://audnixai.com/developer
 
 # MCP (for LLM agents)
 # Config at: .opencode/skills/audnix-mcp.md
-# Endpoint: https://audnixai.com/api/mcp
+# Dashboard: https://audnixai.com/dashboard/mcp-server
+# Endpoint: POST https://audnixai.com/mcp
+# Auth: Bearer audnix_<key>
+#
+# LLM clients supported (25):
+#   Claude/Anthropic, OpenAI GPT, Cursor, Windsurf, Cline,
+#   Continue, GitHub Copilot, Cody/Sourcegraph, Tabnine,
+#   CodeGemini, Amazon Q, Supermaven, Warp, Codeium, Mintlify,
+#   V0, Lovable, Bolt.new, Replit AI, CodeSandbox, StackBlitz,
+#   Gitpod, VS Code, JetBrains AI, Xcode, Android Studio,
+#   IntelliJ IDEA, PyCharm, Vim, Neovim, Sublime Text,
+#   Custom Client
+#
+# Languages (12):
+#   cURL, Python, JS, TS, Go, Rust, Java, Kotlin, Swift,
+#   Ruby, PHP, C#
+#
+# MCP tools available:
+#   get_campaigns, get_leads, get_analytics, get_inbox,
+#   send_message, manage_webhooks, delete_lead, delete_account (blocked)
+#
+# Test live: Dashboard → Test Connection card
 ```
+
+---
+
+## 15. FAQ / Architecture Q&A
+
+| Question | Answer |
+|----------|--------|
+| Does the MCP endpoint work with any language? | Yes — plain HTTP `POST /mcp`, `Authorization: Bearer audnix_<key>`, JSON-RPC 2.0 body. Any HTTP client in any language works. |
+| Is every API key tied to a user? | Yes. `shared/schema.ts:592` — `userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" })`. Every key requires a parent user. |
+| What happens when an account is deleted? | `DELETE /account` (user-settings-routes.ts:418) calls `revocationService.revokeAllAndDestroyUser(userId)` → `db.delete(users).where(eq(users.id, id))`. All 17+ FK constraints in migrator DDL have `ON DELETE CASCADE` — leads, campaigns, API keys, inboxes, settings, sessions, OAuth tokens all cascade-deleted atomically. User must sign up fresh. |
+
+---
+
+## 16. MCP Integration
+
+### How to Connect from any LLM
+
+The MCP server is available over plain HTTP at:
+
+```
+POST https://api.audnixai.com/mcp
+Authorization: Bearer audnix_<your_api_key>
+Content-Type: application/json
+
+{"jsonrpc":"2.0","method":"tools/list","id":1}
+```
+
+No npx, no local server process. Just HTTP.
+
+### Permission Levels
+
+| Level | Access |
+|-------|--------|
+| **Read Only** | Can only call read tools: `get_campaigns`, `get_leads`, `get_analytics`, `get_inbox` |
+| **Read + Write** | Can call all non-blocked tools, including `send_message`, `manage_webhooks`, `delete_lead` (with `dangerous` scope) |
+
+### Blocked Endpoints
+
+| Tool | Reason |
+|------|--------|
+| `delete_account` | **Permanently blocked** for all API keys. Account deletion must be done via the dashboard. |
+
+### Dangerous Endpoints
+
+| Tool | Requirement |
+|------|-------------|
+| `delete_lead` | Requires the `dangerous` scope enabled on the API key. Returns 403 if missing. |
+
+### curl Example
+
+```bash
+curl -X POST "https://api.audnixai.com/mcp" \
+  -H "Authorization: Bearer audnix_<your_api_key>" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+### UI Location
+
+- **Dashboard → Developer** sidebar tab → `/dashboard/mcp-server`
+- Connection code with 3 sub-tabs per LLM: **cURL**, **Languages** (12 languages), **Test** (live test)
+- Tool permissions with collapsible groups, "Blocked" and "Dangerous" badges
+- Profile picture animated ring glow in sidebar
 
 ---
 

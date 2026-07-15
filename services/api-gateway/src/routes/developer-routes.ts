@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
-import { developerLimiter } from '../middleware/rate-limit.js';
+import { developerLimiter, apiLimiter } from '../middleware/rate-limit.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import crypto from 'crypto';
@@ -21,6 +21,52 @@ async function ensureScopeColumn() {
   } catch {}
 }
 ensureScopeColumn();
+
+// ─── Verify API Key (public, read-only) ──────────────────────────────
+// Used by the public developer docs page to test a key's validity and scope.
+// Rate-limited to prevent abuse.
+router.post('/verify-key', apiLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { key } = req.body;
+    if (!key || typeof key !== 'string') {
+      res.status(400).json({ valid: false, error: 'API key is required' });
+      return;
+    }
+    if (!key.startsWith('audnix_')) {
+      res.json({ valid: false, error: 'Invalid key format. Must start with audnix_' });
+      return;
+    }
+    const hashedKey = crypto.createHash('sha256').update(key).digest('hex');
+    const result = await db.execute(sql`
+      SELECT id, name, scope, permission_level, is_active, last_used_at, created_at
+      FROM api_keys WHERE key = ${hashedKey}
+    `);
+    if (result.rows.length === 0) {
+      res.json({ valid: false, error: 'API key not found in our system' });
+      return;
+    }
+    const row = result.rows[0] as any;
+    if (!row.is_active) {
+      res.json({ valid: false, error: 'This API key has been deactivated', keyInfo: { name: row.name, deactivated: true } });
+      return;
+    }
+    // Update last_used_at
+    await db.execute(sql`UPDATE api_keys SET last_used_at = NOW() WHERE id = ${row.id}`);
+    res.json({
+      valid: true,
+      keyInfo: {
+        name: row.name,
+        scope: row.permission_level || row.scope || 'read_write',
+        createdAt: row.created_at?.toISOString() || null,
+        lastUsedAt: row.last_used_at?.toISOString() || null,
+      },
+      message: `Key "${row.name}" is valid with ${row.permission_level || row.scope || 'read_write'} permissions.`,
+    });
+  } catch (error) {
+    console.error('Error verifying API key:', error);
+    res.status(500).json({ valid: false, error: 'Failed to verify API key' });
+  }
+});
 
 // Apply rate limiter to all developer routes
 router.use(developerLimiter);

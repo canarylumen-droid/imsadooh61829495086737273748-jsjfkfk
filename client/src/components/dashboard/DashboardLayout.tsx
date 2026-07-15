@@ -249,6 +249,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
         { label: "Warmup", icon: Shield, path: "/dashboard/warmup" },
+        { label: "Developer", icon: Code, path: "/dashboard/mcp-server" },
       ],
     },
     {
@@ -585,7 +586,9 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                 <DropdownMenuTrigger asChild>
                   <div className={`flex items-center gap-3 cursor-pointer p-2 rounded-xl hover:bg-muted transition-all group ${sidebarCollapsed ? "justify-center" : ""}`}>
                     <div className="relative">
-                      <Avatar className="h-10 w-10 rounded-full border border-border shadow-sm transition-transform group-hover:scale-105">
+                      <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-primary/30 ring-offset-2 ring-offset-background" />
+                      <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary/20 via-transparent to-primary/10 animate-spin" style={{ animationDuration: '4s' }} />
+                      <Avatar className="h-10 w-10 rounded-full border border-border shadow-sm transition-transform group-hover:scale-105 relative">
                         <AvatarImage src={user?.avatar} />
                         <AvatarFallback className="rounded-full bg-primary/20 text-primary font-bold text-sm">
                           {(user?.name || "U").charAt(0).toUpperCase()}
@@ -604,12 +607,15 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                 <DropdownMenuContent align={sidebarCollapsed ? "start" : "end"} className="w-72 p-1 rounded-2xl" side={sidebarCollapsed ? "right" : "top"} sideOffset={12}>
                   <div className="p-4 border-b border-border/40 bg-muted/20 rounded-t-xl mb-1">
                     <div className="flex items-center gap-3 mb-4">
-                      <Avatar className="h-12 w-12 border-2 border-primary/20 rounded-full">
-                        <AvatarImage src={user?.avatar} />
-                        <AvatarFallback className="bg-primary/10 text-primary font-bold rounded-full">
-                          {(user?.name || "U").charAt(0).toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
+                      <div className="relative">
+                        <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-primary/20 ring-offset-2 ring-offset-background" />
+                        <Avatar className="h-12 w-12 border-2 border-primary/20 rounded-full relative">
+                          <AvatarImage src={user?.avatar} />
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold rounded-full">
+                            {(user?.name || "U").charAt(0).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                      </div>
                       <div>
                         <p className="text-sm font-bold text-foreground mb-0.5">{user?.name}</p>
                         <p className="text-[10px] font-bold text-muted-foreground truncate w-40">{user?.email}</p>
