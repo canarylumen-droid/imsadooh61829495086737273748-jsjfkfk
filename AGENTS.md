@@ -46,9 +46,19 @@ Audnix - email outreach/campaign platform.
 - Deploy: `git push github main && ssh EC2 pull && pm2 restart audnix-api-gateway`
 - Key scp: use EC2 Instance Connect to push temporary SSH key
 
+## Recent Fixes (Jul 15 2026)
+
+- Dashboard KPIs: Added empty state when no mailbox connected — shows "Connect Mailbox" / "Create Campaign" buttons
+- AI Insights: Three-tier empty state based on mailbox connected, campaign running, or awaiting activity; fetches integrations/campaigns for smarter messaging
+- Inbox: `statusStyles` now handles `contacted` and `opened` (previously missing, causing blank badge); reply on new lead sets `contacted` not `opened`; "Contacted" filter added
+- Avatar upload: `POST /api/user/avatar` route added with Supabase/S3 → local disk fallback; `/uploads/` static serving
+- CalendarLink: Saved to `users.calendarLink` column instead of `metadata` JSONB
+- Calendly real-time: `settings_updated` socket handler invalidates `/api/user/profile` query
+- mysql2: Lazy import so API gateway starts without the package
+
 ## Useful Commands
 
 - Dev server: 
 - Tests: 
 - Lint: 
-- Deploy: git push origin/main; ssh to EC2, cd /home/ubuntu/app && git pull && npm run build && pm2 restart audnix-api-gateway 
+- Deploy: `git push github main` then ssh EC2: `cd /home/ubuntu/app && git pull && cd client && npm run build && pm2 restart audnix-api-gateway` 

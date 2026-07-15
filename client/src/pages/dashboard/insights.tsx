@@ -7,66 +7,36 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import {
-  TrendingUp,
-  RefreshCw,
-  Sparkles,
-  Loader2,
-  FileText,
-  Download,
-  BarChart3,
-  ArrowRight,
+  TrendingUp, TrendingDown, Minus, RefreshCw, Sparkles, Loader2, FileText, Download,
+  BarChart3, ArrowRight, Send, Lightbulb, Target, Activity, Clock, Zap,
 } from "lucide-react";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { useQuery } from "@tanstack/react-query";
 import { useRealtime } from "@/hooks/use-realtime";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  ResponsiveContainer,
-} from "recharts";
 import { useCanAccessFullAnalytics } from "@/hooks/use-access-gate";
 import { FeatureLock } from "@/components/upgrade/FeatureLock";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 
-interface ChannelData {
-  channel: string;
-  count: number;
-  percentage: number;
-}
-
-interface FunnelStage {
-  stage: string;
-  count: number;
-  percentage: number;
-}
-
-interface TimeSeriesData {
-  date: string;
-  leads: number;
-}
-
-interface InsightsMetrics {
-  avgResponseTime: string;
-  conversionRate: string;
-  engagementScore: string;
-}
-
-interface InsightsApiResponse {
+interface AnalyticsInsights {
+  period: string;
   summary: string | null;
-  channels: ChannelData[];
-  funnel: FunnelStage[];
-  hasData: boolean;
-  timeSeries: TimeSeriesData[];
-  metrics?: InsightsMetrics;
+  trends: {
+    leadGrowth: number;
+    conversionGrowth: number;
+    engagementGrowth: number;
+  };
+  predictions: {
+    expectedConversions: number;
+    projectedRevenue: number;
+    riskLeads: string[];
+  };
+  recommendations: string[];
+  topPerformers: {
+    channels: Array<{ channel: string; performance: number }>;
+    times: Array<{ hour: number; conversions: number }>;
+  };
 }
 
 export default function InsightsPage() {
@@ -75,7 +45,7 @@ export default function InsightsPage() {
   const { data: integrations } = useQuery<any[]>({ queryKey: ["/api/integrations"] });
   const { data: campaigns } = useQuery<any[]>({ queryKey: ["/api/outreach/campaigns"], staleTime: 30_000 });
 
-  const { data: insightsData, isLoading, refetch, isFetching } = useQuery<InsightsApiResponse>({
+  const { data: insightsData, isLoading, refetch, isFetching } = useQuery<AnalyticsInsights>({
     queryKey: ["/api/ai/insights"],
     retry: false,
   });
@@ -99,31 +69,13 @@ export default function InsightsPage() {
   });
 
   const insights = insightsData?.summary || null;
-  const channelData = insightsData?.channels || [];
-  const conversionFunnel = insightsData?.funnel || [];
-  const timeSeriesData = insightsData?.timeSeries || [];
-  const hasData = !!insightsData && (insightsData.hasData || (channelData.length > 0 || conversionFunnel.length > 0) || !!insights || timeSeriesData.length > 0);
-
-  const COLORS = {
-    primary: "hsl(var(--primary))",
-    secondary: "hsl(var(--primary) / 0.6)",
-    accent: "#f59e0b", // Amber
-    success: "#10b981", // Emerald
-    background: "hsl(var(--background))",
-    grid: "hsl(var(--border) / 0.1)",
-    tooltip: "hsl(var(--popover))"
-  };
-
-  const chartConfig = {
-    Instagram: {
-      label: "Instagram",
-      color: "#E1306C",
-    },
-    Email: {
-      label: "Email",
-      color: COLORS.primary,
-    },
-  };
+  const hasRealData = !!insightsData && (
+    !!insights ||
+    insightsData.trends.leadGrowth !== 0 ||
+    insightsData.trends.conversionGrowth !== 0 ||
+    insightsData.predictions.expectedConversions > 0 ||
+    insightsData.recommendations.length > 0
+  );
 
   if (isLoading) {
     return (
@@ -158,7 +110,7 @@ export default function InsightsPage() {
         </div>
       </div>
 
-      {(!hasData && !insights) ? (
+      {!hasRealData ? (
         <div className="grid gap-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -222,16 +174,14 @@ export default function InsightsPage() {
         </div>
       ) : (
         <div className="space-y-8 mt-8">
-          {/* AI Summary Card */}
           {insights && (
             <Card className="bg-gradient-to-br from-primary/10 via-transparent to-transparent border-primary/20 rounded-2xl">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-lg">
-                  <TrendingUp className="h-5 w-5 text-indigo-400" />
+                  <Zap className="h-5 w-5 text-indigo-400" />
                   Performance Summary
                 </CardTitle>
               </CardHeader>
-
               <CardContent>
                 <p className="text-lg leading-relaxed font-medium text-foreground/90">
                   {insights}
@@ -240,75 +190,162 @@ export default function InsightsPage() {
             </Card>
           )}
 
-          {/* Metrics */}
-          <ResponsiveGrid className="md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <Card className="col-span-full lg:col-span-2 rounded-2xl">
+          {/* Trends Row */}
+          <ResponsiveGrid className="md:grid-cols-3 gap-4">
+            <MetricCard
+              title="Lead Growth"
+              value={`${insightsData!.trends.leadGrowth >= 0 ? '+' : ''}${insightsData!.trends.leadGrowth.toFixed(1)}%`}
+              icon={insightsData!.trends.leadGrowth > 0 ? <TrendingUp className="h-5 w-5 text-emerald-500" /> :
+                insightsData!.trends.leadGrowth < 0 ? <TrendingDown className="h-5 w-5 text-red-500" /> :
+                <Minus className="h-5 w-5 text-muted-foreground" />}
+              description="vs previous period"
+              trend={insightsData!.trends.leadGrowth > 0 ? "Growing" : insightsData!.trends.leadGrowth < 0 ? "Declining" : "Stable"}
+              trendColor={insightsData!.trends.leadGrowth > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" :
+                insightsData!.trends.leadGrowth < 0 ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                "bg-muted/20 border-border/20 text-muted-foreground"}
+            />
+            <MetricCard
+              title="Conversion Rate"
+              value={`${insightsData!.trends.conversionGrowth >= 0 ? '+' : ''}${insightsData!.trends.conversionGrowth.toFixed(1)}%`}
+              icon={insightsData!.trends.conversionGrowth > 10 ? <TrendingUp className="h-5 w-5 text-emerald-500" /> :
+                insightsData!.trends.conversionGrowth < -10 ? <TrendingDown className="h-5 w-5 text-red-500" /> :
+                <Activity className="h-5 w-5 text-muted-foreground" />}
+              description="conversion trend"
+              trend={insightsData!.trends.conversionGrowth > 10 ? "Improving" :
+                insightsData!.trends.conversionGrowth < -10 ? "Dropping" : "Stable"}
+              trendColor={insightsData!.trends.conversionGrowth > 10 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" :
+                insightsData!.trends.conversionGrowth < -10 ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                "bg-muted/20 border-border/20 text-muted-foreground"}
+            />
+            <MetricCard
+              title="Engagement"
+              value={`${insightsData!.trends.engagementGrowth >= 0 ? '+' : ''}${insightsData!.trends.engagementGrowth.toFixed(1)}%`}
+              icon={<Activity className="h-5 w-5 text-purple-500" />}
+              description="engagement growth"
+              trend={insightsData!.trends.engagementGrowth > 0 ? "Up" :
+                insightsData!.trends.engagementGrowth < 0 ? "Down" : "Flat"}
+              trendColor={insightsData!.trends.engagementGrowth > 0 ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500" :
+                insightsData!.trends.engagementGrowth < 0 ? "bg-red-500/10 border-red-500/20 text-red-500" :
+                "bg-muted/20 border-border/20 text-muted-foreground"}
+            />
+          </ResponsiveGrid>
+
+          {/* Predictions & Top Performers */}
+          <ResponsiveGrid className="md:grid-cols-2 gap-6">
+            <Card className="rounded-2xl">
               <CardHeader>
-                <CardTitle>Lead Velocity</CardTitle>
-                <CardDescription>Leads generated over time.</CardDescription>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5 text-sky-500" />
+                  AI Predictions
+                </CardTitle>
+                <CardDescription>Projected outcomes based on current trends</CardDescription>
               </CardHeader>
-              <CardContent>
-                <ChartContainer config={chartConfig} className="w-full h-full">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <LineChart
-                      data={timeSeriesData}
-                      margin={{
-                        top: 5,
-                        right: 10,
-                        left: 10,
-                        bottom: 0,
-                      }}
-                    >
-                      <XAxis
-                        dataKey="date"
-                        tickFormatter={(value) => new Date(value).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                        tickLine={false}
-                        axisLine={false}
-                        stroke={COLORS.grid}
-                        className="text-[10px] text-muted-foreground"
-                      />
-                      <YAxis className="text-[10px] text-muted-foreground" axisLine={false} tickLine={false} />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Line
-                        type="monotone"
-                        dataKey="leads"
-                        strokeWidth={4}
-                        stroke="hsl(var(--primary))"
-                        dot={{ r: 4, fill: "hsl(var(--primary))", strokeWidth: 2, stroke: "hsl(var(--background))" }}
-                        activeDot={{ r: 6, strokeWidth: 0 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-muted/20 rounded-xl">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Expected Conversions</p>
+                    <p className="text-3xl font-bold">{insightsData!.predictions.expectedConversions}</p>
+                  </div>
+                  <div className="h-12 w-12 rounded-xl bg-sky-500/10 flex items-center justify-center">
+                    <TrendingUp className="h-6 w-6 text-sky-500" />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-muted/20 rounded-xl">
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Projected Revenue</p>
+                    <p className="text-3xl font-bold">${insightsData!.predictions.projectedRevenue.toLocaleString()}</p>
+                  </div>
+                  <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <TrendingUp className="h-6 w-6 text-emerald-500" />
+                  </div>
+                </div>
+                {insightsData!.predictions.riskLeads.length > 0 && (
+                  <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
+                    <p className="text-sm font-semibold text-amber-600 flex items-center gap-2 mb-2">
+                      <Clock className="h-4 w-4" /> At-Risk Leads ({insightsData!.predictions.riskLeads.length})
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      These leads haven't been contacted in 24+ hours. Consider re-engaging them.
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
-            <MetricCard
-              title="Network Health"
-              value={!insightsData?.metrics?.engagementScore || insightsData.metrics.engagementScore === "NaN" ? "0.00" : Number(insightsData.metrics.engagementScore).toFixed(2)}
-              icon={<Sparkles className="h-5 w-5 text-purple-500" />}
-              description="Average lead interest"
-              trend={
-                !insightsData?.metrics?.engagementScore || isNaN(Number(insightsData.metrics.engagementScore))
-                  ? undefined
-                  : Number(insightsData.metrics.engagementScore) >= 50
-                    ? "Healthy"
-                    : "At Risk"
-              }
-              trendColor={
-                !insightsData?.metrics?.engagementScore || isNaN(Number(insightsData.metrics.engagementScore))
-                  ? undefined
-                  : Number(insightsData.metrics.engagementScore) >= 50
-                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-500"
-                    : "bg-red-500/10 border-red-500/20 text-red-500"
-              }
-            />
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Lightbulb className="h-5 w-5 text-amber-500" />
+                  Recommendations
+                </CardTitle>
+                <CardDescription>AI-powered suggestions to improve performance</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {insightsData!.recommendations.length > 0 ? (
+                  insightsData!.recommendations.map((rec, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3 bg-primary/5 border border-primary/10 rounded-xl">
+                      <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                      <p className="text-sm text-foreground/80">{rec}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-8">No recommendations yet. Keep building your pipeline!</p>
+                )}
+              </CardContent>
+            </Card>
           </ResponsiveGrid>
+
+          {/* Top Performers */}
+          {(insightsData!.topPerformers.channels.length > 0 || insightsData!.topPerformers.times.length > 0) && (
+            <Card className="rounded-2xl">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  Top Performers
+                </CardTitle>
+                <CardDescription>Best performing channels and sending times</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveGrid className="md:grid-cols-2 gap-6">
+                  {insightsData!.topPerformers.channels.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Channels</h4>
+                      <div className="space-y-2">
+                        {insightsData!.topPerformers.channels.map((ch, i) => (
+                          <div key={i} className="flex items-center justify-between p-3 bg-muted/10 rounded-xl">
+                            <span className="text-sm font-medium capitalize">{ch.channel}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {ch.performance.toFixed(1)}% conversion
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {insightsData!.topPerformers.times.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-3">Best Sending Times</h4>
+                      <div className="space-y-2">
+                        {insightsData!.topPerformers.times.slice(0, 5).map((t, i) => (
+                          <div key={i} className="flex items-center justify-between p-3 bg-muted/10 rounded-xl">
+                            <span className="text-sm font-medium">{t.hour}:00</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {t.conversions} conversions
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </ResponsiveGrid>
+              </CardContent>
+            </Card>
+          )}
 
           {!canAccessFullAnalytics && (
             <FeatureLock
               featureName="Advanced Analytics"
-              description="Unlock deep channel analysis."
+              description="Unlock deep channel analysis, historical comparisons, and predictive modeling."
               requiredPlan="Pro"
             />
           )}
@@ -328,9 +365,7 @@ export default function InsightsPage() {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 rounded-full hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-                  onClick={() => {
-                    refetch();
-                  }}
+                  onClick={() => { refetch(); }}
                   disabled={reportLoading || reportFetching}
                 >
                   <RefreshCw className={cn("h-4 w-4", (reportLoading || reportFetching) && "animate-spin")} />

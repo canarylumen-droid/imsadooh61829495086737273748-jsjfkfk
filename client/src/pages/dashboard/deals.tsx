@@ -2,6 +2,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -390,13 +391,29 @@ export default function DealsPage() {
                         <td className="p-4 align-middle font-medium">
                           {['converted', 'closed_won'].includes(deal.status) ? (
                             `$${deal.value ? deal.value.toLocaleString() : "0"}`
-                          ) : (
+                          ) : deal.status === 'pending' ? (
                             <span className="text-muted-foreground text-xs italic">Pending Payment</span>
+                          ) : deal.status === 'open' ? (
+                            <span className="text-muted-foreground text-xs italic">Negotiating</span>
+                          ) : deal.status === 'closed_lost' ? (
+                            <span className="text-muted-foreground text-xs italic">Lost</span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs italic">—</span>
                           )}
                         </td>
                         <td className="p-4 align-middle">
-                          <Badge variant={deal.status === 'converted' ? 'default' : 'secondary'} className="capitalize">
-                            {deal.status.replace('_', ' ')}
+                          <Badge variant={deal.status === 'converted' ? 'default' : 'secondary'} className={cn("capitalize", 
+                            deal.status === 'closed_lost' && "bg-red-500/10 text-red-500 border-red-500/20",
+                            deal.status === 'pending' && "bg-amber-500/10 text-amber-500 border-amber-500/20",
+                            deal.status === 'open' && "bg-sky-500/10 text-sky-500 border-sky-500/20",
+                            deal.status === 'converted' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                            deal.status === 'closed_won' && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+                          )}>
+                            {deal.status === 'pending' ? 'Payment Pending' : 
+                             deal.status === 'closed_lost' ? 'Not Interested' :
+                             deal.status === 'closed_won' ? 'Closed Won' :
+                             deal.status === 'converted' ? 'Booked' :
+                             deal.status.replace('_', ' ')}
                           </Badge>
                         </td>
                         <td className="p-4 align-middle hidden md:table-cell capitalize text-muted-foreground">
