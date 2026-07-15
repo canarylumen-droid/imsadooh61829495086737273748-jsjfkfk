@@ -153,7 +153,7 @@ const RECOVERY_OBJECTIONS_COLUMNS = [
 
 // ─── Connection pool singleton ─────────────────────────────────────────────
 
-let pool: mysql.Pool | null = null;
+let pool: any | null = null;
 
 function readInt(name: string, fallback: number): number {
   const value = Number.parseInt(process.env[name] || "", 10);
@@ -164,14 +164,14 @@ export function hasMySqlUri(): boolean {
   return Boolean(process.env.MYSQL_HOST);
 }
 
-export function getMySqlPool(): mysql.Pool {
+export function getMySqlPool(): any {
   if (!pool) {
     throw new Error("MySQL pool not initialized. Call connectMySql() first.");
   }
   return pool;
 }
 
-export async function connectMySql(): Promise<mysql.Pool> {
+export async function connectMySql(): Promise<any> {
   if (!mysql) throw new Error("mysql2 package not available - install it with: npm install mysql2");
   if (pool) return pool;
 

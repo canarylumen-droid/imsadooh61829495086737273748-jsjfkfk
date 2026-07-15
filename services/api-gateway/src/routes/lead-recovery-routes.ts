@@ -329,7 +329,7 @@ router.post("/brainstorm-sync", async (req, res) => {
     const objections = lead.brainstormedObjections || [];
     let updated = false;
     for (const objection of objections) {
-      if (objection.synced_at) continue;
+      if ((objection as any).synced_at) continue;
       await upsertRecoveryObjection(
         tenantId,
         objection.rule,
@@ -338,7 +338,7 @@ router.post("/brainstorm-sync", async (req, res) => {
         lead.id,
         "ai"
       );
-      objection.synced_at = new Date().toISOString();
+      (objection as any).synced_at = new Date().toISOString();
       synced += 1;
       updated = true;
       recoveryEvents.emitRecovery({
