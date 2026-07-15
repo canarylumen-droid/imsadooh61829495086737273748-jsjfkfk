@@ -6,12 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getActivePlanId } from "@shared/plan-utils";
-import { apiRequest } from "@/lib/queryClient";
 import { useMailbox } from "@/hooks/use-mailbox";
 import {
   ArrowRight,
   Users,
-  MessageSquare,
   Zap,
   Mail,
   Activity,
@@ -24,11 +22,10 @@ import {
   TrendingDown,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { useReducedMotion } from "@/lib/animation-utils";
 import { formatRelativeTime } from "@/lib/format-date";
 import { useRealtime } from "@/hooks/use-realtime";
-import { SiGmail, SiGoogle } from "react-icons/si";
 import { useState, useEffect } from "react";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";

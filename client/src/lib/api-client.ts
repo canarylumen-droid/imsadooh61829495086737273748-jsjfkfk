@@ -38,7 +38,9 @@ export async function apiClient<T>(
         description = 'Please sign in to continue';
         const path = window.location.pathname;
         if (path.startsWith('/dashboard') || path.startsWith('/admin')) {
-          window.location.href = '/auth';
+          toast({ variant: 'destructive', title, description, duration: 3000 });
+          setTimeout(() => { window.location.href = '/auth'; }, 2000);
+          return;
         }
       } else if (response.status === 403) {
         title = 'Access Denied';

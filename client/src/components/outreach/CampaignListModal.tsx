@@ -5,7 +5,7 @@ import { useMemo, useState, useEffect } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtime } from "@/hooks/use-realtime";
-import { Loader2, Plus, Play, Pause, Trash2, Activity, PlayCircle, Loader, StopCircle, Mail, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Plus, Play, Pause, Activity, Loader, StopCircle, Mail, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 

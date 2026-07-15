@@ -2574,8 +2574,8 @@ export class DrizzleStorage implements IStorage {
   }
 
 
-  private calculateRate(num: number, den: number, minDen: number = 0): number {
-    if (den === 0 || den < minDen) return 0;
+  private calculateRate(num: number, den: number, minDen: number = 0): number | null {
+    if (den === 0 || den < minDen) return null;
     return Number(((num / den) * 100).toFixed(2));
   }
 
@@ -2595,14 +2595,14 @@ export class DrizzleStorage implements IStorage {
     aiReplies: number;
     pipelineValue: number;
     closedRevenue: number;
-    openRate: number;
-    responseRate: number;
+    openRate: number | null;
+    responseRate: number | null;
     averageResponseTime: string;
     queuedLeads: number;
     undeliveredLeads: number;
-    conversionRate: number;
-    intentRate: number;
-    outreachVelocity: number;
+    conversionRate: number | null;
+    intentRate: number | null;
+    outreachVelocity: number | null;
     timeSaved: number; // Total seconds saved by AI
     globalBounceRate: number;
     health: {
@@ -2689,11 +2689,11 @@ export class DrizzleStorage implements IStorage {
       hardenedLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND verified = true)`,
       bouncyLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'bouncy')`,
       recoveredLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'recovered')`,
-      repliedLeads: sql<number>`(SELECT count(DISTINCT lead_id) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (${messages.metadata}->>'subject' NOT LIKE '%Undelivered%' OR ${messages.metadata}->>'subject' IS NULL))`,
+      repliedLeads: sql<number>`(SELECT count(DISTINCT lead_id) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (${messages.subject} NOT LIKE '%Undelivered%' OR ${messages.subject} IS NULL))`,
       queuedLeads: sql<number>`(SELECT count(*) FROM ${leads} WHERE ${leadsWhere} AND status = 'new' AND ai_paused = false)`,
       totalSent: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'outbound')`,
       opened: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'outbound' AND opened_at IS NOT NULL)`,
-      replied: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (${messages.metadata}->>'subject' NOT LIKE '%Undelivered%' OR ${messages.metadata}->>'subject' IS NULL))`,
+      replied: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (${messages.subject} NOT LIKE '%Undelivered%' OR ${messages.subject} IS NULL))`,
       messagesToday: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND ${messages.createdAt} >= ${todayStart} AND direction = 'outbound')`,
       messagesYesterday: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND ${messages.createdAt} >= ${yesterdayStart} AND ${messages.createdAt} < ${todayStart} AND direction = 'outbound')`,
       positiveIntents: sql<number>`(SELECT count(*) FROM ${messages} WHERE ${messagesWhere} AND direction = 'inbound' AND (lower(body) LIKE '%yes%' OR lower(body) LIKE '%book%' OR lower(body) LIKE '%interested%' OR lower(body) LIKE '%call%' OR lower(body) LIKE '%meeting%'))`,
@@ -2760,7 +2760,7 @@ export class DrizzleStorage implements IStorage {
       intentRate: this.calculateRate(Number(combinedStats.positiveIntents || 0), Number(combinedStats.repliedLeads || 0), 1),
       outreachVelocity: this.calculateRate(Number(combinedStats.totalSent || 0), Number(combinedStats.totalLeads || 0), 1),
       timeSaved,
-      globalBounceRate: this.calculateRate(Number(bounceTrackerStats?.total || 0), Number(combinedStats.outreachedLeads || 0), 1) / 100,
+      globalBounceRate: Number((this.calculateRate(Number(bounceTrackerStats?.total || 0), Number(combinedStats.totalSent || 0), 1) ?? 0) / 100),
       health: {
         score: integration?.reputationScore ?? null,
         status: integration?.reputationScore == null ? 'unknown' : integration.reputationScore < 45 ? 'critical' : integration.reputationScore < 70 ? 'warning' : 'healthy',

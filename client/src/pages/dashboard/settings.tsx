@@ -18,7 +18,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import {
   AlertDialog,
@@ -38,18 +37,12 @@ import {
   Mic,
   Settings,
   Save,
-  Globe,
-  Palette,
-  Lock,
   Brain,
   Mail,
   RefreshCw,
-  Activity,
   CheckCircle2,
   Plus,
   Phone,
-  ArrowLeft,
-  Building2,
   Sparkles,
   Copy,
   Check,
@@ -62,13 +55,9 @@ import {
   ShieldAlert,
   Clock,
   Eye,
-  EyeOff,
-  X,
-  ChevronDown,
   ExternalLink,
   Code,
   Server,
-  BookOpen,
   Edit3,
   Shield,
 } from "lucide-react";
@@ -79,14 +68,12 @@ import { useToast } from "@/hooks/use-toast";
 import { useCanAccessVoiceNotes } from "@/hooks/use-access-gate";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Link } from "wouter";
-import { PdfIcon, VoiceIcon } from "@/components/ui/CustomIcons";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { BrandKnowledgeBase } from "@/components/admin/BrandKnowledgeBase";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
 import { Separator } from "@/components/ui/separator";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 interface UserProfile {
   id: string;
@@ -121,12 +108,6 @@ interface ApiKey {
   createdAt: string | null;
 }
 
-interface DeletionStatus {
-  pending: boolean;
-  scheduledFor?: string;
-  remainingMs?: number;
-}
-
 export default function SettingsPage() {
   useRealtime();
   const { toast } = useToast();
@@ -145,8 +126,6 @@ export default function SettingsPage() {
   const [showNewKey, setShowNewKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [showCreateKey, setShowCreateKey] = useState(false);
-  const [deleteConfirmText, setDeleteConfirmText] = useState("");
-
   const { data: user, isLoading } = useQuery<UserProfile | null>({
     queryKey: ["/api/user/profile"],
     refetchOnMount: true,

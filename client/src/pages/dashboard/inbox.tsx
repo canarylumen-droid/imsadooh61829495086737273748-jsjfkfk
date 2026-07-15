@@ -3,7 +3,6 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRealtime } from "@/hooks/use-realtime";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -14,14 +13,6 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useParams, useLocation } from "wouter";
@@ -49,29 +40,21 @@ import {
   Instagram,
   Mail,
   RefreshCw,
-  MoreVertical,
   Check,
-  Play,
-  Pause,
   Send,
   Sparkles,
-  Calendar,
   Clock,
   MessageSquare,
   Loader2,
   X,
-  Target,
   Activity,
   Brain,
-  Share2,
   ExternalLink,
   User,
   Phone,
   Plug,
   Facebook,
   MapPin,
-  Smile,
-  Image as ImageIcon,
   Tags,
   Download,
 } from "lucide-react";
@@ -89,9 +72,7 @@ import {
   ArrowRight,
   Filter,
   Zap,
-  Pencil,
   Wand2,
-  CheckCircle,
   AlertCircle
 } from "lucide-react";
 import {
@@ -239,17 +220,6 @@ export default function InboxPage() {
       socket.off('sync:status', onSyncStatus);
     };
   }, [socket]);
-
-  // Helper to determine aggregate sync health
-  const getOverallSyncHealth = () => {
-    const statuses = Object.values(syncStatus);
-    if (statuses.length === 0) return 'idle';
-    if (statuses.some(s => s.status === 'connected' && s.realtime)) return 'realtime';
-    if (statuses.some(s => s.status === 'connected')) return 'polling';
-    return 'disconnected';
-  };
-
-  const syncHealth = getOverallSyncHealth();
 
   useEffect(() => {
     if (!socket) return;
@@ -973,10 +943,6 @@ export default function InboxPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messagesData?.messages, isGenerating, typedText]);
-
-  useEffect(() => {
-    // Component check for debugging
-  }, []);
 
   const ChannelIcon = activeLead ? (channelIcons[activeLead.channel as keyof typeof channelIcons] || Instagram) : Instagram;
 

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, TrendingDown, TrendingUp, Minus, Target, PieChart as PieChartIcon } from 'lucide-react';
+import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, Target } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';

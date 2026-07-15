@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -20,20 +19,16 @@ import {
   Shield,
   Loader2,
   CheckCircle2,
-  Pencil,
   Sparkles,
   Zap,
-  Globe,
   Upload,
   FileText,
   AlertCircle,
   Plus,
   ShieldCheck,
   Activity,
-  Cpu,
   Unplug,
   RefreshCw,
-  FolderSync,
   ArrowRight,
   Search,
   ChevronLeft,
@@ -64,24 +59,6 @@ import {
 import { getPlanCapabilities, getActivePlanId } from "@shared/plan-utils";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { ResponsiveGrid } from "@/components/ui/responsive-grid";
-
-interface Integration {
-  id?: string;
-  provider: string;
-  connected: boolean;
-  lastSync?: string;
-  accountType?: string;
-  accountInfo?: {
-    email?: string;
-    username?: string;
-  };
-  reputationScore?: number;
-  bounceRate?: number;
-}
-
-interface IntegrationsResponse {
-  integrations: Integration[];
-}
 
 interface UserData {
   id: string;

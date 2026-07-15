@@ -358,7 +358,8 @@ export async function getPendingSyncStates(): Promise<LeadRecoveryStateRow[]> {
     `SELECT * FROM lead_recovery_state
      WHERE is_active = 1
        AND sync_requested_at IS NOT NULL
-       AND (last_sync_at IS NULL OR sync_requested_at > last_sync_at)`
+       AND (last_sync_at IS NULL OR sync_requested_at > last_sync_at)
+       AND (available_at IS NULL OR available_at <= NOW())`
   );
   return parseRows<LeadRecoveryStateRow>(rows as Record<string, unknown>[]);
 }
@@ -378,6 +379,7 @@ export async function claimMailboxForSync(
          AND is_active = 1 AND is_busy = 0
          AND sync_requested_at IS NOT NULL
          AND (last_sync_at IS NULL OR sync_requested_at > last_sync_at)
+         AND (available_at IS NULL OR available_at <= NOW())
        FOR UPDATE`,
       [tenantId, mailboxId]
     );
@@ -430,10 +432,10 @@ export async function failMailboxSync(
   const p = getMySqlPool();
   const availableAt = new Date(Date.now() + 60 * 60 * 1000);
   await p.query(
-    `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, sync_status, available_at)
-     VALUES (?, ?, ?, 0, 'failed', ?)
+    `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, sync_status, available_at, last_sync_at)
+     VALUES (?, ?, ?, 0, 'failed', ?, NOW())
      ON DUPLICATE KEY UPDATE
-       is_busy = 0, sync_status = 'failed', available_at = ?`,
+       is_busy = 0, sync_status = 'failed', available_at = ?, last_sync_at = NOW()`,
     [generateId(), tenantId, mailboxId, availableAt, availableAt]
   );
 }

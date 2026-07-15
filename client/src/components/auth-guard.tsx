@@ -27,7 +27,8 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
 
   const { data: user, isLoading, error } = useQuery<AuthUser>({
     queryKey: ["/api/user/profile"],
-    retry: false,
+    retry: 2,
+    retryDelay: attempt => Math.min(1000 * 2 ** attempt, 5000),
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -36,8 +37,8 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
   const onboardingCompleted = user?.metadata?.onboardingCompleted === true || localOnboardingStatus;
 
   useEffect(() => {
-    if (!isLoading) {
-      if (error || !user) {
+    if (!isLoading && !error) {
+      if (!user) {
         setLocation("/auth");
         return;
       }

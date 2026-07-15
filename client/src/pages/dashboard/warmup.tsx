@@ -4,7 +4,7 @@ import { useRealtime } from "@/hooks/use-realtime";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Shield, Mail, Clock, TrendingUp, AlertTriangle, CheckCircle2, Thermometer } from "lucide-react";
+import { Shield, Mail, Clock, AlertTriangle, CheckCircle2, Thermometer } from "lucide-react";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { Link } from "wouter";
 

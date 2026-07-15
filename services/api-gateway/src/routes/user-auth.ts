@@ -713,7 +713,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
 
     // Small delay to allow the session record to propagate across DB replicas
     // before the client makes follow-up /api/user/profile requests.
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     // Final safety check - verify session still has userId after save
     console.log(`[Login] Pre-response session check: userId=${req.session.userId}, SID=${req.sessionID}`);

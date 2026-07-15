@@ -1,29 +1,24 @@
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   DollarSign,
-  Calendar,
   Instagram,
   Mail,
   Package,
   TrendingUp,
-  TrendingDown,
   BarChart3,
   ArrowRight,
   Filter,
-  Activity,
   Plus,
   Download,
   Sparkles,
-  Settings
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -31,7 +26,7 @@ import { Link, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { useRealtime } from "@/hooks/use-realtime";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { apiRequest } from "@/lib/queryClient";
 import { PageWrapper } from "@/components/ui/page-wrapper";
