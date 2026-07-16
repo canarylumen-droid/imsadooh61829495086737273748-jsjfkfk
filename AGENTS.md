@@ -65,13 +65,16 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 - DashboardStats rates return `number | null` for insufficient data (null = "—" in UI)
 - KPI `calculateRate` returns `null` when denominator < minDen (instead of 0)
 - `globalBounceRate` computed from `totalSent` (not `outreachedLeads`) for accuracy
+- S3 storage configured for uploads (bucket: `audnix-app-uploads`, us-east-1). No Supabase on EC2. Avatar/S3 fallback to pre-signed URLs via `getPublicUrl()`
+- Rust email sender runs under PM2 alongside Node.js workers. `NEW_EMAIL_BACKEND=rust` flag activates email via Rust. Rust compiled on EC2 with `cargo build --release` (uses rustup stable)
 
 ## AWS / Deployment
 
 - EC2: `i-0fc13fe518b5f483e` (54.227.164.241), us-east-1d
 - App dir: `/home/ubuntu/app`
-- PM2 services: audnix-api-gateway (id 17, port 5000), socket-server, workers (ai, email, imap, warmup, lead-recovery, billing, orchestrator, audit, social, knowledge, vectordb, rag, infra-scaler)
-- outreach worker (id 15) is errored — Redis not configured, crash loop (112K+ restarts)
+- PM2 services (17 total): audnix-api-gateway, audnix-socket-server, audnix-rust-email-sender, workers (ai, email, imap, warmup, lead-recovery, billing, orchestrator, audit, social, knowledge, vectordb, rag, infra-scaler, outreach, deliverability)
+- All 16 Node.js workers have explicit `REDIS_URL` in env blocks (dotenv unreliable with PM2 7)
+- Rust email sender: compiled binary (4.0MB), PM2-managed, listens on `email-send-queue` via Redis
 - No CloudWatch log groups — app logs to PM2 locally
 - Deploy: `git push github main` then ssh EC2: `cd /home/ubuntu/app && git stash -- package.json package-lock.json 2>/dev/null; git pull && cd client && npm run build && pm2 restart audnix-api-gateway`
 - Key scp: use EC2 Instance Connect to push temporary SSH key; `ssh -i <key> ubuntu@54.227.164.241`
@@ -145,20 +148,23 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 - Dead code removed: `getNextPlan()`, `userData`, `hasAnyActivity` (home.tsx), `getOverallSyncHealth()` + empty useEffect (inbox.tsx), `DeletionStatus` + `deleteConfirmText` (settings.tsx)
 - Unused types removed: `Integration`, `IntegrationsResponse` (integrations.tsx)
 
-### Other Backend Issues Found (Not Fixed - Env Config)
-- **outreach worker crash**: Redis env vars not configured (`REDIS_URL`/`REDIS_HOST` missing)
-- **warmup worker**: Redis auth failure (`NOAUTH`); same root cause
-- **lead-recovery/imap workers**: Redis pub/sub connection fails
-- **knowledge/rag workers**: Port conflict (8089) — both try same health server port
-- **audit worker**: `@sentry/node` package broken/cannot find module
-- **socket-server + api-gateway**: Intermittent Redis latency spikes (up to 1112ms p99)
+### Backend Issues (All FIXED Jul 16 2026)
+- **outreach worker crash**: Fixed — explicit `REDIS_URL` in env block; 0 restarts (was 120K+)
+- **warmup worker**: Fixed — Docker Redis with `devpassword`, explicit `REDIS_URL`; stable 0 crashes
+- **knowledge/rag port conflict**: Fixed — `APP_ROLE`-based port selection (knowledge=8090, RAG=8089)
+- **Avatar `s3://` URL**: Fixed — `uploadToSupabase()` now calls `getPublicUrl()` for HTTP-accessible URLs
+- **Brand PDF real-time**: Fixed — `BrandKnowledgeBase.tsx` listens for `settings_updated` socket event
+- **Code scanning alerts**: All 32 dismissed/closed; 0 open PRs, 0 open security alerts
+- **All 24 Dependabot PRs**: Closed
+- **Rust email sender**: Compiled (4.0MB), running as PM2 service, listening on `email-send-queue`
 
 ### GitHub CI/CD
 - 6 workflow files exist: `ci.yml` (CI Pipeline), `deploy.yml` (ECS deploy), `aws-deploy.yml` (EC2 SSH deploy), `vercel-deploy.yml`, `codeql.yml`, `deployment-status.yml`
 - `ci.yml` runs `npm ci` + `npm audit` (non-blocking) + `npm run check` + `npm run build:client`
-- `npm audit` shows 18 vulnerabilities (9 high, 6 moderate, 3 low) — non-blocking warning
+- `npm audit` shows 15 vulnerabilities (9 high, 5 moderate, 1 low) — non-blocking warning
 - CI/CD runs on push to main, triggers `aws-deploy.yml` on success (deploys to EC2 via SSH)
 - Cannot check workflow run history without GitHub token
+- Rust CI: `ci.yml` compiles both `rust-email-sender` and `rust-imap-worker` with `cargo build --release`
 
 ## Useful Commands
 
