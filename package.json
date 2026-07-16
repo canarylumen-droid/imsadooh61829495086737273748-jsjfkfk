@@ -293,6 +293,7 @@
     "axios": "^1.16.1",
     "tar": "^7.4.3",
     "drizzle-orm": "^0.45.2",
-    "@opentelemetry/core": "^2.8.0"
+    "@opentelemetry/core": "^2.8.0",
+    "nodemailer": "^9.0.3"
   }
 }

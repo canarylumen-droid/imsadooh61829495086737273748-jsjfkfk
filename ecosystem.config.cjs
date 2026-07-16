@@ -380,6 +380,27 @@ module.exports = {
       max_memory_restart: '256M'
     },
     {
+      name: 'audnix-rust-imap-worker',
+      script: './rust-imap-worker/target/release/audnix-imap-worker',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        RUST_LOG: 'info',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        IMAP_QUEUE_NAME: 'imap-queue',
+        IMAP_RESULT_QUEUE_NAME: 'imap-results',
+        WORKER_COUNT: '2',
+        IDLE_TIMEOUT_SECS: '600'
+      },
+      error_file: './logs/rust-imap-error.log',
+      out_file: './logs/rust-imap-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s'
+    },
+    {
       name: 'audnix-rust-email-sender',
       script: './rust-email-sender/target/release/audnix-email-sender',
       instances: 1,
