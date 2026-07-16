@@ -5,9 +5,16 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useRealtime } from "@/hooks/use-realtime";
-import { Loader2, Plus, Play, Pause, Activity, Loader, StopCircle, Mail, X, ChevronLeft, ChevronRight, Send, MessageSquare, Clock } from "lucide-react";
+import { Loader2, Plus, Play, Pause, Activity, Loader, StopCircle, Mail, ChevronLeft, ChevronRight, Send, MessageSquare, Clock, Trash2, MoreHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface CampaignListModalProps {
   isOpen: boolean;
@@ -27,9 +34,7 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
 
   useEffect(() => {
     if (!socket) return;
-    const handler = () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
-    };
+    const handler = () => queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
     socket.on("leads_updated", handler);
     socket.on("campaign_update", (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
@@ -53,7 +58,6 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     return campaigns.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
   }, [campaigns, page]);
 
-  // Fetch live progress for each visible campaign
   const campaignIds = useMemo(() => pagedCampaigns.map(c => c.id), [pagedCampaigns]);
 
   useEffect(() => {
@@ -83,7 +87,7 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
-      toast({ title: "Campaign Updated", description: "Status changed successfully." });
+      toast({ title: "Campaign Updated" });
     },
     onError: (error: any) => {
       toast({ title: "Update Failed", description: error.message, variant: "destructive" });
@@ -96,7 +100,7 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
-      toast({ title: "Campaign Aborted", description: "Campaign and pending queue stopped permanently." });
+      toast({ title: "Campaign Aborted" });
     },
     onError: (error: any) => {
       toast({ title: "Failed to abort", description: error.message, variant: "destructive" });
@@ -109,7 +113,7 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
-      toast({ title: "Campaign Deleted", description: "Campaign and all associated data removed." });
+      toast({ title: "Campaign Deleted" });
     },
     onError: (error: any) => {
       toast({ title: "Delete failed", description: error.message, variant: "destructive" });
@@ -135,9 +139,9 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[800px] border-border/40 bg-background/95 backdrop-blur-xl p-0 overflow-hidden shadow-2xl">
+      <DialogContent className="sm:max-w-[800px] border-border/40 bg-background/95 backdrop-blur-xl p-0 overflow-hidden shadow-2xl [&>button]:opacity-100 [&>button]:text-muted-foreground [&>button]:hover:text-foreground [&>button]:transition-all">
         <DialogHeader className="p-6 pb-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between pr-8">
             <DialogTitle className="text-xl font-black uppercase tracking-widest flex items-center gap-2">
               <Mail className="w-5 h-5 text-primary" />
               Campaign Manager
@@ -179,14 +183,14 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
                 const todayPct = prog?.dailyLimit > 0 ? Math.round((prog.todaySent / prog.dailyLimit) * 100) : 0;
                 
                 return (
-                  <div key={camp.id} className="bg-card p-5 rounded-2xl border border-border/40 shadow-sm group transition-all hover:border-primary/30">
+                  <div key={camp.id} className="bg-card p-5 rounded-2xl border border-border/40 shadow-sm transition-all hover:border-primary/30">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3 min-w-0">
                         <h4 className="font-bold text-base truncate">{camp.name}</h4>
                         {getStatusBadge(camp.status)}
                       </div>
-                      <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity bg-muted/30 p-1.5 rounded-xl border border-border/10 shrink-0 ml-3">
-                        {(camp.status === 'draft' || camp.status === 'paused') && camp.status !== 'aborted' && camp.status !== 'completed' && (
+                      <div className="flex items-center gap-1 shrink-0 ml-3">
+                        {(camp.status === 'draft' || camp.status === 'paused') && (
                           <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg hover:bg-emerald-500/10 hover:text-emerald-500"
                             onClick={() => updateStatusMutation.mutate({ id: camp.id, action: camp.status === 'draft' ? 'start' : 'resume' })}
                             disabled={isPending || isAborting} title="Start / Resume">
@@ -201,22 +205,31 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
                           </Button>
                         )}
                         {(camp.status === 'active' || camp.status === 'paused' || camp.status === 'draft') && (
-                          <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => { if (confirm(`Abort "${camp.name}"? This stops all follow-ups and cannot be undone.`)) abortMutation.mutate(camp.id); }}
-                            disabled={isAborting || isPending || isDeleting} title="Abort Campaign">
-                            {isAborting ? <Loader className="w-4 h-4 animate-spin" /> : <StopCircle className="w-4 h-4" />}
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg hover:bg-muted" disabled={isAborting || isPending}>
+                                <MoreHorizontal className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="rounded-xl border-border/40 min-w-[160px]">
+                              <DropdownMenuItem className="text-xs gap-2 cursor-pointer text-destructive focus:text-destructive"
+                                onClick={() => { if (confirm(`Abort "${camp.name}"?`)) abortMutation.mutate(camp.id); }}
+                                disabled={isAborting}>
+                                <StopCircle className="w-3.5 h-3.5" /> Abort Campaign
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-xs gap-2 cursor-pointer text-destructive focus:text-destructive"
+                                onClick={() => { if (confirm(`Delete "${camp.name}"?`)) deleteMutation.mutate(camp.id); }}
+                                disabled={isDeleting}>
+                                <Trash2 className="w-3.5 h-3.5" /> Delete Campaign
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
-                        <Button size="icon" variant="ghost" className="w-8 h-8 rounded-lg hover:bg-destructive/10 hover:text-destructive"
-                          onClick={() => { if (confirm(`Permanently delete "${camp.name}"? All leads and data will be removed.`)) deleteMutation.mutate(camp.id); }}
-                          disabled={isDeleting || isPending || isAborting} title="Delete Campaign">
-                          {isDeleting ? <Loader className="w-4 h-4 animate-spin" /> : <X className="w-4 h-4" />}
-                        </Button>
                       </div>
                     </div>
 
-                    {/* Stats row */}
-                    <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground mt-3">
+                    <div className="flex items-center gap-4 text-xs font-medium text-muted-foreground mt-3 flex-wrap">
                       <span className="flex items-center gap-1"><Send className="w-3 h-3 text-primary" /> <strong className="text-foreground">{prog?.sent || camp.stats?.sent || 0}</strong> Sent</span>
                       <span className="flex items-center gap-1"><MessageSquare className="w-3 h-3 text-emerald-500" /> <strong className="text-foreground">{prog?.replied || camp.stats?.replied || 0}</strong> Replied</span>
                       <span className="flex items-center gap-1"><Mail className="w-3 h-3 text-muted-foreground" /> <strong className="text-foreground">{prog?.total || camp.stats?.total || 0}</strong> Total</span>
@@ -233,7 +246,6 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
                       )}
                     </div>
 
-                    {/* Progress bars */}
                     <div className="mt-3 space-y-1.5">
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-2 bg-muted/30 rounded-full overflow-hidden">

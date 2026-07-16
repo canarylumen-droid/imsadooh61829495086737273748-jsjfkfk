@@ -163,6 +163,26 @@ export default function InboxPage() {
   const [localDrafts, setLocalDrafts] = useState<Record<string, string>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const leadListRef = useRef<HTMLDivElement>(null);
+  const [virtualRange, setVirtualRange] = useState({ start: 0, end: 50 });
+  const ROW_HEIGHT = 90;
+  const BUFFER = 10;
+  useEffect(() => {
+    const el = leadListRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const scrollTop = el.scrollTop;
+      const viewH = el.clientHeight;
+      const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+      const end = Math.min(filteredLeads.length, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + BUFFER);
+      setVirtualRange({ start, end });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [filteredLeads.length]);
+  const virtualStart = virtualRange.start;
+  const virtualEnd = virtualRange.end;
 
   const [activeReplyTab, setActiveReplyTab] = useState<'text'>('text');
 
@@ -495,7 +515,9 @@ export default function InboxPage() {
 
   const filteredLeads = useMemo(() => {
     // Build regex once for faster search
-    const searchRegex = searchQuery ? new RegExp(searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : null;
+    const enableRegex = searchQuery?.startsWith('/') && searchQuery?.endsWith('/');
+  const searchPattern = enableRegex ? searchQuery.slice(1, -1) : searchQuery?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') || '';
+  const searchRegex = searchQuery ? new RegExp(searchPattern, 'i') : null;
 
     return allLeads.filter((lead: any) => {
       const matchesSearch = !searchRegex ||
@@ -1057,14 +1079,27 @@ export default function InboxPage() {
               </div>
             </div>
 
-            <div className="relative">
+            <div className="relative flex items-center">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search leads..."
-                className="pl-9 h-10 rounded-xl bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary/50"
+                placeholder="Search leads or /regex/..."
+                className="pl-9 pr-9 h-10 rounded-xl bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary/50"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
               />
+              <button
+                onClick={() => setSearchQuery(prev => {
+                  if (prev.startsWith('/') && prev.endsWith('/')) return prev.slice(1, -1);
+                  return `/${prev || ''}/`;
+                })}
+                className={cn(
+                  "absolute right-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-md flex items-center justify-center text-[10px] font-bold transition-all",
+                  enableRegex ? "bg-primary/20 text-primary" : "text-muted-foreground/40 hover:text-muted-foreground"
+                )}
+                title={enableRegex ? "Regex mode ON" : "Toggle regex search"}
+              >
+                .*
+              </button>
             </div>
 
             <div className="flex gap-2 overflow-x-auto pb-1 no-scrollbar">
@@ -1211,115 +1246,84 @@ export default function InboxPage() {
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-auto">
-                  {filteredLeads.map(lead => (
-                    <div
-                      key={lead.id}
-                      onClick={() => {
-                        if (selectedLeadIds.length > 0) {
-                          toggleLeadSelection(lead.id);
-                        } else {
-                          setLocation(`/dashboard/inbox/${lead.id}`);
-                        }
-                      }}
-                      onContextMenu={(e) => handleContextMenu(e, 'inbox', lead)}
-                      className={cn(
-                        "p-5 cursor-pointer border-b border-border/10 transition-all relative group flex gap-4",
-                        leadId === lead.id ? "bg-primary/10" : "hover:bg-muted/30",
-                        lead.metadata?.isUnread && "bg-primary/5",
-                        selectedLeadIds.includes(lead.id) && "bg-primary/20"
-                      )}
-                    >
-                      {/* Checkbox for selection */}
-                      <div
+                <div className="flex-1 overflow-auto overflow-x-auto" ref={leadListRef}>
+                  <div style={{ height: filteredLeads.length * 90 }}>
+                    {filteredLeads.slice(virtualStart, virtualEnd).map((lead, i) => {
+                      const realIdx = virtualStart + i;
+                      return (<div
+                        key={lead.id}
+                        onClick={() => {
+                          if (selectedLeadIds.length > 0) {
+                            toggleLeadSelection(lead.id);
+                          } else {
+                            setLocation(`/dashboard/inbox/${lead.id}`);
+                          }
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, 'inbox', lead)}
                         className={cn(
+                          "p-5 cursor-pointer border-b border-border/10 transition-all relative group flex gap-4 min-w-[600px]",
+                          leadId === lead.id ? "bg-primary/10" : "hover:bg-muted/30",
+                          lead.metadata?.isUnread && "bg-primary/5",
+                          selectedLeadIds.includes(lead.id) && "bg-primary/20"
+                        )}
+                        style={{ position: 'absolute', top: realIdx * 90, left: 0, right: 0 }}
+                      >
+                        <div className={cn(
                           "absolute left-2 top-1/2 -translate-y-1/2 z-10 transition-all",
                           selectedLeadIds.includes(lead.id) || "opacity-0 group-hover:opacity-100"
                         )}
-                        onClick={(e) => toggleLeadSelection(lead.id, e)}
-                      >
-                        <div className={cn(
-                          "h-5 w-5 rounded-md border flex items-center justify-center transition-colors",
-                          selectedLeadIds.includes(lead.id) ? "bg-primary border-primary" : "bg-background border-border"
-                        )}>
-                          {selectedLeadIds.includes(lead.id) && <Check className="h-3 w-3 text-primary-foreground" />}
+                          onClick={(e) => toggleLeadSelection(lead.id, e)}
+                        >
+                          <div className={cn("h-5 w-5 rounded-md border flex items-center justify-center transition-colors", selectedLeadIds.includes(lead.id) ? "bg-primary border-primary" : "bg-background border-border")}>
+                            {selectedLeadIds.includes(lead.id) && <Check className="h-3 w-3 text-primary-foreground" />}
+                          </div>
                         </div>
-                      </div>
-
-                      {leadId === lead.id && <motion.div layoutId="activeLead" className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />}
-                      <div className={cn("flex gap-3 items-center transition-all", (selectedLeadIds.length > 0 || selectedLeadIds.includes(lead.id)) && "pl-8")}>
-                        <Avatar className="h-12 w-12 border-2 border-background shadow-sm transition-transform group-hover:scale-105 shrink-0 rounded-full">
-                          <AvatarImage src={lead.avatar} />
-                          <AvatarFallback className={cn(
-                            "font-bold text-sm rounded-full",
-                            lead.id === leadId ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                          )}>{lead.name?.[0]}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1 min-w-0 space-y-1">
-                          <div className="flex justify-between items-start gap-2">
-                            <span className="text-sm font-bold truncate text-foreground flex-1 max-w-[120px] md:max-w-[140px] lg:max-w-full" title={lead.name}>
-                              <span className="text-[10px] font-black opacity-30 mr-1.5 tabular-nums">
-                                #{filteredLeads.findIndex(l => l.id === lead.id) + 1}
+                        {leadId === lead.id && <motion.div layoutId="activeLead" className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />}
+                        <div className={cn("flex gap-3 items-center transition-all", (selectedLeadIds.length > 0 || selectedLeadIds.includes(lead.id)) && "pl-8")}>
+                          <Avatar className="h-12 w-12 border-2 border-background shadow-sm transition-transform group-hover:scale-105 shrink-0 rounded-full">
+                            <AvatarImage src={lead.avatar} />
+                            <AvatarFallback className={cn("font-bold text-sm rounded-full", lead.id === leadId ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{lead.name?.[0]}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex justify-between items-start gap-2">
+                              <span className="text-sm font-bold truncate text-foreground flex-1 max-w-[120px] md:max-w-[140px] lg:max-w-[200px] xl:max-w-[300px]" title={lead.name}>
+                                <HighlightText text={lead.name} query={searchQuery} />
                               </span>
-                              <HighlightText text={lead.name} query={searchQuery} />
-                            </span>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-primary"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setProcessLead(lead);
-                                }}
-                              >
-                                <Brain className="h-4 w-4" />
-                              </Button>
-                              <span className="text-[10px] text-muted-foreground/50 font-medium uppercase tracking-wider shrink-0 mt-0.5">
-                                {(() => {
-                                  const d = lead.lastMessageAt || lead.createdAt;
-                                  return d ? formatDateShort(d) : '';
-                                })()}
-                              </span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                {lead.email && <span className="text-[10px] text-muted-foreground/60 truncate max-w-[130px] hidden lg:block" title={lead.email}>{lead.email}</span>}
+                                {lead.company && <span className="text-[10px] text-muted-foreground/40 truncate max-w-[80px] hidden xl:block" title={lead.company}>{lead.company}</span>}
+                                <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-primary" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
+                                  <Brain className="h-4 w-4" />
+                                </Button>
+                                <span className="text-[10px] text-muted-foreground/50 font-medium uppercase tracking-wider shrink-0 mt-0.5">
+                                  {(() => { const d = lead.lastMessageAt || lead.createdAt; return d ? formatDateShort(d) : ''; })()}
+                                </span>
+                              </div>
+                            </div>
+                            <p className={cn("text-xs line-clamp-1 overflow-hidden transition-colors", lead.metadata?.isUnread ? "text-foreground font-bold" : "text-muted-foreground")}>
+                              {typingLeadId === lead.id ? (
+                                <span className="flex items-center gap-1 text-primary font-bold animate-pulse">Typinng...</span>
+                              ) : localDrafts[lead.id] ? (
+                                <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
+                              ) : (
+                                <HighlightText text={lead.snippet || "No messages"} query={searchQuery} />
+                              )}
+                            </p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <Badge {...({ variant: "outline", className: cn("text-[9px] h-4 px-1 rounded-sm border-0 uppercase font-black tracking-wider", statusStyles[lead.status as keyof typeof statusStyles] || statusStyles.cold) } as any)}>
+                                {getLeadStatusDisplay(lead.status)}
+                              </Badge>
+                              {lead.metadata?.isUnread && (() => { const isOld = new Date().getTime() - new Date(lead.createdAt).getTime() > 24 * 60 * 60 * 1000; return !isOld ? <span className="h-2 w-2 rounded-full bg-primary animate-pulse" /> : null; })()}
                             </div>
                           </div>
-                          <p className={cn("text-xs line-clamp-1 overflow-hidden transition-colors", lead.metadata?.isUnread ? "text-foreground font-bold" : "text-muted-foreground")}>
-                            {typingLeadId === lead.id ? (
-                              <span className="flex items-center gap-1 text-primary font-bold animate-pulse">
-                                Typinng...
-                              </span>
-                            ) : localDrafts[lead.id] ? (
-                              <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
-                            ) : (
-                              <HighlightText text={lead.snippet || "No messages"} query={searchQuery} />
-                            )}
-                          </p>
-                          <div className="flex items-center gap-2 mt-1">
-                            <Badge {...({
-                              variant: "outline",
-                              className: cn("text-[9px] h-4 px-1 rounded-sm border-0 uppercase font-black tracking-wider", statusStyles[lead.status as keyof typeof statusStyles] || statusStyles.cold)
-                            } as any)}>
-                              {getLeadStatusDisplay(lead.status)}
-                            </Badge>
-                            {lead.metadata?.isUnread && (
-                              (() => {
-                                const isOld = new Date().getTime() - new Date(lead.createdAt).getTime() > 24 * 60 * 60 * 1000;
-                                return !isOld ? <span className="h-2 w-2 rounded-full bg-primary animate-pulse" /> : null;
-                              })()
-                            )}
-                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))}
+                      </div>);
+                    })}
+                  </div>
                   {leadsData?.hasMore && (
                     <div className="p-4">
-                      <Button
-                        variant="outline"
-                        className="w-full text-xs font-bold uppercase tracking-widest rounded-xl h-10 border-dashed text-foreground"
-                        onClick={() => setPage(p => p + 1)}
-                        disabled={leadsLoading}
-                      >
+                      <Button variant="outline" className="w-full text-xs font-bold uppercase tracking-widest rounded-xl h-10 border-dashed text-foreground"
+                        onClick={() => setPage(p => p + 1)} disabled={leadsLoading}>
                         {leadsLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                         Load More
                       </Button>
