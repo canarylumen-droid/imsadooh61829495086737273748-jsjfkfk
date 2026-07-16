@@ -382,6 +382,12 @@ export default function InboxPage() {
 
 
   const [showArchived, setShowArchived] = useState(false);
+  const hasArchivedLeads = useMemo(() => allLeads.some(l => l.archived), [allLeads]);
+  useEffect(() => {
+    if (showArchived && !hasArchivedLeads && hasLoadedLeadsRef.current) {
+      setShowArchived(false);
+    }
+  }, [showArchived, hasArchivedLeads]);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
@@ -399,6 +405,7 @@ export default function InboxPage() {
     }],
     placeholderData: (prev: any) => prev,
     staleTime: 0,
+    refetchInterval: 15_000,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
@@ -408,6 +415,7 @@ export default function InboxPage() {
     enabled: !!leadId,
     placeholderData: (prev: any) => prev,
     staleTime: 0,
+    refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   });
 
@@ -1069,11 +1077,11 @@ export default function InboxPage() {
                   Campaign
                 </Button>
                 <Button
-                  variant={showArchived ? "secondary" : "ghost"}
+                  variant={showArchived ? "secondary" : hasArchivedLeads ? "outline" : "ghost"}
                   size="icon"
                   className={cn("h-8 w-8", showArchived && "text-primary")}
                   onClick={() => setShowArchived(!showArchived)}
-                  title={showArchived ? "Hide Archived" : "Show Archived"}
+                  title={showArchived ? "Hide Archived" : hasArchivedLeads ? "Show Archived" : "No archived leads"}
                 >
                   <Archive className="h-4 w-4" />
                 </Button>

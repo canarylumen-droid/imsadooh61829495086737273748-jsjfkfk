@@ -264,6 +264,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
       // Invalidate specific lead conversation if needed
       if (payload?.message?.leadId) {
         queryClient.invalidateQueries({ queryKey: ["/api/messages", payload.message.leadId] });
@@ -483,6 +484,14 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/outreach/campaigns'] });
       queryClient.invalidateQueries({ queryKey: ['prospects'] });
       queryClient.invalidateQueries({ queryKey: ['/api/prospecting/leads'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    });
+
+    socketInstance.on('campaign_stats_updated', (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/outreach/campaigns'] });
+      if (data?.campaignId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/outreach/campaigns/${data.campaignId}/progress`] });
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
     });
 

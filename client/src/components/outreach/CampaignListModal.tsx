@@ -34,15 +34,21 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
 
   useEffect(() => {
     if (!socket) return;
-    const handler = () => queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
-    socket.on("leads_updated", handler);
-    socket.on("campaign_update", (data: any) => {
+    const refreshCampaigns = () => queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
+    const refreshProgress = (data: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns"] });
       if (data?.campaignId) {
         queryClient.invalidateQueries({ queryKey: ["/api/outreach/campaigns", data.campaignId, "progress"] });
       }
-    });
-    return () => { socket.off("leads_updated", handler); socket.off("campaign_update", handler); };
+    };
+    socket.on("leads_updated", refreshCampaigns);
+    socket.on("campaigns_updated", refreshCampaigns);
+    socket.on("campaign_stats_updated", refreshProgress);
+    return () => {
+      socket.off("leads_updated", refreshCampaigns);
+      socket.off("campaigns_updated", refreshCampaigns);
+      socket.off("campaign_stats_updated", refreshProgress);
+    };
   }, [socket, queryClient]);
 
   const { data: campaigns, isLoading } = useQuery<any[]>({
