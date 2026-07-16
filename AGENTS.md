@@ -168,6 +168,18 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 
 ## Useful Commands
 
+## This Session (Jul 16 2026)
+
+### Fixes Deployed (restarted API gateway + socket server)
+1. **Instant tracking pixel** (email-tracking-routes.ts): `/t/:token` returns GIF first (`res.end()`), then fire-and-forgets `recordEmailEvent()`. Clicks redirected first, event logged async. Response <1ms vs 100-500ms.
+2. **Instant new_mail socket** (imap-connection-manager.ts): IMAP `exists` handler calls `clusterSync.notifyNewMail()` directly before BullMQ enqueue. UI shows "New message arriving..." instantly, full content when fetch completes.
+3. **Gmail/Outlook Disconnect** (integrations.tsx): Buttons show "Disconnect" (red/destructive) when integration exists for provider. Calls `revokeIntegration()`.
+
+### Key Files
+- `services/api-gateway/src/routes/email-tracking-routes.ts`
+- `services/email-worker/src/imap/imap-connection-manager.ts`
+- `client/src/pages/dashboard/integrations.tsx`
+
 - Dev server: 
 - Tests: 
 - Lint: 

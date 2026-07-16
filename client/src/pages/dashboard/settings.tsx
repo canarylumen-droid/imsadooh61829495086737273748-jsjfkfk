@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,6 +60,7 @@ import {
   Server,
   Edit3,
   Shield,
+  Undo2,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -1056,50 +1057,170 @@ curl -H "Authorization: Bearer audnix_..." \\
 
         {/* Account tab */}
         <TabsContent value="account" className="space-y-6">
-          <Card>
-            <CardHeader className="p-4">
-              <CardTitle className="text-sm">Delete account</CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 pt-0">
-              <p className="text-xs text-muted-foreground mb-3">Permanently delete your account and all data.</p>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="destructive" size="sm">
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete account
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Delete your account?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This is permanent and cannot be undone. All your data will be removed.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction
-                      onClick={async () => {
-                        try {
-                          await apiRequest("DELETE", "/api/account");
-                          toast({ title: "Account deleted" });
-                          window.location.href = "/";
-                        } catch {
-                          toast({ title: "Failed", variant: "destructive" });
-                        }
-                      }}
-                      className="bg-destructive hover:bg-destructive/90"
-                    >
-                      Delete
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            </CardContent>
-          </Card>
+          <ScheduledDeletionCard />
         </TabsContent>
       </Tabs>
     </PageWrapper>
+  );
+}
+
+function ScheduledDeletionCard() {
+  const [scheduledAt, setScheduledAt] = useState<string | null>(null);
+  const [remainingMs, setRemainingMs] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchStatus = useCallback(async () => {
+    try {
+      const res = await apiRequest("GET", "/api/account/deletion-status");
+      const data = await res.json();
+      setScheduledAt(data.scheduledDeletionAt);
+      setRemainingMs(data.remainingMs || 0);
+      setError(null);
+    } catch {}
+  }, []);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  // Countdown timer
+  useEffect(() => {
+    if (!scheduledAt || remainingMs <= 0) return;
+    const interval = setInterval(() => {
+      setRemainingMs(prev => Math.max(0, prev - 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [scheduledAt, remainingMs]);
+
+  const days = Math.floor(remainingMs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((remainingMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+
+  const handleScheduleDeletion = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiRequest("POST", "/api/account/schedule-deletion");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Request failed' }));
+        throw new Error(err.error || err.message || 'Failed to schedule deletion');
+      }
+      const data = await res.json();
+      setScheduledAt(data.scheduledAt);
+      setRemainingMs(7 * 24 * 60 * 60 * 1000);
+      toast({ title: "Deletion scheduled" });
+    } catch (e: any) {
+      setError(e.message);
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelDeletion = async () => {
+    setLoading(true);
+    try {
+      await apiRequest("POST", "/api/account/cancel-deletion");
+      setScheduledAt(null);
+      setRemainingMs(0);
+      toast({ title: "Deletion cancelled" });
+    } catch (e: any) {
+      toast({ title: "Error", description: e.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // When timer expires, delete and logout
+  useEffect(() => {
+    if (!scheduledAt || remainingMs > 0) return;
+    (async () => {
+      try {
+        await apiRequest("DELETE", "/api/account");
+        window.location.href = "/";
+      } catch (e: any) {
+        toast({ title: "Deletion failed", description: e.message, variant: "destructive" });
+      }
+    })();
+  }, [scheduledAt, remainingMs]);
+
+  return (
+    <Card>
+      <CardHeader className="p-4">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Trash2 className="h-4 w-4 text-destructive" />
+          Delete account
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-4 pt-0 space-y-3">
+        {scheduledAt ? (
+          <div className="space-y-4">
+            <div className="p-4 rounded-2xl bg-destructive/5 border border-destructive/20">
+              <p className="text-xs font-medium text-destructive mb-2">Account scheduled for deletion</p>
+              <div className="flex items-center gap-3">
+                <Clock className="h-5 w-5 text-destructive shrink-0" />
+                <div>
+                  <p className="text-lg font-bold tabular-nums">
+                    {days > 0 && `${days}d `}{hours}h {minutes}m
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">until permanent deletion</p>
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 rounded-full bg-destructive/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-destructive transition-all duration-1000"
+                  style={{ width: `${Math.max(0, Math.min(100, (remainingMs / (7 * 24 * 60 * 60 * 1000)) * 100))}%` }}
+                />
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCancelDeletion}
+              disabled={loading}
+              className="w-full"
+            >
+              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Undo2 className="h-3.5 w-3.5 mr-1" />}
+              Undo — Cancel Deletion
+            </Button>
+          </div>
+        ) : (
+          <>
+            <p className="text-xs text-muted-foreground">
+              Your account will be permanently deleted after a 7-day waiting period. You can cancel at any time.
+            </p>
+            {error && (
+              <p className="text-xs text-destructive font-medium">{error}</p>
+            )}
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={loading}>
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Schedule deletion
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will schedule your account for permanent deletion in 7 days. You can cancel anytime during the waiting period. All your data will be permanently removed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep my account</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleScheduleDeletion}
+                    className="bg-destructive hover:bg-destructive/90"
+                  >
+                    Schedule deletion
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

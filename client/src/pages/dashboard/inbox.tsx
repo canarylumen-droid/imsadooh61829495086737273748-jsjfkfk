@@ -399,11 +399,6 @@ export default function InboxPage() {
 
   const [showArchived, setShowArchived] = useState(false);
   const hasArchivedLeads = useMemo(() => allLeads.some(l => l.archived), [allLeads]);
-  useEffect(() => {
-    if (showArchived && !hasArchivedLeads && hasLoadedLeadsRef.current) {
-      setShowArchived(false);
-    }
-  }, [showArchived, hasArchivedLeads]);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
@@ -854,11 +849,8 @@ export default function InboxPage() {
           leadIds: [data.id],
           archived: false
         });
-        // Optimistic update
+        // Optimistic update - stay in current view
         setAllLeads(prev => prev.filter(l => l.id !== data.id));
-        if (leadId === data.id) {
-          setLocation('/dashboard/inbox');
-        }
         toast({ title: "Lead Restored", description: "Successfully restored from archive" });
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       } catch (err) {
@@ -1735,61 +1727,6 @@ export default function InboxPage() {
                   </div>
                 </div>
 
-                {/* Quick Reply Header */}
-                {leadId && isChannelConnected(activeLead?.channel) && (
-                  <div className="border-b border-border/30 bg-gradient-to-r from-amber-500/5 via-background to-amber-500/5 px-4 md:px-8 py-2 shrink-0">
-                    <div className="flex items-center gap-2 max-w-5xl mx-auto w-full">
-                      <div className="flex-1 relative">
-                        <input
-                          value={replyMessage}
-                          onChange={e => {
-                            setReplyMessage(e.target.value);
-                            if (leadId) {
-                              if (e.target.value.trim()) {
-                                localStorage.setItem(`draft_${leadId}`, e.target.value);
-                              } else {
-                                localStorage.removeItem(`draft_${leadId}`);
-                              }
-                            }
-                          }}
-                          onKeyDown={e => {
-                            if (e.key === "Enter" && !e.shiftKey) {
-                              e.preventDefault();
-                              submitReply();
-                            }
-                          }}
-                          placeholder="Quick reply..."
-                          className="w-full h-9 bg-muted/30 border border-border/40 rounded-xl px-3 text-xs focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500/50 transition-all placeholder:text-muted-foreground/40"
-                        />
-                      </div>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={handleAI}
-                        disabled={isPolishing || isGenerating}
-                        className="h-8 w-8 rounded-lg shrink-0"
-                        title={replyMessage.trim() ? "Polish with AI" : "Generate AI Reply"}
-                      >
-                        {isPolishing || isGenerating ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : replyMessage.trim() ? (
-                          <Wand2 className="h-3.5 w-3.5 text-primary" />
-                        ) : (
-                          <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                        )}
-                      </Button>
-                      <Button
-                        onClick={submitReply}
-                        disabled={!replyMessage.trim() || sendMutation.isPending}
-                        size="icon"
-                        className="h-8 w-8 rounded-xl shrink-0 shadow-sm"
-                      >
-                        {sendMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
                 {/* Messages Area */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 min-h-0 scroll-smooth flex flex-col bg-muted/5 scrollbar-hide">
                   {(messagesLoading || messagesFetching) && !messagesData?.messages?.length ? (
@@ -1956,22 +1893,16 @@ export default function InboxPage() {
                         <div className="absolute right-3 bottom-2 flex gap-1.5 z-10">
                           <Button
                             size="icon"
+                            variant="ghost"
                             onClick={handleAI}
                             disabled={isPolishing || isGenerating}
-                            className={cn(
-                              "h-7 w-7 rounded-lg transition-all",
-                              replyMessage.trim()
-                                ? "hover:bg-primary/10 text-primary"
-                                : "bg-gradient-to-br from-[#FFD700] via-[#FDB931] to-[#D4AF37] text-black shadow-lg shadow-amber-500/20 hover:scale-105 active:scale-95 border border-amber-400/50 group/ai"
-                            )}
+                            className="h-7 w-7 rounded-lg text-muted-foreground hover:text-foreground transition-all"
                             title={replyMessage.trim() ? "Polish with AI" : "Generate AI Reply"}
                           >
                             {isPolishing || isGenerating ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                            ) : replyMessage.trim() ? (
-                              <Wand2 className="h-3.5 w-3.5" />
                             ) : (
-                              <Sparkles className="h-3.5 w-3.5 fill-black/20" />
+                              <Sparkles className="h-3.5 w-3.5" />
                             )}
                           </Button>
                         </div>

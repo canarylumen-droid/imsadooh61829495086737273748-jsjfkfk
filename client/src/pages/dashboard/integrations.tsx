@@ -1786,15 +1786,26 @@ export default function IntegrationsPage() {
                           </div>
                         )}
                         
-                        <Button
-                          variant={card.badge ? "secondary" : (isConnected ? "outline" : "default")}
-                          size="sm"
-                          className="w-full rounded-lg text-xs font-semibold"
-                          disabled={!!card.badge}
-                          onClick={() => handleConnect(card.id)}
-                        >
-                          {card.badge ? card.badge : (isConnected ? "Connect Another" : "Connect Account")}
-                        </Button>
+                        {isConnected && card.do === "calendar" ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full rounded-lg text-xs font-semibold border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10"
+                            onClick={() => confirmDisconnect(card.id, connectedIntegrations[0]?.id)}
+                          >
+                            Disconnect
+                          </Button>
+                        ) : (
+                          <Button
+                            variant={card.badge ? "secondary" : (isConnected ? "outline" : "default")}
+                            size="sm"
+                            className="w-full rounded-lg text-xs font-semibold"
+                            disabled={!!card.badge}
+                            onClick={() => handleConnect(card.id)}
+                          >
+                            {card.badge ? card.badge : (isConnected ? "Connect Another" : "Connect Account")}
+                          </Button>
+                        )}
                         {card.freePlanNote && (
                           <div className="flex items-start gap-1.5 px-1 mt-1">
                             <Info className="h-3 w-3 text-muted-foreground/60 mt-0.5 shrink-0" />

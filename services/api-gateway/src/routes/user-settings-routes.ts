@@ -415,6 +415,84 @@ router.post('/sync/force', requireAuthOrApiKey, async (req: Request, res: Respon
   }
 });
 
+router.post('/account/schedule-deletion', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    // Schedule deletion 7 days from now
+    const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    await db.execute(sql`
+      UPDATE users SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{scheduledDeletionAt}', to_jsonb(${scheduledAt}::text))
+      WHERE id = ${userId}
+    `);
+
+    res.json({ success: true, message: 'Account scheduled for deletion.', scheduledAt });
+  } catch (error) {
+    console.error('Error scheduling account deletion:', error);
+    res.status(500).json({ error: 'Failed to schedule account deletion.' });
+  }
+});
+
+router.post('/account/cancel-deletion', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    await db.execute(sql`
+      UPDATE users SET metadata = metadata - 'scheduledDeletionAt'
+      WHERE id = ${userId}
+    `);
+
+    res.json({ success: true, message: 'Deletion cancelled.' });
+  } catch (error) {
+    console.error('Error cancelling account deletion:', error);
+    res.status(500).json({ error: 'Failed to cancel deletion.' });
+  }
+});
+
+router.get('/account/deletion-status', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const result = await db.execute(sql`
+      SELECT metadata->>'scheduledDeletionAt' as scheduled_deletion_at FROM users WHERE id = ${userId}
+    `);
+
+    const scheduledAt = result.rows[0]?.scheduled_deletion_at as string | undefined;
+    if (!scheduledAt) {
+      res.json({ scheduledDeletionAt: null });
+      return;
+    }
+
+    const now = new Date();
+    const deletionDate = new Date(scheduledAt as string);
+    const remainingMs = deletionDate.getTime() - now.getTime();
+    const canUndo = remainingMs > 0;
+
+    res.json({
+      scheduledDeletionAt: scheduledAt,
+      remainingMs: Math.max(0, remainingMs),
+      canUndo,
+    });
+  } catch (error) {
+    console.error('Error fetching deletion status:', error);
+    res.status(500).json({ error: 'Failed to fetch deletion status.' });
+  }
+});
+
+// Direct deletion endpoint (used when countdown expires)
 router.delete('/account', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req);
@@ -436,11 +514,41 @@ router.delete('/account', requireAuthOrApiKey, async (req: Request, res: Respons
     }
 
     res.json({ success: true, message: 'Account deleted.' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error during account deletion:', error);
-    res.status(500).json({ error: 'Failed to delete account.' });
+    const message = error?.message || 'Failed to delete account.';
+    res.status(500).json({ error: message });
   }
 });
+
+// Process expired scheduled deletions (called during auth check)
+async function processExpiredDeletions(): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    const result = await db.execute(sql`
+      SELECT id, metadata->>'scheduledDeletionAt' as scheduled_deletion_at
+      FROM users
+      WHERE metadata->>'scheduledDeletionAt' IS NOT NULL
+      AND metadata->>'scheduledDeletionAt' <= ${now}
+    `);
+
+    for (const row of result.rows as any[]) {
+      try {
+        console.log(`[AccountDeletion] Processing expired deletion for user ${row.id}`);
+        await revocationService.revokeAllAndDestroyUser(row.id);
+        console.log(`[AccountDeletion] Successfully deleted user ${row.id}`);
+      } catch (err) {
+        console.error(`[AccountDeletion] Failed to delete user ${row.id}:`, err);
+      }
+    }
+  } catch (error) {
+    console.error('[AccountDeletion] Error processing expired deletions:', error);
+  }
+}
+
+// Run expired deletion processor every minute
+setInterval(processExpiredDeletions, 60_000);
+processExpiredDeletions();
 
 export default router;
 
