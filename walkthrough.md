@@ -855,6 +855,46 @@ cd /home/ubuntu/app && pm2 start ecosystem.config.cjs
 
 ---
 
-*© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*
+## 15. Session Log — Jul 16 2026
+
+### 15.1 GitHub Security Audit
+
+- **Code scanning**: 20 open alerts reviewed
+  - ✅ Fixed #342 (`scripts/aws-mcp-server.mjs`): Removed no-op `key.replace(/^tag:/, "tag:")`
+  - ✅ Fixed #343 (`LeadsDisplayModal.tsx`): Replaced `includes()` substring check with `new URL().hostname` exact domain match
+  - ✅ Fixed #348 (`email-tracking-routes.ts`): Redirect URL validation — `new URL()` protocol check instead of `startsWith('http')`
+  - ⏳ Remaining: 7 errors (path injection x2, CSRF, prompt injection x2, CORS), 10 warnings (rate limiting x6, URL redirect, regex, insecure randomness, format string)
+- **Dependabot**: 18 vulns (9 high, 6 moderate, 3 low) — all transitive deps (nodemailer via mailauth, multer, request via google-it, aws-sdk v2). No fixes available for most.
+- **PR #25**: Dependabot security bump PR — closed. Had merge conflicts from directory restructure. Security bumps already covered by existing versions.
+
+### 15.2 CI/CD Pipeline Fixes
+
+| Workflow | Failure | Fix |
+|----------|---------|-----|
+| `ci.yml` — Compile Rust workers | `rustc 1.85.1` not supported by `icu_collections@2.2.0` (needs 1.86) | Changed `toolchain: 1.85` → `1.86` |
+| `deploy.yml` — Compile Rust workers | Same Rust version issue | Same fix |
+| `ci.yml` — Typecheck & Build | `npm ci` failed — lockfile out of sync (mysql2 deps missing) | Ran `npm install`, synced lockfile |
+| npm audit | 18 vulnerabilities (non-blocking) | Removed unused `mongoose` dep |
+
+### 15.3 Dashboard Fixes
+
+- **Crash on load** (`client/src/pages/dashboard/home.tsx:302-308`): `calculatePercentageChange()` returned a string (`"+12.34%"`) but the render template called `.toFixed(1)` on it. Changed return type to `number | null`.
+- **AI badge always "Idle"**: `lastOutreachActivity` field was defined in the interface but never returned by backend. Removed the field, simplified badge to use `stats?.sync?.status === "Autonomous"`.
+- **TypeScript check**: Clean pass (0 errors) with `NODE_OPTIONS="--max-old-space-size=4096" npx tsc --noEmit`.
+
+### 15.4 Lead Recovery Verification
+
+- Confirmed fully migrated from MongoDB to MySQL — zero MongoDB/mongoose references in code
+- All MySQL functions use `mysql2` lazy import pattern (`let mysql: any`)
+- Error handling: all DB calls wrapped in try/catch, worker skips gracefully if MySQL unavailable
+- No stale/busy state issues — `recoverStaleBusyState` handles crash recovery (15 min threshold)
+- Removed unused `mongoose` dependency from `package.json`
+
+### 15.5 Deployments
+
+- **Git push**: Commit `1ee26178` pushed to `github` remote (`main`)
+- **AWS EC2** (`54.227.164.241`): `git pull` → `npm run build` → `pm2 restart all` — all 16 processes online
+
+---
 
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*
