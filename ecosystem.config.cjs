@@ -81,7 +81,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'imap',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify'
       },
       error_file: './logs/imap-error.log',
       out_file: './logs/imap-out.log',
@@ -382,13 +383,13 @@ module.exports = {
     {
       name: 'audnix-rust-imap-worker',
       script: './rust-imap-worker/target/release/audnix-imap-worker',
-      instances: 1,
+      instances: 0,
       exec_mode: 'fork',
       env: {
         RUST_LOG: 'info',
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
-        IMAP_QUEUE_NAME: 'imap-queue',
-        IMAP_RESULT_QUEUE_NAME: 'imap-results',
+        IMAP_QUEUE_NAME: 'audnix-email-sync',
+        IMAP_RESULT_QUEUE_NAME: 'audnix-email-sync',
         WORKER_COUNT: '2',
         IDLE_TIMEOUT_SECS: '600'
       },
