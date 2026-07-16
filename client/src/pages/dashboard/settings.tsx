@@ -218,13 +218,18 @@ export default function SettingsPage() {
       const formData = new FormData();
       formData.append('avatar', file);
       const res = await fetch('/api/user/avatar', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || 'Upload failed');
+      }
       return res.json();
     },
     onSuccess: (data) => {
       queryClient.setQueryData(["/api/user/profile"], (old: any) => ({ ...old, avatar: data.avatar }));
+      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({ title: "Avatar Updated" });
-    }
+    },
+    onError: (e: Error) => toast({ title: "Upload failed", description: e.message, variant: "destructive" })
   });
 
   const cloneVoiceMutation = useMutation({
@@ -443,13 +448,15 @@ export default function SettingsPage() {
               <CardContent className="flex flex-col items-center p-4 sm:p-8">
                 <div className="relative group mb-6">
                   <div className="relative">
-                    <Avatar className="h-28 w-28 sm:h-32 sm:w-32 border-2 border-border/50 shadow-md ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300">
-                      <AvatarImage src={user.avatar} className="object-cover" />
-                      <AvatarFallback className="text-3xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold">
+                    <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-emerald-400/50 ring-offset-2 ring-offset-background" />
+                    <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-emerald-400/20 via-transparent to-emerald-400/10 animate-spin" style={{ animationDuration: '4s' }} />
+                    <Avatar className="h-28 w-28 sm:h-32 sm:w-32 border-2 border-border/50 shadow-md ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300 relative rounded-full">
+                      <AvatarImage src={user.avatar} className="object-cover rounded-full" />
+                      <AvatarFallback className="text-3xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold rounded-full">
                         {user.name?.[0]?.toUpperCase() || 'U'}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-[3px] border-background" />
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-emerald-500 rounded-full border-[3px] border-background z-10" />
                   </div>
                   <Button
                     size="icon"

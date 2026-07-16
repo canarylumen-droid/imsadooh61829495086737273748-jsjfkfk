@@ -213,7 +213,7 @@ export async function uploadToSupabase(
     const result = await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
     // S3 upload returns an s3:// URI; convert to publicly accessible URL
     if (result.startsWith('s3://')) {
-      return await advancedStorage.getPublicUrl(result, 86400); // 24h expiry for cached avatars
+      return await advancedStorage.getPublicUrl(result, 31536000); // 1-year expiry for avatars/uploads
     }
     return result;
   }
@@ -243,7 +243,7 @@ export async function uploadToSupabase(
     console.warn(`Supabase upload failed, falling back to AdvancedStorageService:`, supabaseError);
     const result = await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
     if (result.startsWith('s3://')) {
-      return await advancedStorage.getPublicUrl(result, 86400);
+      return await advancedStorage.getPublicUrl(result, 31536000);
     }
     return result;
   }
