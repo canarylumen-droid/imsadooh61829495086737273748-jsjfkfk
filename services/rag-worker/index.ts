@@ -15,7 +15,10 @@ async function startRagService() {
   await serviceRegistry.register({ version: '1.0.0' });
   log.info('🧠 RAG Worker Service starting...');
 
-  startWorkerHealthServer('rag-worker', parseInt(process.env.RAG_WORKER_PORT || process.env.PORT || '8083', 10));
+  const role = process.env.APP_ROLE || 'rag';
+  const portVar = role === 'knowledge' ? 'KNOWLEDGE_WORKER_PORT' : 'RAG_WORKER_PORT';
+  const defaultPort = role === 'knowledge' ? '8090' : '8083';
+  startWorkerHealthServer(`${role}-worker`, parseInt(process.env[portVar] || process.env.PORT || defaultPort, 10));
 
   // Phase 10: Register with worker health monitor so crashes appear in the dashboard
   workerHealthMonitor.registerWorker(WORKER_NAME);

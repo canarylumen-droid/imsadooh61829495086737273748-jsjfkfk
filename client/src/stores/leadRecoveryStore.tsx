@@ -61,6 +61,7 @@ interface LeadRecoveryState {
   draftModalOpen: boolean;
   loading: boolean;
   warningOpen: boolean;
+  error: string | null;
   loadAll: () => Promise<void>;
   activate: (mailboxId?: string) => Promise<void>;
   deactivate: () => Promise<void>;
@@ -87,11 +88,17 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [warningOpen, setWarningOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadStatus = useCallback(async () => {
     try {
       const res = await apiRequest("GET", "/api/lead-recovery/status");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || err.message || `HTTP ${res.status}`);
+      }
       const data = await res.json();
+      setError(null);
       setIsActive(data.isActive);
       setHasAvailableMailbox(data.hasAvailableMailbox);
       setAvailableAt(data.availableAt);
@@ -99,8 +106,10 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       setSkipWarning(data.skipWarning || "");
       setPromptConfigured(Boolean(data.promptConfigured));
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setError(msg);
       console.warn('[LeadRecovery] Failed to load status:', e);
-      toast({ title: 'Failed to load recovery status', variant: 'destructive' });
+      toast({ title: 'Failed to load recovery status', description: msg, variant: 'destructive' });
     }
   }, []);
 
@@ -222,6 +231,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     draftModalOpen,
     loading,
     warningOpen,
+    error,
     loadAll,
     activate,
     deactivate,
@@ -244,6 +254,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     draftModalOpen,
     loading,
     warningOpen,
+    error,
     loadAll,
     activate,
     deactivate,

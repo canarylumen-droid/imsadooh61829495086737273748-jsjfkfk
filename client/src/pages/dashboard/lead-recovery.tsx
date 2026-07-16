@@ -27,6 +27,15 @@ function LeadRecoveryContent() {
 
   return (
     <div className="space-y-6">
+      {store.error && (
+        <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
+          <div className="space-y-1">
+            <p className="text-sm font-semibold text-red-500">Lead Recovery Unavailable</p>
+            <p className="text-xs text-muted-foreground">{store.error}. Configure MySQL (MYSQL_HOST) to enable lead recovery.</p>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <div className="flex items-center gap-3">

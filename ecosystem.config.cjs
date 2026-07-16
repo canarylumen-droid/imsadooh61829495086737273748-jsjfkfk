@@ -32,6 +32,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -54,6 +55,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -75,6 +77,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -96,6 +99,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -117,6 +121,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -138,6 +143,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -159,6 +165,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -180,6 +187,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -201,6 +209,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -222,6 +231,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -243,6 +253,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -264,6 +275,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -285,6 +297,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -306,6 +319,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
@@ -325,6 +339,7 @@ module.exports = {
       script: './services/deliverability-service/dist/index.js',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env_file: './.env',
       env: {
         NODE_ENV: 'production',
@@ -348,6 +363,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
