@@ -1,6 +1,6 @@
 # Audnix AI — Platform Walkthrough
 
-> **Date:** 2026-07-15  
+> **Date:** 2026-07-16  
 > **App:** [https://audnixai.com](https://audnixai.com)  
 > **Developer Docs:** [https://audnixai.com/developer](https://audnixai.com/developer)  
 > **MCP Skill:** `.opencode/skills/audnix-mcp.md`
@@ -847,6 +847,11 @@ cd /home/ubuntu/app && pm2 start ecosystem.config.cjs
 |-------|-------|-----|
 | All PM2 services crash on start | Missing `instrument.ts` (Sentry init) | Created `/home/ubuntu/app/instrument.ts` with `Sentry.init()` |
 | CPU at 100% (load ~10.5) | Workers restart-loop before fix | Stabilized after `instrument.ts` deploy |
+| CI Pipeline failure (Rust) | `toolchain: 1.85` incompatible with `icu_collections@2.2.0` (needs 1.86) | Updated CI to `toolchain: 1.86` |
+| CI Pipeline failure (npm ci) | Lockfile out of sync after mysql2 addition | Ran `npm install`, removed unused `mongoose` dep |
+| Code scanning #342/#343/#348 | No-op replace, URL substring check, insecure redirect | Fixed: key used directly, URL hostname validation, protocol check |
+| Dashboard crash on load | `calculatePercentageChange` returned string but `.toFixed(1)` called on it | Changed return type to `number \| null` |
+| Dashboard AI badge always "Idle" | `lastOutreachActivity` field never returned by backend | Removed dead field, simplified badge logic |
 
 ---
 
