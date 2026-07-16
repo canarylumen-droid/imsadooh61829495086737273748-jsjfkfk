@@ -130,6 +130,7 @@ export default function InboxPage() {
   const { selectedMailboxId } = useMailbox();
   const [processLead, setProcessLead] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const enableRegex = searchQuery ? (searchQuery.startsWith('/') && searchQuery.endsWith('/')) : false;
   const [filterChannel, setFilterChannel] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [allLeads, setAllLeads] = useState<any[]>([]);
@@ -164,25 +165,8 @@ export default function InboxPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const leadListRef = useRef<HTMLDivElement>(null);
-  const [virtualRange, setVirtualRange] = useState({ start: 0, end: 50 });
   const ROW_HEIGHT = 90;
   const BUFFER = 10;
-  useEffect(() => {
-    const el = leadListRef.current;
-    if (!el) return;
-    const onScroll = () => {
-      const scrollTop = el.scrollTop;
-      const viewH = el.clientHeight;
-      const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
-      const end = Math.min(filteredLeads.length, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + BUFFER);
-      setVirtualRange({ start, end });
-    };
-    el.addEventListener('scroll', onScroll, { passive: true });
-    onScroll();
-    return () => el.removeEventListener('scroll', onScroll);
-  }, [filteredLeads.length]);
-  const virtualStart = virtualRange.start;
-  const virtualEnd = virtualRange.end;
 
   const [activeReplyTab, setActiveReplyTab] = useState<'text'>('text');
 
@@ -515,9 +499,8 @@ export default function InboxPage() {
 
   const filteredLeads = useMemo(() => {
     // Build regex once for faster search
-    const enableRegex = searchQuery?.startsWith('/') && searchQuery?.endsWith('/');
-  const searchPattern = enableRegex ? searchQuery.slice(1, -1) : searchQuery?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') || '';
-  const searchRegex = searchQuery ? new RegExp(searchPattern, 'i') : null;
+    const searchPattern = enableRegex ? searchQuery.slice(1, -1) : searchQuery?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') || '';
+    const searchRegex = searchQuery ? new RegExp(searchPattern, 'i') : null;
 
     return allLeads.filter((lead: any) => {
       const matchesSearch = !searchRegex ||
@@ -586,6 +569,24 @@ export default function InboxPage() {
       return timeB - timeA;
     });
   }, [allLeads, searchQuery, filterChannel, filterStatus, showArchived, localDrafts, selectedMailboxId]);
+
+  const [virtualRange, setVirtualRange] = useState({ start: 0, end: 50 });
+  const virtualStart = virtualRange.start;
+  const virtualEnd = virtualRange.end;
+  useEffect(() => {
+    const el = leadListRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      const scrollTop = el.scrollTop;
+      const viewH = el.clientHeight;
+      const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+      const end = Math.min(filteredLeads.length, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + BUFFER);
+      setVirtualRange({ start, end });
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [filteredLeads.length]);
 
   // Detect if a message body contains HTML
   const isHtml = (text: string) => /<[a-z][\s\S]*>/i.test(text);
