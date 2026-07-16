@@ -351,7 +351,22 @@ export default function InboxPage() {
 
     let leadsTimeout: NodeJS.Timeout | null = null;
 
+    const handleNewMail = (payload: any) => {
+      const fromEmail = payload?.from?.match(/<([^>]+)>/)?.[1] || payload?.from || '';
+      if (fromEmail) {
+        setAllLeads(prev => {
+          const idx = prev.findIndex(l => l.email === fromEmail || l.email?.includes(fromEmail) || fromEmail.includes(l.email || ''));
+          if (idx === -1) return prev;
+          const updated = { ...prev[idx], lastMessageAt: payload.date || new Date().toISOString(), snippet: payload.snippet || prev[idx].snippet, metadata: { ...prev[idx].metadata, isUnread: true } };
+          return [updated, ...prev.filter(l => l.id !== prev[idx].id)];
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      if (leadId) queryClient.invalidateQueries({ queryKey: ["/api/messages", leadId] });
+    };
+
     socket.on('messages_updated', handleMessagesUpdated);
+    socket.on('new_mail', handleNewMail);
     socket.on('leads_updated', handleLeadsUpdated);
     socket.on('notification', handleNotification);
     socket.on('activity_updated', handleActivityUpdated);
@@ -364,6 +379,7 @@ export default function InboxPage() {
 
     return () => {
       socket.off('messages_updated', handleMessagesUpdated);
+      socket.off('new_mail', handleNewMail);
       socket.off('leads_updated', handleLeadsUpdated);
       socket.off('notification', handleNotification);
       socket.off('activity_updated', handleActivityUpdated);
@@ -596,6 +612,7 @@ export default function InboxPage() {
 
   // Detect if a message body contains HTML
   const isHtml = (text: string) => /<[a-z][\s\S]*>/i.test(text);
+  const stripHtml = (text: string) => text.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, ' ').trim();
 
   // Highlighting helper
   const HighlightText = useCallback(({ text, query }: { text: string, query: string }) => {
@@ -1313,7 +1330,7 @@ export default function InboxPage() {
                               ) : localDrafts[lead.id] ? (
                                 <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
                               ) : (
-                                <HighlightText text={lead.snippet || "No messages"} query={searchQuery} />
+                                <HighlightText text={lead.snippet ? stripHtml(lead.snippet) : "No messages"} query={searchQuery} />
                               )}
                             </p>
                             <div className="flex items-center gap-2 mt-1">

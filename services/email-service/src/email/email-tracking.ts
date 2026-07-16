@@ -79,10 +79,8 @@ export async function createTrackedEmail(data: EmailTrackingData): Promise<{ tok
   // store the same value in campaign_emails.message_id and correlate events.
   // If no messageId is provided, generate a new tracking token.
   const token = data.messageId || generateTrackingToken();
-  // Use sender's domain for tracking pixel URL, fallback to PUBLIC_URL, then audnixai.com
-  const senderDomain = data.senderEmail?.includes('@') ? data.senderEmail.split('@')[1] : null;
-  const baseUrl = (senderDomain ? `https://${senderDomain}` : null)
-    || (globalThis as any).process?.env?.PUBLIC_URL
+  // Always use APP domain for tracking — never sender's domain (tracking server only runs on app domain)
+  const baseUrl = (globalThis as any).process?.env?.PUBLIC_URL
     || (globalThis as any).process?.env?.BASE_URL
     || 'https://audnixai.com';
 
@@ -342,8 +340,8 @@ export async function getEmailStats(userId: string, days: number = 30, integrati
   }
 }
 
-export async function injectTrackingIntoEmail(content: string, token: string, senderDomain?: string): Promise<{ html: string; urls: string[] }> {
-  const baseUrl = senderDomain ? `https://${senderDomain}` : ((globalThis as any).process?.env?.BASE_URL || 'https://audnixai.com');
+export async function injectTrackingIntoEmail(content: string, token: string, _senderDomain?: string): Promise<{ html: string; urls: string[] }> {
+  const baseUrl = (globalThis as any).process?.env?.PUBLIC_URL || (globalThis as any).process?.env?.BASE_URL || 'https://audnixai.com';
 
   // Check if content is HTML or plain text
   const isHtml = /<[a-z][\s\S]*>/i.test(content);
