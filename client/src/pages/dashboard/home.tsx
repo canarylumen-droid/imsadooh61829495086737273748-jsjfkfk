@@ -81,7 +81,6 @@ interface DashboardStats {
   closedRevenue?: number;
   queuedLeads?: number;
   undeliveredLeads?: number;
-  lastOutreachActivity?: string | null;
   domainHealth?: number;
     health?: {
         score: number | null;
@@ -300,13 +299,12 @@ export default function DashboardHome() {
 
   const trialDaysLeft = getTrialDaysLeft();
 
-  const calculatePercentageChange = (current: number, previous: number | undefined): string => {
-    if (!previousStats || previous === undefined) return "—";
-    if (previous === 0) return current > 0 ? "+100%" : "—";
+  const calculatePercentageChange = (current: number, previous: number | undefined): number | null => {
+    if (!previousStats || previous === undefined) return null;
+    if (previous === 0) return current > 0 ? 100 : null;
     const change = ((current - previous) / previous) * 100;
-    if (isNaN(change) || !isFinite(change)) return "—";
-    const formatted = change.toFixed(2);
-    return change > 0 ? `+${formatted}%` : `${formatted}%`;
+    if (isNaN(change) || !isFinite(change)) return null;
+    return Number(change.toFixed(2));
   };
 
   const summaryMetrics = [
@@ -638,9 +636,9 @@ export default function DashboardHome() {
                     AI Automation
                   </span>
                   <Badge variant="secondary" className={cn("border-0 text-[10px] uppercase font-bold tracking-tighter",
-                    (stats?.sync?.status === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
+                    stats?.sync?.status === "Autonomous" ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
                   )}>
-                    {(stats?.sync?.status === "Autonomous" && stats?.lastOutreachActivity && (new Date().getTime() - new Date(stats.lastOutreachActivity).getTime() < 3600000)) ? "Active" : (stats?.sync?.status === "Autonomous" ? "Monitoring" : "Idle")}
+                    {stats?.sync?.status === "Autonomous" ? "Active" : "Idle"}
                   </Badge>
                 </div>
                 <div className="flex items-center justify-between">

@@ -89,7 +89,7 @@ const TOOLS = {
       const params = {};
       if (filters) {
         const [key, value] = filters.split("=");
-        params.Filters = [{ Name: key.replace(/^tag:/, "tag:"), Values: [value] }];
+        params.Filters = [{ Name: key, Values: [value] }];
       }
       const { Reservations } = await ec2.send(new DescribeInstancesCommand(params));
       const instances = (Reservations || []).flatMap(r => r.Instances || []);

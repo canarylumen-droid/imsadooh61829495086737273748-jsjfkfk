@@ -61,11 +61,20 @@ function useVirtualScroll(itemsLength: number, rowHeight: number, overscan: numb
   return { containerRef, handleScroll, totalHeight, startIndex, endIndex, offsetY, containerHeight };
 }
 
+const getHostname = (urlStr: string): string | null => {
+  try {
+    return new URL(urlStr).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+};
+
 const renderValue = (val: any, type?: string) => {
   if (!val) return <span className="text-muted-foreground/30">—</span>;
 
   const str = val.toString();
-  if (type === 'google_maps' || str.includes('maps.google')) {
+  const hostname = getHostname(str);
+  if (type === 'google_maps' || (hostname && (hostname === 'maps.google.com' || hostname.endsWith('.maps.google.com')))) {
     return (
       <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-primary hover:underline">
         <MapPin className="h-3 w-3 shrink-0" />
@@ -73,7 +82,7 @@ const renderValue = (val: any, type?: string) => {
       </a>
     );
   }
-  if (type === 'linkedin' || str.includes('linkedin.com')) {
+  if (type === 'linkedin' || (hostname && (hostname === 'linkedin.com' || hostname.endsWith('.linkedin.com')))) {
     return (
       <a href={val} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-blue-400 hover:underline">
         <Linkedin className="h-3 w-3 shrink-0" />

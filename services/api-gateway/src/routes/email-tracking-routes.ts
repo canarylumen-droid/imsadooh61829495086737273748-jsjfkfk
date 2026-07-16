@@ -65,15 +65,14 @@ stealthRouter.get('/c/:token', async (req: Request, res: Response): Promise<void
 
     const decodedUrl = decodeURIComponent(url);
 
-    // Basic URL safety check
-    let isSafe = false;
+    let parsedUrl: URL;
     try {
-      isSafe = decodedUrl.startsWith('http://') || decodedUrl.startsWith('https://');
+      parsedUrl = new URL(decodedUrl);
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+        res.status(400).send('Invalid redirect URL');
+        return;
+      }
     } catch {
-      isSafe = false;
-    }
-
-    if (!isSafe) {
       res.status(400).send('Invalid redirect URL');
       return;
     }

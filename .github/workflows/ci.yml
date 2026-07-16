@@ -52,7 +52,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.85
+          toolchain: 1.86
       - run: cargo build --release --manifest-path ./rust-email-sender/Cargo.toml
       - run: cargo build --release --manifest-path ./rust-imap-worker/Cargo.toml
 
