@@ -871,35 +871,65 @@ export default function IntegrationsPage() {
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]",
-                          isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise' 
-                            ? "opacity-50 cursor-not-allowed border-muted bg-muted/20" 
-                            : "border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
-                        )}
-                        onClick={() => handleConnect('gmail')}
-                        disabled={isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'}
-                      >
-                        <SiGoogle className="h-5 w-5 shrink-0" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Connect Google</span>
-                      </Button>
+                      {(() => {
+                        const hasGmail = Array.isArray(integrations) && integrations.some((i: any) => i.provider === 'gmail');
+                        const gmailIntegration = Array.isArray(integrations) ? integrations.find((i: any) => i.provider === 'gmail') : null;
+                        return hasGmail ? (
+                          <Button
+                            variant="outline"
+                            className="rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px] border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10"
+                            onClick={() => confirmDisconnect('gmail', gmailIntegration?.id)}
+                          >
+                            <SiGoogle className="h-5 w-5 shrink-0" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Disconnect Gmail</span>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]",
+                              isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise' 
+                                ? "opacity-50 cursor-not-allowed border-muted bg-muted/20" 
+                                : "border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
+                            )}
+                            onClick={() => handleConnect('gmail')}
+                            disabled={isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'}
+                          >
+                            <SiGoogle className="h-5 w-5 shrink-0" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Connect Google</span>
+                          </Button>
+                        );
+                      })()}
 
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]",
-                          isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'
-                            ? "opacity-50 cursor-not-allowed border-muted bg-muted/20"
-                            : "border-blue-500/20 bg-blue-500/5 text-blue-500 hover:bg-blue-500/10"
-                        )}
-                        onClick={() => handleConnect('outlook')}
-                        disabled={isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'}
-                      >
-                        <Mail className="h-5 w-5" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Connect Outlook</span>
-                      </Button>
+                      {(() => {
+                        const hasOutlook = Array.isArray(integrations) && integrations.some((i: any) => i.provider === 'outlook');
+                        const outlookIntegration = Array.isArray(integrations) ? integrations.find((i: any) => i.provider === 'outlook') : null;
+                        return hasOutlook ? (
+                          <Button
+                            variant="outline"
+                            className="rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px] border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10"
+                            onClick={() => confirmDisconnect('outlook', outlookIntegration?.id)}
+                          >
+                            <Mail className="h-5 w-5" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Disconnect Outlook</span>
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "rounded-xl px-4 py-6 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]",
+                              isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'
+                                ? "opacity-50 cursor-not-allowed border-muted bg-muted/20"
+                                : "border-blue-500/20 bg-blue-500/5 text-blue-500 hover:bg-blue-500/10"
+                            )}
+                            onClick={() => handleConnect('outlook')}
+                            disabled={isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise'}
+                          >
+                            <Mail className="h-5 w-5" />
+                            <span className="text-[10px] font-bold uppercase tracking-widest">Connect Outlook</span>
+                          </Button>
+                        );
+                      })()}
 
                       <div className="w-full md:w-auto flex flex-col items-center justify-center px-4">
                         <span className="text-[10px] font-bold text-muted-foreground uppercase">Or</span>

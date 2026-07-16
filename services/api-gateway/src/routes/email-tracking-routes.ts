@@ -22,34 +22,25 @@ const TRANSPARENT_1X1_GIF = Buffer.from(
 const stealthRouter = Router();
 
 stealthRouter.get('/t/:token', async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { token } = req.params;
-    if (!token) {
-      res.set('Content-Type', 'image/gif');
-      res.send(TRANSPARENT_1X1_GIF);
-      return;
-    }
+  const { token } = req.params;
+  // Return GIF immediately (<1ms) — fire-and-forget tracking so email client isn't blocked
+  res.set({
+    'Content-Type': 'image/gif',
+    'Content-Length': TRANSPARENT_1X1_GIF.length.toString(),
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+  });
+  res.end(TRANSPARENT_1X1_GIF);
 
-    await recordEmailEvent({
+  if (token) {
+    recordEmailEvent({
       type: 'open',
       messageId: token,
       timestamp: new Date(),
       ipAddress: req.ip || req.socket.remoteAddress,
       userAgent: req.headers['user-agent'],
-    });
-
-    res.set({
-      'Content-Type': 'image/gif',
-      'Content-Length': TRANSPARENT_1X1_GIF.length.toString(),
-      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-    });
-    res.send(TRANSPARENT_1X1_GIF);
-  } catch (error) {
-    console.error('Error tracking email open:', error);
-    res.set('Content-Type', 'image/gif');
-    res.send(TRANSPARENT_1X1_GIF);
+    }).catch((err: any) => console.error('Error recording email open:', err));
   }
 });
 
@@ -77,16 +68,16 @@ stealthRouter.get('/c/:token', async (req: Request, res: Response): Promise<void
       return;
     }
 
-    await recordEmailEvent({
+    res.redirect(302, decodedUrl);
+
+    recordEmailEvent({
       type: 'click',
       messageId: token,
       timestamp: new Date(),
       ipAddress: req.ip || req.socket.remoteAddress,
       userAgent: req.headers['user-agent'],
       linkUrl: decodedUrl,
-    });
-
-    res.redirect(302, decodedUrl);
+    }).catch((err: any) => console.error('Error recording email click:', err));
   } catch (error) {
     console.error('Error tracking email click:', error);
     res.status(400).send('Invalid request');

@@ -430,6 +430,17 @@ export class ImapConnectionManager {
           console.error(`[IMAP] Failed to enqueue new-mail for ${integration.id}:`, err.message)
         );
       }
+
+      // INSTANT PUSH: Notify user immediately (before fetch completes)
+      // This makes inbox feel like WhatsApp — new mail appears instantly
+      clusterSync.notifyNewMail(integration.userId, {
+        integrationId: integration.id,
+        subject: undefined,
+        from: undefined,
+        snippet: 'New message arriving...',
+        date: new Date().toISOString(),
+        isNew: true,
+      }).catch(() => {});
     });
 
     // ── Connect ──
