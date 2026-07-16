@@ -181,6 +181,12 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 8. **Account deletion** (settings.tsx + user-settings-routes.ts): 7-day scheduled deletion with real-time countdown, undo button, cleaner error messages. `processExpiredDeletions()` runs every 60s.
 9. **Lead Intelligence modal** (LeadIntelligenceModal.tsx): Simplified UI, mobile-friendly, removed generic badges/gradients.
 
+### Fixes Deployed This Round
+1. **S3 avatar storage configured**: Added `S3_BUCKET_NAME`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_REGION` to `ecosystem.config.cjs` on EC2 (not in git — secrets scanned). Pre-signed URL expiry changed 24h→1yr (`file-upload.ts:216,246`).
+2. **Avatar upload cache fix** (`settings.tsx:224-231`): `uploadAvatarMutation.onSuccess` now calls `invalidateQueries` after `setQueryData` to force refetch. Error toast added for failures.
+3. **Green dot pulse ring** (`settings.tsx:445-452`): Avatar in settings has animated pulse ring (`ring-2 ring-emerald-400/50`), gradient glow, and emerald dot matching sidebar style.
+4. **Client build passes**, both API gateway and socket server restarted with `--update-env`.
+
 ### Key Files
 - `services/api-gateway/src/routes/email-tracking-routes.ts`
 - `services/email-worker/src/imap/imap-connection-manager.ts`
@@ -189,11 +195,12 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 - `client/src/pages/dashboard/integrations.tsx`
 - `client/src/pages/dashboard/settings.tsx`
 - `client/src/components/dashboard/LeadIntelligenceModal.tsx`
+- `shared/lib/storage/file-upload.ts`
 
 - Dev server: 
 - Tests: 
 - Lint: 
-- Deploy: `git push github main` then ssh EC2: `cd /home/ubuntu/app && git stash -- package.json package-lock.json 2>/dev/null; git pull && cd client && npm run build && pm2 restart audnix-api-gateway`
+- Deploy: `git push github main` → then push SSH key: `node push-ssh-key.mjs` (generate key, use SDK) → `ssh -i /tmp/opencode_ssh_key ubuntu@54.227.164.241` → `cd /home/ubuntu/app && git stash -- package.json package-lock.json 2>/dev/null; git pull && cd client && npm run build && pm2 restart audnix-api-gateway --update-env && pm2 restart audnix-socket-server --update-env`
+- To push SSH key: generate `ssh-keygen -t rsa -f /tmp/opencode_ssh_key -N ""`, then run node script using `EC2InstanceConnectClient.sendSSHPublicKeyCommand` (SDK in workspace node_modules), key valid ~60s
 - Check PM2: `pm2 list`
 - Check logs: `pm2 logs audnix-api-gateway --lines 50`
-- SSH deploy temp key: EC2 Instance Connect → `/tmp/aws_temp_key` → `ssh -i /tmp/aws_temp_key ubuntu@54.227.164.241`

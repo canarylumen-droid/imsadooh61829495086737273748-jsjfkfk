@@ -295,8 +295,8 @@ router.get('/api/mcp/keys', requireAuth, async (req: Request, res: Response): Pr
       id: row.id,
       name: row.name,
       permissionLevel: row.scope || 'read_write',
-      createdAt: row.created_at?.toISOString() || null,
-      lastUsedAt: row.last_used_at?.toISOString() || null,
+      createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+      lastUsedAt: row.last_used_at ? new Date(row.last_used_at).toISOString() : null,
     }));
 
     res.json({ keys });

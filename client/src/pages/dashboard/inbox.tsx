@@ -1742,8 +1742,30 @@ export default function InboxPage() {
                   ) : [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map((msg: any, _idx: number) => {
                     const prevMsg = _idx > 0 ? [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[_idx - 1] : null;
                     const showHeader = !prevMsg || prevMsg.subject !== msg.subject;
+                    const msgDate = msg.createdAt ? new Date(msg.createdAt).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' }) : null;
+                    const prevDate = prevMsg?.createdAt ? new Date(prevMsg.createdAt).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' }) : null;
+                    const showDateSep = msgDate && (!prevMsg || msgDate !== prevDate);
+                    const dateLabel = (() => {
+                      if (!msgDate) return '';
+                      const today = new Date().toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' });
+                      const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' });
+                      if (msgDate === today) return 'Today';
+                      if (msgDate === yesterday) return 'Yesterday';
+                      const weekAgo = new Date(Date.now() - 604800000).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' });
+                      const d = new Date(msg.createdAt);
+                      const dow = d.toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, weekday: 'long' });
+                      if (d > new Date(Date.now() - 604800000)) return dow;
+                      return msgDate;
+                    })();
                     return (
                     <div key={msg.id} className="flex flex-col w-full">
+                      {showDateSep && (
+                        <div className="flex justify-center my-4">
+                          <div className="px-4 py-1.5 rounded-full bg-muted/60 text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wider border border-border/30 shadow-sm backdrop-blur-sm">
+                            {dateLabel}
+                          </div>
+                        </div>
+                      )}
                       {msg.subject && showHeader && (
                         <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 px-1 mb-2 mt-2">
                           {msg.subject.replace(/^Re:\s*/i, '').replace(/\{\{[^}]+\}\}/g, '')}

@@ -332,7 +332,7 @@ export default function IntegrationsPage() {
     const params = new URLSearchParams();
     if (integrationSearch) params.set("search", integrationSearch);
     params.set("page", String(integrationPage));
-    params.set("limit", "25");
+    params.set("limit", "100");
     return ["/api/integrations", params.toString()];
   }, [integrationSearch, integrationPage]);
 
@@ -363,6 +363,10 @@ export default function IntegrationsPage() {
     queryKey: ["/api/dashboard/stats", { integrationId: selectedMailboxId }],
   });
   const { data: userData } = useQuery<UserData>({ queryKey: ["/api/user/profile"] });
+  const { data: calendlyStatus } = useQuery<{ connected: boolean }>({
+    queryKey: ["/api/channels/calendly"],
+    staleTime: 30_000,
+  });
 
   const getDailyLimit = () => {
     const tier = (getActivePlanId(userData)).toLowerCase();
@@ -1746,7 +1750,7 @@ export default function IntegrationsPage() {
               ) : (
                 integrationCards.map((card) => {
                   const connectedIntegrations = Array.isArray(integrations) ? integrations.filter(i => i.provider === card.id) : [];
-                  const isConnected = connectedIntegrations.length > 0;
+                  const isConnected = connectedIntegrations.length > 0 || (card.id === 'calendly' && calendlyStatus?.connected);
 
                   return (
                     <Card key={card.id} className={`group transition-all rounded-2xl border bg-muted/10 hover:bg-muted/20 ${isConnected ? 'border-primary/40 bg-primary/5' : 'border-border/50'} flex flex-col`}>
