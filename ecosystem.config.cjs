@@ -14,7 +14,8 @@ module.exports = {
         APP_ROLE: 'api',
         PORT: 5000,
         API_DISABLE_SOCKET: 'true',
-        DISABLE_STATIC_SERVE: 'true'
+        DISABLE_STATIC_SERVE: 'true',
+        S3_REGION: 'us-east-1'
       },
       error_file: './logs/api-error.log',
       out_file: './logs/api-out.log',
@@ -82,7 +83,8 @@ module.exports = {
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'imap',
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
-        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify'
+        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify',
+        ENCRYPTION_KEY: '491bd6e2ff0d3ed47797569305125cd5476ad182d962ae618b2ffdf3081f70ad'
       },
       error_file: './logs/imap-error.log',
       out_file: './logs/imap-out.log',
