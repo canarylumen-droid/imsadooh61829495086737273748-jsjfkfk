@@ -969,4 +969,88 @@ RAM: 35-38% (normal). All 18 services online.
 
 ---
 
+## 17. Session Log — Jul 16 2026 (Evening: Campaign Throttling + Real-Time UI)
+
+### 17.1 Smart Campaign Throttling
+
+| Change | File | Description |
+|--------|------|-------------|
+| **Unified daily budget** | `shared/lib/queues/campaign-queue.ts:1054-1076` | `processSendBatch()` now counts TOTAL sends (initials + follow-ups) against `dailyLimit`. Follow-ups consume from same cap as initials. |
+| **Smart initial throttle** | Same | If follow-ups use >30% of daily budget, initials throttle proportionally. Never below 50% of limit — ensures campaign progress continues. |
+| **No change to follow-ups** | `processFollowUp()` lines 1574-1612 | Already respected daily cap (`hardCeiling`). No change needed. |
+
+**How it works:**
+- User sets daily limit (e.g., 50) in campaign creation wizard
+- System counts ALL sends today (initial + follow-ups) against 50
+- If follow-ups consume 10 slots today, initials get 40 remaining
+- If initials hit their share, they wait 1h and retry
+- Follow-ups that can't fit get rescheduled to next day (never >1 day late)
+- Inbound replies are NOT counted — they're unbounded inbound traffic
+
+### 17.2 Campaign Progress API
+
+**New endpoint:** `GET /api/outreach/campaigns/:id/progress` in `outreach.ts:790-873`
+
+Returns:
+```json
+{
+  "campaignId": "...",
+  "total": 500, "sent": 123, "replied": 12, "pending": 50, "queued": 327,
+  "todaySent": 45, "initialToday": 30, "followUpToday": 15,
+  "dailyLimit": 50, "remaining": 377,
+  "etaDays": 8, "etaLabel": "~8 days",
+  "status": "active"
+}
+```
+
+### 17.3 Campaign List Modal — Real-Time Stats
+
+**File:** `client/src/components/outreach/CampaignListModal.tsx` (rewritten)
+
+| Feature | Detail |
+|---------|--------|
+| **Daily progress bar** | Green/amber/red based on utilization (<70%/70-90%/>90%) |
+| **Today's sends** | Shows `todaySent / dailyLimit` with live count |
+| **ETA** | Socket-driven, recalculates every 15s via `/progress` endpoint |
+| **Initial vs follow-up** | Separate counts for today's breakdown |
+| **Socket events** | `campaign_update` + `leads_updated` trigger instant re-fetch |
+| **Polling** | 15s interval fallback, 30s query stale time |
+
+### 17.4 Final PM2 Status — End of Day
+
+```
+ id  name                          status  restarts  mem
+ 28  audnix-rust-imap-worker       online  0         4.8mb
+ 26  audnix-rust-email-sender      online  2         4.3mb
+ 25  audnix-worker-outreach        online  0         278.9mb
+ 20  audnix-worker-warmup          online  1         146.2mb
+ 17  audnix-api-gateway            online  45        68.6mb
+  1  audnix-socket-server          online  131       114.3mb
+```
+
+RAM: 36-40% across 18 services. All stable. Rust workers at 4-5MB each.
+
+### 17.5 Architecture Summary — End of Day
+
+```
+User sets daily cap (e.g., 50/day)
+  │
+  ├─► processSendBatch (per mailbox)
+  │     ├─ Counts ALL sends today (initials + follow-ups)
+  │     ├─ If total < cap: continue sending
+  │     ├─ If follow-ups use budget: initials get less
+  │     └─ If cap hit: reschedule 1h later
+  │
+  ├─► processFollowUp (per lead)
+  │     ├─ Checks same daily cap
+  │     ├─ If cap hit: reschedule +1h (never >1 day late)
+  │     └─ Reply gate: yields to auto-reply
+  │
+  └─► Campaign Progress API
+        └─ ETA = remaining / dailyLimit
+        └─ Socket emits campaign_update → UI refreshes instantly
+```
+
+---
+
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*
