@@ -238,16 +238,16 @@ function DisconnectConfirmationDialog({
 }) {
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="p-6 pt-8 gap-4">
+        <DialogHeader className="pr-6 space-y-2">
           <DialogTitle>Disconnect {providerName}?</DialogTitle>
           <DialogDescription>
-            Are you sure you want to disconnect? The AI will stop processing leads from this source immediately.
+            The AI will stop processing leads from this source immediately.
           </DialogDescription>
         </DialogHeader>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="destructive" onClick={() => { onConfirm(); onOpenChange(false); }}>Yes, Disconnect</Button>
+        <DialogFooter className="gap-3 pt-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">Cancel</Button>
+          <Button variant="destructive" onClick={() => { onConfirm(); onOpenChange(false); }} className="flex-1">Yes, Disconnect</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

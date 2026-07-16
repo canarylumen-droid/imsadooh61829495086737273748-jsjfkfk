@@ -849,8 +849,10 @@ export default function InboxPage() {
           leadIds: [data.id],
           archived: false
         });
-        // Optimistic update - stay in current view
         setAllLeads(prev => prev.filter(l => l.id !== data.id));
+        if (leadId === data.id) {
+          setLocation('/dashboard/inbox');
+        }
         toast({ title: "Lead Restored", description: "Successfully restored from archive" });
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       } catch (err) {
@@ -1200,11 +1202,13 @@ export default function InboxPage() {
                   </div>
                   <p className="text-sm font-bold text-foreground/80">
                     {searchQuery ? "No matches found" :
+                      showArchived ? "No archived leads" :
                       filterStatus !== 'all' ? `No ${filterStatus} conversations` :
                         "No conversations yet"}
                   </p>
                   <p className="text-xs text-muted-foreground mt-2">
                     {searchQuery ? "Try different keywords or check spelling" :
+                      showArchived ? "Leads you archive will appear here" :
                       filterStatus === 'unread' ? "All caught up — no unread messages" :
                       filterStatus === 'opened' ? "No opened conversations yet" :
                       filterStatus === 'archived' ? "No archived conversations" :

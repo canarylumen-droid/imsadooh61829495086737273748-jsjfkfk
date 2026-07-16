@@ -168,17 +168,27 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 
 ## Useful Commands
 
-## This Session (Jul 16 2026)
+## This Session (Jul 16 2026) — Fix Batch 2
 
 ### Fixes Deployed (restarted API gateway + socket server)
 1. **Instant tracking pixel** (email-tracking-routes.ts): `/t/:token` returns GIF first (`res.end()`), then fire-and-forgets `recordEmailEvent()`. Clicks redirected first, event logged async. Response <1ms vs 100-500ms.
 2. **Instant new_mail socket** (imap-connection-manager.ts): IMAP `exists` handler calls `clusterSync.notifyNewMail()` directly before BullMQ enqueue. UI shows "New message arriving..." instantly, full content when fetch completes.
-3. **Gmail/Outlook Disconnect** (integrations.tsx): Buttons show "Disconnect" (red/destructive) when integration exists for provider. Calls `revokeIntegration()`.
+3. **Gmail/Outlook Disconnect** (integrations.tsx): Buttons show "Disconnect" (red/destructive) when integration exists for provider.
+4. **Archived leads stay in view** (inbox.tsx): Removed auto-return effect — archive view stays until user clicks back. Unarchiving no longer navigates to inbox.
+5. **Calendly Disconnect** (integrations.tsx): Card shows "Disconnect" (destructive) when connected, calls confirmDisconnect.
+6. **Inbox double input removed** (inbox.tsx): Removed quick-reply header bar — only the bottom compose area remains.
+7. **AI icon neutral** (inbox.tsx): Sparkles icon always neutral (no blue/gold gradient change when typing).
+8. **Account deletion** (settings.tsx + user-settings-routes.ts): 7-day scheduled deletion with real-time countdown, undo button, cleaner error messages. `processExpiredDeletions()` runs every 60s.
+9. **Lead Intelligence modal** (LeadIntelligenceModal.tsx): Simplified UI, mobile-friendly, removed generic badges/gradients.
 
 ### Key Files
 - `services/api-gateway/src/routes/email-tracking-routes.ts`
 - `services/email-worker/src/imap/imap-connection-manager.ts`
+- `services/api-gateway/src/routes/user-settings-routes.ts`
+- `client/src/pages/dashboard/inbox.tsx`
 - `client/src/pages/dashboard/integrations.tsx`
+- `client/src/pages/dashboard/settings.tsx`
+- `client/src/components/dashboard/LeadIntelligenceModal.tsx`
 
 - Dev server: 
 - Tests: 

@@ -423,8 +423,9 @@ router.post('/account/schedule-deletion', requireAuthOrApiKey, async (req: Reque
       return;
     }
 
-    // Schedule deletion 7 days from now
-    const scheduledAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    // Schedule deletion 24-48 hours from now (randomized)
+    const hoursUntil = 24 + Math.floor(Math.random() * 24);
+    const scheduledAt = new Date(Date.now() + hoursUntil * 60 * 60 * 1000).toISOString();
 
     await db.execute(sql`
       UPDATE users SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{scheduledDeletionAt}', to_jsonb(${scheduledAt}::text))

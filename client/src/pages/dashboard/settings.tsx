@@ -1069,7 +1069,10 @@ function ScheduledDeletionCard() {
   const [remainingMs, setRemainingMs] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [deletingNow, setDeletingNow] = useState(false);
   const { toast } = useToast();
+
+  const MAX_MS = 48 * 60 * 60 * 1000; // 48h max for progress bar
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -1083,7 +1086,6 @@ function ScheduledDeletionCard() {
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
-  // Countdown timer
   useEffect(() => {
     if (!scheduledAt || remainingMs <= 0) return;
     const interval = setInterval(() => {
@@ -1092,9 +1094,9 @@ function ScheduledDeletionCard() {
     return () => clearInterval(interval);
   }, [scheduledAt, remainingMs]);
 
-  const days = Math.floor(remainingMs / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((remainingMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const hours = Math.floor(remainingMs / (1000 * 60 * 60));
   const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((remainingMs % (1000 * 60)) / 1000);
 
   const handleScheduleDeletion = async () => {
     setLoading(true);
@@ -1107,7 +1109,7 @@ function ScheduledDeletionCard() {
       }
       const data = await res.json();
       setScheduledAt(data.scheduledAt);
-      setRemainingMs(7 * 24 * 60 * 60 * 1000);
+      setRemainingMs(Math.min(MAX_MS, new Date(data.scheduledAt).getTime() - Date.now()));
       toast({ title: "Deletion scheduled" });
     } catch (e: any) {
       setError(e.message);
@@ -1123,7 +1125,7 @@ function ScheduledDeletionCard() {
       await apiRequest("POST", "/api/account/cancel-deletion");
       setScheduledAt(null);
       setRemainingMs(0);
-      toast({ title: "Deletion cancelled" });
+      toast({ title: "Deletion cancelled", description: "Your account is safe." });
     } catch (e: any) {
       toast({ title: "Error", description: e.message, variant: "destructive" });
     } finally {
@@ -1131,18 +1133,22 @@ function ScheduledDeletionCard() {
     }
   };
 
-  // When timer expires, delete and logout
   useEffect(() => {
-    if (!scheduledAt || remainingMs > 0) return;
-    (async () => {
-      try {
-        await apiRequest("DELETE", "/api/account");
-        window.location.href = "/";
-      } catch (e: any) {
-        toast({ title: "Deletion failed", description: e.message, variant: "destructive" });
-      }
-    })();
-  }, [scheduledAt, remainingMs]);
+    if (!scheduledAt || remainingMs > 0 || deletingNow) return;
+    setDeletingNow(true);
+    const timer = setTimeout(() => {
+      (async () => {
+        try {
+          await apiRequest("DELETE", "/api/account");
+          window.location.href = "/";
+        } catch (e: any) {
+          toast({ title: "Deletion failed", description: e.message, variant: "destructive" });
+          setDeletingNow(false);
+        }
+      })();
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [scheduledAt, remainingMs, deletingNow]);
 
   return (
     <Card>
@@ -1153,71 +1159,123 @@ function ScheduledDeletionCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 pt-0 space-y-3">
-        {scheduledAt ? (
+        {deletingNow ? (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-6 rounded-2xl bg-gradient-to-br from-destructive/10 to-background border border-destructive/30 text-center space-y-3"
+          >
+            <motion.div
+              animate={{ y: [0, -10, 0], opacity: [1, 0.5, 0] }}
+              transition={{ duration: 2.5, ease: "easeInOut" }}
+              className="text-4xl"
+            >
+              🕊️
+            </motion.div>
+            <p className="text-sm font-semibold text-destructive">Goodbye for now</p>
+            <p className="text-xs text-muted-foreground">Clearing your data and logging you out...</p>
+          </motion.div>
+        ) : scheduledAt ? (
           <div className="space-y-4">
-            <div className="p-4 rounded-2xl bg-destructive/5 border border-destructive/20">
-              <p className="text-xs font-medium text-destructive mb-2">Account scheduled for deletion</p>
-              <div className="flex items-center gap-3">
-                <Clock className="h-5 w-5 text-destructive shrink-0" />
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="p-4 rounded-2xl bg-destructive/5 border border-destructive/20"
+            >
+              <p className="text-xs font-medium text-destructive/80 mb-3 flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                Scheduled for deletion
+              </p>
+              <div className="flex items-center gap-3 mb-3">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
+                >
+                  <Clock className="h-5 w-5 text-destructive shrink-0" />
+                </motion.div>
                 <div>
-                  <p className="text-lg font-bold tabular-nums">
-                    {days > 0 && `${days}d `}{hours}h {minutes}m
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">until permanent deletion</p>
+                  <motion.p
+                    key={`${hours}-${minutes}-${seconds}`}
+                    initial={{ opacity: 0, y: -5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-lg font-bold tabular-nums text-destructive"
+                  >
+                    {String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+                  </motion.p>
+                  <p className="text-[10px] text-muted-foreground">until account is permanently deleted</p>
                 </div>
               </div>
-              <div className="mt-3 h-1.5 rounded-full bg-destructive/10 overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-destructive transition-all duration-1000"
-                  style={{ width: `${Math.max(0, Math.min(100, (remainingMs / (7 * 24 * 60 * 60 * 1000)) * 100))}%` }}
+              <motion.div className="h-1.5 rounded-full bg-destructive/10 overflow-hidden">
+                <motion.div
+                  className="h-full rounded-full bg-destructive"
+                  initial={{ width: '100%' }}
+                  animate={{ width: `${Math.max(0, (remainingMs / MAX_MS) * 100)}%` }}
+                  transition={{ duration: 1 }}
                 />
-              </div>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCancelDeletion}
-              disabled={loading}
-              className="w-full"
+              </motion.div>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.3 }}
             >
-              {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <Undo2 className="h-3.5 w-3.5 mr-1" />}
-              Undo — Cancel Deletion
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCancelDeletion}
+                disabled={loading}
+                className="w-full gap-1.5"
+              >
+                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Undo2 className="h-3.5 w-3.5" />}
+                Cancel deletion
+              </Button>
+            </motion.div>
           </div>
         ) : (
-          <>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-3"
+          >
             <p className="text-xs text-muted-foreground">
-              Your account will be permanently deleted after a 7-day waiting period. You can cancel at any time.
+              Your account will be permanently deleted within 24-48 hours. You can cancel at any time.
             </p>
             {error && (
-              <p className="text-xs text-destructive font-medium">{error}</p>
+              <motion.p
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="text-xs text-destructive font-medium"
+              >
+                {error}
+              </motion.p>
             )}
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive" size="sm" disabled={loading}>
-                  <Trash2 className="h-4 w-4 mr-1" />
-                  Schedule deletion
+                <Button variant="destructive" size="sm" disabled={loading} className="gap-1.5">
+                  <Trash2 className="h-4 w-4" />
+                  Delete account
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
+              <AlertDialogContent className="p-6 pt-8 gap-4">
+                <AlertDialogHeader className="pr-6 space-y-2">
                   <AlertDialogTitle>Delete your account?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will schedule your account for permanent deletion in 7 days. You can cancel anytime during the waiting period. All your data will be permanently removed.
+                  <AlertDialogDescription className="space-y-2">
+                    <p>Your account will be permanently deleted within 24-48 hours.</p>
+                    <p className="text-muted-foreground/60">You can cancel anytime before the deletion completes. All your data will be permanently removed.</p>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep my account</AlertDialogCancel>
+                <AlertDialogFooter className="gap-3 pt-2">
+                  <AlertDialogCancel className="flex-1">Keep my account</AlertDialogCancel>
                   <AlertDialogAction
                     onClick={handleScheduleDeletion}
-                    className="bg-destructive hover:bg-destructive/90"
+                    className="bg-destructive hover:bg-destructive/90 flex-1"
                   >
-                    Schedule deletion
+                    Yes, delete my account
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
-          </>
+          </motion.div>
         )}
       </CardContent>
     </Card>
@@ -1313,21 +1371,21 @@ function ApiKeyRow({
             <Trash2 className="h-4 w-4" />
           </Button>
         </AlertDialogTrigger>
-        <AlertDialogContent className="rounded-2xl max-w-sm">
-          <AlertDialogHeader>
+        <AlertDialogContent className="rounded-2xl max-w-sm p-6 pt-8 gap-4">
+          <AlertDialogHeader className="pr-6 space-y-2">
             <AlertDialogTitle className="flex items-center gap-2">
-              <Trash2 className="h-5 w-5 text-destructive" />
+              <Trash2 className="h-5 w-5 text-destructive shrink-0" />
               Delete API Key?
             </AlertDialogTitle>
             <AlertDialogDescription>
               This will permanently revoke <strong>{apiKey.name}</strong>. Any services using this key will immediately lose access.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="rounded-xl">Keep Key</AlertDialogCancel>
+          <AlertDialogFooter className="gap-3 pt-2">
+            <AlertDialogCancel className="rounded-xl flex-1">Keep Key</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => onDelete(apiKey.id)}
-              className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold"
+              className="rounded-xl bg-destructive hover:bg-destructive/90 text-destructive-foreground font-bold flex-1"
             >
               Delete Key
             </AlertDialogAction>

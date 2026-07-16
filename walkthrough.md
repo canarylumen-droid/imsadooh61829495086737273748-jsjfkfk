@@ -1097,4 +1097,142 @@ All 18 services online, API gateway restarted (48 total). Build passes on both c
 
 ---
 
+## 19. Session Log — Jul 16 2026 (Late+: Instant Tracking, New Mail Socket, OAuth States)
+
+### 19.1 Instant Tracking Pixel
+
+The email tracking endpoint `/t/:token` was awaiting `recordEmailEvent()` (5-6 DB queries) before returning the GIF, causing 100-500ms response times.
+
+**Fix:** Return GIF immediately via `res.end(TRANSPARENT_1X1_GIF)`, then fire-and-forget `recordEmailEvent()`.
+
+```ts
+// Before: awaited DB ops first
+await recordEmailEvent({ ... });
+res.send(TRANSPARENT_1X1_GIF);
+
+// After: GIF first, log async
+res.end(TRANSPARENT_1X1_GIF);
+recordEmailEvent({ ... }).catch(() => {});
+```
+
+**Same for click tracking:** Redirect first (`res.redirect(302, decodedUrl)`), then log event async.
+
+### 19.2 Instant New Mail Socket
+
+IMAP `exists` handler now emits `new_mail` socket directly via `clusterSync.notifyNewMail()` **before** pushing to BullMQ. UI shows "New message arriving..." instantly, full content arrives when BullMQ fetch completes.
+
+### 19.3 Gmail/Outlook Disconnect Buttons
+
+Hero buttons now dynamically show "Disconnect" (red/destructive) when Gmail/Outlook is already connected:
+
+```tsx
+const hasGmail = Array.isArray(integrations) && integrations.some(i => i.provider === 'gmail');
+return hasGmail ? (
+  <Button variant="outline" className="border-destructive/30 bg-destructive/5 text-destructive ..."
+    onClick={() => confirmDisconnect('gmail', integration?.id)}>
+    <SiGoogle /> Disconnect Gmail
+  </Button>
+) : (
+  <Button ... onClick={() => handleConnect('gmail')}>
+    <SiGoogle /> Connect Google
+  </Button>
+);
+```
+
+### 19.4 Files Changed
+
+| File | Changes |
+|------|---------|
+| `services/api-gateway/src/routes/email-tracking-routes.ts` | Fire-and-forget tracking pixel/click |
+| `services/email-worker/src/imap/imap-connection-manager.ts` | Instant `notifyNewMail()` in `exists` handler |
+| `client/src/pages/dashboard/integrations.tsx` | Gmail/Outlook disconnect buttons, dialog spacing fix |
+
+---
+
+## 20. Session Log — Jul 16 2026 (Batch 2: Archive, Calendly, Inbox, AI, Account Deletion, Lead Intel)
+
+### 20.1 Archive UX Fixes
+
+**Problems:**
+- When clicking "Archived" button, it flickered back to inbox immediately
+- When unarchiving the last lead, it auto-returned to inbox (unwanted navigation)
+- No empty state for archive view
+
+**Fixes:**
+1. Removed auto-return `useEffect` — archive view now stays until user clicks button
+2. Unarchiving a lead navigates back to inbox (desired behavior)
+3. Empty state shows "No archived leads" / "Leads you archive will appear here"
+
+### 20.2 Calendly Disconnect
+
+Calendly integration card now shows "Disconnect" (destructive variant) when connected, instead of "Connect Another". Uses `confirmDisconnect()` flow.
+
+### 20.3 Inbox Double Input Removed
+
+The quick-reply header bar at the top of the message thread was removed — only the bottom compose area remains. Both wrote to the same `replyMessage` state, so the top bar was redundant.
+
+### 20.4 AI Icon Neutralized
+
+AI compose button was changing from gold sparkles gradient (empty) to blue wand icon (text typed). Now always a neutral `Sparkles` icon — no color change, no gradient, no gold star theme.
+
+### 20.5 Account Deletion (Scheduled + Countdown + Undo)
+
+**Backend (`user-settings-routes.ts`):**
+- `POST /api/account/schedule-deletion` — Sets `metadata.scheduledDeletionAt` to NOW + 24-48h (randomized)
+- `POST /api/account/cancel-deletion` — Removes `scheduledDeletionAt` from metadata
+- `GET /api/account/deletion-status` — Returns `{ scheduledDeletionAt, remainingMs, canUndo }`
+- `DELETE /api/account` — Immediate deletion (called when timer expires)
+- `processExpiredDeletions()` — Runs every 60s, checks for expired `scheduledDeletionAt` and deletes
+
+**Frontend (`settings.tsx` — `ScheduledDeletionCard`):**
+1. **Initial state:** "Delete account" button with description "deleted within 24-48 hours"
+2. **Confirmation dialog:** "Delete your account?" with cancel/confirm
+3. **Countdown state:** Animated timer with rotating clock icon, progress bar, "Cancel deletion" undo button
+4. **Expiry animation:** Fading dove icon with "Goodbye for now" text, then redirect to landing
+
+```
+UI States:
+┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐
+│ Delete account      │  →  │ Schedule deletion?  │  →  │ ⏰ 23:45:12         │
+│ 24-48h notice       │     │ [Keep] [Delete]     │     │ ████████░░ 52%      │
+│ [Delete account]    │     │                     │     │ [Cancel deletion]   │
+└─────────────────────┘     └─────────────────────┘     └─────────────────────┘
+                                                              │
+                                                         Timer hits 0
+                                                              ↓
+                                                    ┌─────────────────────┐
+                                                    │ 🕊️ Goodbye         │
+                                                    │ Clearing data...    │
+                                                    │ → redirect to /     │
+                                                    └─────────────────────┘
+```
+
+### 20.6 Lead Intelligence Modal Cleanup
+
+**Before:** Heavy gradient backgrounds, animated sparkles, "AI EXECUTIVE SUMMARY" badge, multiple hover effects, generic badges (Company Matched, Role Identified), "Audnix Intel Engine V2.4" footer, complex staggered animations.
+
+**After:** Clean card-based layout, single "Lead Intelligence" badge, compact stats grid (2-col on mobile), simple link pills for social profiles, "Audnix Intelligence" footer text.
+
+### 20.7 Dialog/Popup Spacing
+
+Fixed spacing across all modals/dialogs:
+- Added `p-6 pt-8 gap-4` to `DialogContent` / `AlertDialogContent`
+- Added `pr-6 space-y-2` to headers (prevents close X icon from overlapping text)
+- Added `gap-3 pt-2` to footers
+- Buttons use `flex-1` for consistent sizing
+
+Files affected: `DisconnectConfirmationDialog` (integrations.tsx), `ScheduledDeletionCard` (settings.tsx), `ApiKeyRow` delete dialog (settings.tsx).
+
+### 20.8 Files Changed (Batch 2)
+
+| File | Changes |
+|------|---------|
+| `client/src/pages/dashboard/inbox.tsx` | Archive auto-return removed, unarchive->inbox navigation, empty state, double input removed, AI icon neutral |
+| `client/src/pages/dashboard/integrations.tsx` | Calendly disconnect button, dialog spacing |
+| `client/src/pages/dashboard/settings.tsx` | `ScheduledDeletionCard` component, dialog spacing, 24-48h countdown |
+| `client/src/components/dashboard/LeadIntelligenceModal.tsx` | Simplified UI, mobile-friendly |
+| `services/api-gateway/src/routes/user-settings-routes.ts` | Schedule/cancel/status/deletion endpoints, `processExpiredDeletions()` |
+
+---
+
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*
