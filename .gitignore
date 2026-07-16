@@ -41,3 +41,4 @@ Thumbs.db
 .replit
 rust-email-sender/target/
 rust-imap-worker/target/
+opencode.json
