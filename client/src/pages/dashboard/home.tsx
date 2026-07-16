@@ -219,7 +219,6 @@ export default function DashboardHome() {
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
     },
-    refetchInterval: 30_000,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
     placeholderData: (previousData) => previousData,

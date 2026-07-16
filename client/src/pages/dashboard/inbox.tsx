@@ -405,7 +405,6 @@ export default function InboxPage() {
     }],
     placeholderData: (prev: any) => prev,
     staleTime: 0,
-    refetchInterval: 15_000,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
@@ -415,7 +414,6 @@ export default function InboxPage() {
     enabled: !!leadId,
     placeholderData: (prev: any) => prev,
     staleTime: 0,
-    refetchInterval: 10_000,
     refetchOnWindowFocus: true,
   });
 
@@ -1091,7 +1089,7 @@ export default function InboxPage() {
             <div className="relative flex items-center">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search leads or /regex/..."
+                placeholder="Search leads..."
                 className="pl-9 pr-9 h-10 rounded-xl bg-muted/50 border-none focus-visible:ring-1 focus-visible:ring-primary/50"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
@@ -1255,8 +1253,8 @@ export default function InboxPage() {
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-auto overflow-x-auto" ref={leadListRef}>
-                  <div style={{ height: filteredLeads.length * 90 }}>
+                <div className="flex-1 overflow-auto overflow-x-auto relative" ref={leadListRef}>
+                  <div style={{ height: filteredLeads.length * 90, position: 'relative' }}>
                     {filteredLeads.slice(virtualStart, virtualEnd).map((lead, i) => {
                       const realIdx = virtualStart + i;
                       return (<div
@@ -1270,7 +1268,7 @@ export default function InboxPage() {
                         }}
                         onContextMenu={(e) => handleContextMenu(e, 'inbox', lead)}
                         className={cn(
-                          "p-5 cursor-pointer border-b border-border/10 transition-all relative group flex gap-4 min-w-[600px]",
+                          "p-5 cursor-pointer border-b border-border/10 transition-all relative group flex gap-4",
                           leadId === lead.id ? "bg-primary/10" : "hover:bg-muted/30",
                           lead.metadata?.isUnread && "bg-primary/5",
                           selectedLeadIds.includes(lead.id) && "bg-primary/20"
