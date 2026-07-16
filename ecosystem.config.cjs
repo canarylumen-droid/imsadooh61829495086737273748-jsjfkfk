@@ -319,11 +319,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'warmup'
+        APP_ROLE: 'warmup',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/warmup-error.log',
       out_file: './logs/warmup-out.log',
