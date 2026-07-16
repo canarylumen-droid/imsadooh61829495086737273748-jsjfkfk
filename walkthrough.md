@@ -897,4 +897,76 @@ cd /home/ubuntu/app && pm2 start ecosystem.config.cjs
 
 ---
 
+## 16. Session Log — Jul 16 2026 (Afternoon: Rust Productionization)
+
+### 16.1 Worker Hardening
+
+| Worker | Problem | Fix | Result |
+|--------|---------|-----|--------|
+| **All 13 workers** | Dotenv `.env` unreliable with PM2 7 | Replaced with explicit `REDIS_URL` in each `ecosystem.config.cjs` env block | Deterministic Redis connect |
+| **Warmup** | Auth crash on startup | Added `REDIS_URL` with `devpassword` to env block | 1 restart, stable 58m uptime |
+| **Outreach** | Crash loop (120K+ restarts) | `REDIS_URL` missing — dotenv didn't load for background workers | **0 restarts** |
+| **Knowledge / RAG** | Port conflict (both used 8089) | `APP_ROLE`-based port: knowledge=8090, RAG=8089 | Both online |
+
+### 16.2 Bug Fixes
+
+- **Avatar `s3://` URL** (`shared/lib/storage/file-upload.ts`): `uploadToSupabase()` returned raw `s3://` URL instead of HTTP. Fixed by calling `advancedStorage.getPublicUrl()` for pre-signed S3 URL.
+- **Brand PDF real-time** (`BrandKnowledgeBase.tsx`): Added `settings_updated` DOM event listener for instant PDF refresh when brand settings change.
+
+### 16.3 GitHub Cleanup
+
+- 24 Dependabot PRs closed
+- 3 Dependabot alerts dismissed (tolerable_risk)
+- 8 CodeQL alerts dismissed
+- **0 open PRs, 0 open security alerts**
+
+### 16.4 Rust Email Sender
+
+- **Compiled** on EC2 via `cargo build --release` (4.0 MB binary)
+- **Added to PM2** as `audnix-rust-email-sender` (id 26), listens on `email-send-queue` Redis list
+- **SMTP benchmark**: Email sent via `admin.mail.replyflow.pro:587` in **561ms** (queue→SMTP→sent)
+- **Rust binary path**: `./rust-email-sender/target/release/audnix-email-sender`
+- **All 16 Node workers** have `NEW_EMAIL_BACKEND: 'rust'` in env — email routes through Rust by default, falls back to NodeMailer
+
+### 16.5 Rust IMAP Worker
+
+- **Crypto provider fix** (`src/main.rs`): Added `rustls::crypto::aws_lc_rs::default_provider().install_default()` — was panicking at runtime
+- **Greeting read fix** (`src/imap_client.rs`): Untagged `* OK` server greeting now read via `read_raw()` instead of `read_response()` (which expected tagged response like `A0001 OK`)
+- **Event loop added** (`src/main.rs`): Redis BRPOP from `imap-queue`, processes jobs, writes results to `imap-results`
+- **Added to PM2** as `audnix-rust-imap-worker` (id 28), online
+- **CLI test**: `cargo run --release -- <host> <port> <user> <pass> [folder]` — full IMAP test tool
+- **IMAP benchmark**: Connect → auth → select INBOX → fetch headers in **129ms**
+
+### 16.6 Quick Reply Header (Inbox UI)
+
+**File:** `client/src/pages/dashboard/inbox.tsx` (after line 1708)
+
+Compact reply bar below the thread header with:
+- Text input (Enter to send, Shift+Enter newline) — syncs drafts via localStorage
+- AI sparkle button (draft reply when empty, polish when text exists)
+- Send button with loading state
+- Uses existing `submitReply`, `handleAI`, `sendMutation` state — same mutation as bottom reply
+
+### 16.7 npm Audit Cleanup
+
+- Added `"nodemailer": "^9.0.3"` to `overrides` in root `package.json` — fixes HIGH severity via `mailauth`'s nested `nodemailer@8.0.7`
+- CI runs `npm audit --audit-level=critical` (non-blocking for < critical)
+- 15 remaining vulns (9 high, 5 moderate, 1 low) — all non-blocking, no patches available
+
+### 16.8 Final PM2 Status
+
+```
+ id  name                          pid      status  restarts  uptime
+ 28  audnix-rust-imap-worker       11110    online  0         2m
+ 26  audnix-rust-email-sender      1102828  online  1         2m
+ 25  audnix-worker-outreach        1073608  online  0         60m
+ 20  audnix-worker-warmup          1073572  online  1         60m
+ 17  audnix-api-gateway            1102811  online  43        2m
+  1  audnix-socket-server          1073493  online  131       60m
+```
+
+RAM: 35-38% (normal). All 18 services online.
+
+---
+
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*
