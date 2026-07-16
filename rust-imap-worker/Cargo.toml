@@ -8,7 +8,7 @@ authors = ["Audnix AI <hello@audnixai.com>"]
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-rustls = "0.26"
-rustls = "0.23"
+rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2"
 webpki-roots = "1"
 redis = { version = "0.27", default-features = false, features = ["tokio-comp", "connection-manager"] }
