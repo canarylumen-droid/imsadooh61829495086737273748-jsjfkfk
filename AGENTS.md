@@ -79,7 +79,7 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 - Deploy: `git push github main` then ssh EC2: `cd /home/ubuntu/app && git stash -- package.json package-lock.json 2>/dev/null; git pull && cd client && npm run build && pm2 restart audnix-api-gateway`
 - Key scp: use EC2 Instance Connect to push temporary SSH key; `ssh -i <key> ubuntu@54.227.164.241`
 - SSH key not available in automated workspace — use EC2 console Instance Connect to push a temp key via AWS SDK v3
-- AWS creds in `/home/runner/workspace/opencode.json` (AKIAZUAXW67WM4BNID4G)
+- AWS creds in `/home/runner/workspace/opencode.json` (access key ID masked)
 - Temp SSH key at `/tmp/aws_temp_key`
 
 ## Auth Flow
