@@ -55,11 +55,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'email'
+        APP_ROLE: 'email',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/email-error.log',
       out_file: './logs/email-out.log',
@@ -77,11 +77,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'imap'
+        APP_ROLE: 'imap',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/imap-error.log',
       out_file: './logs/imap-out.log',
@@ -99,11 +99,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'ai'
+        APP_ROLE: 'ai',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/ai-error.log',
       out_file: './logs/ai-out.log',
@@ -121,11 +121,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'outreach'
+        APP_ROLE: 'outreach',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/outreach-error.log',
       out_file: './logs/outreach-out.log',
@@ -143,11 +143,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'lead-recovery'
+        APP_ROLE: 'lead-recovery',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/lead-recovery-error.log',
       out_file: './logs/lead-recovery-out.log',
@@ -165,11 +165,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'social'
+        APP_ROLE: 'social',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/social-error.log',
       out_file: './logs/social-out.log',
@@ -187,11 +187,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'billing'
+        APP_ROLE: 'billing',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/billing-error.log',
       out_file: './logs/billing-out.log',
@@ -209,11 +209,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'orchestrator'
+        APP_ROLE: 'orchestrator',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/orchestrator-error.log',
       out_file: './logs/orchestrator-out.log',
@@ -231,11 +231,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'rag'
+        APP_ROLE: 'rag',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/rag-error.log',
       out_file: './logs/rag-out.log',
@@ -253,11 +253,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'knowledge'
+        APP_ROLE: 'knowledge',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/knowledge-error.log',
       out_file: './logs/knowledge-out.log',
@@ -275,11 +275,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'audit'
+        APP_ROLE: 'audit',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/audit-error.log',
       out_file: './logs/audit-out.log',
@@ -297,11 +297,11 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
-        APP_ROLE: 'vectordb'
+        APP_ROLE: 'vectordb',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/vectordb-error.log',
       out_file: './logs/vectordb-out.log',
@@ -363,12 +363,12 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
-      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'infra-scaler',
-        QUEUE_AUTOSCALER_ENABLED: 'true'
+        QUEUE_AUTOSCALER_ENABLED: 'true',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
       },
       error_file: './logs/infra-scaler-error.log',
       out_file: './logs/infra-scaler-out.log',
