@@ -788,6 +788,91 @@ router.get('/campaigns/:id', requireAuthOrApiKey, async (req, res) => {
 });
 
 /**
+ * GET /api/outreach/campaigns/:id/progress
+ * Get real-time campaign progress with daily stats and ETA
+ */
+router.get('/campaigns/:id/progress', requireAuthOrApiKey, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.session?.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+    const [campaign] = await db.select().from(outreachCampaigns)
+      .where(and(eq(outreachCampaigns.id, id), eq(outreachCampaigns.userId, userId)));
+    if (!campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const leadStats = await db.select({
+      status: campaignLeads.status,
+      count: sql<number>`count(*)`
+    })
+      .from(campaignLeads)
+      .where(eq(campaignLeads.campaignId, id))
+      .groupBy(campaignLeads.status);
+
+    const config = (campaign.config || {}) as any;
+    const mailboxLimits: Record<string, number> = config.mailboxLimits || {};
+    const baseLimit = config.totalDailyLimit || config.dailyLimit || 50;
+    const mailboxCount = Object.keys(mailboxLimits).length || 1;
+    const totalDailyLimit = baseLimit * mailboxCount;
+
+    // Count today's total sends for this campaign
+    const todayResult = await db.execute(sql`
+      SELECT COUNT(*) as count FROM campaign_emails
+      WHERE campaign_id = ${id}::uuid
+      AND sent_at >= (NOW() AT TIME ZONE 'UTC')::date::timestamptz
+      AND status IN ('sent', 'delivered', 'opened', 'clicked', 'replied')
+    `);
+    const todaySent = Number(todayResult.rows[0].count);
+
+    // Count initial vs follow-up sends today
+    const initialTodayResult = await db.execute(sql`
+      SELECT COUNT(*) as count FROM campaign_emails
+      WHERE campaign_id = ${id}::uuid
+      AND sent_at >= (NOW() AT TIME ZONE 'UTC')::date::timestamptz
+      AND step_index = 0
+      AND status IN ('sent', 'delivered', 'opened', 'clicked', 'replied')
+    `);
+    const initialToday = Number(initialTodayResult.rows[0].count);
+    const followUpToday = todaySent - initialToday;
+
+    const stats: Record<string, number> = { total: 0, sent: 0, failed: 0, pending: 0, replied: 0, queued: 0, bounced: 0 };
+    leadStats.forEach((s: any) => {
+      stats.total += Number(s.count);
+      if (stats[s.status] !== undefined) stats[s.status] += Number(s.count);
+    });
+
+    // ETA calculation
+    const remaining = Math.max(0, stats.total - stats.sent);
+    const daysRunning = campaign.createdAt ? Math.max(0.5, (Date.now() - new Date(campaign.createdAt).getTime()) / 86400000) : 1;
+    const avgDailyRate = daysRunning > 0 ? Math.ceil(stats.sent / daysRunning) : 0;
+    const etaDays = avgDailyRate > 0 && remaining > 0
+      ? Math.ceil(remaining / totalDailyLimit)
+      : (remaining > 0 ? Math.ceil(remaining / Math.max(1, totalDailyLimit)) : 0);
+
+    res.json({
+      campaignId: id,
+      total: stats.total,
+      sent: stats.sent,
+      replied: stats.replied,
+      pending: stats.pending,
+      queued: stats.queued,
+      failed: stats.failed,
+      bounced: stats.bounced,
+      todaySent,
+      initialToday,
+      followUpToday,
+      dailyLimit: totalDailyLimit,
+      remaining,
+      etaDays,
+      etaLabel: etaDays > 0 ? `~${etaDays} ${etaDays === 1 ? 'day' : 'days'}` : (remaining === 0 ? 'Done' : 'Unknown'),
+      status: campaign.status,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * GET /api/outreach/strategy
  * Get current outreach strategy info
  */

@@ -1051,8 +1051,11 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     console.log(`[CampaignWorker] ⚠️ Mailbox ${integrationId.slice(-8)} is soft paused. Throttling down to follow-ups ONLY.`);
   }
 
-  // 4. Check INITIAL OUTREACH budget only (follow-ups are NEVER throttled by this)
+  // 4. Check TOTAL daily budget (initials + follow-ups combined)
+  // Follow-ups consume from the same daily cap — this ensures mailbox limits are never exceeded
+  const totalSentToday = await getMailboxSentCount(userId, integrationId);
   const initialSentToday = await getMailboxInitialSendCount(integrationId);
+  const followUpSentToday = totalSentToday - initialSentToday;
 
   // Refetch current integration to get latest reputation-adjusted limits
   const currentIntegration = await storage.getIntegrationById(integrationId);
@@ -1070,7 +1073,25 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     }
   }
 
-  if (initialSentToday >= effectiveLimit) {
+  // Hard cap: total sends (initials + follow-ups) must not exceed daily limit
+  if (totalSentToday >= effectiveLimit) {
+    console.log(`[CampaignWorker] ⏸️ Daily cap hit: ${totalSentToday}/${effectiveLimit} (${initialSentToday} initial, ${followUpSentToday} follow-up). Rescheduling.`);
+    await rescheduleSendBatch(data, 60 * 60 * 1000);
+    return;
+  }
+
+  // Smart throttle: follow-ups reserve their share of the daily budget
+  // If follow-ups consume slots, initials get proportionally less
+  // This ensures: (a) follow-ups aren't pushed >1 day late, (b) initials don't starve, (c) cap is respected
+  const followUpReserve = Math.min(followUpSentToday, Math.round(effectiveLimit * 0.3));
+  let initialLimit = effectiveLimit - followUpReserve;
+  // Never throttle initials below 50% of the daily limit — ensures campaign progress
+  if (initialLimit < Math.round(effectiveLimit * 0.5)) {
+    initialLimit = Math.round(effectiveLimit * 0.5);
+  }
+
+  if (initialSentToday >= initialLimit) {
+    console.log(`[CampaignWorker] ⏸️ Initials throttled: ${initialSentToday}/${initialLimit} (${followUpSentToday} follow-ups using ${followUpReserve} reserved slots). Rescheduling.`);
     await rescheduleSendBatch(data, 60 * 60 * 1000);
     return;
   }
