@@ -1053,4 +1053,48 @@ User sets daily cap (e.g., 50/day)
 
 ---
 
+## 18. Session Log — Jul 16 2026 (Late: Real-Time Fixes + Archive UX)
+
+### 18.1 Auto-Refresh Polling (Fallback for Socket Gaps)
+
+| Page | Before | After | Why |
+|------|--------|-------|-----|
+| Dashboard KPIs | No polling — relied entirely on socket events | `refetchInterval: 30s` | Socket events throttled/debounced server-side; data stayed stale without a trigger |
+| Inbox leads | No polling — socket-only | `refetchInterval: 15s` | New leads/messages missed if socket event dropped |
+| Inbox thread messages | No polling | `refetchInterval: 10s` | Conversation view didn't auto-refresh while open |
+
+### 18.2 Dead Socket Event Fixed
+
+The `CampaignListModal` was listening for `campaign_update` (singular) — **a non-existent event**. No backend code emitted it. The backend emits:
+- `campaigns_updated` (plural) — via `notifyCampaignsUpdated()`
+- `campaign_stats_updated` — via `notifyCampaignStatsUpdated()`
+
+**Fix:** Both `CampaignListModal.tsx` and `use-realtime.tsx` now listen for the real events. `campaign_stats_updated` also invalidates the per-campaign progress endpoint.
+
+### 18.3 Missing `/api/leads` Invalidation
+
+The `messages_updated` handler in `use-realtime.tsx` only invalidated leads when `payload?.message?.leadId` existed. Now it **always** invalidates `/api/leads` — ensures the lead list reflects new messages even without a specific leadId.
+
+### 18.4 Archive UX Improvements
+
+| Issue | Fix |
+|-------|-----|
+| Archive button highlighted (secondary variant) even when 0 archived leads | Button uses `hasArchivedLeads` — shows "outline" variant instead of "secondary" when no archived leads exist |
+| Unarchiving last lead left user on empty archive view | Auto-effect detects `showArchived && !hasArchivedLeads` and sets `showArchived = false`, returning to inbox |
+
+### 18.5 Files Changed
+
+| File | Changes |
+|------|---------|
+| `client/src/pages/dashboard/home.tsx` | Added `refetchInterval: 30_000` to stats query |
+| `client/src/pages/dashboard/inbox.tsx` | Added `refetchInterval: 15_000` to leads, `10_000` to messages; `hasArchivedLeads` memo; auto-return useEffect; archive button variant logic |
+| `client/src/hooks/use-realtime.tsx` | Added `campaign_stats_updated` handler; removed dead `campaign_update` handler; `messages_updated` always invalidates `/api/leads` |
+| `client/src/components/outreach/CampaignListModal.tsx` | Removed dead `campaign_update` listener; added `campaigns_updated` + `campaign_stats_updated` listeners |
+
+### 18.6 Final PM2 Status
+
+All 18 services online, API gateway restarted (48 total). Build passes on both client (Vite) and server (tsc).
+
+---
+
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*
