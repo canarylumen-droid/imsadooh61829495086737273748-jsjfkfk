@@ -79,6 +79,7 @@ pub async fn test_imap_connect(
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let _ = rustls::crypto::aws_lc_rs::default_provider().install_default();
     env_logger::init();
     log::info!("Audnix IMAP Worker starting...");
 
