@@ -378,6 +378,29 @@ module.exports = {
       max_restarts: 10,
       min_uptime: '10s',
       max_memory_restart: '256M'
+    },
+    {
+      name: 'audnix-rust-email-sender',
+      script: './rust-email-sender/target/release/audnix-email-sender',
+      instances: 1,
+      exec_mode: 'fork',
+      env: {
+        RUST_LOG: 'info',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        EMAIL_QUEUE_NAME: 'email-send-queue',
+        EMAIL_RESULT_QUEUE_NAME: 'email-send-results',
+        WORKER_COUNT: '4',
+        MAX_CONCURRENT_SENDS: '100',
+        SMTP_PORT: '587',
+        SMTP_TIMEOUT_SECS: '15'
+      },
+      error_file: './logs/rust-email-error.log',
+      out_file: './logs/rust-email-out.log',
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+      merge_logs: true,
+      autorestart: true,
+      max_restarts: 10,
+      min_uptime: '10s'
     }
   ]
 };
