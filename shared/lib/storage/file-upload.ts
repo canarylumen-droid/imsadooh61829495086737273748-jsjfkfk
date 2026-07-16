@@ -210,7 +210,12 @@ export async function uploadToSupabase(
 
   // If Supabase not configured, use AdvancedStorageService (S3 -> Redis -> Local)
   if (!supabase) {
-    return await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
+    const result = await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
+    // S3 upload returns an s3:// URI; convert to publicly accessible URL
+    if (result.startsWith('s3://')) {
+      return await advancedStorage.getPublicUrl(result, 86400); // 24h expiry for cached avatars
+    }
+    return result;
   }
 
   // Ensure bucket exists before uploading
@@ -236,7 +241,11 @@ export async function uploadToSupabase(
   } catch (supabaseError) {
     // Fallback to AdvancedStorageService if Supabase upload fails
     console.warn(`Supabase upload failed, falling back to AdvancedStorageService:`, supabaseError);
-    return await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
+    const result = await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
+    if (result.startsWith('s3://')) {
+      return await advancedStorage.getPublicUrl(result, 86400);
+    }
+    return result;
   }
 }
 

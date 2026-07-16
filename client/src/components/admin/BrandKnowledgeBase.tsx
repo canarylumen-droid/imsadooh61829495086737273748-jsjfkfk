@@ -85,6 +85,9 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
   useEffect(() => {
     loadContent();
     loadHistory();
+    const onSettingsUpdated = () => { loadContent(); loadHistory(); };
+    window.addEventListener('settings_updated', onSettingsUpdated);
+    return () => window.removeEventListener('settings_updated', onSettingsUpdated);
   }, [loadContent, loadHistory]);
 
   // Save edited text + re-index
