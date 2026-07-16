@@ -761,7 +761,7 @@ router.post('/user/avatar', requireAuthOrApiKey, uploadAvatar.single('avatar'), 
     }
 
     const ext = path.extname(file.originalname) || '.jpg';
-    const filename = `avatars/${userId}_${Date.now()}${ext}`;
+    const filename = `${userId}_${Date.now()}${ext}`;
 
     let avatarUrl: string | null = null;
 
