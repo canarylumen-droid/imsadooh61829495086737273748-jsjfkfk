@@ -64,8 +64,12 @@ impl ImapConnection {
             anyhow::bail!("Non-TLS IMAP is not supported for security reasons");
         }
 
-        // Read server greeting
-        self.read_response().await?;
+        // Read server greeting (untagged "* OK ..." line)
+        self.buffer.clear();
+        let greeting = self.read_raw().await?;
+        if !greeting.contains("* OK") && !greeting.contains("* PREAUTH") {
+            warn!("Unexpected server greeting: {}", greeting.trim());
+        }
         self.last_activity = std::time::Instant::now();
         debug!("Connected to {}:{}", host, port);
         Ok(())
@@ -172,6 +176,24 @@ impl ImapConnection {
             stream.flush().await
                 .context("Failed to flush IMAP stream")?;
             Ok(())
+        } else {
+            anyhow::bail!("Not connected")
+        }
+    }
+
+    async fn read_raw(&mut self) -> Result<String> {
+        if let Some(stream) = &mut self.stream {
+            let mut temp = [0u8; 8192];
+            let n = tokio::time::timeout(
+                Duration::from_secs(10),
+                stream.read(&mut temp),
+            ).await
+                .context("Read timeout")?
+                .context("Read error")?;
+            if n > 0 {
+                return Ok(String::from_utf8_lossy(&temp[..n]).to_string());
+            }
+            Ok(String::new())
         } else {
             anyhow::bail!("Not connected")
         }
