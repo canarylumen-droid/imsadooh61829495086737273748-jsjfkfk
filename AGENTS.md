@@ -187,6 +187,13 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 3. **Green dot pulse ring** (`settings.tsx:445-452`): Avatar in settings has animated pulse ring (`ring-2 ring-emerald-400/50`), gradient glow, and emerald dot matching sidebar style.
 4. **Client build passes**, both API gateway and socket server restarted with `--update-env`.
 
+### Fixes Deployed This Round (Jul 16 2026 — Batch 3)
+1. **Calendly disconnect button** (`integrations.tsx`): Increased integrations API limit 25→100; added dedicated `calendlyStatus` query from `/api/channels/calendly` so Disconnect shows even if Calendly record is paginated off page 1.
+2. **WhatsApp-style date headers in conversation** (`inbox.tsx:1742-1773`): Added sticky date separators between messages from different days — "Today", "Yesterday", day-of-week (within 7 days), or "Jun 15" format.
+3. **MCP test connection crash** (`mcp-routes.ts:298`): Fixed `row.created_at?.toISOString()` crash — SQL returns strings, not Date objects; now `new Date(row.created_at).toISOString()`.
+4. **Integrations list pagination** (`integrations.tsx:335`): Limit 100 ensures all SMTP/Calendly/Instagram cards render on page 1.
+5. **S3 credentials on EC2** (`ecosystem.config.cjs`): Quoted string values so `/` in secret key parses correctly; restarted API gateway with `--update-env`.
+
 ### Key Files
 - `services/api-gateway/src/routes/email-tracking-routes.ts`
 - `services/email-worker/src/imap/imap-connection-manager.ts`
@@ -196,6 +203,7 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 - `client/src/pages/dashboard/settings.tsx`
 - `client/src/components/dashboard/LeadIntelligenceModal.tsx`
 - `shared/lib/storage/file-upload.ts`
+- `services/api-gateway/src/routes/mcp-routes.ts`
 
 - Dev server: 
 - Tests: 
