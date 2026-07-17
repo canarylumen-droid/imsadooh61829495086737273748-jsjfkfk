@@ -1,52 +1,55 @@
 /**
  * Historical Email Backfill
  *
- * For ALL connected mailboxes, triggers a full IMAP sync of past emails
- * (up to 5000 per mailbox) so existing users see their full conversation
- * history in the inbox.
+ * Enqueues a 'historical' BullMQ job for every connected email mailbox.
+ * All new connections auto-trigger historical sync on first IMAP IDLE connect.
  *
- * Usage:
- *   npx tsx scripts/backfill-historical-emails.ts
+ * Usage on EC2:
+ *   cd /home/ubuntu/app && node --import tsx scripts/backfill-historical-emails.ts
  *
- * This script should be run ONCE on EC2 after deploying the Jul 17 changes.
- * It will:
- *   1. Find all connected IMAP integrations
- *   2. Enqueue a 'historical' job for each one via BullMQ
- *   3. Log progress as each mailbox syncs
- *
- * New connections going forward will auto-trigger historical sync
- * on first IMAP IDLE connect (5 min discovery cycle).
+ * Requires DATABASE_URL in .env or environment.
  */
-import { storage } from '@shared/lib/storage/storage.js';
-import { emailSyncQueue } from '@shared/lib/queues/email-sync-queue.js';
 
-async function backfillAllUsers() {
-  const users = await storage.getAllUsers?.() || [];
-  console.log(`Found ${users.length} users`);
+// Load .env before anything else touches process.env
+import { config } from 'dotenv';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+config({ path: resolve(dirname(fileURLToPath(import.meta.url)), '../.env') });
 
-  let totalEnqueued = 0;
-  for (const user of users) {
-    const integrations = await storage.getIntegrations(user.id);
-    const emailInts = integrations.filter((i: any) =>
-      ['custom_email', 'gmail', 'outlook'].includes(i.provider) && i.connected
-    );
+import pg from 'pg';
 
-    for (const int of emailInts) {
-      const job = await emailSyncQueue.add('historical', {
-        type: 'historical',
-        userId: user.id,
-        integrationId: int.id,
-        limit: 5000,
-      });
-      console.log(`[Backfill] Enqueued historical sync for user ${user.id} / ${int.provider}:${int.id} (job ${job.id})`);
-      totalEnqueued++;
-    }
+async function backfill() {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) { console.error('❌ DATABASE_URL not set'); process.exit(1); }
+
+  const pool = new pg.Pool({ connectionString: dbUrl });
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (i.user_id, i.id) i.user_id, i.id
+     FROM integrations i
+     WHERE i.provider IN ('custom_email','gmail','outlook')
+       AND i.connected = true`
+  );
+  console.log(`Found ${rows.length} connected email integrations`);
+
+  // Dynamic import ensures dotenv is loaded first for shared lib
+  const { emailSyncQueue } = await import(
+    resolve(dirname(fileURLToPath(import.meta.url)), '../shared/lib/queues/email-sync-queue.js')
+  );
+
+  let enqueued = 0;
+  for (const row of rows) {
+    const job = await emailSyncQueue.add('historical', {
+      type: 'historical',
+      userId: row.user_id,
+      integrationId: row.id,
+      limit: 5000,
+    });
+    console.log(`[${++enqueued}/${rows.length}] user=${row.user_id} int=${row.id} job=${job.id}`);
   }
-  console.log(`\n✅ Done. ${totalEnqueued} historical sync jobs enqueued.`);
+
+  await pool.end();
+  console.log(`\n✅ ${enqueued} historical sync jobs enqueued`);
   process.exit(0);
 }
 
-backfillAllUsers().catch(err => {
-  console.error('Backfill failed:', err);
-  process.exit(1);
-});
+backfill().catch(err => { console.error('Backfill failed:', err); process.exit(1); });
