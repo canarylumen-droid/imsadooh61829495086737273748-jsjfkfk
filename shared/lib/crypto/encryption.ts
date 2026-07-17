@@ -9,62 +9,62 @@ const KEY_LENGTH = 32;
  * Get encryption key from environment
  * Falls back to SESSION_SECRET for development
  */
+function deriveKey(key: string): Buffer {
+  return crypto.createHash("sha256").update(key).digest().slice(0, KEY_LENGTH);
+}
+
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY;
-  
   if (!key) {
     throw new Error("ENCRYPTION_KEY must be set in production - generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
   }
-
-  // Convert key to proper length buffer
-  const hash = crypto.createHash("sha256").update(key).digest();
-  return hash.slice(0, KEY_LENGTH);
+  return deriveKey(key);
 }
 
-/**
- * Encrypt data using AES-256-GCM
- * @param plaintext - Data to encrypt
- * @returns Encrypted data as hex string (iv:authTag:ciphertext)
- */
+function getLegacyEncryptionKey(): Buffer | null {
+  const key = process.env.LEGACY_ENCRYPTION_KEY;
+  return key ? deriveKey(key) : null;
+}
+
+function tryDecryptWithKey(ciphertext: string, key: Buffer): string | null {
+  try {
+    const parts = ciphertext.split(":");
+    if (parts.length !== 3) return null;
+    const iv = Buffer.from(parts[0], "hex");
+    const authTag = Buffer.from(parts[1], "hex");
+    const encrypted = parts[2];
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+    let decrypted = decipher.update(encrypted, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+    return decrypted;
+  } catch {
+    return null;
+  }
+}
+
 export function encrypt(plaintext: string): string {
   const key = getEncryptionKey();
   const iv = crypto.randomBytes(IV_LENGTH);
-  
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
-  
   let encrypted = cipher.update(plaintext, "utf8", "hex");
   encrypted += cipher.final("hex");
-  
   const authTag = cipher.getAuthTag();
-  
-  // Format: iv:authTag:ciphertext
   return `${iv.toString("hex")}:${authTag.toString("hex")}:${encrypted}`;
 }
 
-/**
- * Decrypt data encrypted with encrypt()
- * @param ciphertext - Encrypted data (iv:authTag:ciphertext)
- * @returns Decrypted plaintext
- */
 export function decrypt(ciphertext: string): string {
-  const key = getEncryptionKey();
-  const parts = ciphertext.split(":");
-  
-  if (parts.length !== 3) {
-    throw new Error("Invalid encrypted data format");
+  const primaryKey = getEncryptionKey();
+  const result = tryDecryptWithKey(ciphertext, primaryKey);
+  if (result !== null) return result;
+
+  const legacyKey = getLegacyEncryptionKey();
+  if (legacyKey) {
+    const legacyResult = tryDecryptWithKey(ciphertext, legacyKey);
+    if (legacyResult !== null) return legacyResult;
   }
-  
-  const iv = Buffer.from(parts[0], "hex");
-  const authTag = Buffer.from(parts[1], "hex");
-  const encrypted = parts[2];
-  
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  decipher.setAuthTag(authTag);
-  
-  let decrypted = decipher.update(encrypted, "hex", "utf8");
-  decrypted += decipher.final("utf8");
-  
-  return decrypted;
+
+  throw new Error("Decryption failed with all available keys");
 }
 
 /**

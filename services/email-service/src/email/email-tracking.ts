@@ -292,6 +292,7 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
         integrationId: trackingInfo.integration_id,
         type: event.type 
       });
+      await clusterSync.notifyStatsCacheInvalidate(trackingInfo.user_id);
     }
 
   } catch (error) {

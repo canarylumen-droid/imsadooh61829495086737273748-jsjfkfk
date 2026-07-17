@@ -237,7 +237,7 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
 
 /**
  * POST /api/messages/:leadId/read
- * Mark all notifications for this lead as read
+ * Mark all notifications AND messages for this lead as read
  */
 router.post("/:leadId/read", requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
@@ -259,9 +259,32 @@ router.post("/:leadId/read", requireAuthOrApiKey, async (req: Request, res: Resp
       await storage.markNotificationAsRead(n.id);
     }
 
+    // Mark all inbound messages as read for this lead
+    try {
+      const { db } = await import('@shared/lib/db/db.js');
+      const { messages } = await import('@audnix/shared');
+      const { eq, and } = await import('drizzle-orm');
+      await db.update(messages)
+        .set({ isRead: true } as any)
+        .where(and(
+          eq(messages.leadId, leadId as string),
+          eq(messages.isRead, false)
+        ));
+    } catch (dbErr) {
+      console.warn(`Failed to mark messages as read for lead ${leadId}:`, dbErr);
+    }
+
+    // Also clear isUnread from lead metadata
+    try {
+      await storage.updateLead(leadId as string, {
+        metadata: { ...((lead.metadata as Record<string, any>) || {}), isUnread: false }
+      });
+    } catch { /* non-critical */ }
+
     // Notify client to update notification count/UI
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
     wsSync.notifyNotification(userId, { type: 'update', action: 'read_all', leadId });
+    wsSync.notifyMessagesUpdated(userId, { leadId, action: 'read_all' });
 
     res.json({ success: true });
   } catch (error: unknown) {

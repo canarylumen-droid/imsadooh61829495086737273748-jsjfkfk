@@ -172,17 +172,6 @@ export function startEmailSyncWorker() {
                   return null;
                 });
 
-                // Real-time push — immediate, no throttle (priority event)
-                await clusterSync.notifyNewMail(userId, {
-                  integrationId,
-                  messageId: saved?.messageId || msg.messageId,
-                  subject: msg.subject,
-                  from: msg.from,
-                  snippet: msg.snippet,
-                  date: msg.date,
-                  isNew: true,
-                });
-
                 if (lead) {
                   console.log(`[EmailSyncQueue] 📨 Found matching lead ${lead.id} for inbound email. Creating message to trigger auto-reply.`);
                   try {
@@ -192,6 +181,47 @@ export function startEmailSyncWorker() {
                       direction: 'inbound',
                       body: msg.snippet || '',
                     });
+
+                    // Update lead status to 'replied' and notify UI
+                    try {
+                      const { db } = await import('@shared/lib/db/db.js');
+                      const { leads, campaignLeads, campaignEmails } = await import('@audnix/shared');
+                      const { eq, and } = await import('drizzle-orm');
+
+                      await db.update(leads)
+                        .set({ status: 'replied', updatedAt: new Date() })
+                        .where(eq(leads.id, lead.id));
+
+                      await db.update(campaignLeads)
+                        .set({ status: 'replied', repliedAt: new Date() })
+                        .where(eq(campaignLeads.leadId, lead.id));
+
+                      await db.update(campaignEmails)
+                        .set({ status: 'replied' })
+                        .where(and(
+                          eq(campaignEmails.leadId, lead.id),
+                          eq(campaignEmails.status, 'sent')
+                        ));
+                    } catch (dbErr: any) {
+                      console.warn(`[EmailSyncQueue] Failed to update reply status for lead ${lead.id}:`, dbErr.message);
+                    }
+
+                    // Fire socket events for real-time UI update
+                    await clusterSync.notifyLeadsUpdated(userId, {
+                      leadId: lead.id,
+                      status: 'replied',
+                      action: 'replied',
+                    });
+                    await clusterSync.notifyMessagesUpdated(userId, {
+                      leadId: lead.id,
+                      direction: 'inbound',
+                    });
+                    await clusterSync.notifyStatsUpdated(userId, {
+                      integrationId,
+                      type: 'reply',
+                    });
+                    await clusterSync.notifyStatsCacheInvalidate(userId);
+
                     // Immediately fast-track an AI reply — don't wait for tick
                     try {
                       const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
@@ -204,6 +234,17 @@ export function startEmailSyncWorker() {
                     console.error(`[EmailSyncQueue] Failed to create message for lead ${lead.id}:`, e.message);
                   }
                 }
+
+                // Real-time push — after DB updates so UI gets accurate data
+                await clusterSync.notifyNewMail(userId, {
+                  integrationId,
+                  messageId: saved?.messageId || msg.messageId,
+                  subject: msg.subject,
+                  from: msg.from,
+                  snippet: msg.snippet,
+                  date: msg.date,
+                  isNew: !!lead,
+                });
               }
 
               console.log(`[EmailSyncQueue] ✅ New mail processed for ${integrationId}: ${newMessages.length} message(s)`);
