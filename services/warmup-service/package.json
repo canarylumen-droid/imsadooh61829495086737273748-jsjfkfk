@@ -17,7 +17,7 @@
     "imapflow": "^1.0.0",
     "mailauth": "^4.13.2",
     "nodemailer": "^9.0.3",
-    "openai": "^4.0.0",
+    "openai": "^6.48.0",
     "winston": "^3.11.0",
     "zod": "^3.22.0"
   },
