@@ -38,7 +38,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'socket',
-        PORT: 5001
+        PORT: 5001,
+        S3_REGION: 'us-east-1'
       },
       error_file: './logs/socket-error.log',
       out_file: './logs/socket-out.log',

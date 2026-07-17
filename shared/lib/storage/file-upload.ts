@@ -134,12 +134,12 @@ const avatarFileFilter = (
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ): void => {
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
 
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'));
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) or PDF are allowed'));
   }
 };
 
@@ -147,7 +147,7 @@ export const uploadAvatar = multer({
   storage: multer.memoryStorage(),
   fileFilter: avatarFileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 10 * 1024 * 1024,
   },
 });
 

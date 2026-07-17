@@ -756,7 +756,7 @@ router.post('/user/avatar', requireAuthOrApiKey, uploadAvatar.single('avatar'), 
 
     const file = req.file;
     if (!file) {
-      res.status(400).json({ error: 'No image file provided' });
+      res.status(400).json({ error: 'No file provided' });
       return;
     }
 
