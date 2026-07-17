@@ -250,6 +250,7 @@ export default function InboxPage() {
       const isOpenEvent = payload?.action === 'email_opened';
       const isClickEvent = payload?.action === 'email_clicked';
       const isNewMsg = payload?.action === 'email_replied' || !!msgData.direction;
+      const msgDirection = msgData.direction || (isOpenEvent || isClickEvent ? 'outbound' : null);
       setAllLeads(prev => {
         const leadIndex = prev.findIndex(l => l.id === targetLeadId);
         if (leadIndex === -1) return prev;
@@ -265,7 +266,9 @@ export default function InboxPage() {
           status: newStatus,
           metadata: {
             ...existing.metadata,
-            isUnread: true,
+            isUnread: isOpenEvent || isClickEvent ? existing.metadata?.isUnread : true,
+            lastMessageDirection: msgDirection || existing.metadata?.lastMessageDirection || 'inbound',
+            lastMessageIsRead: isOpenEvent || isClickEvent ? true : msgDirection === 'outbound' ? false : existing.metadata?.lastMessageIsRead,
             ...(isOpenEvent ? { openedAt: new Date().toISOString(), opened: true, openedCount: (existing.metadata?.openedCount || 0) + 1 } : {}),
             ...(isClickEvent ? { clickedAt: new Date().toISOString(), clicked: true } : {}),
           }
@@ -298,6 +301,25 @@ export default function InboxPage() {
               ...oldData,
               messages: [...oldData.messages, newMsg]
             };
+          }
+        );
+      }
+
+      // Real-time open/click update: mark the most recent outbound message as opened/clicked
+      if ((isOpenEvent || isClickEvent) && targetLeadId === leadId) {
+        queryClient.setQueriesData(
+          { queryKey: ["/api/messages", targetLeadId] },
+          (oldData: any) => {
+            if (!oldData || !oldData.messages) return oldData;
+            const updated = oldData.messages.map((m: any) => {
+              if (m.direction !== 'outbound') return m;
+              return {
+                ...m,
+                ...(isOpenEvent ? { openedAt: new Date().toISOString() } : {}),
+                ...(isClickEvent ? { clickedAt: new Date().toISOString() } : {}),
+              };
+            });
+            return { ...oldData, messages: updated };
           }
         );
       }
@@ -366,7 +388,7 @@ export default function InboxPage() {
         setAllLeads(prev => {
           const idx = prev.findIndex(l => l.email === fromEmail || l.email?.includes(fromEmail) || fromEmail.includes(l.email || ''));
           if (idx === -1) return prev;
-          const updated = { ...prev[idx], lastMessageAt: payload.date || new Date().toISOString(), snippet: payload.snippet || prev[idx].snippet, metadata: { ...prev[idx].metadata, isUnread: true } };
+          const updated = { ...prev[idx], lastMessageAt: payload.date || new Date().toISOString(), snippet: payload.snippet || prev[idx].snippet, metadata: { ...prev[idx].metadata, isUnread: true, lastMessageDirection: 'inbound' } };
           return [updated, ...prev.filter(l => l.id !== prev[idx].id)];
         });
       }
@@ -688,7 +710,7 @@ export default function InboxPage() {
               snippet: newContent,
               lastMessageAt: new Date().toISOString(),
               status: lead.status === "new" ? "contacted" : lead.status,
-              metadata: { ...lead.metadata, isUnread: false },
+              metadata: { ...lead.metadata, isUnread: false, lastMessageDirection: 'outbound', lastMessageIsRead: false },
             }
           : lead
       ));
@@ -1027,7 +1049,10 @@ export default function InboxPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button variant="ghost" size="icon" disabled={backendSyncing} onClick={() => {
+                <Button variant="ghost" size="icon" disabled={backendSyncing} onClick={async () => {
+                  try {
+                    await fetch("/api/custom-email/sync-now", { method: "POST", credentials: "include" });
+                  } catch {}
                   queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
                   queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
                   toast({ title: "Syncing...", description: "Fetching latest messages from the cloud." });
@@ -1333,9 +1358,9 @@ export default function InboxPage() {
                                     <ArrowRight className="h-3 w-3 shrink-0 text-primary" />
                                   ) : null}
                                   {lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
-                                    <CheckCheck className="h-3 w-3 shrink-0 text-sky-500" />
+                                    <CheckCheck className="h-3 w-3 shrink-0 text-primary" />
                                   )}
-                                  {lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === false && (
+                                  {lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
                                   <HighlightText text={lead.snippet ? stripHtml(lead.snippet) : "No messages"} query={searchQuery} />
