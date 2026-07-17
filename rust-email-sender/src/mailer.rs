@@ -24,7 +24,7 @@ impl MailerPool {
             .from(from_mailbox)
             .to(to_mailbox)
             .subject(&job.subject)
-            .header(ContentType::TEXT_PLAIN)
+            .header(ContentType::TEXT_HTML)
             .body(job.body.clone())?;
 
         if let (Some(ref host), Some(ref user), Some(ref pass)) = (&job.smtp_host, &job.smtp_user, &job.smtp_pass) {

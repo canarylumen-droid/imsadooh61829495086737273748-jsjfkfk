@@ -175,6 +175,65 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
 
     const trackingInfo = trackResult.rows[0] as any;
 
+    // FIRE SOCKET EVENTS FIRST — instant UI update before DB writes
+    const socketPromises: Promise<any>[] = [];
+    if (trackingInfo) {
+      const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+
+      if (trackingInfo.lead_id) {
+        socketPromises.push(
+          clusterSync.notifyLeadsUpdated(trackingInfo.user_id, {
+            leadId: trackingInfo.lead_id,
+            action: event.type === 'open' ? 'email_opened' : 'email_clicked'
+          }),
+          clusterSync.notifyMessagesUpdated(trackingInfo.user_id, {
+            leadId: trackingInfo.lead_id,
+            action: event.type === 'open' ? 'email_opened' : 'email_clicked'
+          })
+        );
+      }
+
+      socketPromises.push(
+        clusterSync.notifyActivityUpdated(trackingInfo.user_id, {
+          type: event.type === 'open' ? 'email_opened' : 'email_clicked',
+          leadId: trackingInfo.lead_id,
+          integrationId: trackingInfo.integration_id,
+          details: {
+            email: trackingInfo.recipient_email,
+            subject: trackingInfo.subject,
+            link: event.linkUrl,
+            timestamp: event.timestamp
+          }
+        })
+      );
+
+      if (trackingInfo.lead_id && event.type === 'click') {
+        socketPromises.push(
+          clusterSync.notifyNotification(trackingInfo.user_id, {
+            type: 'lead_activity',
+            title: 'Link Clicked',
+            message: `${trackingInfo.recipient_email} clicked a link in "${trackingInfo.subject}"`,
+            leadId: trackingInfo.lead_id,
+            integrationId: trackingInfo.integration_id
+          })
+        );
+      }
+
+      socketPromises.push(
+        clusterSync.notifyStatsUpdated(trackingInfo.user_id, { 
+          integrationId: trackingInfo.integration_id,
+          type: event.type 
+        }),
+        clusterSync.notifyStatsCacheInvalidate(trackingInfo.user_id)
+      );
+
+      // Fire all socket notifications in parallel, don't block DB writes
+      Promise.all(socketPromises).catch(err =>
+        console.error('Failed to fire tracking socket events:', err)
+      );
+    }
+
+    // DB writes — update tracking counters
     if (event.type === 'open') {
       await db.execute(sql`
         UPDATE email_tracking 
@@ -191,108 +250,55 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
       `);
     }
 
-    // Real-time Notification
-    if (trackingInfo) {
-      const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+    // Update lead/message/campaign metadata
+    if (trackingInfo?.lead_id) {
+      try {
+        if (event.type === 'open') {
+          await db.execute(sql`
+            UPDATE leads 
+            SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{isOpened}', 'true'::jsonb),
+                status = CASE WHEN status IN ('new', 'open') THEN 'opened'::text ELSE status END,
+                updated_at = NOW()
+            WHERE id = ${trackingInfo.lead_id}
+          `);
 
-      // Update lead metadata for filtering
-      if (trackingInfo.lead_id) {
-        try {
-          if (event.type === 'open') {
-            await db.execute(sql`
-                  UPDATE leads 
-                  SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{isOpened}', 'true'::jsonb),
-                      status = CASE WHEN status IN ('new', 'open') THEN 'opened'::text ELSE status END,
-                      updated_at = NOW()
-                  WHERE id = ${trackingInfo.lead_id}
-                `);
+          await db.execute(sql`
+            UPDATE messages
+            SET opened_at = COALESCE(opened_at, ${event.timestamp.toISOString()}),
+                is_read = true
+            WHERE tracking_id = ${event.messageId}
+          `);
 
-            // Update messages table
-            await db.execute(sql`
-                  UPDATE messages
-                  SET opened_at = COALESCE(opened_at, ${event.timestamp.toISOString()}),
-                      is_read = true
-                  WHERE tracking_id = ${event.messageId}
-                `);
+          await db.execute(sql`
+            UPDATE campaign_emails
+            SET opened_at = COALESCE(opened_at, ${event.timestamp.toISOString()}),
+                status = 'opened'
+            WHERE message_id = ${event.messageId}
+          `);
+        } else if (event.type === 'click') {
+          await db.execute(sql`
+            UPDATE leads 
+            SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{isClicked}', 'true'::jsonb),
+                updated_at = NOW()
+            WHERE id = ${trackingInfo.lead_id}
+          `);
 
-            // Update campaign_emails table
-            await db.execute(sql`
-                  UPDATE campaign_emails
-                  SET opened_at = COALESCE(opened_at, ${event.timestamp.toISOString()}),
-                      status = 'opened'
-                  WHERE message_id = ${event.messageId}
-                `);
-          } else if (event.type === 'click') {
-            await db.execute(sql`
-                  UPDATE leads 
-                  SET metadata = jsonb_set(COALESCE(metadata, '{}'::jsonb), '{isClicked}', 'true'::jsonb),
-                      updated_at = NOW()
-                  WHERE id = ${trackingInfo.lead_id}
-                `);
+          await db.execute(sql`
+            UPDATE messages
+            SET clicked_at = COALESCE(clicked_at, ${event.timestamp.toISOString()})
+            WHERE tracking_id = ${event.messageId}
+          `);
 
-            // Update messages table
-            await db.execute(sql`
-                  UPDATE messages
-                  SET clicked_at = COALESCE(clicked_at, ${event.timestamp.toISOString()})
-                  WHERE tracking_id = ${event.messageId}
-                `);
-
-            // Update campaign_emails table
-            await db.execute(sql`
-                  UPDATE campaign_emails
-                  SET clicked_at = COALESCE(clicked_at, ${event.timestamp.toISOString()}),
-                      status = 'clicked'
-                  WHERE message_id = ${event.messageId}
-                `);
-          }
-
-          // Notify lead update to refresh counts/badges
-          await clusterSync.notifyLeadsUpdated(trackingInfo.user_id, {
-            leadId: trackingInfo.lead_id,
-            action: event.type === 'open' ? 'email_opened' : 'email_clicked'
-          });
-
-          // Notify messages update to refresh the message thread instantly
-          await clusterSync.notifyMessagesUpdated(trackingInfo.user_id, {
-            leadId: trackingInfo.lead_id,
-            action: event.type === 'open' ? 'email_opened' : 'email_clicked'
-          });
-        } catch (err) {
-          console.error('Failed to update lead/message metadata for tracking event:', err);
+          await db.execute(sql`
+            UPDATE campaign_emails
+            SET clicked_at = COALESCE(clicked_at, ${event.timestamp.toISOString()}),
+                status = 'clicked'
+            WHERE message_id = ${event.messageId}
+          `);
         }
+      } catch (err) {
+        console.error('Failed to update lead/message metadata for tracking event:', err);
       }
-
-      // Notify activity feed with integrationId for mailbox-specific updates
-      await clusterSync.notifyActivityUpdated(trackingInfo.user_id, {
-        type: event.type === 'open' ? 'email_opened' : 'email_clicked',
-        leadId: trackingInfo.lead_id,
-        integrationId: trackingInfo.integration_id,
-        details: {
-          email: trackingInfo.recipient_email,
-          subject: trackingInfo.subject,
-          link: event.linkUrl,
-          timestamp: event.timestamp
-        }
-      });
-
-      // Only notify for LINK CLICKS — email opens are too frequent for individual toasts.
-      // Open events are tracked silently in the activity feed and stats.
-      if (trackingInfo.lead_id && event.type === 'click') {
-        await clusterSync.notifyNotification(trackingInfo.user_id, {
-          type: 'lead_activity',
-          title: '🔗 Link Clicked',
-          message: `${trackingInfo.recipient_email} clicked a link in "${trackingInfo.subject}"`,
-          leadId: trackingInfo.lead_id,
-          integrationId: trackingInfo.integration_id
-        });
-      }
-
-      // Instant Stats Refresh for Dashboard
-      await clusterSync.notifyStatsUpdated(trackingInfo.user_id, { 
-        integrationId: trackingInfo.integration_id,
-        type: event.type 
-      });
-      await clusterSync.notifyStatsCacheInvalidate(trackingInfo.user_id);
     }
 
   } catch (error) {

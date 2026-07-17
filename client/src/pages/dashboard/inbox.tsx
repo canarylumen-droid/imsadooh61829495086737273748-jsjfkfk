@@ -127,7 +127,8 @@ export default function InboxPage() {
   }
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { selectedMailboxId } = useMailbox();
+  const { selectedMailboxId, mailboxes } = useMailbox();
+  const mailboxLookup = useMemo(() => Object.fromEntries((mailboxes||[]).map((m: any) => [m.id, m])), [mailboxes]);
   const [processLead, setProcessLead] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const enableRegex = searchQuery ? (searchQuery.startsWith('/') && searchQuery.endsWith('/')) : false;
@@ -234,14 +235,6 @@ export default function InboxPage() {
       const targetLeadId = msgData.leadId || payload?.leadId;
       const targetIntegrationId = payload?.integrationId;
 
-      // Real-time synchronization check: if this sync event is for our CURRENT selected mailbox, refresh!
-      if (targetIntegrationId === selectedMailboxId) {
-        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-        if (leadId) {
-          queryClient.invalidateQueries({ queryKey: ["/api/messages", leadId] });
-        }
-      }
-
       if (!targetLeadId) {
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
         if (leadId) {
@@ -251,6 +244,8 @@ export default function InboxPage() {
       }
 
       // 20ms UI Push: Instantly move lead to top and update snippet
+      const isOpenEvent = payload?.action === 'email_opened';
+      const isClickEvent = payload?.action === 'email_clicked';
       setAllLeads(prev => {
         const leadIndex = prev.findIndex(l => l.id === targetLeadId);
         if (leadIndex === -1) return prev;
@@ -259,7 +254,13 @@ export default function InboxPage() {
           ...prev[leadIndex],
           lastMessageAt: new Date().toISOString(),
           snippet: msgData.content || msgData.snippet || prev[leadIndex].snippet,
-          metadata: { ...prev[leadIndex].metadata, isUnread: true }
+          status: isOpenEvent ? 'opened' : prev[leadIndex].status,
+          metadata: {
+            ...prev[leadIndex].metadata,
+            isUnread: true,
+            ...(isOpenEvent ? { openedAt: new Date().toISOString(), opened: true, openedCount: (prev[leadIndex].metadata?.openedCount || 0) + 1 } : {}),
+            ...(isClickEvent ? { clickedAt: new Date().toISOString(), clicked: true } : {}),
+          }
         };
 
         const otherLeads = prev.filter(l => l.id !== targetLeadId);
@@ -393,7 +394,7 @@ export default function InboxPage() {
       if (leadsTimeout) clearTimeout(leadsTimeout);
       if (notifTimeout) clearTimeout(notifTimeout);
     };
-  }, [socket, leadId, queryClient, toast, selectedMailboxId, user]);
+  }, [socket, leadId, queryClient, toast, user]);
 
 
 
@@ -409,7 +410,6 @@ export default function InboxPage() {
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
       includeArchived: showArchived,
-      integrationId: selectedMailboxId,
       search: searchQuery || undefined,
       channel: filterChannel !== "all" ? filterChannel : undefined,
       status: simpleStatuses.includes(filterStatus) ? filterStatus : undefined,
@@ -421,7 +421,7 @@ export default function InboxPage() {
   });
 
   const { data: messagesData, isLoading: messagesLoading, isFetching: messagesFetching } = useQuery<any>({
-    queryKey: ["/api/messages", leadId, { integrationId: selectedMailboxId }],
+    queryKey: ["/api/messages", leadId],
     enabled: !!leadId,
     placeholderData: (prev: any) => prev,
     staleTime: 0,
@@ -557,23 +557,8 @@ export default function InboxPage() {
       }
 
       const matchesArchived = showArchived ? lead.archived : !lead.archived;
-      
-      // Strict UI Separation Logic:
-      // 1. If 'inventory' filter is active: Show ONLY unassigned leads.
-      // 2. If a specific mailbox is selected: Show ONLY its leads (no inventory).
-      // 3. If 'All Chats' is active and NO mailbox selected: Show everything.
-      
-      let matchesMailbox = true;
-      if (filterStatus === "inventory") {
-        matchesMailbox = !lead.integrationId;
-      } else if (selectedMailboxId) {
-        matchesMailbox = !lead.integrationId || lead.integrationId === selectedMailboxId;
-      } else {
-        // "All Chats" view with no mailbox filter: show all for visibility
-        matchesMailbox = true;
-      }
 
-      return matchesSearch && matchesChannel && matchesStatus && matchesArchived && matchesMailbox;
+      return matchesSearch && matchesChannel && matchesStatus && matchesArchived;
     }).sort((a: any, b: any) => {
       const hasDraftA = !!localDrafts[a.id];
       const hasDraftB = !!localDrafts[b.id];
@@ -585,7 +570,7 @@ export default function InboxPage() {
       const timeB = new Date(b.lastMessageAt || b.updatedAt || b.createdAt).getTime();
       return timeB - timeA;
     });
-  }, [allLeads, searchQuery, filterChannel, filterStatus, showArchived, localDrafts, selectedMailboxId]);
+  }, [allLeads, searchQuery, filterChannel, filterStatus, showArchived, localDrafts]);
 
   const [virtualRange, setVirtualRange] = useState({ start: 0, end: 50 });
   const virtualStart = virtualRange.start;
@@ -1333,6 +1318,11 @@ export default function InboxPage() {
                               <Badge {...({ variant: "outline", className: cn("text-[9px] h-4 px-1 rounded-sm border-0 uppercase font-black tracking-wider", statusStyles[lead.status as keyof typeof statusStyles] || statusStyles.cold) } as any)}>
                                 {getLeadStatusDisplay(lead.status)}
                               </Badge>
+                              {lead.integrationId && mailboxLookup[lead.integrationId] && (
+                                <span className="text-[9px] text-muted-foreground/50 truncate max-w-[100px]" title={mailboxLookup[lead.integrationId]?.email || ''}>
+                                  via {mailboxLookup[lead.integrationId]?.email?.split('@')[0] || mailboxLookup[lead.integrationId]?.name || 'mailbox'}
+                                </span>
+                              )}
                               {lead.metadata?.isUnread && (() => { const isOld = new Date().getTime() - new Date(lead.createdAt).getTime() > 24 * 60 * 60 * 1000; return !isOld ? <span className="h-2 w-2 rounded-full bg-primary animate-pulse" /> : null; })()}
                             </div>
                           </div>
