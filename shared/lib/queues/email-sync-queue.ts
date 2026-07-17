@@ -113,8 +113,6 @@ export function startEmailSyncWorker() {
               // Save each new message to the DB and push to UI
               for (const msg of newMessages) {
                 // ── TEST-EMAIL SELF-LOOP GUARD ─────────────────────────────────────
-                // If the inbound sender IS the user's own mailbox address it's a bounce
-                // or auto-reply from a test send. Skip saving to DB; only ping the UI.
                 const senderAddr = (msg.from || '').toLowerCase().trim().replace(/.*<([^>]+)>.*/, '$1');
                 let ownAddr = (integration.email || integration.accountType || '').toLowerCase().trim();
                 if (!ownAddr && integration.encryptedMeta) {
@@ -132,11 +130,12 @@ export function startEmailSyncWorker() {
                     from: msg.from,
                     snippet: msg.snippet,
                     date: msg.date,
-                    isNew: false, // not a real lead reply
+                    isNew: false,
                   });
                   continue;
                 }
-                // [NEW] Warmup Seed Interception
+
+                // ── WARMUP SEED CHECK ────────────────────────────────────────────
                 const { warmupSeedAccounts } = await import('@audnix/shared');
                 const { db } = await import('@shared/lib/db/db.js');
                 const { eq } = await import('drizzle-orm');
@@ -144,10 +143,54 @@ export function startEmailSyncWorker() {
                 const isWarmupSeed = !!seedAccount;
 
                 let lead = null;
+                let senderName = senderAddr.split('@')[0];
                 if (!isWarmupSeed) {
                   lead = await storage.findLeadBySenderAndIntegration(senderAddr, integrationId);
+                  if (!lead) {
+                    // Also match by recipient for sent emails (both directions in Inbox)
+                    try {
+                      const recipientAddr = (msg.to || '').toLowerCase().trim().replace(/.*<([^>]+)>.*/, '$1');
+                      if (recipientAddr && recipientAddr !== senderAddr) {
+                        lead = await storage.findLeadBySenderAndIntegration(recipientAddr, integrationId);
+                      }
+                    } catch { /* non-critical */ }
+                  }
+                  senderName = (msg.from || '').replace(/<[^>]+>/g, '').trim() || senderAddr.split('@')[0];
                 }
 
+                // ── PHASE 1: Push to UI BEFORE DB (instant) ──────────────────────
+                const leadIdForPush = lead?.id || '__pending__';
+                const isNewLead = !lead && !isWarmupSeed;
+
+                // Fire all notifications IMMEDIATELY — before any DB write
+                await Promise.all([
+                  clusterSync.notifyNewMail(userId, {
+                    integrationId,
+                    messageId: msg.messageId || `imap-${integrationId}-${msg.uid}`,
+                    subject: msg.subject,
+                    from: msg.from,
+                    snippet: msg.snippet,
+                    date: msg.date,
+                    isNew: !!lead,
+                  }),
+                  isNewLead ? Promise.resolve() : clusterSync.notifyMessagesUpdated(userId, {
+                    leadId: lead!.id,
+                    direction: 'inbound',
+                  }),
+                  isNewLead ? Promise.resolve() : clusterSync.notifyLeadsUpdated(userId, {
+                    leadId: lead!.id,
+                    status: 'replied',
+                    action: 'replied',
+                  }),
+                  clusterSync.notifyStatsUpdated(userId, {
+                    integrationId,
+                    type: isNewLead ? 'new_lead' : 'reply',
+                  }),
+                  clusterSync.notifyStatsCacheInvalidate(userId),
+                ]);
+
+                // ── PHASE 2: Save to DB (background) ─────────────────────────────
+                // createEmailMessage
                 const saved = await storage.createEmailMessage({
                   userId,
                   integrationId,
@@ -172,8 +215,8 @@ export function startEmailSyncWorker() {
                   return null;
                 });
 
-                if (lead) {
-                  console.log(`[EmailSyncQueue] 📨 Found matching lead ${lead.id} for inbound email. Creating message to trigger auto-reply.`);
+                if (lead && saved) {
+                  console.log(`[EmailSyncQueue] 📨 Found matching lead ${lead.id} for inbound email. Saving message.`);
                   try {
                     await storage.createMessage({
                       userId,
@@ -182,18 +225,17 @@ export function startEmailSyncWorker() {
                       body: msg.snippet || '',
                     });
 
-                    // Update lead status to 'replied' and notify UI
+                    // Update lead + campaign status
                     try {
-                      const { db } = await import('@shared/lib/db/db.js');
-                      const { leads, campaignLeads, campaignEmails } = await import('@audnix/shared');
+                      const { leads: leadsSchema, campaignLeads, campaignEmails } = await import('@audnix/shared');
                       const { eq, and } = await import('drizzle-orm');
 
-                      await db.update(leads)
+                      await db.update(leadsSchema)
                         .set({ status: 'replied', updatedAt: new Date() })
-                        .where(eq(leads.id, lead.id));
+                        .where(eq(leadsSchema.id, lead.id));
 
                       await db.update(campaignLeads)
-                        .set({ status: 'replied', repliedAt: new Date() })
+                        .set({ status: 'replied', repliedAt: new Date() } as any)
                         .where(eq(campaignLeads.leadId, lead.id));
 
                       await db.update(campaignEmails)
@@ -206,23 +248,7 @@ export function startEmailSyncWorker() {
                       console.warn(`[EmailSyncQueue] Failed to update reply status for lead ${lead.id}:`, dbErr.message);
                     }
 
-                    // Fire socket events for real-time UI update
-                    await clusterSync.notifyLeadsUpdated(userId, {
-                      leadId: lead.id,
-                      status: 'replied',
-                      action: 'replied',
-                    });
-                    await clusterSync.notifyMessagesUpdated(userId, {
-                      leadId: lead.id,
-                      direction: 'inbound',
-                    });
-                    await clusterSync.notifyStatsUpdated(userId, {
-                      integrationId,
-                      type: 'reply',
-                    });
-                    await clusterSync.notifyStatsCacheInvalidate(userId);
-
-                    // Immediately fast-track an AI reply — don't wait for tick
+                    // Fast-track AI reply
                     try {
                       const { enqueuePriorityReply } = await import('@shared/lib/queues/outreach-queue.js');
                       await enqueuePriorityReply({ userId, leadId: lead.id, type: 'autonomous_reply', isAutonomous: true });
@@ -233,18 +259,44 @@ export function startEmailSyncWorker() {
                   } catch(e: any) {
                     console.error(`[EmailSyncQueue] Failed to create message for lead ${lead.id}:`, e.message);
                   }
-                }
+                } else if (isNewLead && saved) {
+                  // ── NEW LEAD FROM UNKNOWN SENDER ────────────────────────────────
+                  senderName = (msg.from || '').replace(/<[^>]+>/g, '').trim() || senderAddr.split('@')[0];
+                  const { leads: leadsSchema, emailMessages } = await import('@audnix/shared');
 
-                // Real-time push — after DB updates so UI gets accurate data
-                await clusterSync.notifyNewMail(userId, {
-                  integrationId,
-                  messageId: saved?.messageId || msg.messageId,
-                  subject: msg.subject,
-                  from: msg.from,
-                  snippet: msg.snippet,
-                  date: msg.date,
-                  isNew: !!lead,
-                });
+                  try {
+                    const [newLead] = await db.insert(leadsSchema).values({
+                      userId,
+                      integrationId,
+                      email: senderAddr,
+                      name: senderName,
+                      channel: 'email',
+                      status: 'new',
+                      aiPaused: true,
+                      metadata: { source: 'imap_inbound', integrationId },
+                    }).returning();
+
+                    if (newLead) {
+                      if (saved?.id) {
+                        await db.update(emailMessages)
+                          .set({ leadId: newLead.id })
+                          .where(eq(emailMessages.id, saved.id)).catch(() => {});
+                      }
+
+                      await storage.createMessage({
+                        userId,
+                        leadId: newLead.id,
+                        direction: 'inbound',
+                        body: msg.snippet || '',
+                      });
+
+                      lead = newLead;
+                      console.log(`[EmailSyncQueue] 🆕 Created new lead ${newLead.id} for unknown sender ${senderAddr}`);
+                    }
+                  } catch (leadErr: any) {
+                    console.error(`[EmailSyncQueue] Failed to create lead from inbound email ${senderAddr}:`, leadErr.message);
+                  }
+                }
               }
 
               console.log(`[EmailSyncQueue] ✅ New mail processed for ${integrationId}: ${newMessages.length} message(s)`);

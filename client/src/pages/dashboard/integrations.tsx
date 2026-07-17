@@ -487,7 +487,7 @@ export default function IntegrationsPage() {
     onError: (err: any) => toast({ title: "Verification Failed", description: err.message, variant: "destructive" })
   });
 
-  const disconnectProviderMutation = useMutation({
+    const disconnectProviderMutation = useMutation({
     mutationFn: async ({ provider, integrationId }: { provider: string, integrationId?: string }) => {
       let url = `/api/integrations/${provider}/disconnect`;
       if (integrationId) {
@@ -496,7 +496,15 @@ export default function IntegrationsPage() {
       const response = await apiRequest("POST", url);
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      queryClient.setQueryData(["/api/custom-email/status"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          integrations: (old.integrations || []).filter((i: any) => i.id !== variables.integrationId)
+        };
+      });
+      queryClient.setQueryData(["/api/channels/calendly"], (old: any) => old ? { ...old, connected: false } : old);
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
@@ -564,7 +572,15 @@ export default function IntegrationsPage() {
 
   const disconnectCustomEmailMutation = useMutation({
     mutationFn: async (integrationId?: string) => apiRequest("POST", "/api/custom-email/disconnect", { integrationId }),
-    onSuccess: () => {
+    onSuccess: (_data, integrationId) => {
+      queryClient.setQueryData(["/api/custom-email/status"], (old: any) => {
+        if (!old) return old;
+        return {
+          ...old,
+          connected: (old.integrations || []).filter((i: any) => i.id !== integrationId).length > 0,
+          integrations: (old.integrations || []).filter((i: any) => i.id !== integrationId)
+        };
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });

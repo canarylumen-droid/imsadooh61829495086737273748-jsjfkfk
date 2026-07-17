@@ -885,6 +885,7 @@ router.post("/reply/:leadId", requireAuthOrApiKey, async (req: Request, res: Res
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
     wsSync.notifyMessagesUpdated(userId, { leadId: leadId as string, message });
     wsSync.notifyLeadsUpdated(userId, { type: 'lead_updated', lead: updatedLead });
+    wsSync.notifyStatsUpdated(userId);
 
     if ((newStatus as string) === 'converted' || (newStatus as string) === 'booked' || (newStatus as string) === 'closed_won') {
       evaluateLeadDealValue(userId, leadId as string).catch(err => 

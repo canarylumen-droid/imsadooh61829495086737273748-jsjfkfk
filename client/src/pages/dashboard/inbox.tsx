@@ -57,6 +57,8 @@ import {
   MapPin,
   Tags,
   Download,
+  ArrowLeft,
+  CheckCheck,
 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import {
@@ -184,11 +186,12 @@ export default function InboxPage() {
     setLocalDrafts(drafts);
   }, []);
 
-  // Handle lead change: focus textarea and load draft
+  // Handle lead change: focus textarea and load draft from localStorage directly
   useEffect(() => {
     if (leadId) {
-      if (localDrafts[leadId]) {
-        setReplyMessage(localDrafts[leadId]);
+      const draftText = localStorage.getItem(`draft_${leadId}`);
+      if (draftText) {
+        setReplyMessage(draftText);
       } else {
         setReplyMessage("");
       }
@@ -246,25 +249,30 @@ export default function InboxPage() {
       // 20ms UI Push: Instantly move lead to top and update snippet
       const isOpenEvent = payload?.action === 'email_opened';
       const isClickEvent = payload?.action === 'email_clicked';
+      const isNewMsg = payload?.action === 'email_replied' || !!msgData.direction;
       setAllLeads(prev => {
         const leadIndex = prev.findIndex(l => l.id === targetLeadId);
         if (leadIndex === -1) return prev;
 
+        const existing = prev[leadIndex];
+        const wasCold = existing.status === 'cold' || existing.status === 'new';
+        const newStatus = isOpenEvent ? 'opened' : isNewMsg && wasCold ? 'contacted' : isNewMsg && existing.status === 'contacted' ? 'replied' : existing.status;
+
         const updatedLead = {
-          ...prev[leadIndex],
+          ...existing,
           lastMessageAt: new Date().toISOString(),
-          snippet: msgData.content || msgData.snippet || prev[leadIndex].snippet,
-          status: isOpenEvent ? 'opened' : prev[leadIndex].status,
+          snippet: msgData.content || msgData.snippet || existing.snippet,
+          status: newStatus,
           metadata: {
-            ...prev[leadIndex].metadata,
+            ...existing.metadata,
             isUnread: true,
-            ...(isOpenEvent ? { openedAt: new Date().toISOString(), opened: true, openedCount: (prev[leadIndex].metadata?.openedCount || 0) + 1 } : {}),
+            ...(isOpenEvent ? { openedAt: new Date().toISOString(), opened: true, openedCount: (existing.metadata?.openedCount || 0) + 1 } : {}),
             ...(isClickEvent ? { clickedAt: new Date().toISOString(), clicked: true } : {}),
           }
         };
 
         const otherLeads = prev.filter(l => l.id !== targetLeadId);
-        return [updatedLead, ...otherLeads]; // PUSH TO TOP
+        return [updatedLead, ...otherLeads];
       });
 
       // 20ms UI Push: Instantly add message to the exact thread if currently viewing
@@ -686,7 +694,14 @@ export default function InboxPage() {
       ));
 
       setReplyMessage("");
-      if (leadId) localStorage.removeItem(`draft_${leadId}`);
+      if (leadId) {
+        localStorage.removeItem(`draft_${leadId}`);
+        setLocalDrafts(prev => {
+          const next = { ...prev };
+          delete next[leadId];
+          return next;
+        });
+      }
 
       return { previousMessages, previousLeads, tempId };
     },
@@ -1311,7 +1326,20 @@ export default function InboxPage() {
                               ) : localDrafts[lead.id] ? (
                                 <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
                               ) : (
-                                <HighlightText text={lead.snippet ? stripHtml(lead.snippet) : "No messages"} query={searchQuery} />
+                                <span className="flex items-center gap-1">
+                                  {lead.metadata?.lastMessageDirection === 'inbound' ? (
+                                    <ArrowLeft className="h-3 w-3 shrink-0 text-emerald-500" />
+                                  ) : lead.metadata?.lastMessageDirection === 'outbound' ? (
+                                    <ArrowRight className="h-3 w-3 shrink-0 text-primary" />
+                                  ) : null}
+                                  {lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
+                                    <CheckCheck className="h-3 w-3 shrink-0 text-sky-500" />
+                                  )}
+                                  {lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === false && (
+                                    <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+                                  )}
+                                  <HighlightText text={lead.snippet ? stripHtml(lead.snippet) : "No messages"} query={searchQuery} />
+                                </span>
                               )}
                             </p>
                             <div className="flex items-center gap-2 mt-1">

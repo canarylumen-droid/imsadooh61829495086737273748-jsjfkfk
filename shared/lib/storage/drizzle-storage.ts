@@ -566,7 +566,9 @@ export class DrizzleStorage implements IStorage {
 
     let query: any = db.select({
         lead: leads,
-        provider: integrations.provider
+        provider: integrations.provider,
+        lastMessageDirection: sql<string>`(SELECT direction FROM ${messages} WHERE lead_id = ${leads.id} ORDER BY created_at DESC LIMIT 1)`,
+        lastMessageIsRead: sql<boolean>`(SELECT is_read FROM ${messages} WHERE lead_id = ${leads.id} ORDER BY created_at DESC LIMIT 1)`,
       })
       .from(leads)
       .leftJoin(integrations, eq(leads.integrationId, integrations.id))
@@ -582,11 +584,13 @@ export class DrizzleStorage implements IStorage {
     }
 
     const rows = await query;
-    return rows.map((r: { lead: Lead; provider: string | null }) => ({
+    return rows.map((r: { lead: Lead; provider: string | null; lastMessageDirection?: string; lastMessageIsRead?: boolean }) => ({
       ...r.lead,
       metadata: {
         ...(r.lead.metadata as any || {}),
-        provider: r.provider || r.lead.channel
+        provider: r.provider || r.lead.channel,
+        lastMessageDirection: r.lastMessageDirection || null,
+        lastMessageIsRead: r.lastMessageIsRead ?? null,
       }
     }));
   }

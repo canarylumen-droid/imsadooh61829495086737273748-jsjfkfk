@@ -211,6 +211,7 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
     wsSync.notifyMessagesUpdated(userId, { leadId: leadId as string, message });
     wsSync.notifyLeadsUpdated(userId, { type: 'lead_updated', lead: updatedLead });
+    wsSync.notifyStatsUpdated(userId);
     
     // Explicit notification for Real-time Feedback (Sound / Animation)
     if (selectedChannel === 'email') {

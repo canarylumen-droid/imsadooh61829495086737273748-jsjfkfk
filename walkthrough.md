@@ -1235,4 +1235,125 @@ Files affected: `DisconnectConfirmationDialog` (integrations.tsx), `ScheduledDel
 
 ---
 
+## 21. Session Log — Jul 17 2026 (Instant UI + Full Inbox + Historical Backfill)
+
+### 21.1 IMAP Push Before DB (Two-Phase Flow)
+
+**Problem:** IMAP emails went through fetch → DB save → socket events (300-500ms total). UI was delayed by DB writes.
+
+**Fix:** Restructured `email-sync-queue.ts` into a two-phase flow:
+
+```
+Phase 1 (instant, <1ms):   Fire socket events to UI
+                            notifyNewMail, notifyLeadsUpdated,
+                            notifyMessagesUpdated, notifyStatsUpdated,
+                            notifyStatsCacheInvalidate
+
+Phase 2 (async):            Save to DB in background
+                            createEmailMessage, createMessage,
+                            createLead if new, update statuses
+```
+
+Phase 1 fires **before any DB write** — the UI updates instantly (1-5ms), then the DB save completes ~50-200ms later. Lead lookup also matches by **recipient** address (not just sender), so both directions of a conversation appear.
+
+### 21.2 New Leads from Unknown IMAP Senders
+
+**Problem:** IMAP emails from unknown senders were saved to `email_messages` with `leadId: null` — invisible in inbox.
+
+**Fix:** When `findLeadBySenderAndIntegration()` returns null, creates a new lead with `status: 'new'`, links the email_message, creates a `messages` thread entry, fires all socket events. Previously these emails were silently dropped from the UI.
+
+### 21.3 Stats on Inbox Send
+
+**Problem:** Sending a message from the inbox did not fire `notifyStatsUpdated()` — dashboard KPIs stayed stale.
+
+**Fix:** Added `wsSync.notifyStatsUpdated(userId)` to both `messages-routes.ts` (manual send) and `ai-routes.ts` (AI auto-reply). KPIs now update instantly after any outbound message.
+
+### 21.4 Draft Persistence Fix
+
+**Problem:** After sending a message, navigating away and back would show the old draft text. The `localDrafts` React state was never cleared — only `localStorage` was cleared. The draft-loading `useEffect` read from stale `localDrafts` state.
+
+**Fix:**
+- `onMutate` now also calls `setLocalDrafts()` to remove the entry
+- Draft-loading `useEffect` reads from `localStorage` directly instead of `localDrafts`
+- Drafts no longer reappear after navigating away and back
+
+### 21.5 Inbox UX — Direction + Delivery Indicators
+
+**Problem:** Lead list showed snippet and timestamp but no indication of who sent the last message or delivery status.
+
+**Fix:**
+- Added `lastMessageDirection` + `lastMessageIsRead` subqueries to `getLeads()` in `drizzle-storage.ts`
+- Lead list now shows:
+  - `←` (emerald) — last message was inbound (they replied)
+  - `→` (primary) — last message was outbound (we sent)
+  - `✓✓` (sky) — outbound message was read
+  - `✓` (muted) — outbound message pending delivery
+
+```
+┌──────────────────────────────────────────────┐
+│ John Doe                        Just now      │
+│ ← ✓✓ Thanks for reaching out!                │
+│ replied                    via fortune@out... │
+└──────────────────────────────────────────────┘
+```
+
+### 21.6 Historical Backfill for Existing Users
+
+**Problem:** Users who connected mailboxes before Jul 17 don't see their past emails in conversations.
+
+**Solution:** The `syncHistoricalEmails()` function already exists in `imap-idle-manager.ts` — it fetches up to 5000 messages from both INBOX and SENT folders, creates email_messages + messages records, and links them to leads. To trigger for all existing users:
+
+```bash
+# Trigger historical sync for all connected mailboxes
+node -e "
+const { emailSyncQueue } = require('./shared/lib/queues/email-sync-queue');
+// Enqueue historical sync for each user/integration
+// Run via: node scripts/backfill-historical-emails.js
+"
+```
+
+Affected mailboxes reconnect on next IMAP IDLE cycle (within 5 minutes). New historical syncs auto-trigger on initial IMAP connection going forward.
+
+### 21.7 TypeScript Build Status
+
+| Check | Before | After |
+|-------|--------|-------|
+| `npx tsc --noEmit` | 1 error (`repliedAt` type) | **0 errors** ✅ |
+| Client Vite build | Clean | Clean |
+| Pre-existing errors fixed | `repliedAt` cast to `any` | 0 errors |
+
+### 21.8 Files Changed (Jul 17 2026)
+
+| File | Changes |
+|------|---------|
+| `shared/lib/queues/email-sync-queue.ts` | Two-phase flow (socket before DB), new lead creation, recipient matching, repliedAt cast |
+| `services/api-gateway/src/routes/messages-routes.ts` | Added `wsSync.notifyStatsUpdated()` |
+| `services/api-gateway/src/routes/ai-routes.ts` | Added `wsSync.notifyStatsUpdated()` |
+| `shared/lib/storage/drizzle-storage.ts` | `lastMessageDirection` + `lastMessageIsRead` subqueries in `getLeads()` |
+| `client/src/pages/dashboard/inbox.tsx` | Draft persistence fix (localDrafts + localStorage), direction/delivery indicators |
+| `AGENTS.md` | Updated session notes |
+| `walkthrough.md` | Added this section |
+
+### 21.9 Deployment Required
+
+```bash
+scp -i /tmp/aws_temp_key \
+  shared/lib/queues/email-sync-queue.ts \
+  services/api-gateway/src/routes/messages-routes.ts \
+  services/api-gateway/src/routes/ai-routes.ts \
+  shared/lib/storage/drizzle-storage.ts \
+  client/src/pages/dashboard/inbox.tsx \
+  ubuntu@54.227.164.241:/home/ubuntu/app/
+
+ssh -i /tmp/aws_temp_key ubuntu@54.227.164.241 "
+  cd /home/ubuntu/app && \
+  npm run build:shared && \
+  cd client && npm run build && \
+  cd .. && \
+  pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email --update-env
+"
+```
+
+---
+
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*

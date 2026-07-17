@@ -268,13 +268,41 @@ Cleared `imap:active:*` (5 keys) + `lock:imap:conn:*` (5 keys), restarted the wo
 4. **Stale Redis keys** (`imap:active:*`, `lock:imap:*`, `imap:circuit:*`) persist across restarts — must be manually deleted when debugging connection issues
 5. **The mail server at 34.225.68.57** DOES accept connections from EC2 — the earlier timeouts were from a fail2ban triggered by repeated AUTH_FAILED. The ban expired naturally within ~an hour.
 
-### What You Should Test Next
-- Send an email from one mailbox to another to verify instant IMAP IDLE arrival (~50-100ms)
-- Check the Inbox UI (fortuneuchendu708@gmail.com) — should see replied/opened status in conversations
-- Check Dashboard KPIs / Insights to see if real data shows up
+## This Session (Jul 17 2026) — Instant UI + Full Inbox + Build Clean
 
-### Git Status for This Session
-- No code changes made this session (no `git commit`, no `git push`)
-- All fixes were EC2-side only: ecosystem.config.cjs editing, Redis key deletion, PM2 delete/restart
-- The `ecosystem.config.cjs` on EC2 has `ENCRYPTION_KEY: 'd5def3c9...'` in the IMAP worker env block (not in git version)
-- GitHub `main` branch at `99559cac` — no changes from this session
+### Key Changes (all files code changes, 0 TS errors)
+
+1. **IMAP push before DB** (`email-sync-queue.ts`):
+   - Socket events (`notifyNewMail`, `notifyLeadsUpdated`, `notifyMessagesUpdated`, `notifyStatsUpdated`, `notifyStatsCacheInvalidate`) fire BEFORE any DB writes
+   - Two-phase flow: Phase 1 = push to UI instantly, Phase 2 = save to DB async
+   - Lead lookup also matches by recipient address (not just sender) for sent/received cross-match
+   - Fixed `repliedAt` type error with cast
+
+2. **New leads from unknown IMAP senders** (`email-sync-queue.ts:293-299`):
+   - IMAP emails from unknown senders create new lead with status "new"
+   - Email message linked, conversation created, socket events fired
+
+3. **Stats on inbox send** (`messages-routes.ts`, `ai-routes.ts`):
+   - Added `wsSync.notifyStatsUpdated(userId)` after outbound message creation
+   - KPIs now update instantly after sending from inbox
+
+4. **Draft persistence fixed** (`inbox.tsx`):
+   - `onMutate` also clears `localDrafts` state (not just localStorage)
+   - Draft-loading useEffect reads from localStorage directly, not stale React state
+   - Drafts no longer reappear after navigating away and back
+
+5. **Inbox UX indicators** (`inbox.tsx` + `drizzle-storage.ts`):
+   - Added `lastMessageDirection` + `lastMessageIsRead` subqueries to `getLeads()`
+   - Lead list shows direction arrow (← inbound/emerald, → outbound/primary) + delivery status (✓✓ read, ✓ pending)
+
+6. **Calendly disconnect** — verified cleanup is thorough (revokes OAuth, deletes integration, clears user+calendar settings)
+
+### Deployment Required
+- All 6 files need scp to EC2
+- Client needs `npm run build` on EC2
+- API gateway + socket server + email worker need restart
+- See instructions below
+
+### Git Status
+- GitHub main at `99559cac` — no pushes from this session  
+- AWS credentials in commit history block push — deploy via scp only
