@@ -41,7 +41,7 @@ export function createApp() {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:"],
+        imgSrc: ["'self'", "data:", "blob:", "https://*.s3.amazonaws.com", "https://*.s3.us-east-1.amazonaws.com"],
         connectSrc: ["'self'", "https://www.audnixai.com", "wss://www.audnixai.com", "https://audnixai.com", "wss://audnixai.com"],
       },
     },
@@ -114,6 +114,8 @@ export function createApp() {
     console.warn("ENCRYPTION_KEY not set — auto-generated. Set it in env for persistence across restarts.");
     process.env.ENCRYPTION_KEY = generated;
   }
+
+  app.use('/uploads', express.static('public/uploads'));
 
   app.use("/api/", apiLimiter);
   app.use(["/api/auth/", "/api/admin/auth/"], authLimiter);

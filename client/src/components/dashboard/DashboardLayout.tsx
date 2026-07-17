@@ -600,7 +600,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <div className={`flex items-center gap-3 cursor-pointer p-2 rounded-xl hover:bg-muted transition-all group ${sidebarCollapsed ? "justify-center" : ""}`}>
-                    <div className="relative">
+                    <div className="relative cursor-pointer" onClick={(e) => { e.stopPropagation(); handleNavigate('/dashboard/settings'); }}>
                       <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-primary/30 ring-offset-2 ring-offset-background" />
                       <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary/20 via-transparent to-primary/10 animate-spin" style={{ animationDuration: '4s' }} />
                       <Avatar className="h-10 w-10 rounded-full border border-border shadow-sm transition-transform group-hover:scale-105 relative">

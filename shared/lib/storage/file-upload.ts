@@ -134,12 +134,12 @@ const avatarFileFilter = (
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ): void => {
-  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
   if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) or PDF are allowed'));
+    cb(new Error('Only image files (JPEG, PNG, GIF, WebP) are allowed'));
   }
 };
 
@@ -208,9 +208,20 @@ export async function uploadToSupabase(
     throw new Error("No file data provided");
   }
 
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeMap: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.gif': 'image/gif',
+    '.webp': 'image/webp',
+    '.pdf': 'application/pdf',
+  };
+  const contentType = mimeMap[ext] || 'application/octet-stream';
+
   // If Supabase not configured, use AdvancedStorageService (S3 -> Redis -> Local)
   if (!supabase) {
-    const result = await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
+    const result = await advancedStorage.upload(bucket, filePath, buffer, contentType);
     // S3 upload returns an s3:// URI; convert to publicly accessible URL
     if (result.startsWith('s3://')) {
       return await advancedStorage.getPublicUrl(result, 31536000); // 1-year expiry for avatars/uploads
@@ -241,7 +252,7 @@ export async function uploadToSupabase(
   } catch (supabaseError) {
     // Fallback to AdvancedStorageService if Supabase upload fails
     console.warn(`Supabase upload failed, falling back to AdvancedStorageService:`, supabaseError);
-    const result = await advancedStorage.upload(bucket, filePath, buffer, 'application/octet-stream');
+    const result = await advancedStorage.upload(bucket, filePath, buffer, contentType);
     if (result.startsWith('s3://')) {
       return await advancedStorage.getPublicUrl(result, 31536000);
     }
