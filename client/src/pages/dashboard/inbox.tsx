@@ -847,8 +847,7 @@ export default function InboxPage() {
 
   const handleMenuAction = useCallback(async (action: string, data: any) => {
     if (action === 'archive') {
-      // Optimistic update
-      setAllLeads(prev => prev.filter(l => l.id !== data.id));
+      setAllLeads(prev => prev.map(l => l.id === data.id ? { ...l, archived: true } : l));
       if (leadId === data.id) {
         setLocation('/dashboard/inbox');
       }
@@ -861,25 +860,25 @@ export default function InboxPage() {
         toast({ title: "Lead Archived", description: "Successfully moved to archive" });
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       } catch (err) {
-        // Revert on failure
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
         toast({ title: "Error", description: "Failed to archive lead", variant: "destructive" });
       }
     } else if (action === 'unarchive') {
+      setAllLeads(prev => prev.map(l => l.id === data.id ? { ...l, archived: false } : l));
+      if (leadId === data.id) {
+        setLocation('/dashboard/inbox');
+      }
+
       try {
         await apiRequest("POST", "/api/bulk/archive", {
           leadIds: [data.id],
           archived: false
         });
-        setAllLeads(prev => prev.filter(l => l.id !== data.id));
-        if (leadId === data.id) {
-          setLocation('/dashboard/inbox');
-        }
         toast({ title: "Lead Restored", description: "Successfully restored from archive" });
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
       } catch (err) {
-        toast({ title: "Error", description: "Failed to unarchive lead", variant: "destructive" });
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+        toast({ title: "Error", description: "Failed to unarchive lead", variant: "destructive" });
       }
     } else if (action === 'delete') {
       if (confirm(`Are you sure you want to delete ${data.name}? This action cannot be undone.`)) {
@@ -1352,18 +1351,13 @@ export default function InboxPage() {
                                 <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
                               ) : (
                                 <span className="flex items-center gap-1">
-                                  {lead.metadata?.lastMessageDirection === 'inbound' ? (
-                                    <ArrowLeft className="h-3 w-3 shrink-0 text-emerald-500" />
-                                  ) : lead.metadata?.lastMessageDirection === 'outbound' ? (
-                                    <ArrowRight className="h-3 w-3 shrink-0 text-primary" />
-                                  ) : null}
                                   {lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
                                     <CheckCheck className="h-3 w-3 shrink-0 text-primary" />
                                   )}
                                   {lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <HighlightText text={lead.snippet ? stripHtml(lead.snippet) : "No messages"} query={searchQuery} />
+                                  <span className="truncate">{lead.snippet ? stripHtml(lead.snippet).substring(0, 120) : "No messages"}</span>
                                 </span>
                               )}
                             </p>
@@ -1437,10 +1431,10 @@ export default function InboxPage() {
                       <AvatarFallback className="bg-primary/10 text-primary font-bold rounded-full">{activeLead?.name?.[0]}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
-                      <h3 className="text-base font-bold line-clamp-2 break-words leading-tight mb-1" title={activeLead?.name}>{activeLead?.name}</h3>
+                      <h3 className="text-base font-medium line-clamp-2 break-words leading-tight mb-1" title={activeLead?.name}>{activeLead?.name}</h3>
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground truncate">{activeLead?.status ? getLeadStatusDisplay(activeLead.status) : ''}</span>
-                        <div className="h-1 w-1 rounded-full bg-muted-foreground/30" />
+                        {(messagesData?.messages?.length > 0) && <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground truncate">{activeLead?.status ? getLeadStatusDisplay(activeLead.status) : ''}</span>}
+                        {(messagesData?.messages?.length > 0) && <div className="h-1 w-1 rounded-full bg-muted-foreground/30" />}
                         <ChannelIcon className={cn("h-3 w-3 shrink-0", !isChannelConnected(activeLead?.channel) ? "text-destructive" : "text-muted-foreground")} />
                         {!isChannelConnected(activeLead?.channel) && (
                           <span className="text-[9px] font-bold text-destructive uppercase tracking-wide ml-1 hidden sm:inline">Disconnected</span>
@@ -1781,6 +1775,16 @@ export default function InboxPage() {
                       <div className="flex justify-start"><Skeleton className="h-16 w-64 rounded-2xl rounded-tl-none" /></div>
                       <div className="flex justify-end"><Skeleton className="h-16 w-64 rounded-2xl rounded-tr-none" /></div>
                       <div className="flex justify-start"><Skeleton className="h-12 w-48 rounded-2xl rounded-tl-none" /></div>
+                    </div>
+                  ) : !(messagesLoading || messagesFetching) && !messagesData?.messages?.length ? (
+                    <div className="flex-1 flex items-center justify-center">
+                      <div className="text-center space-y-4 max-w-xs">
+                        <div className="mx-auto w-16 h-16 rounded-2xl bg-muted/30 flex items-center justify-center">
+                          <MessageSquare className="h-8 w-8 text-muted-foreground/40" />
+                        </div>
+                        <h3 className="text-sm font-semibold text-muted-foreground">No messages yet</h3>
+                        <p className="text-xs text-muted-foreground/50">Start a conversation to see messages here.</p>
+                      </div>
                     </div>
                   ) : [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map((msg: any, _idx: number) => {
                     const prevMsg = _idx > 0 ? [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[_idx - 1] : null;
