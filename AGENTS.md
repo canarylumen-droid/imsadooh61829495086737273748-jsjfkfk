@@ -76,6 +76,7 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 - All 16 Node.js workers have explicit `REDIS_URL` in env blocks (dotenv unreliable with PM2 7)
 - Rust email sender: compiled binary (4.0MB), PM2-managed, listens on `email-send-queue` via Redis
 - No CloudWatch log groups — app logs to PM2 locally
+- **Encryption key crisis (Jul 17)**: EC2's `ecosystem.config.cjs` had `ENCRYPTION_KEY: '491bd6e2...'` in IMAP worker env block (PM2 env overrides `.env`). The `.env` has `ENCRYPTION_KEY=d5def3c9...`. NEITHER key decrypts the 5 existing IMAP integrations — the original encryption key used when credentials were stored is lost (`.env` was changed at some point). **Fix**: Removed `ENCRYPTION_KEY` from IMAP worker's `ecosystem.config.cjs` env block (`sed -i '/ENCRYPTION_KEY/d' ecosystem.config.cjs`) + `pm2 set audnix-worker-imap:ENCRYPTION_KEY null` + `pm2 restart audnix-worker-imap --update-env`. Now both API gateway and IMAP worker use `.env`'s `d5def3c9...`. New integrations will work; existing 5 need manual credential re-entry.
 - Deploy: `git push github main` then ssh EC2: `cd /home/ubuntu/app && git stash -- package.json package-lock.json 2>/dev/null; git pull && cd client && npm run build && pm2 restart audnix-api-gateway`
 - Key scp: use EC2 Instance Connect to push temporary SSH key; `ssh -i <key> ubuntu@54.227.164.241`
 - SSH key not available in automated workspace — use EC2 console Instance Connect to push a temp key via AWS SDK v3
