@@ -1670,20 +1670,92 @@ class ImapIdleManager {
     }
 
     public async syncHistoricalEmails(userId: string, integrationId: string, limit: number = 5000): Promise<{ success: boolean; count: number; error?: string }> {
-        const folderMap = this.connections.get(integrationId);
-        const imap = folderMap?.values().next().value;
-        if (!imap || imap.state !== 'authenticated') return { success: false, count: 0, error: 'IMAP not active' };
+        let tempImap: Imap | null = null;
+        let folderMap = this.connections.get(integrationId);
+        let imap = folderMap?.values().next().value;
+        let folders = this.folders.get(integrationId);
 
-        const folders = this.folders.get(integrationId);
-        if (!folders) return { success: false, count: 0, error: 'Folders not discovered' };
+        // If no active IMAP connection, create a temporary one for historical sync
+        if (!imap || imap.state !== 'authenticated' || !folders) {
+            try {
+                const integration = await storage.getIntegration(userId, integrationId);
+                if (!integration || !integration.connected || !integration.encryptedMeta) {
+                    return { success: false, count: 0, error: 'Integration not available' };
+                }
+                const credentialsStr = await decrypt(integration.encryptedMeta);
+                const config = JSON.parse(credentialsStr) as EmailConfig;
+                const imapHost = config.imap_host || '';
+                const imapPort = config.imap_port || 993;
+                if (!imapHost) return { success: false, count: 0, error: 'IMAP host not configured' };
+
+                tempImap = new Imap({
+                    user: config.smtp_user!,
+                    password: config.smtp_pass!,
+                    host: imapHost,
+                    port: imapPort,
+                    tls: parseInt(String(imapPort)) === 993,
+                    tlsOptions: { rejectUnauthorized: false },
+                    authTimeout: 10000,
+                    connTimeout: 15000
+                });
+
+                await new Promise<void>((res, rej) => {
+                    tempImap!.once('ready', () => res());
+                    tempImap!.once('error', (e: any) => rej(e));
+                    tempImap!.connect();
+                });
+
+                // Discover folders
+                const boxes = await new Promise<any>((res, rej) => {
+                    tempImap!.getBoxes((err: any, b: any) => err ? rej(err) : res(b));
+                });
+
+                const discoveredInbox: string[] = [];
+                const discoveredSent: string[] = [];
+                const processBoxes = (obj: any, prefix = '') => {
+                    for (const key in obj) {
+                        const box = obj[key];
+                        const fullName = prefix + key;
+                        const attribs = box.attribs || [];
+                        const isInbox = attribs.some((a: string) => a.toLowerCase() === '\\inbox');
+                        const isSent = attribs.some((a: string) => a.toLowerCase() === '\\sent');
+                        if (isInbox) discoveredInbox.push(fullName);
+                        else if (isSent) discoveredSent.push(fullName);
+                        else {
+                            const lk = key.toLowerCase();
+                            if (lk === 'inbox') discoveredInbox.push(fullName);
+                            else if (['sent','sent items','sent messages'].includes(lk)) discoveredSent.push(fullName);
+                        }
+                        if (box.children) processBoxes(box.children, fullName + (box.delimiter || '/'));
+                    }
+                };
+                processBoxes(boxes);
+
+                folders = { inbox: discoveredInbox, sent: discoveredSent, spam: [] };
+                imap = tempImap;
+            } catch (error: any) {
+                const errMsg = error.message || 'Temp connection failed';
+                if (tempImap) try { tempImap.end(); } catch {}
+                return { success: false, count: 0, error: errMsg };
+            }
+        }
+
+        if (!imap || imap.state !== 'authenticated') {
+            if (tempImap) try { tempImap.end(); } catch {}
+            return { success: false, count: 0, error: 'IMAP not active' };
+        }
+        if (!folders) {
+            if (tempImap) try { tempImap.end(); } catch {}
+            return { success: false, count: 0, error: 'Folders not discovered' };
+        }
 
         let totalImported = 0;
         wsSync.notifySyncStatus(userId, { syncing: true, integrationId });
 
         try {
             const syncFolder = async (folderName: string, direction: 'inbound' | 'outbound'): Promise<number> => {
-                const result = await this.executeImapCommand<number>(imap, (cb) => {
-                    imap.openBox(folderName, true, (err, box) => {
+                const result = await this.executeImapCommand<number>(imap!, (cb) => {
+                    imap!.openBox(folderName, true, (err, box) => {
                         if (err || !box || box.messages.total === 0) return cb(null, 0);
 
                         const total = box.messages.total;
@@ -1758,6 +1830,10 @@ class ImapIdleManager {
             return { success: false, count: totalImported, error: error.message };
         } finally {
             wsSync.notifySyncStatus(userId, { syncing: false, integrationId });
+            if (tempImap) {
+                try { tempImap.end(); } catch {}
+                console.log(`[IMAP] Closed temporary historical sync connection for ${integrationId}`);
+            }
         }
     }
 
