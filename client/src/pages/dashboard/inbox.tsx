@@ -1327,7 +1327,7 @@ export default function InboxPage() {
                       >
                         <div className={cn(
                           "absolute left-2 top-1/2 -translate-y-1/2 z-10 transition-all",
-                          selectedLeadIds.includes(lead.id) || "opacity-0 group-hover:opacity-100"
+                          selectedLeadIds.includes(lead.id) || "opacity-0 md:group-hover:opacity-100 sm:opacity-60 sm:group-hover:opacity-100"
                         )}
                           onClick={(e) => toggleLeadSelection(lead.id, e)}
                         >
@@ -1347,7 +1347,7 @@ export default function InboxPage() {
                                 {lead.name}
                               </span>
                               <div className="flex items-center gap-1 shrink-0">
-                                <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-primary -mr-1" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-primary -mr-1" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
                                   <Brain className="h-3 w-3" />
                                 </Button>
                                 <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 mt-0.5">
@@ -1443,14 +1443,14 @@ export default function InboxPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 group">
                     <Sheet open={showDetails} onOpenChange={setShowDetails}>
                       <SheetTrigger asChild>
                         <Badge
-                          className="bg-gradient-to-r from-yellow-500 to-amber-600 text-white border-none font-bold text-[10px] hidden xl:block px-3 py-1 uppercase tracking-tighter cursor-pointer hover:shadow-[0_0_20px_rgba(245,158,11,0.4)] transition-all md:animate-pulse"
+                          className="bg-gradient-to-r from-yellow-500 to-amber-600 text-white border-none font-bold text-[10px] hidden md:block px-3 py-1 uppercase tracking-tighter cursor-pointer md:opacity-0 md:group-hover:opacity-100 transition-all hover:shadow-[0_0_20px_rgba(245,158,11,0.4)]"
                           onClick={() => setShowDetails(true)}
                         >
-                          {activeLead?.score || 0}% Engagement Insight
+                          <Sparkles className="h-3 w-3 mr-1 inline-block" />{activeLead?.score || 0}%
                         </Badge>
                       </SheetTrigger>
                       <SheetContent
@@ -1821,7 +1821,7 @@ export default function InboxPage() {
                       )}
                       <div className={cn("flex w-full min-w-0", msg.direction === 'inbound' ? "justify-start" : "justify-end")}>
                       <div className={cn(
-                        "max-w-[90%] md:max-w-[75%] lg:max-w-[65%] p-4 rounded-2xl text-sm shadow-sm relative group transition-all hover:shadow-md min-w-0",
+                        "max-w-[95%] sm:max-w-[85%] md:max-w-[75%] lg:max-w-[65%] p-4 rounded-2xl text-sm shadow-sm relative group transition-all hover:shadow-md min-w-0",
                         msg.direction === 'inbound'
                           ? "bg-card text-card-foreground rounded-tl-none border border-border/50 shadow-sm"
                           : "bg-primary text-primary-foreground rounded-tr-none shadow-md shadow-primary/20"
@@ -1843,7 +1843,7 @@ export default function InboxPage() {
                           </div>
                         <button
                           onClick={() => setReplyToMsg(msg)}
-                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 rounded-full bg-background/80 border border-border/40 flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary"
+                          className="absolute top-2 right-2 opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity h-6 w-6 rounded-full bg-background/80 border border-border/40 flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary"
                           title="Reply to this message"
                         >
                           <Reply className="h-3 w-3" />
@@ -1853,33 +1853,35 @@ export default function InboxPage() {
                             {msg.metadata.disclaimer}
                           </div>
                         )}
-                        <div className="text-[10px] mt-2 opacity-50 flex items-center gap-1.5 justify-end font-medium">
+                        <div className="text-[10px] mt-2 opacity-50 flex items-center gap-1 justify-end font-medium flex-wrap">
                           {msg.direction === 'outbound' && (
-                            <div className="flex items-center gap-1 mr-auto">
+                            <div className="flex items-center gap-1 mr-auto shrink-0">
                               {msg.clickedAt ? (
                                 <Badge variant="outline" className="text-[8px] h-3.5 px-1 bg-emerald-500/20 text-emerald-200 border-none shadow-[0_0_8px_rgba(16,185,129,0.3)]">
-                                  <ExternalLink className="h-2 w-2 mr-1" /> CLICKED
+                                  <ExternalLink className="h-2 w-2" /> CLICKED
                                 </Badge>
                               ) : msg.openedAt ? (
                                 <Badge variant="outline" className="text-[8px] h-3.5 px-1 bg-sky-500/20 text-sky-100 border-none shadow-[0_0_8px_rgba(14,165,233,0.3)]">
-                                  <Activity className="h-2 w-2 mr-1" /> OPENED
+                                  <Activity className="h-2 w-2" /> OPENED
                                 </Badge>
                               ) : (
                                 <span className="opacity-40">Delivered</span>
                               )}
                             </div>
                           )}
-                          {msg.metadata?.aiGenerated && <Sparkles className="h-2.5 w-2.5" />}
-                          {formatTimeOnly(msg.createdAt)}
-                          {msg.direction === 'outbound' && (
-                            <span className="ml-1">
-                              {msg.openedAt ? (
-                                <CheckCheck className="h-3 w-3 text-primary-foreground" />
-                              ) : (
-                                <Check className="h-3 w-3 opacity-40" />
-                              )}
-                            </span>
-                          )}
+                          <span className="flex items-center gap-1 shrink-0">
+                            {msg.metadata?.aiGenerated && <Sparkles className="h-2.5 w-2.5 shrink-0" />}
+                            <span className="whitespace-nowrap">{formatTimeOnly(msg.createdAt)}</span>
+                            {msg.direction === 'outbound' && (
+                              <span className="ml-0.5">
+                                {msg.openedAt ? (
+                                  <CheckCheck className="h-3 w-3 text-primary-foreground" />
+                                ) : (
+                                  <Check className="h-3 w-3 opacity-40" />
+                                )}
+                              </span>
+                            )}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1948,7 +1950,7 @@ export default function InboxPage() {
                         {replyToMsg && (
                           <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/10 text-[11px] font-medium text-primary">
                             <Reply className="h-3 w-3 shrink-0" />
-                            <span className="truncate">Replying to {replyToMsg.direction === 'inbound' ? activeLead?.name || 'lead' : 'yourself'}</span>
+                            <span className="truncate">Replying to {(activeLead?.name || 'lead').split(' ')[0]}</span>
                             <button onClick={() => setReplyToMsg(null)} className="ml-auto shrink-0 hover:bg-primary/10 rounded-full p-0.5">
                               <X className="h-3 w-3" />
                             </button>
