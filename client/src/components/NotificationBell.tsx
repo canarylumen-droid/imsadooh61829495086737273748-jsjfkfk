@@ -33,12 +33,12 @@ export function NotificationBell() {
   const [showDropdown, setShowDropdown] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { socket } = useRealtime();
+  const { socket, isConnected } = useRealtime();
 
   const { data: notifications } = useQuery<NotificationResponse>({
     queryKey: ["/api/notifications"],
-    refetchInterval: 15000,
-    staleTime: 10000,
+    refetchInterval: isConnected ? false : 5000,
+    staleTime: isConnected ? Infinity : 0,
   });
 
 

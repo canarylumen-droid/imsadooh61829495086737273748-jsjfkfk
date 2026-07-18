@@ -478,7 +478,7 @@ export default function InboxPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const simpleStatuses = ['new', 'contacted', 'converted', 'not_interested', 'unsubscribed'];
+  const apiStatusFilters = new Set(['new', 'contacted', 'converted', 'not_interested', 'unsubscribed', 'cold', 'booked', 'warm', 'replied']);
 
   const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching, isError: leadsError } = useQuery<any>({
     queryKey: ["/api/leads", {
@@ -487,7 +487,7 @@ export default function InboxPage() {
       includeArchived: showArchived,
       search: searchQuery || undefined,
       channel: filterChannel !== "all" ? filterChannel : undefined,
-      status: simpleStatuses.includes(filterStatus) ? filterStatus : undefined,
+      status: apiStatusFilters.has(filterStatus) ? filterStatus : undefined,
     }],
     placeholderData: (prev: any) => prev,
     staleTime: 0,

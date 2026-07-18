@@ -458,8 +458,28 @@ Send email → SMTP 250 OK (or Gmail/Outlook API 200)
 | FBL/spam complaint | ✅ (placement=spam) | ✅ | ✅ |
 | Spam folder IMAP detect | ✅ | ✅ | ✅ |
 
-### Deploy Steps
+## This Session (Jul 18 2026) — Notification Push Fix + Filter Fix
+
+### Critical Fix: Socket Push from Workers
+**Root cause**: `createNotification()` in `drizzle-storage.ts:3073` used `wsSync` (direct Socket.IO in-process) instead of `clusterSync` (Redis pub/sub). In background workers (email, brain, outreach, billing), `wsSync.io` is `null`, so the push was silently lost. 19 of 34 notification creation sites across the codebase were broken.
+
+**Fix**: Changed `wsSync.notifyNotification(userId, notification)` → `clusterSync.notifyNotification(userId, notification)` in `createNotification()`. Also fixed same pattern in `paged-email-importer.ts:279` and `lead-scoring-engine.ts:189` (`wsSync.notifyStatsUpdated` → `clusterSync.notifyStatsUpdated`).
+
+**Fallback**: Added `refetchInterval: 15000` + `staleTime: 10000` to `NotificationBell.tsx` query.
+
+### Inbox Filter Fix
+**Issue**: Status filter drop-down showed "No X conversations" empty state because `simpleStatuses` was missing `'unsubscribed'`, so API wasn't filtering by that status. Also, socket `leads_updated` handler only patched `allLeads` state on `BULK_DELETE` — individual lead status changes (like unsubscribe) required a full query refetch with timing-dependent reactivity.
+
+**Fix**: Added `'unsubscribed'` to `simpleStatuses`. Updated `handleLeadsUpdated` to patch `allLeads` state directly for:
+- `{ leadId, status }` — immediate status update in state
+- `{ event: 'INSERT', lead }` — immediate lead insertion in state
+- `{ event: 'BULK_DELETE', leadIds }` — existing behavior
+
+### Build Fix
+**ReputationCard.tsx**: Used `useNavigate` from `wouter` (not exported) → changed to `useLocation` (returns `[location, setLocation]`).
+
+### Deploy Steps (SSH key at `/tmp/aws_temp_key` — may need refresh via EC2 Instance Connect)
 ```bash
 cd /home/ubuntu/app && git pull
-npm run build:client && pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-imap
+npm run build:client && pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-imap audnix-worker-brain
 ```
