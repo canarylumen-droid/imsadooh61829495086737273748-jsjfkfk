@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Search, ChevronRight, Key, Server, BookOpen, Copy, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Search, Key, Server, BookOpen, Copy, Check, Terminal, AlertCircle, Globe } from "lucide-react";
 
 interface EndpointItem {
   method: string;
@@ -11,103 +12,77 @@ interface EndpointItem {
   auth: string;
   params?: Record<string, string>;
   body?: Record<string, string>;
+  curl?: string;
+  response?: string;
 }
+
 interface EndpointSection {
   section: string;
+  icon: any;
   items: EndpointItem[];
 }
 
+const BASE_URL = "https://audnixai.com";
+
 const API_ENDPOINTS: EndpointSection[] = [
   {
-    section: "Authentication",
+    section: "Authentication", icon: Key,
     items: [
-      { method: "POST", path: "/api/auth/login", desc: "Login with email and password", auth: "None", body: { email: "string", password: "string" } },
-      { method: "POST", path: "/api/auth/signup/request-otp", desc: "Request OTP for signup", auth: "None", body: { email: "string" } },
-      { method: "POST", path: "/api/auth/signup/verify-otp", desc: "Verify OTP and create account", auth: "None", body: { email: "string", otp: "string" } },
-      { method: "POST", path: "/api/auth/logout", desc: "End current session", auth: "Session" },
-      { method: "GET", path: "/api/auth/me", desc: "Get current authenticated user", auth: "Session | API Key" },
+      { method: "POST", path: "/api/auth/login", desc: "Login with email and password", auth: "None", body: { email: "string", password: "string" }, curl: `curl -X POST ${BASE_URL}/api/auth/login \\\n  -H "Content-Type: application/json" \\\n  -d '{"email":"user@example.com","password":"yourpass"}'`, response: `{"user":{"id":"...","email":"..."},"sessionId":"..."}` },
+      { method: "POST", path: "/api/auth/signup/request-otp", desc: "Request OTP for signup", auth: "None", body: { email: "string" }, curl: `curl -X POST ${BASE_URL}/api/auth/signup/request-otp \\\n  -H "Content-Type: application/json" \\\n  -d '{"email":"user@example.com"}'`, response: `{"message":"OTP sent to email"}` },
+      { method: "POST", path: "/api/auth/signup/verify-otp", desc: "Verify OTP and create account", auth: "None", body: { email: "string", otp: "string" }, curl: `curl -X POST ${BASE_URL}/api/auth/signup/verify-otp \\\n  -H "Content-Type: application/json" \\\n  -d '{"email":"user@example.com","otp":"123456"}'`, response: `{"token":"audnix_...","user":{"id":"..."}}` },
+      { method: "GET", path: "/api/auth/me", desc: "Get current authenticated user", auth: "Session | API Key", curl: `curl ${BASE_URL}/api/auth/me \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"id":"...","email":"user@example.com","plan":"pro"}` },
     ],
   },
   {
-    section: "Leads",
+    section: "Leads", icon: BookOpen,
     items: [
-      { method: "GET", path: "/api/leads", desc: "List all leads with filters", auth: "Session | API Key", params: { status: "string (optional)", limit: "number (optional)", offset: "number (optional)" } },
-      { method: "GET", path: "/api/leads/:id", desc: "Get single lead details", auth: "Session | API Key" },
-      { method: "POST", path: "/api/leads/:leadId/research", desc: "Trigger AI research on a lead", auth: "Session | API Key" },
-      { method: "POST", path: "/api/leads/reply/:leadId", desc: "Generate AI reply for a lead", auth: "Session | API Key" },
-      { method: "POST", path: "/api/leads/intelligence/score", desc: "AI score lead quality", auth: "Session | API Key" },
-      { method: "POST", path: "/api/leads/import-csv", desc: "Bulk import leads from CSV", auth: "Session" },
+      { method: "GET", path: "/api/leads", desc: "List leads with filters (status, channel, search)", auth: "Session | API Key", params: { status: "new|contacted|replied|converted|unsubscribed|cold|booked|warm", limit: "number (max 200)", offset: "number" }, curl: `curl "${BASE_URL}/api/leads?status=new&limit=10" \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"leads":[...],"total":42,"hasMore":true}` },
+      { method: "GET", path: "/api/leads/:id", desc: "Get single lead by ID", auth: "Session | API Key", curl: `curl ${BASE_URL}/api/leads/lead_abc123 \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"id":"lead_abc123","name":"John","email":"john@example.com","status":"new"}` },
+      { method: "PATCH", path: "/api/leads/:leadId", desc: "Update lead fields or metadata", auth: "Session | API Key", body: { status: "string (optional)", metadata: "object (optional)" }, curl: `curl -X PATCH ${BASE_URL}/api/leads/lead_abc123 \\\n  -H "Authorization: Bearer audnix_<your_key>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"status":"contacted"}'`, response: `{"id":"lead_abc123","status":"contacted"}` },
+      { method: "POST", path: "/api/leads/import-csv", desc: "Bulk import leads from CSV (multipart form)", auth: "Session", curl: `curl -X POST ${BASE_URL}/api/leads/import-csv \\\n  -F "file=@leads.csv" \\\n  -b "audnix.sid=<session_cookie>"`, response: `{"imported":150,"failed":2,"errors":["Row 12: invalid email"]}` },
     ],
   },
   {
-    section: "Campaigns & Outreach",
+    section: "Messages", icon: Terminal,
     items: [
-      { method: "GET", path: "/api/outreach/campaigns", desc: "List all campaigns", auth: "Session | API Key" },
-      { method: "POST", path: "/api/outreach/campaigns", desc: "Create a new campaign", auth: "Session", body: { name: "string", subject: "string", content: "string", targets: "object" } },
-      { method: "POST", path: "/api/outreach/campaigns/:id/start", desc: "Start campaign execution", auth: "Session" },
-      { method: "POST", path: "/api/outreach/campaigns/:id/pause", desc: "Pause active campaign", auth: "Session" },
-      { method: "POST", path: "/api/outreach/campaigns/:id/abort", desc: "Abort campaign immediately", auth: "Session" },
+      { method: "GET", path: "/api/messages/:leadId", desc: "Get conversation thread for a lead", auth: "Session | API Key", curl: `curl ${BASE_URL}/api/messages/lead_abc123 \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"messages":[{"id":"msg_1","direction":"outbound","body":"Hi...","createdAt":"..."}]}` },
+      { method: "POST", path: "/api/messages/:leadId", desc: "Send a message to a lead", auth: "Session | API Key", body: { content: "string", subject: "string (optional)" }, curl: `curl -X POST ${BASE_URL}/api/messages/lead_abc123 \\\n  -H "Authorization: Bearer audnix_<your_key>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"content":"Hi John, following up..."}'`, response: `{"id":"msg_456","direction":"outbound","leadId":"lead_abc123"}` },
     ],
   },
   {
-    section: "Dashboard & Analytics",
+    section: "Campaigns", icon: Server,
     items: [
-      { method: "GET", path: "/api/dashboard/stats", desc: "Get dashboard statistics", auth: "Session | API Key" },
-      { method: "GET", path: "/api/dashboard/activity", desc: "Get recent activity feed", auth: "Session | API Key" },
-      { method: "GET", path: "/api/dashboard/analytics/full", desc: "Full analytics report", auth: "Session | API Key" },
-      { method: "GET", path: "/api/stats/inbox-placement", desc: "Inbox vs spam placement stats", auth: "Session | API Key", params: { days: "number (default: 30)" } },
-      { method: "GET", path: "/api/stats/domain-reputation", desc: "Per-mailbox domain reputation", auth: "Session | API Key", params: { days: "number (default: 30)" } },
-      { method: "GET", path: "/api/stats/bounces/stats", desc: "Bounce statistics", auth: "Session | API Key" },
-      { method: "GET", path: "/api/stats/warmup/status", desc: "Email warmup status", auth: "Session | API Key" },
+      { method: "GET", path: "/api/outreach/campaigns", desc: "List all campaigns for your account", auth: "Session | API Key", curl: `curl ${BASE_URL}/api/outreach/campaigns \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"campaigns":[{"id":"camp_1","name":"Q2 Outreach","status":"active"}]}` },
+      { method: "POST", path: "/api/outreach/campaigns", desc: "Create a campaign", auth: "Session", body: { name: "string", subject: "string", content: "string", targets: "object" }, curl: `curl -X POST ${BASE_URL}/api/outreach/campaigns \\\n  -H "Content-Type: application/json" \\\n  -b "audnix.sid=<session>" \\\n  -d '{"name":"Test Campaign","subject":"Hi {{name}}","content":"...","targets":{"listIds":["list_1"]}}'`, response: `{"id":"camp_2","name":"Test Campaign","status":"draft"}` },
+      { method: "POST", path: "/api/outreach/campaigns/:id/start", desc: "Start campaign delivery", auth: "Session" },
+      { method: "POST", path: "/api/outreach/campaigns/:id/pause", desc: "Pause an active campaign", auth: "Session" },
     ],
   },
   {
-    section: "Integrations",
+    section: "Dashboard & Analytics", icon: Globe,
     items: [
-      { method: "GET", path: "/api/custom-email/status", desc: "Email connection status", auth: "Session | API Key" },
-      { method: "GET", path: "/api/integrations", desc: "List all connected integrations", auth: "Session | API Key" },
-      { method: "POST", path: "/api/custom-email/connect", desc: "Connect custom SMTP email", auth: "Session" },
-      { method: "POST", path: "/api/custom-email/test", desc: "Test SMTP connection", auth: "Session" },
-      { method: "POST", path: "/api/custom-email/sync-now", desc: "Trigger email sync", auth: "Session" },
+      { method: "GET", path: "/api/dashboard/stats", desc: "Get KPI summary (leads, sent, opens, replies, bounces, deals)", auth: "Session | API Key", params: { integrationId: "mailbox ID (optional)" }, curl: `curl ${BASE_URL}/api/dashboard/stats \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"leads":150,"totalSent":320,"openRate":45.2,"replyRate":12.5,"bounceRate":2.1,"wonCount":8}` },
+      { method: "GET", path: "/api/stats/inbox-placement", desc: "Inbox vs spam placement rates", auth: "Session | API Key", params: { days: "number (default: 30)" }, curl: `curl "${BASE_URL}/api/stats/inbox-placement?days=7" \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"inboxRate":88.5,"spamRate":8.2,"bounceRate":3.3,"totalTracked":320}` },
+      { method: "GET", path: "/api/dashboard/activity", desc: "Recent activity feed (50 events)", auth: "Session | API Key" },
+      { method: "GET", path: "/api/stats/domain-reputation", desc: "Per-mailbox domain reputation scores", auth: "Session | API Key" },
     ],
   },
   {
-    section: "Messages & Conversations",
+    section: "Integrations & Email", icon: Server,
     items: [
-      { method: "GET", path: "/api/messages/:leadId", desc: "Get conversation with a lead", auth: "Session | API Key" },
-      { method: "POST", path: "/api/messages/:leadId", desc: "Send a message to a lead", auth: "Session | API Key", body: { content: "string" } },
+      { method: "GET", path: "/api/custom-email/status", desc: "Email mailbox connection status and stats", auth: "Session | API Key", curl: `curl ${BASE_URL}/api/custom-email/status \\\n  -H "Authorization: Bearer audnix_<your_key>"`, response: `{"mailboxes":[{"email":"user@domain.com","deliveryRate":98.5,"bounceRate":1.2,"inboxPlacement":95.0}]}` },
+      { method: "GET", path: "/api/integrations", desc: "All connected integrations (email, calendly, social)", auth: "Session | API Key" },
+      { method: "POST", path: "/api/custom-email/connect", desc: "Connect a custom SMTP mailbox", auth: "Session", body: { host: "string", port: "number", username: "string", password: "string" } },
     ],
   },
   {
-    section: "Deals & Pipeline",
+    section: "API Keys & MCP", icon: Key,
     items: [
-      { method: "GET", path: "/api/deals", desc: "List all deals in pipeline", auth: "Session | API Key" },
-      { method: "POST", path: "/api/deals", desc: "Create a new deal", auth: "Session" },
-    ],
-  },
-  {
-    section: "Calendar",
-    items: [
-      { method: "GET", path: "/api/calendar", desc: "Get calendar bookings", auth: "Session | API Key" },
-      { method: "GET", path: "/api/calendar/slots", desc: "Get available calendar slots", auth: "Session | API Key" },
-    ],
-  },
-  {
-    section: "Notifications",
-    items: [
-      { method: "GET", path: "/api/notifications", desc: "List notifications", auth: "Session | API Key" },
-      { method: "POST", path: "/api/notifications/mark-all-read", desc: "Mark all notifications read", auth: "Session" },
-    ],
-  },
-  {
-    section: "Developer",
-    items: [
-      { method: "GET", path: "/api/mcp/keys", desc: "List your API keys", auth: "Session" },
+      { method: "GET", path: "/api/mcp/keys", desc: "List your API keys (key values masked)", auth: "Session", curl: `curl ${BASE_URL}/api/mcp/keys \\\n  -b "audnix.sid=<session>"`, response: `{"keys":[{"id":"key_1","name":"My Key","prefix":"audnix_a1b2...","permission":"read_write"}]}` },
       { method: "POST", path: "/api/mcp/key/create", desc: "Create a new API key", auth: "Session", body: { name: "string", permission_level: "'read' | 'read_write'" } },
-      { method: "DELETE", path: "/api/mcp/key/:id", desc: "Delete an API key", auth: "Session" },
-      { method: "POST", path: "/mcp", desc: "MCP endpoint — list tools, call tools", auth: "API Key" },
-      { method: "DELETE", path: "/api/account", desc: "Delete account — blocked for API keys", auth: "Session only" },
-      { method: "POST", path: "/api/auth/signup/request-otp", desc: "Request OTP — restricted for API keys", auth: "Session only" },
+      { method: "DELETE", path: "/api/mcp/key/:id", desc: "Delete an API key immediately", auth: "Session" },
+      { method: "POST", path: "/mcp", desc: "MCP endpoint — JSON-RPC tool execution", auth: "API Key", curl: `curl -X POST ${BASE_URL}/mcp \\\n  -H "Authorization: Bearer audnix_<your_key>" \\\n  -H "Content-Type: application/json" \\\n  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'`, response: `{"jsonrpc":"2.0","result":{"tools":[...]},"id":1}` },
     ],
   },
 ];

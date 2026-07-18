@@ -486,4 +486,37 @@ Send email → SMTP 250 OK (or Gmail/Outlook API 200)
 ```bash
 cd /home/ubuntu/app && git pull
 npm run build:client && pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-imap audnix-worker-brain
+# Rust services need manual recompile:
+cd rust-email-sender && cargo build --release && pm2 restart audnix-rust-email-sender
+cd ../rust-imap-worker && cargo build --release && pm2 restart audnix-worker-imap
 ```
+
+## This Session (Jul 18 2026) — Full Inbox Placement Engine (4 Components)
+
+### Overview
+Built 4 interconnected components for real-time inbox placement detection without seed accounts:
+
+### 1. SMTP Telemetry Probe (`rust-email-sender/src/telemetry.rs`)
+- **Pre-send analysis**: Opens raw TCP to MX port 25, performs EHLO/MAIL FROM/RCPT TO handshake, measures timing
+- **Tarpit detection**: If RCPT TO takes >1200ms → flags as `TarpittedSpamQueue`. If SMTP 4xx → `GreylistedOrThrottled`. If 250 OK in <200ms → `InboxConfident`
+- **Runs before every send** in the email sender's main loop
+
+### 2. DMARC/RUF Forensic Listener (`rust-imap-worker/src/dmarc_ruf.rs`)
+- **IMAP IDLE**: Connects to forensics@yourdomain.com inbox, monitors for DMARC forensic reports
+- **Detection**: Checks SUBJECT (DMARC/forensic/abuse) and FROM (postmaster/mailer-daemon)
+- **Publishes to Redis**: `{ event: "DMARC_REPORT", payload: { from, subject, headers } }`
+
+### 3. Seed Monitor (`rust-imap-worker/src/seed_monitor.rs`)
+- **Folder scan**: Periodically checks INBOX, [Gmail]/Spam, [Gmail]/Promotions on seed accounts
+- **X-Audnix-Id lookup**: Finds our sent messages by custom header, reports folder placement
+- **Publishes to Redis**: `{ event: "SEED_MONITOR", payload: { message_id, seed_email, folder, placement } }`
+
+### 4. Forensic Handler (`shared/lib/realtime/forensic-handler.ts`)
+- **Node.js subscriber**: Listens on `audnix-cluster:events` for DMARC_REPORT and SEED_MONITOR events
+- **DB lookup**: Matches original recipient/message_id in `email_tracking` table
+- **Updates placement**: Sets `email_tracking.placement = 'spam'|'inbox'` and fires `deliverability_updated` + `stats_updated` + `stats_cache_invalidate`
+- **Initialized in API Gateway** at app startup
+
+### Config (Env Vars)
+- `FORENSICS_EMAIL` / `FORENSICS_PASSWORD` — DMARC forensics inbox
+- `SEED_MONITOR_EMAIL` / `SEED_MONITOR_PASSWORD` — Seed account for placement checking

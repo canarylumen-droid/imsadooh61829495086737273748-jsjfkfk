@@ -181,6 +181,16 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api", featureFlagRouter);
   registerAnalyticsRoutes(app); // Phase 14: KPI & Conversion Analytics
 
+  // Global error handler — return JSON instead of HTML for unhandled errors
+  app.use((err: any, req: any, res: any, next: any) => {
+    if (res.headersSent) return next(err);
+    const status = err.status || err.statusCode || 500;
+    res.status(status).json({
+      error: err.message || 'Internal server error',
+      ...(process.env.NODE_ENV !== 'production' ? { stack: err.stack } : {}),
+    });
+  });
+
   // Create HTTP server
   const server = http.createServer(app);
 

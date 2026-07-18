@@ -480,6 +480,12 @@ export default function InboxPage() {
 
   const apiStatusFilters = new Set(['new', 'contacted', 'converted', 'not_interested', 'unsubscribed', 'cold', 'booked', 'warm', 'replied']);
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setPage(0);
+    setVirtualRange({ start: 0, end: 50 });
+  }, [filterStatus, filterChannel, searchQuery]);
+
   const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching, isError: leadsError } = useQuery<any>({
     queryKey: ["/api/leads", {
       limit: PAGE_SIZE,
@@ -1444,7 +1450,7 @@ export default function InboxPage() {
                                 {lead.name}
                               </span>
                               <div className="flex items-center gap-1 shrink-0">
-                                <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full opacity-60 md:opacity-0 md:group-hover:opacity-100 transition-opacity text-primary -mr-1" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
+                                <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full hidden md:inline-flex md:opacity-0 md:group-hover:opacity-100 transition-opacity text-primary -mr-0.5" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
                                   <Brain className="h-3 w-3" />
                                 </Button>
                                 <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 mt-0.5">
@@ -1459,10 +1465,10 @@ export default function InboxPage() {
                                 <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
                               ) : (
                                 <span className="flex items-center gap-1">
-                                  {lead.snippet && lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
+                                  {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
                                     <CheckCheck className="h-3 w-3 shrink-0 text-primary" />
                                   )}
-                                  {lead.snippet && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
+                                  {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
                                   <span className="truncate">{lead.snippet ? stripHtml(lead.snippet).substring(0, 60) : "No messages"}</span>
@@ -1476,13 +1482,16 @@ export default function InboxPage() {
                     })}
                   </div>
                   {leadsData?.hasMore && (
-                    <div className="p-4">
-                      <Button variant="outline" className="w-full text-xs font-bold uppercase tracking-widest rounded-xl h-10 border-dashed text-foreground"
+                    <div className="px-3 pb-1">
+                      <Button variant="outline" className="w-full text-xs font-bold uppercase tracking-widest rounded-xl h-9 border-dashed text-foreground"
                         onClick={() => setPage(p => p + 1)} disabled={leadsFetching}>
                         {leadsFetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ChevronDown className="h-3 w-3 mr-2" />}
                         {leadsFetching ? 'Loading...' : 'Load More'}
                       </Button>
                     </div>
+                  )}
+                  {!leadsData?.hasMore && filteredLeads.length > 0 && (
+                    <div className="h-4" />
                   )}
                 </div>
               </>

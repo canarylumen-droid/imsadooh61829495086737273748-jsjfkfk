@@ -89,6 +89,7 @@ export function RecentConversations() {
   });
 
   const isAnyChannelConnected = integrations?.some(i => i.connected) ?? false;
+  const hasLoadedLeads = Array.isArray(leadsData?.leads);
 
   // Real-time synchronization
   useEffect(() => {
@@ -309,14 +310,17 @@ export function RecentConversations() {
               <p className="text-muted-foreground mb-2">
                 No recent {channelConfig[selectedChannel].label} conversations
               </p>
-              {isAnyChannelConnected ? (
-                <p className="text-xs text-muted-foreground font-medium italic">
-                  Waiting for new leads to arrive...
+              {hasLoadedLeads ? (
+                <p className="text-xs text-muted-foreground">
+                  {isAnyChannelConnected
+                    ? "Waiting for new leads to arrive..."
+                    : "Connect your account to start receiving leads"}
                 </p>
               ) : (
-                <p className="text-xs text-muted-foreground">
-                  Connect your account to start receiving leads
-                </p>
+                <div className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  <span className="text-xs text-muted-foreground">Loading leads...</span>
+                </div>
               )}
             </div>
           ) : (
