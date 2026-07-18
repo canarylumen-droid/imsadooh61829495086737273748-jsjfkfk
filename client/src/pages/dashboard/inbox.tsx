@@ -474,7 +474,7 @@ export default function InboxPage() {
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
 
-  const simpleStatuses = ['new', 'contacted', 'converted', 'not_interested'];
+  const simpleStatuses = ['new', 'contacted', 'converted', 'not_interested', 'unsubscribed'];
 
   const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching, isError: leadsError } = useQuery<any>({
     queryKey: ["/api/leads", {

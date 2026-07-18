@@ -35,10 +35,10 @@ export function NotificationBell() {
   const { toast } = useToast();
   const { socket } = useRealtime();
 
-  // Fetch notifications count
   const { data: notifications } = useQuery<NotificationResponse>({
     queryKey: ["/api/notifications"],
-
+    refetchInterval: 15000,
+    staleTime: 10000,
   });
 
 

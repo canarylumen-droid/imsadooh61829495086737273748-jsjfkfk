@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
-import { useNavigate } from "wouter";
+import { useLocation } from "wouter";
 
 interface ReputationCardProps {
   score: number | null;
@@ -47,7 +47,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
   isLoading,
   hasIntegrations = true
 }) => {
-  const navigate = useNavigate();
+  const [, setLocation] = useLocation();
   const getStatusColor = (s: string) => {
     switch (s) {
       case 'healthy': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
@@ -202,7 +202,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => navigate('/dashboard/integrations')}
+          onClick={() => setLocation('/dashboard/integrations')}
           className="w-full h-8 rounded-lg text-[10px] font-medium text-muted-foreground/60 hover:text-primary hover:bg-primary/5 border border-border/10"
         >
           <ExternalLink className="w-3 h-3 mr-1.5" />

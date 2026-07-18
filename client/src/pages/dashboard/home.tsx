@@ -228,6 +228,7 @@ export default function DashboardHome() {
     },
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+    refetchInterval: 30000,
     placeholderData: (previousData) => previousData,
   });
 

@@ -1,6 +1,7 @@
 import type { Lead, Message } from '@audnix/shared';
 import { storage } from '@shared/lib/storage/storage.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 export type LeadScoreCategory = 'A' | 'B' | 'C' | 'D';
 
@@ -186,7 +187,7 @@ export class LeadScoringEngine {
         console.error('[LeadScoring] Failed to create notification:', err);
       }
       try {
-        wsSync.notifyStatsUpdated(lead.userId);
+        clusterSync.notifyStatsUpdated(lead.userId);
       } catch (err) {
         console.error('[LeadScoring] Failed to notify stats updated:', err);
       }

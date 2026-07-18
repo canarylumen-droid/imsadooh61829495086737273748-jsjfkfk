@@ -276,7 +276,7 @@ async function processEmailForLead(
           });
 
           // Notify UI to play sound and show toast
-          wsSync.notifyNotification(userId, {
+          clusterSync.notifyNotification(userId, {
             type: 'lead_activity',
             title: 'New Reply Received',
             message: `${email.from || lead.email} replied to your outreach.`,

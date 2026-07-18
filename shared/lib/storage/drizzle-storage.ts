@@ -3070,7 +3070,7 @@ export class DrizzleStorage implements IStorage {
     }).returning();
 
     if (notification) {
-      wsSync.notifyNotification(data.userId, notification);
+      clusterSync.notifyNotification(data.userId, notification);
     }
 
     return notification;
