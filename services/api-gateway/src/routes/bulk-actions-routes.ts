@@ -15,11 +15,12 @@ const router = Router();
 router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;
-    const { leads: leadsData, channel = 'email', aiPaused = false, integrationId } = req.body as {
+    const { leads: leadsData, channel = 'email', aiPaused = false, integrationId, distribute } = req.body as {
       leads: Array<{ name?: string; email?: string; phone?: string; company?: string }>;
       channel?: 'email' | 'instagram';
       aiPaused?: boolean;
       integrationId?: string;
+      distribute?: boolean;
     };
 
     if (!Array.isArray(leadsData) || leadsData.length === 0) {
@@ -37,6 +38,16 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
         limitReached: true
       });
       return;
+    }
+
+    // Load mailboxes for distribution
+    let mailboxPool: Array<{ id: string; email: string; provider: string }> = [];
+    let mailboxIndex = 0;
+    if (distribute || !integrationId) {
+      const integrations = await storage.getIntegrations(userId);
+      mailboxPool = integrations.filter((i: any) =>
+        ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected
+      ).map((i: any) => ({ id: i.id, email: i.smtpUser || i.email || '', provider: i.provider }));
     }
 
     const results = {
@@ -90,6 +101,14 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
 
           // Full deterministic + MX check
           const spamCheck = email ? await SpamTrapDetector.verifyFull(email, leadData) : { isTrap: false, score: 0, hasMx: true };
+
+          // Evenly distribute across all connected mailboxes if distribute flag is set
+          let assignedIntegrationId = integrationId || null;
+          if (mailboxPool.length > 0) {
+            const mb = mailboxPool[mailboxIndex % mailboxPool.length];
+            assignedIntegrationId = mb.id;
+            mailboxIndex++;
+          }
           
           batchToInsert.push({
             userId,
@@ -105,7 +124,7 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
             industry: metadata.industry || null,
             revenue: metadata.revenue || null,
             channel: channel as any,
-            integrationId: integrationId || null,
+            integrationId: assignedIntegrationId,
             status: (spamCheck.isTrap || !spamCheck.hasMx) ? 'bouncy' : 'new',
             aiPaused: aiPaused || spamCheck.isTrap || !spamCheck.hasMx,
             metadata: {

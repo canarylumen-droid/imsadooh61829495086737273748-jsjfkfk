@@ -92,7 +92,8 @@ export default function LeadImportPage() {
       const importRes = await apiRequest("POST", "/api/bulk/import-bulk", {
         leads: extractedLeads,
         aiPaused: !enableAi,
-        integrationId: selectedMailboxId
+        integrationId: selectedMailboxId,
+        distribute: !selectedMailboxId
       });
 
       const result = await importRes.json();
@@ -345,7 +346,8 @@ export default function LeadImportPage() {
           })),
           channel: 'email',
           aiPaused: !enableAi,
-          integrationId: selectedMailboxId
+          integrationId: selectedMailboxId,
+          distribute: !selectedMailboxId
         }),
         credentials: 'include'
       });

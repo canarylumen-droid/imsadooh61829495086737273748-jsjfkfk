@@ -494,6 +494,7 @@ export default function InboxPage() {
       search: searchQuery || undefined,
       channel: filterChannel !== "all" ? filterChannel : undefined,
       status: apiStatusFilters.has(filterStatus) ? filterStatus : undefined,
+      integrationId: selectedMailboxId || undefined,
     }],
     placeholderData: (prev: any) => prev,
     staleTime: 0,

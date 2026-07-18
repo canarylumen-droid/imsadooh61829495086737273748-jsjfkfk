@@ -40,7 +40,7 @@ const ITEMS_PER_PAGE = 20;
 
 export default function WarmupPage() {
   const { socket } = useRealtime();
-  const { mailboxes } = useMailbox();
+  const { mailboxes, selectedMailboxId } = useMailbox();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,13 +62,27 @@ export default function WarmupPage() {
   }, [socket, queryClient]);
 
   const { data: warmupData, isLoading } = useQuery<any>({
-    queryKey: ["/api/dashboard/warmup-status"],
+    queryKey: ["/api/dashboard/warmup-status", selectedMailboxId],
+    queryFn: async () => {
+      const url = new URL("/api/dashboard/warmup-status", window.location.origin);
+      if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch warmup status");
+      return res.json();
+    },
     refetchOnWindowFocus: true,
     staleTime: 10_000,
   });
 
   const { data: activityData } = useQuery<any>({
-    queryKey: ["/api/warmup/activity"],
+    queryKey: ["/api/warmup/activity", selectedMailboxId],
+    queryFn: async () => {
+      const url = new URL("/api/warmup/activity", window.location.origin);
+      if (selectedMailboxId) url.searchParams.set("mailboxId", selectedMailboxId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch warmup activity");
+      return res.json();
+    },
     refetchInterval: 60_000,
     staleTime: 30_000,
   });

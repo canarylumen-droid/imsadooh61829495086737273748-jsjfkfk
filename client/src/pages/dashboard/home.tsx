@@ -273,9 +273,17 @@ export default function DashboardHome() {
   const activities = activityData?.activities || [];
 
   const { data: insightsData } = useQuery<any>({
-    queryKey: ["/api/ai/insights", { period: '7d' }],
+    queryKey: ["/api/ai/insights", { period: '7d', integrationId: selectedIntegrationId }],
+    queryFn: async () => {
+      const url = new URL("/api/ai/insights", window.location.origin);
+      url.searchParams.set("period", "7d");
+      if (selectedIntegrationId) url.searchParams.set("integrationId", selectedIntegrationId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch insights");
+      return res.json();
+    },
     refetchOnWindowFocus: false,
-    enabled: !!activities && activities.length > 0 && !!user, // Only fetch inside dashboard if activities exist
+    enabled: !!activities && activities.length > 0 && !!user,
   });
 
   const { data: campaigns } = useQuery<any[]>({

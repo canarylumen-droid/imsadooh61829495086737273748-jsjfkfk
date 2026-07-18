@@ -1322,6 +1322,7 @@ export class DrizzleStorage implements IStorage {
             aiPaused: l.aiPaused ?? true,
             verified: l.verified || false,
             verifiedAt: l.verifiedAt || null,
+            integrationId: l.integrationId || null,
             metadata: l.metadata || {},
             updatedAt: new Date()
           })))

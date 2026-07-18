@@ -108,11 +108,15 @@ router.get('/inbox-placement', requireAuthOrApiKey, async (req: Request, res: Re
     const userId = getCurrentUserId(req)!;
     const days = Math.min(parseInt(req.query.days as string) || 30, 90);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const filterIntegrationId = req.query.integrationId as string | undefined;
 
-    const userIntegrations = await db
-      .select({ id: integrations.id, userId: integrations.userId })
-      .from(integrations)
-      .where(eq(integrations.userId, userId));
+    const userIntegrations = filterIntegrationId
+      ? await db.select({ id: integrations.id, userId: integrations.userId })
+          .from(integrations)
+          .where(and(eq(integrations.userId, userId), eq(integrations.id, filterIntegrationId)))
+      : await db.select({ id: integrations.id, userId: integrations.userId })
+          .from(integrations)
+          .where(eq(integrations.userId, userId));
 
     if (userIntegrations.length === 0) {
       res.json({ success: true, mailboxes: [], totals: { sent: 0, inbox: 0, spam: 0, bounce: 0, rate: '0%' } });
@@ -218,11 +222,15 @@ router.get('/domain-reputation', requireAuthOrApiKey, async (req: Request, res: 
     const userId = getCurrentUserId(req)!;
     const days = Math.min(parseInt(req.query.days as string) || 30, 90);
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const filterIntegrationId = req.query.integrationId as string | undefined;
 
-    const userIntegrations = await db
-      .select({ id: integrations.id })
-      .from(integrations)
-      .where(eq(integrations.userId, userId));
+    const userIntegrations = filterIntegrationId
+      ? await db.select({ id: integrations.id })
+          .from(integrations)
+          .where(and(eq(integrations.userId, userId), eq(integrations.id, filterIntegrationId)))
+      : await db.select({ id: integrations.id })
+          .from(integrations)
+          .where(eq(integrations.userId, userId));
 
     const integrationIds = userIntegrations.map(i => i.id);
     if (integrationIds.length === 0) {

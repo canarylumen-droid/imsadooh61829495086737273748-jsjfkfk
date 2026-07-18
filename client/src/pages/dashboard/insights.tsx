@@ -13,6 +13,7 @@ import {
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { useQuery } from "@tanstack/react-query";
 import { useRealtime } from "@/hooks/use-realtime";
+import { useMailbox } from "@/hooks/use-mailbox";
 import { useCanAccessFullAnalytics } from "@/hooks/use-access-gate";
 import { FeatureLock } from "@/components/upgrade/FeatureLock";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
@@ -42,12 +43,20 @@ interface AnalyticsInsights {
 export default function InsightsPage() {
   useRealtime();
   const { canAccess: canAccessFullAnalytics } = useCanAccessFullAnalytics();
+  const { selectedMailboxId, setSelectedMailboxId } = useMailbox();
   const { data: integrationsRaw } = useQuery<any>({ queryKey: ["/api/integrations"] });
   const { data: campaigns } = useQuery<any[]>({ queryKey: ["/api/outreach/campaigns"], staleTime: 30_000 });
   const integrations = (integrationsRaw as any)?.integrations || integrationsRaw || [];
 
   const { data: insightsData, isLoading, refetch, isFetching } = useQuery<AnalyticsInsights>({
-    queryKey: ["/api/ai/insights"],
+    queryKey: ["/api/ai/insights", { integrationId: selectedMailboxId }],
+    queryFn: async () => {
+      const url = new URL("/api/ai/insights", window.location.origin);
+      if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch insights");
+      return res.json();
+    },
     retry: false,
   });
 
@@ -55,13 +64,13 @@ export default function InsightsPage() {
   const hasCampaign = campaigns?.some((c: any) => c.status === 'active' || c.status === 'running' || c.status === 'completed');
 
   const [isReportOpen, setIsReportOpen] = useState(false);
-  const [selectedMailbox, setSelectedMailbox] = useState<string | undefined>("all");
 
   const { data: reportData, isLoading: reportLoading, isFetching: reportFetching } = useQuery<{ text: string }>({
-    queryKey: ["/api/ai/weekly-report", selectedMailbox],
+    queryKey: ["/api/ai/weekly-report", selectedMailboxId || "all"],
     queryFn: async () => {
-      const url = selectedMailbox === "all" ? "/api/ai/weekly-report" : `/api/ai/weekly-report?integrationId=${selectedMailbox}`;
-      const res = await fetch(url);
+      const url = new URL("/api/ai/weekly-report", window.location.origin);
+      if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
+      const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch report");
       return res.json();
     },
@@ -373,8 +382,8 @@ export default function InsightsPage() {
                 </Button>
               </div>
               <MailboxSwitcher
-                value={selectedMailbox}
-                onValueChange={setSelectedMailbox}
+                value={selectedMailboxId}
+                onValueChange={(v) => setSelectedMailboxId(v)}
                 className="w-full md:w-auto"
               />
             </div>

@@ -991,8 +991,18 @@ router.get('/analytics/outreach', requireAuthOrApiKey, async (req: Request, res:
     const { messages } = await import('@audnix/shared');
     const { sql, and, eq, gte } = await import('drizzle-orm');
 
+    const integrationId = req.query.integrationId as string | undefined;
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    let messagesWhere = and(
+      eq(messages.userId, userId),
+      gte(messages.createdAt, thirtyDaysAgo),
+      eq(messages.isWarmup, false)
+    );
+    if (integrationId) {
+      messagesWhere = and(messagesWhere, eq(messages.integrationId, integrationId));
+    }
 
     // Group messages by day and direction
     const stats = await db
@@ -1002,13 +1012,7 @@ router.get('/analytics/outreach', requireAuthOrApiKey, async (req: Request, res:
         count: sql<number>`COUNT(*)::int`,
       })
       .from(messages)
-      .where(
-        and(
-          eq(messages.userId, userId),
-          gte(messages.createdAt, thirtyDaysAgo),
-          eq(messages.isWarmup, false)
-        )
-      )
+      .where(messagesWhere)
       .groupBy(sql`DATE_TRUNC('day', ${messages.createdAt})`, messages.direction)
       .orderBy(sql`DATE_TRUNC('day', ${messages.createdAt})`);
 
@@ -1205,10 +1209,14 @@ router.post('/ai/learn-style', requireAuthOrApiKey, async (req: Request, res: Re
 router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = req.session?.userId!;
-        const integrations = await storage.getIntegrations(userId);
-        const emailInts = integrations.filter((i: any) =>
+        const filterIntegrationId = req.query.integrationId as string | undefined;
+        let integrations = await storage.getIntegrations(userId);
+        let emailInts = integrations.filter((i: any) =>
             ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected
         );
+        if (filterIntegrationId) {
+            emailInts = emailInts.filter((i: any) => i.id === filterIntegrationId);
+        }
 
         const { db } = await import('@shared/lib/db/db.js');
         const { integrations: intSchema, emailTracking, bounceTracker: bounceTrackerTable } = await import('@audnix/shared');

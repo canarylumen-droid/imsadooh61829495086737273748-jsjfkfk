@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRealtime } from "@/hooks/use-realtime";
+import { useMailbox } from "@/hooks/use-mailbox";
 import { PageWrapper } from '@/components/ui/page-wrapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +36,7 @@ export default function DeliverabilityPage() {
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { selectedMailboxId } = useMailbox();
 
   useEffect(() => {
     if (!socket) return;
@@ -61,11 +63,26 @@ export default function DeliverabilityPage() {
   });
 
   const { data: placementData } = useQuery<InboxPlacementData>({
-    queryKey: ["/api/stats/inbox-placement", { days: 30 }],
+    queryKey: ["/api/stats/inbox-placement", { days: 30, integrationId: selectedMailboxId }],
+    queryFn: async () => {
+      const url = new URL("/api/stats/inbox-placement", window.location.origin);
+      url.searchParams.set("days", "30");
+      if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch inbox placement");
+      return res.json();
+    },
   });
 
   const { data: warmupData } = useQuery<any>({
-    queryKey: ["/api/dashboard/warmup-status"],
+    queryKey: ["/api/dashboard/warmup-status", selectedMailboxId],
+    queryFn: async () => {
+      const url = new URL("/api/dashboard/warmup-status", window.location.origin);
+      if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch warmup status");
+      return res.json();
+    },
     staleTime: 15_000,
   });
 
