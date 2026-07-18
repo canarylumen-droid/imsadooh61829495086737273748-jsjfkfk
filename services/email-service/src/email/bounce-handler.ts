@@ -201,6 +201,13 @@ class BounceHandler {
         source: 'bounce_handler'
       }).catch(() => {});
 
+      // Push stats update so dashboard KPIs refresh immediately
+      await clusterSync.notifyStatsUpdated(event.userId, {
+        integrationId,
+        type: 'bounce'
+      }).catch(() => {});
+      await clusterSync.notifyStatsCacheInvalidate(event.userId).catch(() => {});
+
       // Create audit log for activity feed
       await storage.createAuditLog({
         userId: event.userId,

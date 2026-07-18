@@ -130,14 +130,21 @@ async function suppressEmailAddress(email: string, metadata: Record<string, any>
         log.warn('Failed to update email_tracking placement from FBL', { email, error: err.message });
       }
 
-      // Push deliverability update
+      // Push deliverability + stats updates
       try {
         const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
-        await clusterSync.notifyDeliverabilityUpdated(lead.userId, {
-          integrationId: lead.integrationId,
-          placement: 'spam',
-          source: 'fbl_webhook'
-        }).catch(() => {});
+        await Promise.all([
+          clusterSync.notifyDeliverabilityUpdated(lead.userId, {
+            integrationId: lead.integrationId,
+            placement: 'spam',
+            source: 'fbl_webhook'
+          }),
+          clusterSync.notifyStatsUpdated(lead.userId, {
+            integrationId: lead.integrationId,
+            type: 'spam_complaint'
+          }),
+          clusterSync.notifyStatsCacheInvalidate(lead.userId)
+        ]).catch(() => {});
       } catch (_) {}
     }
 
