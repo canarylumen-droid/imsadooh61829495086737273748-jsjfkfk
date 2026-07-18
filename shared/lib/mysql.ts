@@ -164,11 +164,8 @@ export function hasMySqlUri(): boolean {
   return Boolean(process.env.MYSQL_HOST);
 }
 
-export function getMySqlPool(): any {
-  if (!pool) {
-    throw new Error("MySQL pool not initialized. Call connectMySql() first.");
-  }
-  return pool;
+export function getMySqlPool(): any | null {
+  return pool || null;
 }
 
 export async function connectMySql(): Promise<any> {
@@ -333,6 +330,7 @@ export async function getLeadRecoveryStates(
   tenantId: string
 ): Promise<LeadRecoveryStateRow[]> {
   const p = getMySqlPool();
+  if (!p) return [];
   const [rows] = await p.query(
     "SELECT * FROM lead_recovery_state WHERE tenant_id = ?",
     [tenantId]
@@ -344,6 +342,7 @@ export async function getActiveLeadRecoveryState(
   tenantId: string
 ): Promise<LeadRecoveryStateRow | null> {
   const p = getMySqlPool();
+  if (!p) return null;
   const [rows] = await p.query(
     "SELECT * FROM lead_recovery_state WHERE tenant_id = ? AND is_active = 1 ORDER BY updated_at DESC LIMIT 1",
     [tenantId]
@@ -354,6 +353,7 @@ export async function getActiveLeadRecoveryState(
 
 export async function getPendingSyncStates(): Promise<LeadRecoveryStateRow[]> {
   const p = getMySqlPool();
+  if (!p) return [];
   const [rows] = await p.query(
     `SELECT * FROM lead_recovery_state
      WHERE is_active = 1
@@ -369,6 +369,7 @@ export async function claimMailboxForSync(
   mailboxId: string
 ): Promise<LeadRecoveryStateRow | null> {
   const p = getMySqlPool();
+  if (!p) return null;
   const conn = await p.getConnection();
   try {
     await conn.beginTransaction();
@@ -416,6 +417,7 @@ export async function completeMailboxSync(
   mailboxId: string
 ): Promise<void> {
   const p = getMySqlPool();
+  if (!p) return;
   await p.query(
     `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, available_at, last_sync_at, sync_status)
      VALUES (?, ?, ?, 0, NULL, NOW(), 'completed')
@@ -430,6 +432,7 @@ export async function failMailboxSync(
   mailboxId: string
 ): Promise<void> {
   const p = getMySqlPool();
+  if (!p) return;
   const availableAt = new Date(Date.now() + 60 * 60 * 1000);
   await p.query(
     `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, sync_status, available_at, last_sync_at)
@@ -456,6 +459,7 @@ export async function upsertRecoveryState(
   >
 ): Promise<void> {
   const p = getMySqlPool();
+  if (!p) return;
   const allowed = [
     "is_active", "is_busy", "last_sync_at", "sync_requested_at",
     "sync_status", "available_at",
@@ -485,6 +489,7 @@ export async function deactivateAllRecoveryStates(
   tenantId: string
 ): Promise<void> {
   const p = getMySqlPool();
+  if (!p) return;
   await p.query(
     "UPDATE lead_recovery_state SET is_active = 0 WHERE tenant_id = ?",
     [tenantId]
@@ -498,6 +503,7 @@ export async function getRecoveredLeads(
   limit: number
 ): Promise<RecoveredLeadRow[]> {
   const p = getMySqlPool();
+  if (!p) return [];
   const [rows] = await p.query(
     "SELECT * FROM recovered_leads WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?",
     [tenantId, limit]
@@ -518,6 +524,7 @@ export async function getRecoveredLeadById(
   tenantId: string
 ): Promise<RecoveredLeadRow | null> {
   const p = getMySqlPool();
+  if (!p) return null;
   const [rows] = await p.query(
     "SELECT * FROM recovered_leads WHERE id = ? AND tenant_id = ?",
     [leadId, tenantId]
@@ -550,8 +557,9 @@ export async function upsertRecoveredLead(
     sourceMessageIds?: string[];
     brainstormedObjections?: BrainstormedObjection[];
   }
-): Promise<RecoveredLeadRow> {
+): Promise<RecoveredLeadRow | null> {
   const p = getMySqlPool();
+  if (!p) return null;
 
   const existingRows = await p.query(
     "SELECT * FROM recovered_leads WHERE tenant_id = ? AND mailbox_id = ? AND email = ?",
@@ -660,6 +668,7 @@ export async function getRecoveryPromptConfig(
   name: string
 ): Promise<RecoveryPromptConfigRow | null> {
   const p = getMySqlPool();
+  if (!p) return null;
   const [rows] = await p.query(
     "SELECT * FROM recovery_prompt_config WHERE name = ?",
     [name]
@@ -674,6 +683,7 @@ export async function upsertRecoveryPromptConfig(
   userPromptTemplate: string
 ): Promise<void> {
   const p = getMySqlPool();
+  if (!p) return;
   await p.query(
     `INSERT INTO recovery_prompt_config (id, name, system_prompt, user_prompt_template)
      VALUES (?, ?, ?, ?)
@@ -684,6 +694,7 @@ export async function upsertRecoveryPromptConfig(
 
 export async function promptConfigExists(name: string): Promise<boolean> {
   const p = getMySqlPool();
+  if (!p) return false;
   const [rows] = await p.query(
     "SELECT 1 FROM recovery_prompt_config WHERE name = ? LIMIT 1",
     [name]
@@ -698,6 +709,7 @@ export async function getRecoveryEventLogs(
   limit: number
 ): Promise<RecoveryEventLogRow[]> {
   const p = getMySqlPool();
+  if (!p) return [];
   const [rows] = await p.query(
     "SELECT * FROM recovery_event_logs WHERE tenant_id = ? ORDER BY timestamp DESC LIMIT ?",
     [tenantId, limit]
@@ -716,8 +728,9 @@ export async function createRecoveryEventLog(
   tenantId: string,
   action: string,
   payload: Record<string, unknown>
-): Promise<RecoveryEventLogRow> {
+): Promise<RecoveryEventLogRow | null> {
   const p = getMySqlPool();
+  if (!p) return null;
   const id = generateId();
   const payloadJson = serializeJson(payload);
   const timestamp = new Date();
@@ -748,6 +761,7 @@ export async function upsertRecoveryObjection(
   createdBy: ObjectionCreatedBy = "ai"
 ): Promise<void> {
   const p = getMySqlPool();
+  if (!p) return;
   await p.query(
     `INSERT INTO recovery_objections (id, tenant_id, category, rule, evidence, source_lead_id, created_by)
      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -760,6 +774,7 @@ export async function upsertRecoveryObjection(
 
 export async function getLeadRecoveryBacklog(): Promise<number> {
   const p = getMySqlPool();
+  if (!p) return 0;
   const [rows] = await p.query(
     `SELECT COUNT(*) AS count FROM lead_recovery_state
      WHERE is_active = 1
@@ -774,6 +789,7 @@ export async function recoverStaleBusyState(
   stateId: string
 ): Promise<void> {
   const p = getMySqlPool();
+  if (!p) return;
   await p.query(
     `UPDATE lead_recovery_state
      SET is_busy = 0, sync_status = 'idle', available_at = NOW()

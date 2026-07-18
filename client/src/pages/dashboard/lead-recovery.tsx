@@ -32,7 +32,7 @@ function LeadRecoveryContent() {
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
           <div className="space-y-1">
             <p className="text-sm font-semibold text-red-500">Lead Recovery Unavailable</p>
-            <p className="text-xs text-muted-foreground">{store.error}. Configure MySQL (MYSQL_HOST) to enable lead recovery.</p>
+            <p className="text-xs text-muted-foreground">{store.error.replace(/<[^>]+>/g, '')}</p>
           </div>
         </div>
       )}

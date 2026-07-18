@@ -29,20 +29,15 @@ const SKIP_WARNING =
 
 router.use(requireAuthOrApiKey, requireProPlan);
 
-router.use(async (_req, res, next) => {
-  if (!hasMySqlUri()) {
-    return res.status(503).json({
-      error: "MySQL unavailable",
-      message: "MYSQL_HOST is required before Lead Recovery can be used.",
-    });
+router.use(async (_req, _res, next) => {
+  if (hasMySqlUri()) {
+    try {
+      await connectMySql();
+    } catch {
+      // MySQL unavailable — routes will return empty/fallback data
+    }
   }
-
-  try {
-    await connectMySql();
-    next();
-  } catch (error: any) {
-    res.status(503).json({ error: "MySQL connection failed", message: error.message });
-  }
+  next();
 });
 
 function tenantIdFrom(req: Express.Request): string {
