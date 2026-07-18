@@ -1290,7 +1290,7 @@ export default function InboxPage() {
               </div>
             ) : (
               <>
-                <div className="flex-1 overflow-auto overflow-x-auto relative" ref={leadListRef}>
+                <div className="flex-1 overflow-y-auto overflow-x-hidden relative" ref={leadListRef}>
                   <div style={{ height: filteredLeads.length * 90, position: 'relative' }}>
                     {filteredLeads.slice(virtualStart, virtualEnd).map((lead, i) => {
                       const realIdx = virtualStart + i;
@@ -1329,22 +1329,20 @@ export default function InboxPage() {
                             <AvatarFallback className={cn("font-bold text-sm rounded-full", lead.id === leadId ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{lead.name?.[0]}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0 space-y-1">
-                            <div className="flex justify-between items-start gap-2">
-                              <span className="text-sm font-bold truncate text-foreground flex-1 max-w-[120px] md:max-w-[140px] lg:max-w-[200px] xl:max-w-[300px]" title={lead.name}>
-                                <HighlightText text={lead.name} query={searchQuery} />
+                            <div className="flex justify-between items-start gap-1">
+                              <span className="text-sm font-semibold truncate text-foreground flex-1 min-w-0" title={lead.name}>
+                                {lead.name}
                               </span>
-                              <div className="flex items-center gap-2 shrink-0">
-                                {lead.email && <span className="text-[10px] text-muted-foreground/60 truncate max-w-[130px] hidden lg:block" title={lead.email}>{lead.email}</span>}
-                                {lead.company && <span className="text-[10px] text-muted-foreground/40 truncate max-w-[80px] hidden xl:block" title={lead.company}>{lead.company}</span>}
-                                <Button variant="ghost" size="icon" className="h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-primary" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
-                                  <Brain className="h-4 w-4" />
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-primary -mr-1" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
+                                  <Brain className="h-3 w-3" />
                                 </Button>
-                                <span className="text-[10px] text-muted-foreground/50 font-medium uppercase tracking-wider shrink-0 mt-0.5">
+                                <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 mt-0.5">
                                   {(() => { const d = lead.lastMessageAt || lead.createdAt; return d ? formatDateShort(d) : ''; })()}
                                 </span>
                               </div>
                             </div>
-                            <p className={cn("text-xs line-clamp-1 overflow-hidden transition-colors", lead.metadata?.isUnread ? "text-foreground font-bold" : "text-muted-foreground")}>
+                            <p className={cn("text-xs line-clamp-1 overflow-hidden transition-colors", lead.metadata?.isUnread ? "text-foreground font-semibold" : "text-muted-foreground")}>
                               {typingLeadId === lead.id ? (
                                 <span className="flex items-center gap-1 text-primary font-bold animate-pulse">Typinng...</span>
                               ) : localDrafts[lead.id] ? (
@@ -1769,7 +1767,7 @@ export default function InboxPage() {
                 </div>
 
                 {/* Messages Area */}
-                <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 min-h-0 scroll-smooth flex flex-col bg-muted/5 scrollbar-hide">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 space-y-6 min-h-0 scroll-smooth flex flex-col bg-muted/5 scrollbar-hide">
                   {(messagesLoading || messagesFetching) && !messagesData?.messages?.length ? (
                     <div className="space-y-6">
                       <div className="flex justify-start"><Skeleton className="h-16 w-64 rounded-2xl rounded-tl-none" /></div>

@@ -303,6 +303,30 @@ Cleared `imap:active:*` (5 keys) + `lock:imap:conn:*` (5 keys), restarted the wo
 - API gateway + socket server + email worker need restart
 - See instructions below
 
-### Git Status
-- GitHub main at `99559cac` — no pushes from this session  
-- AWS credentials in commit history block push — deploy via scp only
+## This Session (Jul 18 2026) — Avatar Fix + Inbox Cleanup
+
+### Inbox UI Fixes
+1. **Archive toggle** — `setAllLeads(prev => prev.map(...))` marks `archived: true` instead of filtering out; toggleable archive view works
+2. **Lead name header** — `font-bold` → `font-medium` (cleaner header)
+3. **Status tag hidden** until conversation has messages (`messagesData?.messages?.length > 0`)
+4. **Empty state** for messages area — "No messages yet" with icon, disappears instantly on send/receive
+5. **Snippet truncation** — `substring(0, 120)` + `truncate` class (no full messages in list)
+6. **Double tick kept** (✓✓ read, ✓ delivered), **arrows removed**
+7. **Optimistic tick** via `sendMutation.onMutate` + socket `messages_updated` handler
+
+### Avatar Upload Fixes
+1. **Root cause — wrong MIME type**: `file-upload.ts` now detects content type from extension (`.jpg`→`image/jpeg`, `.png`→`image/png`) instead of hardcoded `application/octet-stream` for S3 uploads
+2. **CSP block**: `app.ts` added `https://*.s3.amazonaws.com` and `https://*.s3.us-east-1.amazonaws.com` to `img-src`
+3. **Static serving**: `app.ts` added `app.use('/uploads', express.static('public/uploads'))` for local fallback
+4. **PDF removed**: `settings.tsx` accept changed from `image/*,.pdf` → `image/*`; PDF avatar display removed; `file-upload.ts` `avatarFileFilter` no longer allows PDF
+5. **Click avatar → settings**: `DashboardLayout.tsx` sidebar avatar has `onClick → handleNavigate('/dashboard/settings')`
+
+### Key Files Changed
+- `client/src/pages/dashboard/inbox.tsx` — archive, header, empty state, snippet, arrows/tick
+- `client/src/pages/dashboard/settings.tsx` — removed PDF accept + PDF avatar display
+- `client/src/components/dashboard/DashboardLayout.tsx` — avatar click → settings
+- `services/api-gateway/src/app.ts` — CSP `img-src` + `express.static('/uploads')`
+- `shared/lib/storage/file-upload.ts` — proper MIME type detection + no PDF for avatar
+
+### SendGrid
+- `TWILIO_SENDGRID_API_KEY` is set in `.env` on EC2 (SendGrid auth is configured)
