@@ -327,22 +327,47 @@ export function startEmailSyncWorker() {
           case 'replay-existing': {
             console.log(`[EmailSyncQueue] replay existing messages for user ${userId}`);
             const { db } = await import('@shared/lib/db/db.js');
-            const { emailMessages } = await import('@audnix/shared');
-            const { eq, and, isNull } = await import('drizzle-orm');
+            const { emailMessages, leads, messages: messagesSchema } = await import('@audnix/shared');
+            const { eq, and, isNull, sql } = await import('drizzle-orm');
 
-            // Delete stub email_messages created by the fetchNewMessages race condition
-            // (body parsed after message push → null from_address, null subject, no lead match)
-            const deleted = await db.delete(emailMessages).where(
-              and(
-                eq(emailMessages.userId, userId),
-                isNull(emailMessages.from)
-              )
-            );
-            if (deleted?.rowCount > 0) {
-              console.log(`[EmailSyncQueue] Deleted ${deleted.rowCount} stub email_messages for user ${userId}`);
-            }
+            // ── Phase 1: Delete stub email_messages (null from_address — race condition) ──
+            let deletedStubs = 0;
+            try {
+              const result = await db.delete(emailMessages).where(
+                and(eq(emailMessages.userId, userId), isNull(emailMessages.from))
+              );
+              deletedStubs = result?.rowCount || 0;
+              if (deletedStubs > 0) console.log(`[EmailSyncQueue] Deleted ${deletedStubs} stub email_messages`);
+            } catch (e: any) { console.warn('[EmailSyncQueue] stub delete err:', e.message); }
 
-            // Re-import last 5000 from each custom_email integration
+            // ── Phase 2: Fix leads with empty email — relink messages to correct leads ──
+            let relinked = 0;
+            try {
+              const stubLeads = await db.select().from(leads).where(
+                and(eq(leads.userId, userId), sql`${leads.email} IS NULL OR ${leads.email} = ''`)
+              );
+              for (const stub of stubLeads) {
+                const msgEmail = await db.select().from(emailMessages)
+                  .where(and(eq(emailMessages.leadId, stub.id), sql`${emailMessages.from} IS NOT NULL`))
+                  .limit(1);
+                if (msgEmail.length > 0 && msgEmail[0].from) {
+                  const realLead = await storage.findLeadBySenderAndIntegration(
+                    msgEmail[0].from, stub.integrationId || ''
+                  );
+                  if (realLead && realLead.id !== stub.id) {
+                    await db.update(messagesSchema).set({ leadId: realLead.id }).where(eq(messagesSchema.leadId, stub.id));
+                    await db.update(emailMessages).set({ leadId: realLead.id }).where(eq(emailMessages.leadId, stub.id));
+                    await db.delete(leads).where(eq(leads.id, stub.id));
+                    relinked++;
+                  } else {
+                    await db.update(leads).set({ email: msgEmail[0].from }).where(eq(leads.id, stub.id));
+                  }
+                }
+              }
+              if (relinked > 0) console.log(`[EmailSyncQueue] Relinked ${relinked} leads to existing leads`);
+            } catch (e: any) { console.warn('[EmailSyncQueue] lead fix err:', e.message); }
+
+            // ── Phase 3: Re-import last 5000 from each custom_email integration ──
             const userIntegrations = await storage.getIntegrations(userId);
             for (const integration of userIntegrations) {
               if (integration.connected && integration.provider === 'custom_email') {
@@ -352,7 +377,7 @@ export function startEmailSyncWorker() {
               }
             }
 
-            // Fire global refresh — client will refetch all leads/messages/stats from API
+            // ── Phase 4: Fire socket refresh — client refetches all from API ──
             await Promise.all([
               clusterSync.notifyLeadsUpdated(userId, { refresh: true }),
               clusterSync.notifyMessagesUpdated(userId, { refresh: true }),
