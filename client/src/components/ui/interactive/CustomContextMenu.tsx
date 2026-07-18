@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { queryClient } from '@/lib/queryClient';
-import { Scissors, Copy, ClipboardPaste, Link2, Download, Trash2, RefreshCw } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Link2, Download, Trash2, RefreshCw, Reply } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface ContextMenuConfig {
@@ -62,6 +62,8 @@ export function CustomContextMenu({
     } else if (config.type === 'inbox') {
         const isArchived = config.data?.archived;
         const inboxItems: MenuItem[] = [
+            { type: 'divider' },
+            { icon: Reply, label: 'Reply in Thread', id: 'reply' },
             { type: 'divider' },
             { icon: Link2, label: 'Mark as Unread', id: 'mark_unread' },
             { icon: ClipboardPaste, label: 'Mark as Booked', id: 'mark_booked' },

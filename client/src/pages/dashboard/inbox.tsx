@@ -59,6 +59,7 @@ import {
   Download,
   ArrowLeft,
   CheckCheck,
+  Reply,
 } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import {
@@ -163,12 +164,13 @@ export default function InboxPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [typedText, setTypedText] = useState("");
   const [showDetails, setShowDetails] = useState(false); // Controls the right sidebar
-  const [typingLeadId, setTypingLeadId] = useState<string | null>(null); // Track which lead is typing
+  const [typingLeadId, setTypingLeadId] = useState<string | null>(null);
   const [localDrafts, setLocalDrafts] = useState<Record<string, string>>({});
+  const [replyToMsg, setReplyToMsg] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const leadListRef = useRef<HTMLDivElement>(null);
-  const ROW_HEIGHT = 72;
+  const ROW_HEIGHT = 76;
   const BUFFER = 10;
 
   const [activeReplyTab, setActiveReplyTab] = useState<'text'>('text');
@@ -196,7 +198,7 @@ export default function InboxPage() {
         setReplyMessage("");
       }
 
-      // Auto-focus when switching to a lead thread
+      setReplyToMsg(null);
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus();
@@ -666,8 +668,10 @@ export default function InboxPage() {
   const sendMutation = useMutation({
     mutationFn: async (content: string) => {
       const body: any = { content, channel: activeLead?.channel };
-      // Send a fallback subject so backend doesn't need AI generation
-      if (activeLead?.subject && !activeLead.subject.includes('{{')) {
+      if (replyToMsg) {
+        body.inReplyTo = replyToMsg.id;
+        body.subject = replyToMsg.subject ? `Re: ${replyToMsg.subject.replace(/^Re:\s*/i, '')}` : undefined;
+      } else if (activeLead?.subject && !activeLead.subject.includes('{{')) {
         body.subject = activeLead.subject.replace(/^Re:\s*/i, 'Re: ');
       } else {
         body.subject = `Re: ${activeLead?.name || 'Follow up'}`;
@@ -716,6 +720,7 @@ export default function InboxPage() {
       ));
 
       setReplyMessage("");
+      setReplyToMsg(null);
       if (leadId) {
         localStorage.removeItem(`draft_${leadId}`);
         setLocalDrafts(prev => {
@@ -927,6 +932,9 @@ export default function InboxPage() {
       } catch (err) {
         toast({ title: "Error", description: "Failed to mark lead as booked", variant: "destructive" });
       }
+    } else if (action === 'reply') {
+      if (leadId !== data.id) setLocation(`/dashboard/inbox/${data.id}`);
+      setTimeout(() => textareaRef.current?.focus(), 100);
     }
   }, [toast, queryClient, leadId, setLocation]);
 
@@ -1812,7 +1820,9 @@ export default function InboxPage() {
                         msg.direction === 'inbound'
                           ? "bg-card text-card-foreground rounded-tl-none border border-border/50 shadow-sm"
                           : "bg-primary text-primary-foreground rounded-tr-none shadow-md shadow-primary/20"
-                      )}>
+                      )}
+                      onContextMenu={(e) => { e.preventDefault(); setReplyToMsg(msg); }}
+                      >
                           <div className="whitespace-pre-wrap break-words break-all leading-relaxed overflow-hidden">
                             {(() => {
                               let displayText = msg.body || msg.content || '';
@@ -1826,6 +1836,13 @@ export default function InboxPage() {
                               return <HighlightText text={displayText} query={searchQuery} />;
                             })()}
                           </div>
+                        <button
+                          onClick={() => setReplyToMsg(msg)}
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity h-6 w-6 rounded-full bg-background/80 border border-border/40 flex items-center justify-center hover:bg-primary hover:text-primary-foreground hover:border-primary"
+                          title="Reply to this message"
+                        >
+                          <Reply className="h-3 w-3" />
+                        </button>
                         {msg.metadata?.disclaimer && (
                           <div className="mt-3 pt-3 border-t border-current/10 text-[10px] opacity-60 italic font-medium">
                             {msg.metadata.disclaimer}
@@ -1920,6 +1937,15 @@ export default function InboxPage() {
                         </div>
                         
                         {/* Tab Content */}
+                        {replyToMsg && (
+                          <div className="flex items-center gap-2 px-4 py-1.5 bg-primary/5 border-b border-primary/10 text-[11px] font-medium text-primary">
+                            <Reply className="h-3 w-3 shrink-0" />
+                            <span className="truncate">Replying to {replyToMsg.direction === 'inbound' ? activeLead?.name || 'lead' : 'yourself'}</span>
+                            <button onClick={() => setReplyToMsg(null)} className="ml-auto shrink-0 hover:bg-primary/10 rounded-full p-0.5">
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        )}
                         <Textarea
                           value={replyMessage}
                           onChange={e => {
@@ -1948,7 +1974,7 @@ export default function InboxPage() {
                               submitReply();
                             }
                           }}
-                          placeholder="Compose a response..."
+                          placeholder={replyToMsg ? "Reply to this message..." : "Compose a response..."}
                           className="w-full bg-muted/30 border-none rounded-b-2xl p-4 pr-24 text-sm focus:ring-0 min-h-[56px] max-h-40 resize-none transition-all overflow-y-auto"
                         />
                         <div className="absolute right-3 bottom-2 flex gap-1.5 z-10">
