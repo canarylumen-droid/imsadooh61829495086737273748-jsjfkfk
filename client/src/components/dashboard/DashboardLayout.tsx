@@ -154,10 +154,16 @@ const ThemeSwitcher = () => {
   );
 };
 
+function cacheBustSrc(src?: string): string | undefined {
+  if (!src) return undefined;
+  return src.includes('?') ? src : `${src}?cb=${Date.now()}`;
+}
+
 export function DashboardLayout({ children, fullHeight = false }: { children: React.ReactNode, fullHeight?: boolean }) {
   const { data: user, isLoading: isUserLoading } = useQuery<UserProfile | null>({
     queryKey: ["/api/user/profile"],
   });
+  const bustedAvatar = user?.avatar ? cacheBustSrc(user.avatar) : undefined;
   const { selectedMailboxId } = useMailbox();
   const tourState = useTour(user?.metadata?.onboardingCompleted);
   const { showTour, completeTour, skipTour, replayTour } = tourState || {
@@ -604,7 +610,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                       <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-primary/30 ring-offset-2 ring-offset-background" />
                       <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary/20 via-transparent to-primary/10 animate-spin" style={{ animationDuration: '4s' }} />
                       <Avatar key={user?.avatar || 'sidebar-avatar'} className="h-10 w-10 rounded-full border border-border shadow-sm transition-transform group-hover:scale-105 relative">
-                        <AvatarImage src={user?.avatar} />
+                        <AvatarImage src={bustedAvatar} />
                         <AvatarFallback className="rounded-full bg-primary/20 text-primary font-bold text-sm">
                           {(user?.name || "U").charAt(0).toUpperCase()}
                         </AvatarFallback>
@@ -625,7 +631,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                       <div className="relative">
                         <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-primary/20 ring-offset-2 ring-offset-background" />
                         <Avatar key={user?.avatar || 'dropdown-avatar'} className="h-12 w-12 border-2 border-primary/20 rounded-full relative">
-                          <AvatarImage src={user?.avatar} />
+                          <AvatarImage src={bustedAvatar} />
                           <AvatarFallback className="bg-primary/10 text-primary font-bold rounded-full">
                             {(user?.name || "U").charAt(0).toUpperCase()}
                           </AvatarFallback>
@@ -721,7 +727,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                   <div className="p-4 border-t border-border/10 bg-muted/10 space-y-3">
                     <div className="flex items-center gap-4 p-4 rounded-3xl bg-background border border-border/40">
                       <Avatar key={user?.avatar || 'sheet-avatar'} className="h-12 w-12 rounded-full">
-                        <AvatarImage src={user?.avatar} />
+                        <AvatarImage src={bustedAvatar} />
                         <AvatarFallback className="font-black bg-primary text-primary-foreground rounded-full">{(user?.name || "U")[0]}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0 flex-1">
@@ -1017,7 +1023,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
 
               <div className="md:hidden">
                 <Avatar key={user?.avatar || 'mobile-avatar'} className="h-10 w-10 rounded-full border border-border/40">
-                  <AvatarImage src={user?.avatar} />
+                  <AvatarImage src={bustedAvatar} />
                   <AvatarFallback className="font-bold rounded-full">{(user?.name || "U")[0]}</AvatarFallback>
                 </Avatar>
               </div>

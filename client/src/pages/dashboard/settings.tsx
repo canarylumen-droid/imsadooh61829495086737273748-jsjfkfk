@@ -55,6 +55,7 @@ import {
   ShieldAlert,
   Clock,
   Eye,
+  X,
   ExternalLink,
   Code,
   Server,
@@ -126,6 +127,7 @@ export default function SettingsPage() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showNewKey, setShowNewKey] = useState<string | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyScope, setNewKeyScope] = useState("read_write");
   const [showCreateKey, setShowCreateKey] = useState(false);
   const { data: user, isLoading } = useQuery<UserProfile | null>({
     queryKey: ["/api/user/profile"],
@@ -272,13 +274,14 @@ export default function SettingsPage() {
   });
 
   const createApiKeyMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const res = await apiRequest("POST", "/api/developer/api-keys", { name });
-      return res;
+    mutationFn: async ({ name, scope }: { name: string; scope: string }) => {
+      const res = await apiRequest("POST", "/api/developer/api-keys", { name, scope });
+      return res.json();
     },
     onSuccess: (data: any) => {
       setShowNewKey(data.key);
       setNewKeyName("");
+      setNewKeyScope("read_write");
       setShowCreateKey(false);
       refetchApiKeys();
       toast({ title: "API Key Created", description: "Copy your key now — you won't see it again." });
@@ -450,8 +453,8 @@ export default function SettingsPage() {
                   <div className="relative">
                     <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-emerald-400/50 ring-offset-2 ring-offset-background" />
                     <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-emerald-400/20 via-transparent to-emerald-400/10 animate-spin" style={{ animationDuration: '4s' }} />
-                    <Avatar key={user.avatar || 'no-avatar'} className="h-28 w-28 sm:h-32 sm:w-32 border-2 border-border/50 shadow-md ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300 relative rounded-full">
-                      <AvatarImage src={user.avatar} className="object-cover rounded-full" />
+                    <Avatar key={user.avatar ? `${user.avatar}-${Date.now()}` : 'no-avatar'} className="h-28 w-28 sm:h-32 sm:w-32 border-2 border-border/50 shadow-md ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300 relative rounded-full">
+                      <AvatarImage src={user.avatar ? `${user.avatar}${user.avatar.includes('?') ? '&' : '?'}cb=${Date.now()}` : undefined} className="object-cover rounded-full" />
                       <AvatarFallback className="text-3xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold rounded-full">
                         {user.name?.[0]?.toUpperCase() || 'U'}
                       </AvatarFallback>
@@ -723,7 +726,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Permissions</Label>
-                        <Select defaultValue="read_write" onValueChange={() => {}}>
+                        <Select value={newKeyScope} onValueChange={setNewKeyScope}>
                           <SelectTrigger className="rounded-xl h-11 bg-background border-border/40">
                             <SelectValue />
                           </SelectTrigger>
@@ -745,12 +748,12 @@ export default function SettingsPage() {
                       </div>
                     </div>
                     <div className="flex justify-end gap-2 pt-2">
-                      <Button variant="ghost" onClick={() => { setShowCreateKey(false); setNewKeyName(""); }} className="rounded-xl">
+                      <Button variant="ghost" onClick={() => { setShowCreateKey(false); setNewKeyName(""); setNewKeyScope("read_write"); }} className="rounded-xl">
                         Cancel
                       </Button>
                       <Button
                         onClick={() => {
-                          if (newKeyName.trim()) createApiKeyMutation.mutate(newKeyName.trim());
+                          if (newKeyName.trim()) createApiKeyMutation.mutate({ name: newKeyName.trim(), scope: newKeyScope });
                         }}
                         disabled={!newKeyName.trim() || createApiKeyMutation.isPending}
                         className="rounded-xl font-bold"
@@ -763,9 +766,19 @@ export default function SettingsPage() {
 
                 {showNewKey && (
                   <div className="mb-6 p-5 bg-primary/5 rounded-2xl border border-primary/20 space-y-4">
-                    <div className="flex items-center gap-2 text-primary">
-                      <Key className="h-5 w-5" />
-                      <span className="font-bold text-sm">Your API Key</span>
+                    <div className="flex items-start justify-between gap-2 text-primary">
+                      <div className="flex items-center gap-2">
+                        <Key className="h-5 w-5" />
+                        <span className="font-bold text-sm">Your API Key</span>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setShowNewKey(null)}
+                        className="h-6 w-6 rounded-full -mt-0.5 -mr-1"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       Copy this key now. <strong>You won't be able to see it again</strong> for security reasons.
@@ -798,14 +811,6 @@ export default function SettingsPage() {
                         Treat this like a password. Never share it or commit it to code.
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setShowNewKey(null)}
-                      className="text-xs font-bold"
-                    >
-                      I've saved it — Done
-                    </Button>
                   </div>
                 )}
 
@@ -1084,11 +1089,20 @@ function ScheduledDeletionCard() {
   const fetchStatus = useCallback(async () => {
     try {
       const res = await apiRequest("GET", "/api/account/deletion-status");
+      if (!res.ok) {
+        if (res.status !== 404) {
+          const err = await res.json().catch(() => ({ error: res.statusText }));
+          setError(err.error || 'Failed to fetch deletion status');
+        }
+        return;
+      }
       const data = await res.json();
       setScheduledAt(data.scheduledDeletionAt);
       setRemainingMs(data.remainingMs || 0);
       setError(null);
-    } catch {}
+    } catch (e: any) {
+      setError(e.message || 'Failed to fetch deletion status');
+    }
   }, []);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
@@ -1099,7 +1113,7 @@ function ScheduledDeletionCard() {
       setRemainingMs(prev => Math.max(0, prev - 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, [scheduledAt, remainingMs]);
+  }, [scheduledAt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const hours = Math.floor(remainingMs / (1000 * 60 * 60));
   const minutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
@@ -1353,8 +1367,8 @@ function ApiKeyRow({
               </Badge>
             </div>
           )}
-          <div className="flex items-center gap-3 mt-0.5">
-            <code className="text-xs font-mono text-muted-foreground/70">{apiKey.key}</code>
+          <div className="flex items-center gap-3 mt-0.5 min-w-0">
+            <code className="text-xs font-mono text-muted-foreground/70 truncate">{apiKey.key}</code>
             <button
               onClick={() => onCopy(apiKey.key)}
               className="opacity-0 group-hover:opacity-100 transition-opacity"

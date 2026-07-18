@@ -18,7 +18,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRealtime } from "@/hooks/use-realtime";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
-import { Key, Copy, Check, Trash2, Loader2, Plus, Eye, EyeOff, Shield, Pencil } from "lucide-react";
+import { Key, Copy, Check, Trash2, Loader2, Plus, Eye, EyeOff, Shield, Pencil, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 
@@ -44,8 +44,8 @@ function DeveloperPage() {
   useEffect(() => {
     if (!socket) return;
     const handler = () => qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
-    socket.on("leads_updated", handler);
-    return () => { socket.off("leads_updated", handler); };
+    socket.on("keys_updated", handler);
+    return () => { socket.off("keys_updated", handler); };
   }, [socket, qc]);
 
   const { data: keysData, isLoading } = useQuery<{ keys: ApiKey[] }>({
@@ -208,10 +208,10 @@ function DeveloperPage() {
               </div>
               <button
                 onClick={() => setShowFullKey(false)}
-                className="text-muted-foreground hover:text-foreground mt-1"
+                className="text-muted-foreground hover:text-foreground mt-1 rounded-full hover:bg-muted p-1 transition-colors"
                 title="Dismiss"
               >
-                <EyeOff className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
           </CardContent>
