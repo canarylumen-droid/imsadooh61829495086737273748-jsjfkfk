@@ -213,21 +213,54 @@ export default function InboxPage() {
 
   const { socket, isSyncing: backendSyncing } = useRealtime();
   const [syncStatus, setSyncStatus] = useState<Record<string, any>>({});
+  const [lastActivity, setLastActivity] = useState<{ label: string; time: number } | null>(null);
 
   useEffect(() => {
     if (!socket) return;
-    
-    // Listen for sync health updates from the server
+
+    // Track sync:status per integration with completion detection
     const onSyncStatus = (data: any) => {
-      setSyncStatus(prev => ({
-        ...prev,
-        [data.integrationId]: data
-      }));
+      setSyncStatus(prev => {
+        const existing = prev[data.integrationId];
+        // If this is a completion event (syncing: false) and we had a start
+        if (!data.syncing && existing?.syncing) {
+          setLastActivity({ label: 'Updated ✓', time: Date.now() });
+          setTimeout(() => setLastActivity(null), 2500);
+        }
+        return { ...prev, [data.integrationId]: { ...data, _updatedAt: Date.now() } };
+      });
+    };
+
+    // Track real socket events as live activity
+    const onActivity = (payload: any) => {
+      const label =
+        payload?.type === 'email_sync' ? 'Syncing emails...' :
+        payload?.type === 'reply_detected' ? 'Reply detected' :
+        payload?.type === 'spam_detected' ? 'Spam detected' :
+        payload?.type === 'email_opened' ? 'Open tracked' :
+        payload?.type === 'email_sent' ? 'Email sent' :
+        payload?.event === 'INSERT' ? 'New message arrived' :
+        payload?.action === 'email_replied' ? 'Reply processed' : null;
+      if (label) {
+        setLastActivity({ label, time: Date.now() });
+        setTimeout(() => setLastActivity(null), 2000);
+      }
+    };
+
+    const onNewMail = () => {
+      setLastActivity({ label: 'New mail arriving...', time: Date.now() });
+      setTimeout(() => setLastActivity(null), 3000);
     };
 
     socket.on('sync:status', onSyncStatus);
+    socket.on('activity_updated', onActivity);
+    socket.on('messages_updated', onActivity);
+    socket.on('new_mail', onNewMail);
     return () => {
       socket.off('sync:status', onSyncStatus);
+      socket.off('activity_updated', onActivity);
+      socket.off('messages_updated', onActivity);
+      socket.off('new_mail', onNewMail);
     };
   }, [socket]);
 
@@ -1028,14 +1061,21 @@ export default function InboxPage() {
           "w-full sm:w-72 md:w-80 lg:w-[350px] border-r flex flex-col transition-all shrink-0 h-[100dvh] md:h-full bg-background",
           leadId && "hidden md:flex"
         )}>
-          {/* Sync status bar */}
-          {backendSyncing && (
-            <div className="px-4 py-1.5 bg-primary/5 border-b border-primary/10 flex items-center gap-2 text-[11px] font-medium text-primary/80 shrink-0">
-              <RefreshCw className="h-3 w-3 animate-spin shrink-0" />
+          {/* Sync status bar — real-time backend activity */}
+          {(backendSyncing || lastActivity) && (
+            <div className={cn(
+              "px-4 py-1.5 border-b flex items-center gap-2 text-[11px] font-medium shrink-0 transition-all duration-300",
+              lastActivity && !backendSyncing
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                : "bg-primary/5 border-primary/10 text-primary/80"
+            )}>
+              {backendSyncing ? (
+                <RefreshCw className="h-3 w-3 animate-spin shrink-0" />
+              ) : (
+                <Check className="h-3 w-3 shrink-0" />
+              )}
               <span className="truncate">
-                {Object.values(syncStatus).some((s: any) => s.syncing) 
-                  ? 'Syncing messages from mailboxes...'
-                  : 'Updating...'}
+                {lastActivity?.label || 'Syncing...'}
               </span>
             </div>
           )}
@@ -1425,10 +1465,19 @@ export default function InboxPage() {
             <div className="flex flex-1 overflow-hidden h-full">
               <div className="flex-1 flex flex-col h-full min-w-0">
                 {/* Thread Header */}
-                {backendSyncing && (
-                  <div className="px-4 py-1 bg-primary/5 border-b border-primary/10 flex items-center gap-2 text-[10px] font-medium text-primary/60 shrink-0">
-                    <RefreshCw className="h-2.5 w-2.5 animate-spin shrink-0" />
-                    <span className="truncate">Syncing new messages...</span>
+                {(backendSyncing || lastActivity) && (
+                  <div className={cn(
+                    "px-4 py-1 border-b flex items-center gap-2 text-[10px] font-medium shrink-0 transition-all duration-300",
+                    lastActivity && !backendSyncing
+                      ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-600"
+                      : "bg-primary/5 border-primary/10 text-primary/60"
+                  )}>
+                    {backendSyncing ? (
+                      <RefreshCw className="h-2.5 w-2.5 animate-spin shrink-0" />
+                    ) : (
+                      <Check className="h-2.5 w-2.5 shrink-0" />
+                    )}
+                    <span className="truncate">{lastActivity?.label || 'Syncing...'}</span>
                   </div>
                 )}
                 <div className="h-16 md:h-20 border-b flex items-center px-4 md:px-8 justify-between bg-background shrink-0 z-10">
