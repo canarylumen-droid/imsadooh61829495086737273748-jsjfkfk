@@ -1299,7 +1299,7 @@ export default function InboxPage() {
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
-            ) : filteredLeads.length === 0 && !leadsFetching && hasLoadedLeadsRef.current && !channelsLoading && allLeads.length > 0 ? (
+            ) : filteredLeads.length === 0 && !leadsFetching && hasLoadedLeadsRef.current && allLeads.length > 0 ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
                 <div className="max-w-xs">
                   <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-500/20 to-gray-500/20 border border-slate-500/20 flex items-center justify-center mb-6 mx-auto">
@@ -1322,20 +1322,22 @@ export default function InboxPage() {
                   </p>
                 </div>
               </div>
-            ) : !leadsFetching && hasLoadedLeadsRef.current && !channelsLoading && allLeads.length === 0 ? (
+            ) : leadsError && !leadsFetching && hasLoadedLeadsRef.current && allLeads.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
-                {leadsError ? (
-                  <div className="max-w-xs text-center space-y-4">
-                    <div className="mx-auto w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
-                      <AlertCircle className="h-8 w-8 text-destructive" />
-                    </div>
-                    <p className="text-sm font-semibold text-foreground/80">Failed to load conversations</p>
-                    <p className="text-xs text-muted-foreground">The server returned an error. Please try again.</p>
-                    <Button variant="outline" size="sm" className="rounded-xl" onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })}>
-                      <RefreshCw className="h-4 w-4 mr-2" /> Retry
-                    </Button>
+                <div className="max-w-xs text-center space-y-4">
+                  <div className="mx-auto w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
+                    <AlertCircle className="h-8 w-8 text-destructive" />
                   </div>
-                ) : hasAnyChannel === false ? (
+                  <p className="text-sm font-semibold text-foreground/80">Failed to load conversations</p>
+                  <p className="text-xs text-muted-foreground">The server returned an error. Please try again.</p>
+                  <Button variant="outline" size="sm" className="rounded-xl" onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })}>
+                    <RefreshCw className="h-4 w-4 mr-2" /> Retry
+                  </Button>
+                </div>
+              </div>
+            ) : !leadsFetching && hasLoadedLeadsRef.current && allLeads.length === 0 && !channelsError ? (
+              <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
+                {hasAnyChannel === false ? (
                   <div className="max-w-xs">
                     <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-8 mx-auto relative group">
                       <div className="absolute inset-0 bg-primary/20 blur-xl md:blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1407,7 +1409,7 @@ export default function InboxPage() {
             ) : (
               <>
                 <div className="flex-1 overflow-y-auto overflow-x-hidden relative" ref={leadListRef}>
-                  <div style={{ height: filteredLeads.length * 90, position: 'relative' }}>
+                  <div style={{ height: filteredLeads.length * 72, position: 'relative' }}>
                     {filteredLeads.slice(virtualStart, virtualEnd).map((lead, i) => {
                       const realIdx = virtualStart + i;
                       return (<div
@@ -1464,14 +1466,14 @@ export default function InboxPage() {
                               ) : localDrafts[lead.id] ? (
                                 <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
                               ) : (
-                                <span className="flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1 max-w-full">
                                   {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
                                     <CheckCheck className="h-3 w-3 shrink-0 text-primary" />
                                   )}
                                   {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <span className="truncate">{lead.snippet ? stripHtml(lead.snippet).substring(0, 60) : "No messages"}</span>
+                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{lead.snippet ? stripHtml(lead.snippet).substring(0, 120) : "No messages"}</span>
                                 </span>
                               )}
                             </p>
