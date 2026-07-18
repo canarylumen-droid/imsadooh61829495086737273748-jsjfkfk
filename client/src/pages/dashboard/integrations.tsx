@@ -504,9 +504,10 @@ export default function IntegrationsPage() {
           integrations: (old.integrations || []).filter((i: any) => i.id !== variables.integrationId)
         };
       });
-      queryClient.setQueryData(["/api/channels/calendly"], (old: any) => old ? { ...old, connected: false } : old);
+      queryClient.setQueryData(["/api/channels/calendly"], { connected: false, accountName: null });
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({ title: "Disconnected", description: "Integration removed successfully." });
     }
@@ -1778,7 +1779,9 @@ export default function IntegrationsPage() {
                           {card.badge ? (
                             <Badge variant="secondary" className="bg-muted text-muted-foreground border-0 font-semibold text-[9px] uppercase tracking-wider py-1">{card.badge}</Badge>
                           ) : isConnected ? (
-                            <Badge className="bg-emerald-500/10 text-emerald-600 border-0 font-bold text-[9px] uppercase tracking-wider py-1">{connectedIntegrations.length} Active</Badge>
+                            <Badge className="bg-emerald-500/10 text-emerald-600 border-0 font-bold text-[9px] uppercase tracking-wider py-1">
+                              {card.id === 'calendly' ? 'Connected' : `${connectedIntegrations.length} Active`}
+                            </Badge>
                           ) : (
                             <div className="h-2 w-2 rounded-full bg-muted-foreground/20" />
                           )}
