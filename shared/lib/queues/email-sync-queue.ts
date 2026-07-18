@@ -323,6 +323,46 @@ export function startEmailSyncWorker() {
             break;
           }
 
+          // ── Replay existing: push all existing DB messages to UI + re-import ───
+          case 'replay-existing': {
+            console.log(`[EmailSyncQueue] replay existing messages for user ${userId}`);
+            const { db } = await import('@shared/lib/db/db.js');
+            const { emailMessages } = await import('@audnix/shared');
+            const { eq, and, isNull } = await import('drizzle-orm');
+
+            // Delete stub email_messages created by the fetchNewMessages race condition
+            // (body parsed after message push → null from_address, null subject, no lead match)
+            const deleted = await db.delete(emailMessages).where(
+              and(
+                eq(emailMessages.userId, userId),
+                isNull(emailMessages.from)
+              )
+            );
+            if (deleted?.rowCount > 0) {
+              console.log(`[EmailSyncQueue] Deleted ${deleted.rowCount} stub email_messages for user ${userId}`);
+            }
+
+            // Re-import last 5000 from each custom_email integration
+            const userIntegrations = await storage.getIntegrations(userId);
+            for (const integration of userIntegrations) {
+              if (integration.connected && integration.provider === 'custom_email') {
+                await imapIdleManager.syncHistoricalEmails(userId, integration.id, 5000).catch((e: any) => {
+                  console.warn(`[EmailSyncQueue] replay: syncHistorical failed for ${integration.id}: ${e.message}`);
+                });
+              }
+            }
+
+            // Fire global refresh — client will refetch all leads/messages/stats from API
+            await Promise.all([
+              clusterSync.notifyLeadsUpdated(userId, { refresh: true }),
+              clusterSync.notifyMessagesUpdated(userId, { refresh: true }),
+              clusterSync.notifyStatsUpdated(userId),
+              clusterSync.notifyStatsCacheInvalidate(userId),
+            ]);
+            console.log(`[EmailSyncQueue] ✅ replay-existing done for user ${userId}`);
+            break;
+          }
+
           // ── Discovery: reconnect missing IMAP sessions ─────────────────────────
           case 'discovery': {
             await imapIdleManager.syncConnections();

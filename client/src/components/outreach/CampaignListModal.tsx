@@ -55,7 +55,6 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
     queryKey: ["/api/outreach/campaigns"],
     enabled: isOpen,
     staleTime: 10_000,
-    refetchInterval: 30_000,
   });
 
   const totalPages = Math.max(1, Math.ceil((campaigns?.length || 0) / PAGE_SIZE));

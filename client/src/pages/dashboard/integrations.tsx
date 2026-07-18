@@ -365,7 +365,8 @@ export default function IntegrationsPage() {
   const { data: userData } = useQuery<UserData>({ queryKey: ["/api/user/profile"] });
   const { data: calendlyStatus } = useQuery<{ connected: boolean }>({
     queryKey: ["/api/channels/calendly"],
-    staleTime: 30_000,
+    staleTime: 5_000,
+    refetchOnMount: true,
   });
 
   const getDailyLimit = () => {
@@ -379,11 +380,32 @@ export default function IntegrationsPage() {
   const reputationStr = stats?.domainHealth !== undefined && stats.domainHealth !== null ? stats.domainHealth.toFixed(2) : null;
   const reputationNum = reputationStr !== null ? parseFloat(reputationStr) : null;
 
+  // Handle OAuth success/error redirect params
   useEffect(() => {
-    // 1. Handle success redirect from OAuth (Gmail/Outlook/Calendly/Instagram)
     const searchParams = new URLSearchParams(window.location.search);
     const success = searchParams.get('success');
+    const error = searchParams.get('error');
     
+    if (error) {
+      const errorLabels: Record<string, string> = {
+        'calendly_denied': 'Calendly authorization was denied.',
+        'calendly_oauth_failed': 'Calendly connection failed. Please try again.',
+        'invalid_request': 'Invalid OAuth request. Please try connecting again.',
+        'invalid_state': 'Session expired. Please try connecting again.',
+        'gmail_denied': 'Gmail authorization was denied.',
+        'outlook_denied': 'Outlook authorization was denied.',
+        'instagram_denied': 'Instagram authorization was denied.'
+      };
+      toast({
+        title: "Connection Failed",
+        description: errorLabels[error] || error.replace(/_/g, ' '),
+        variant: "destructive"
+      });
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+      return;
+    }
+
     if (success) {
       const providers: Record<string, string> = {
         'gmail_connected': 'Gmail',
@@ -400,21 +422,19 @@ export default function IntegrationsPage() {
         });
         queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
         queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
-        // Part 5: Invalidate channel status so inbox doesn't show "Connect Sources" after OAuth
         queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
-        // Refresh inbox so it shows the newly connected mailbox's leads immediately
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
 
-        // Robust re-fetch with slight delay to ensure backend propagation
         setTimeout(() => {
           queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
           queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
         }, 1500);
       }
-      
-      // Clean up URL
+
       const newUrl = window.location.pathname;
       window.history.replaceState({}, '', newUrl);
     }

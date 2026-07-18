@@ -425,3 +425,41 @@ Send email → SMTP 250 OK (or Gmail/Outlook API 200)
 - `shared/lib/channels/email.ts` — `updateSendPlacement()` function + calls after each provider send
 - `services/email-service/src/email/imap-idle-manager.ts` — `checkSentFolderPlacement()` method
 - `shared/lib/realtime/websocket-sync.ts` — expanded `notifyDeliverabilityUpdated` type
+
+## This Session (Jul 18 2026) — Full Real-Time: No Polling, Everything Socket-Driven
+
+### Three Commits
+- `b16258a4` — IMAP fetchNewMessages race condition, bounce DSN detection, deliverability_updated on send, polling 5s→1s, websocket-sync type widened
+- `d5d6c615` — bounce-handler + fbl-webhook now fire stats_updated + stats_cache_invalidate (KPIs were not refreshing on bounce/spam)
+- `97f83957` — SEO: Helmet meta tags for developer docs + MCP server pages, react-helmet-async added
+
+### What Was Fixed
+
+1. **`fetchNewMessages` race condition** (`imap-idle-manager.ts`): Body parsing with `simpleParser` was async but `msg.once('end')` pushed items synchronously before body was parsed → empty messages, UI got nothing. Fixed with promise-based wait for body parsing.
+
+2. **Bounce DSN detection** (`paged-email-importer.ts`): `MAILER-DAEMON`/`postmaster` bounces arriving in inbox were filtered out by `isTransactionalEmail` before reaching bounce detection. Now runs BEFORE that filter, extracts original recipient from bounce body, matches to `email_tracking`, sets `placement='bounced'`, fires `deliverability_updated` + `stats_updated`.
+
+3. **`stats_updated` missing from bounce-handler.ts**: Bounce handler fired `deliverability_updated` but NOT `stats_updated` — so home page KPIs never refreshed when a bounce was recorded. Fixed.
+
+4. **`stats_updated` missing from fbl-webhook.ts**: Same issue — spam complaint only updated deliverability page, not KPI page. Fixed.
+
+5. **Polling fallback 5s→1s**: IMAP overflow polling now checks every 1 second.
+
+6. **SEO meta tags**: `react-helmet-async` added. Developer docs (`/developer`) and MCP server (`/dashboard/mcp-server`) now have unique `<title>`, `<meta description>`, `<og:title>`, `<og:description>` tags for Google indexing. MCP page meta targets "MCP Server" / "AI Agent Integration" keywords for AI tool crawlers.
+
+### Data Flow — All Paths Now Fire Both deliverability_updated + stats_updated
+
+| Event | deliverability_updated | stats_updated | stats_cache_invalidate |
+|---|---|---|---|
+| Send (SMTP/Gmail/Outlook) | ✅ | ✅ | ✅ |
+| Open (tracking pixel) | ✅ (placement=inbox) | ✅ | ✅ |
+| Bounce (handler) | ✅ (placement=bounced) | ✅ | ✅ |
+| Bounce (IMAP DSN) | ✅ (placement=bounced) | ✅ | ✅ |
+| FBL/spam complaint | ✅ (placement=spam) | ✅ | ✅ |
+| Spam folder IMAP detect | ✅ | ✅ | ✅ |
+
+### Deploy Steps
+```bash
+cd /home/ubuntu/app && git pull
+npm run build:client && pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-imap
+```

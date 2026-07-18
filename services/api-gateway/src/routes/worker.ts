@@ -201,5 +201,40 @@ router.get('/outreach/tick', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/worker/replay-existing
+ * Trigger replay of all existing DB messages to UI via socket.
+ * One-time recovery trigger for users affected by the fetchNewMessages race condition.
+ */
+router.post('/replay-existing', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { hasRedis } = await import('@shared/lib/queues/redis-config.js');
+    if (!hasRedis) {
+      return res.status(503).json({ error: 'Redis not available — cannot enqueue replay job' });
+    }
+
+    const { emailSyncQueue } = await import('@shared/lib/queues/email-sync-queue.js');
+    await emailSyncQueue.add('replay-existing', {
+      type: 'replay-existing',
+      userId,
+      timestamp: Date.now(),
+    }, {
+      removeOnComplete: true,
+      removeOnFail: true,
+      priority: 1,
+    });
+
+    res.json({ success: true, message: 'Replay job enqueued. Messages will appear within a few seconds.' });
+  } catch (error: any) {
+    console.error('[Worker] replay-existing error:', error.message);
+    res.status(500).json({ error: 'Failed to enqueue replay job' });
+  }
+});
+
 export default router;
 
