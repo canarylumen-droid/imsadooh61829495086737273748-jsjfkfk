@@ -82,6 +82,12 @@ export default function DeliverabilityPage() {
   const atRiskCount = mailboxes.filter((m: any) => (m.reputationScore ?? 0) < 70 && (m.reputationScore ?? 0) >= 40).length;
   const criticalCount = mailboxes.filter((m: any) => (m.reputationScore ?? 0) < 40).length;
 
+  const totalBounces = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realBounceCount ?? 0), 0);
+  const totalSpam = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realSpamCount ?? 0), 0);
+  const totalSent = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realSentCount ?? 0), 0);
+  const globalBounceRate = totalSent > 0 ? ((totalBounces / totalSent) * 100).toFixed(1) : null;
+  const globalSpamRate = totalSent > 0 ? ((totalSpam / totalSent) * 100).toFixed(1) : null;
+
   return (
     <PageWrapper className="space-y-6">
       <div className="flex items-center justify-between">
@@ -112,7 +118,7 @@ export default function DeliverabilityPage() {
         </Card>
       ) : (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <Card className="bg-card/50 border-border/40">
               <CardContent className="p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Average Reputation</p>
@@ -140,6 +146,26 @@ export default function DeliverabilityPage() {
                 <p className="text-2xl font-black text-red-500">{criticalCount} <span className="text-sm font-medium text-muted-foreground/60">mailboxes</span></p>
               </CardContent>
             </Card>
+            {globalBounceRate !== null && (
+              <Card className="bg-card/50 border-border/40">
+                <CardContent className="p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Bounce Rate</p>
+                  <p className={cn("text-2xl font-black", parseFloat(globalBounceRate) > 5 ? "text-red-500" : parseFloat(globalBounceRate) > 2 ? "text-amber-500" : "text-emerald-500")}>
+                    {globalBounceRate}%
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            {globalSpamRate !== null && (
+              <Card className="bg-card/50 border-border/40">
+                <CardContent className="p-4">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Spam Rate</p>
+                  <p className={cn("text-2xl font-black", parseFloat(globalSpamRate) > 5 ? "text-red-500" : parseFloat(globalSpamRate) > 2 ? "text-amber-500" : "text-emerald-500")}>
+                    {globalSpamRate}%
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           <InboxPlacementPie />
@@ -202,12 +228,16 @@ export default function DeliverabilityPage() {
                           </p>
                         </div>
                         <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Bounces</p>
-                          <p className={cn("text-sm font-bold", bounceCount > 0 ? "text-red-500" : "")}>{bounceCount}</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Bounce Rate</p>
+                          <p className={cn("text-sm font-bold", sentCount > 0 ? (bounceCount / sentCount) * 100 > 5 ? "text-red-500" : (bounceCount / sentCount) * 100 > 2 ? "text-amber-500" : "text-emerald-500" : "")}>
+                            {sentCount > 0 ? `${((bounceCount / sentCount) * 100).toFixed(1)}%` : '—'}
+                          </p>
                         </div>
                         <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Spam Reports</p>
-                          <p className={cn("text-sm font-bold", spamCount > 0 ? "text-red-500" : "")}>{spamCount}</p>
+                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Spam Rate</p>
+                          <p className={cn("text-sm font-bold", sentCount > 0 ? (spamCount / sentCount) * 100 > 5 ? "text-red-500" : (spamCount / sentCount) * 100 > 2 ? "text-amber-500" : "text-emerald-500" : "")}>
+                            {sentCount > 0 ? `${((spamCount / sentCount) * 100).toFixed(1)}%` : '—'}
+                          </p>
                         </div>
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">DNS</p>

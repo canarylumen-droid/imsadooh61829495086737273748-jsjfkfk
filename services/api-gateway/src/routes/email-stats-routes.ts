@@ -3,7 +3,7 @@ import { requireAuthOrApiKey, getCurrentUserId } from '../middleware/auth.js';
 import { bounceHandler } from '@services/email-service/src/email/bounce-handler.js';
 import { smtpAbuseProtection } from '@services/email-service/src/email/smtp-abuse-protection.js';
 import { db } from '@shared/lib/db/db.js';
-import { emailTracking, integrations } from '@audnix/shared';
+import { emailTracking, integrations, bounceTracker } from '@audnix/shared';
 import { warmupMailboxes } from '@audnix/shared';
 import { eq, and, sql, gte, desc } from 'drizzle-orm';
 
@@ -121,7 +121,8 @@ router.get('/inbox-placement', requireAuthOrApiKey, async (req: Request, res: Re
 
     const integrationIds = userIntegrations.map(i => i.id);
 
-    const rows = await db
+    // 1. Get placement data from email_tracking
+    const trackingRows = await db
       .select({
         integrationId: emailTracking.integrationId,
         placement: emailTracking.placement,
@@ -136,12 +137,29 @@ router.get('/inbox-placement', requireAuthOrApiKey, async (req: Request, res: Re
       )
       .groupBy(emailTracking.integrationId, emailTracking.placement);
 
+    // 2. Get real bounce/spam data from bounce_tracker
+    const bounceRows = await db
+      .select({
+        integrationId: bounceTracker.integrationId,
+        bounceType: bounceTracker.bounceType,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(bounceTracker)
+      .where(
+        and(
+          sql`${bounceTracker.integrationId} IN ${integrationIds}`,
+          gte(bounceTracker.timestamp, since)
+        )
+      )
+      .groupBy(bounceTracker.integrationId, bounceTracker.bounceType);
+
     const perMailbox: Record<string, { sent: number; inbox: number; spam: number; bounce: number; other: number }> = {};
     for (const id of integrationIds) {
       perMailbox[id] = { sent: 0, inbox: 0, spam: 0, bounce: 0, other: 0 };
     }
 
-    for (const row of rows) {
+    // Apply email_tracking data
+    for (const row of trackingRows) {
       const id = row.integrationId ?? '';
       if (!id) continue;
       if (!perMailbox[id]) perMailbox[id] = { sent: 0, inbox: 0, spam: 0, bounce: 0, other: 0 };
@@ -150,6 +168,18 @@ router.get('/inbox-placement', requireAuthOrApiKey, async (req: Request, res: Re
       else if (row.placement === 'spam') perMailbox[id].spam += row.count;
       else if (row.placement === 'bounce') perMailbox[id].bounce += row.count;
       else perMailbox[id].other += row.count;
+    }
+
+    // Apply bounce_tracker data (overrides email_tracking with real data)
+    for (const row of bounceRows) {
+      const id = row.integrationId ?? '';
+      if (!id) continue;
+      if (!perMailbox[id]) perMailbox[id] = { sent: 0, inbox: 0, spam: 0, bounce: 0, other: 0 };
+      if (row.bounceType === 'hard' || row.bounceType === 'soft') {
+        perMailbox[id].bounce += row.count;
+      } else if (row.bounceType === 'spam') {
+        perMailbox[id].spam += row.count;
+      }
     }
 
     let totalSent = 0, totalInbox = 0, totalSpam = 0, totalBounce = 0;
