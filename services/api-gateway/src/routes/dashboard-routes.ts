@@ -1360,6 +1360,7 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
     try {
         const userId = req.session?.userId!;
         const mailboxId = req.query.mailboxId as string | undefined;
+        const days = Math.min(parseInt(req.query.days as string) || 1, 365);
 
         const { db } = await import('@shared/lib/db/db.js');
         const { warmupMailboxes, warmupInteractions } = await import('@audnix/shared');
@@ -1381,10 +1382,16 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
 
         if (warmupMailboxIds.length === 0) { res.json({ hours: [] }); return; }
 
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+        // For 24-48h: hourly grouping; for longer: daily grouping
+        const useHourly = days <= 2;
+        const timeField = useHourly
+            ? sql<string>`to_char(${warmupInteractions.sentAt}, 'HH24')`
+            : sql<string>`to_char(${warmupInteractions.sentAt}, 'YYYY-MM-DD')`;
 
         const rows = await db.select({
-            hour: sql<number>`EXTRACT(HOUR FROM ${warmupInteractions.sentAt})::int`,
+            period: timeField,
             sends: sql<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound')`,
             opens: sql<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound' AND ${warmupInteractions.status} = 'delivered')`,
             bounces: sql<number>`count(*) filter (where ${warmupInteractions.status} = 'bounced' OR ${warmupInteractions.status} = 'failed')`,
@@ -1392,28 +1399,19 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
             .from(warmupInteractions)
             .where(and(
                 inArray(warmupInteractions.fromMailboxId, warmupMailboxIds),
-                gte(warmupInteractions.sentAt, twentyFourHoursAgo),
+                gte(warmupInteractions.sentAt, since),
             ))
-            .groupBy(sql`EXTRACT(HOUR FROM ${warmupInteractions.sentAt})`)
-            .orderBy(sql`EXTRACT(HOUR FROM ${warmupInteractions.sentAt})`);
+            .groupBy(timeField)
+            .orderBy(timeField);
 
-        const hoursMap = new Map<number, { sends: number; opens: number; bounces: number }>();
-        for (const row of rows) {
-            hoursMap.set(row.hour, {
-                sends: Number(row.sends),
-                opens: Number(row.opens),
-                bounces: Number(row.bounces),
-            });
-        }
-
-        const hours = Array.from({ length: 24 }, (_, i) => ({
-            hour: String(i).padStart(2, '0'),
-            sends: hoursMap.get(i)?.sends || 0,
-            opens: hoursMap.get(i)?.opens || 0,
-            bounces: hoursMap.get(i)?.bounces || 0,
+        const periods: Array<{ period: string; sends: number; opens: number; bounces: number }> = rows.map(r => ({
+            period: r.period,
+            sends: Number(r.sends),
+            opens: Number(r.opens),
+            bounces: Number(r.bounces),
         }));
 
-        res.json({ hours });
+        res.json({ periods, hourly: useHourly });
     } catch (error: any) {
         console.error('[Warmup] Activity error:', error.message);
         res.json({ hours: [] });

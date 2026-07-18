@@ -46,6 +46,7 @@ export default function WarmupPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [page, setPage] = useState(0);
   const [showAll, setShowAll] = useState(false);
+  const [warmupDays, setWarmupDays] = useState(1);
 
   useEffect(() => {
     if (!socket) return;
@@ -75,10 +76,11 @@ export default function WarmupPage() {
   });
 
   const { data: activityData } = useQuery<any>({
-    queryKey: ["/api/warmup/activity", selectedMailboxId],
+    queryKey: ["/api/warmup/activity", selectedMailboxId, warmupDays],
     queryFn: async () => {
       const url = new URL("/api/warmup/activity", window.location.origin);
       if (selectedMailboxId) url.searchParams.set("mailboxId", selectedMailboxId);
+      url.searchParams.set("days", String(warmupDays));
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch warmup activity");
       return res.json();
@@ -88,7 +90,8 @@ export default function WarmupPage() {
   });
 
   const warmupStatuses: MailboxWarmup[] = warmupData?.mailboxes || [];
-  const activityHours: { hour: string; sends: number; opens: number; bounces: number }[] = activityData?.hours || [];
+  const activityPeriods: { period: string; sends: number; opens: number; bounces: number }[] = activityData?.periods || [];
+  const isHourly = activityData?.hourly ?? true;
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return warmupStatuses;
@@ -264,31 +267,49 @@ export default function WarmupPage() {
         </Card>
       </div>
 
-      {/* 24h Activity Chart */}
+      {/* Warmup Activity Chart */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <BarChart3 className="h-4 w-4 text-primary" />
-            24-Hour Warmup Activity
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              Warmup Activity
+            </CardTitle>
+            <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-0.5">
+              {[1, 7, 14, 30, 90, 365].map(d => (
+                <button
+                  key={d}
+                  onClick={() => setWarmupDays(d)}
+                  className={cn(
+                    "px-2 py-0.5 text-[10px] font-medium rounded-md transition-colors",
+                    warmupDays === d
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {d === 1 ? '24H' : d === 365 ? '1Y' : `${d}D`}
+                </button>
+              ))}
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {activityHours.length === 0 ? (
+          {activityPeriods.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
               <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              No warmup data in the last 24 hours
+              No warmup data in this period
             </div>
           ) : (
             <div className="w-full h-48">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={activityHours} barCategoryGap="20%">
+                <BarChart data={activityPeriods} barCategoryGap={isHourly ? "20%" : "10%"}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.4} />
                   <XAxis
-                    dataKey="hour"
-                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    dataKey="period"
+                    tick={{ fontSize: isHourly ? 10 : 8, fill: 'hsl(var(--muted-foreground))' }}
                     tickLine={false}
                     axisLine={false}
-                    interval={2}
+                    interval={isHourly ? 2 : Math.max(0, Math.floor(activityPeriods.length / 10) - 1)}
                   />
                   <YAxis
                     tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
@@ -306,16 +327,16 @@ export default function WarmupPage() {
                     formatter={(value: number, name: string) => [
                       value, name.charAt(0).toUpperCase() + name.slice(1)
                     ]}
-                    labelFormatter={(hour: string) => `${hour}:00`}
+                    labelFormatter={(period: string) => isHourly ? `${period}:00` : period}
                   />
                   <Legend
                     iconType="circle"
                     iconSize={8}
                     wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }}
                   />
-                  <Bar dataKey="sends" name="Sends" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={16} />
-                  <Bar dataKey="opens" name="Opens" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={16} />
-                  <Bar dataKey="bounces" name="Bounces" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={16} />
+                  <Bar dataKey="sends" name="Sends" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={isHourly ? 16 : 32} />
+                  <Bar dataKey="opens" name="Opens" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={isHourly ? 16 : 32} />
+                  <Bar dataKey="bounces" name="Bounces" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={isHourly ? 16 : 32} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

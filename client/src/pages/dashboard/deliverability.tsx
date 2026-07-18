@@ -56,6 +56,7 @@ export default function DeliverabilityPage() {
   }, [socket, queryClient]);
 
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [placementDays, setPlacementDays] = useState(30);
 
   const { data: integrationsData, isLoading, refetch } = useQuery({
     queryKey: ['/api/integrations'],
@@ -63,10 +64,10 @@ export default function DeliverabilityPage() {
   });
 
   const { data: placementData } = useQuery<InboxPlacementData>({
-    queryKey: ["/api/stats/inbox-placement", { days: 30, integrationId: selectedMailboxId }],
+    queryKey: ["/api/stats/inbox-placement", { days: placementDays, integrationId: selectedMailboxId }],
     queryFn: async () => {
       const url = new URL("/api/stats/inbox-placement", window.location.origin);
-      url.searchParams.set("days", "30");
+      url.searchParams.set("days", String(placementDays));
       if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch inbox placement");
