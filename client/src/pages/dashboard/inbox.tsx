@@ -1028,6 +1028,17 @@ export default function InboxPage() {
           "w-full sm:w-72 md:w-80 lg:w-[350px] border-r flex flex-col transition-all shrink-0 h-[100dvh] md:h-full bg-background",
           leadId && "hidden md:flex"
         )}>
+          {/* Sync status bar */}
+          {backendSyncing && (
+            <div className="px-4 py-1.5 bg-primary/5 border-b border-primary/10 flex items-center gap-2 text-[11px] font-medium text-primary/80 shrink-0">
+              <RefreshCw className="h-3 w-3 animate-spin shrink-0" />
+              <span className="truncate">
+                {Object.values(syncStatus).some((s: any) => s.syncing) 
+                  ? 'Syncing messages from mailboxes...'
+                  : 'Updating...'}
+              </span>
+            </div>
+          )}
           <div className="p-4 border-b space-y-4 shrink-0">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-2">
               <div className="flex items-center gap-2">
@@ -1414,6 +1425,12 @@ export default function InboxPage() {
             <div className="flex flex-1 overflow-hidden h-full">
               <div className="flex-1 flex flex-col h-full min-w-0">
                 {/* Thread Header */}
+                {backendSyncing && (
+                  <div className="px-4 py-1 bg-primary/5 border-b border-primary/10 flex items-center gap-2 text-[10px] font-medium text-primary/60 shrink-0">
+                    <RefreshCw className="h-2.5 w-2.5 animate-spin shrink-0" />
+                    <span className="truncate">Syncing new messages...</span>
+                  </div>
+                )}
                 <div className="h-16 md:h-20 border-b flex items-center px-4 md:px-8 justify-between bg-background shrink-0 z-10">
                   <div className="flex items-center gap-4 min-w-0">
                     {/* Back Button for All Device Views */}
