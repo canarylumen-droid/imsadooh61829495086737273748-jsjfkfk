@@ -330,3 +330,14 @@ Cleared `imap:active:*` (5 keys) + `lock:imap:conn:*` (5 keys), restarted the wo
 
 ### SendGrid
 - `TWILIO_SENDGRID_API_KEY` is set in `.env` on EC2 (SendGrid auth is configured)
+
+### Inbox Cleanup (Batch 2)
+1. **Tick only for our sent messages** — `lastMessageDirection === 'outbound'` check prevents ticks on leads we never contacted
+2. **Lead list cleaner** — removed email/company overflow text, smaller Brain button, `font-semibold` for name, `overflow-x-hidden` on lead list + messages area
+3. **No horizontal scroll** — `overflow-x-hidden` on both panes, message bubbles use `break-words break-all`
+4. **Push GitHub + AWS** — `84932256` pushed + scp + build + restart API gateway
+
+### Git History (Jul 18)
+- `84932256` — inbox cleanup: tick only for our sent messages, cleaner lead list, no horizontal scroll
+- `6936aa54` — fix: avatar upload — proper MIME type for S3, CSP img-src, avatar opens settings
+- `0e16174f` — fix: inbox UI cleanup — archive toggle, header weight, empty state, snippet truncation, status tag
