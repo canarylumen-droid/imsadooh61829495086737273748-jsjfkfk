@@ -1,3 +1,8 @@
+import dns from 'dns';
+import { promisify } from 'util';
+import net from 'net';
+
+const resolveMx = promisify(dns.resolveMx);
 
 /**
  * Email Discovery Service
@@ -15,6 +20,31 @@ interface EmailSettings {
     };
     provider: string;
 }
+
+/**
+ * Known MX → IMAP host mappings based on common providers.
+ * Derived from the MX hostname, not the email domain.
+ */
+const MX_TO_IMAP: Record<string, string> = {
+    'aspmx.l.google.com': 'imap.gmail.com',
+    'alt1.aspmx.l.google.com': 'imap.gmail.com',
+    'alt2.aspmx.l.google.com': 'imap.gmail.com',
+    'alt3.aspmx.l.google.com': 'imap.gmail.com',
+    'alt4.aspmx.l.google.com': 'imap.gmail.com',
+    'mx1.office365.com': 'outlook.office365.com',
+    'mx2.office365.com': 'outlook.office365.com',
+    'mx3.office365.com': 'outlook.office365.com',
+    'mx4.office365.com': 'outlook.office365.com',
+    'mx1.microsoft365.com': 'outlook.office365.com',
+    'mx2.microsoft365.com': 'outlook.office365.com',
+    'mx1.hotmail.com': 'outlook.office365.com',
+    'mx2.hotmail.com': 'outlook.office365.com',
+    'mx1.mail.yahoo.com': 'imap.mail.yahoo.com',
+    'mx2.mail.yahoo.com': 'imap.mail.yahoo.com',
+    'mx1.zoho.com': 'imappro.zoho.com',
+    'mx2.zoho.com': 'imappro.zoho.com',
+    'mx3.zoho.com': 'imappro.zoho.com',
+};
 
 const PROVIDER_MAP: Record<string, EmailSettings> = {
     'gmail.com': {
@@ -152,7 +182,23 @@ export class EmailDiscoveryService {
             };
         }
 
-        // 2. Probe common subdomains + port combinations for custom/enterprise domains
+        // 2. MX-based discovery: resolve MX, derive SMTP/IMAP from MX host
+        const mxHost = await this.resolveMxHost(domain);
+        if (mxHost) {
+            const smtpHost = mxHost;
+            // Try to derive IMAP from MX host mapping, or guess from domain
+            const imapHost = MX_TO_IMAP[mxHost.toLowerCase()]
+                || this.guessImapFromMx(mxHost, domain);
+
+            return {
+                smtp: { host: smtpHost, port: 587 },
+                imap: { host: imapHost, port: 993 },
+                provider: 'custom',
+                suggestedName
+            };
+        }
+
+        // 3. Fallback: probe common subdomains + port combinations
         const smtpCandidates: Array<{ host: string; port: number }> = [
             { host: `smtp.${domain}`, port: 587 },
             { host: `smtp.${domain}`, port: 465 },
@@ -170,7 +216,6 @@ export class EmailDiscoveryService {
             { host: domain, port: 993 },
         ];
 
-        const { default: net } = await import('net');
         const probePort = (host: string, port: number, timeoutMs = 3000): Promise<boolean> =>
             new Promise(resolve => {
                 const sock = new net.Socket();
@@ -181,7 +226,7 @@ export class EmailDiscoveryService {
                 sock.connect(port, host);
             });
 
-        let smtpResult = smtpCandidates[0]; // safe fallback
+        let smtpResult = smtpCandidates[0];
         for (const candidate of smtpCandidates) {
             if (await probePort(candidate.host, candidate.port)) {
                 smtpResult = candidate;
@@ -189,7 +234,7 @@ export class EmailDiscoveryService {
             }
         }
 
-        let imapResult = imapCandidates[0]; // safe fallback
+        let imapResult = imapCandidates[0];
         for (const candidate of imapCandidates) {
             if (await probePort(candidate.host, candidate.port)) {
                 imapResult = candidate;
@@ -206,6 +251,37 @@ export class EmailDiscoveryService {
     }
 
     /**
+     * Resolve the highest-priority MX hostname for a domain.
+     */
+    private static async resolveMxHost(domain: string): Promise<string | null> {
+        try {
+            const records = await resolveMx(domain);
+            if (!records || records.length === 0) return null;
+            records.sort((a, b) => a.priority - b.priority);
+            return records[0].exchange.replace(/\.$/, '');
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Guess IMAP host from MX hostname or domain.
+     */
+    private static guessImapFromMx(mxHost: string, domain: string): string {
+        const mxl = mxHost.toLowerCase();
+        if (mxl.includes('google') || mxl.includes('aspmx')) return 'imap.gmail.com';
+        if (mxl.includes('office365') || mxl.includes('outlook') || mxl.includes('hotmail')) return 'outlook.office365.com';
+        if (mxl.includes('yahoo')) return 'imap.mail.yahoo.com';
+        if (mxl.includes('zoho')) return 'imappro.zoho.com';
+        if (mxl.includes('icloud') || mxl.includes('me.com')) return 'imap.mail.me.com';
+        if (mxl.includes('aol')) return 'imap.aol.com';
+        if (mxl.includes('gmx')) return 'imap.gmx.com';
+
+        // Fallback: guess from domain
+        return `imap.${domain}`;
+    }
+
+    /**
      * Extract a likely display name from an email address
      */
     static suggestNameFromEmail(email: string): string {
@@ -213,15 +289,13 @@ export class EmailDiscoveryService {
             const prefix = email.split('@')[0];
             if (!prefix) return '';
 
-            // Handle common delimiters: dots, underscores, plus signs, hyphens
             const parts = prefix.split(/[._+\-]/);
-            
-            // Capitalize each part and join with spaces
+
             return parts
                 .map(part => part.trim())
                 .filter(part => part.length > 0)
                 .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
-                .filter(part => !/^\d+$/.test(part)) // Filter out purely numeric parts
+                .filter(part => !/^\d+$/.test(part))
                 .join(' ')
                 .trim();
         } catch (e) {
@@ -229,4 +303,3 @@ export class EmailDiscoveryService {
         }
     }
 }
-

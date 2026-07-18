@@ -535,6 +535,28 @@ export default function IntegrationsPage() {
     }
   });
 
+  const [testConnectionResult, setTestConnectionResult] = useState<any>(null);
+  useEffect(() => { setTestConnectionResult(null); }, [customEmailConfig.smtpHost, customEmailConfig.smtpPort, customEmailConfig.imapHost, customEmailConfig.imapPort, customEmailConfig.email, customEmailConfig.password]);
+
+  const testConnectionMutation = useMutation({
+    mutationFn: async (config: { smtpHost: string; smtpPort: string; imapHost: string; imapPort: string; email: string; password: string }) => {
+      const res = await apiRequest("POST", "/api/custom-email/test", config);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setTestConnectionResult(data);
+      if (data.smtpVerified || data.imapVerified) {
+        toast({ title: "Connection Successful", description: data.message });
+      } else {
+        toast({ title: "Connection Failed", description: data.message || data.smtpError || data.imapError, variant: "destructive" });
+      }
+    },
+    onError: (err: any) => {
+      setTestConnectionResult({ smtpVerified: false, imapVerified: false, message: err.message, smtpError: err.message });
+      toast({ title: "Test Failed", description: err.message, variant: "destructive" });
+    }
+  });
+
   const connectCustomEmailMutation = useMutation({
     mutationFn: async (config: typeof customEmailConfig & { passwordType?: string }) => {
       const response = await apiRequest("POST", "/api/custom-email/connect", config);
@@ -983,6 +1005,7 @@ export default function IntegrationsPage() {
                         className="rounded-xl px-4 py-6 border-border/50 bg-muted/20 text-foreground hover:bg-muted/30 transition-all flex flex-col items-center gap-2 flex-1 min-w-0 sm:min-w-[140px]"
                         onClick={() => {
                           setCustomEmailConfig({ smtpHost: '', smtpPort: '587', imapHost: '', imapPort: '993', email: '', password: '', fromName: '' });
+                          setTestConnectionResult(null);
                         }}
                       >
                         <Plus className="h-5 w-5" />
@@ -1289,7 +1312,23 @@ export default function IntegrationsPage() {
                     ))}
                   </div>
 
-                  <div className="flex gap-4 pt-4">
+                  <div className="flex gap-2 pt-4">
+                    <Button
+                      variant="outline"
+                      className="rounded-xl px-6 font-semibold h-11 gap-2"
+                      disabled={!customEmailConfig.email || !customEmailConfig.password || testConnectionMutation.isPending}
+                      onClick={() => testConnectionMutation.mutate({
+                        smtpHost: customEmailConfig.smtpHost,
+                        smtpPort: customEmailConfig.smtpPort,
+                        imapHost: customEmailConfig.imapHost,
+                        imapPort: customEmailConfig.imapPort,
+                        email: customEmailConfig.email,
+                        password: customEmailConfig.password,
+                      })}
+                    >
+                      {testConnectionMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
+                      {testConnectionMutation.isPending ? "Testing..." : testConnectionResult ? "Tested" : "Test Connection"}
+                    </Button>
                     <Button
                       className="rounded-xl px-8 font-semibold h-11 flex-1"
                       disabled={connectCustomEmailMutation.isPending || (isAtMailboxLimit && getActivePlanId(userData) !== 'enterprise')}
@@ -1300,6 +1339,23 @@ export default function IntegrationsPage() {
                     </Button>
                     <Button variant="outline" className="rounded-xl px-8 font-semibold h-11" onClick={() => setIsEditingCustomEmail(false)}>Cancel</Button>
                   </div>
+                  {testConnectionResult && (
+                    <div className={cn(
+                      "rounded-xl p-3 text-xs flex items-start gap-2",
+                      testConnectionResult.smtpVerified || testConnectionResult.imapVerified
+                        ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                        : "bg-destructive/10 border border-destructive/20 text-destructive"
+                    )}>
+                      {testConnectionResult.smtpVerified || testConnectionResult.imapVerified
+                        ? <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                        : <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />}
+                      <div className="space-y-1">
+                        <p className="font-semibold">{testConnectionResult.message}</p>
+                        {testConnectionResult.smtpError && <p className="opacity-70">SMTP: {testConnectionResult.smtpError}</p>}
+                        {testConnectionResult.imapError && <p className="opacity-70">IMAP: {testConnectionResult.imapError}</p>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : hasMailboxesConnected ? (
                 <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
@@ -1369,7 +1425,7 @@ export default function IntegrationsPage() {
                       <Button
                         size="sm"
                         className="rounded-full gap-2 shadow-lg shadow-primary/20"
-                        onClick={() => setIsEditingCustomEmail(true)}
+                        onClick={() => { setIsEditingCustomEmail(true); setTestConnectionResult(null); }}
                         variant={isAtMailboxLimit ? "outline" : "default"}
                       >
                         <Plus className="h-4 w-4" /> Add Mailbox
@@ -1779,7 +1835,7 @@ export default function IntegrationsPage() {
                     </div>
                     <Button 
                       className="rounded-xl gap-2 h-11 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-wider shadow-lg shadow-primary/15"
-                      onClick={() => setIsEditingCustomEmail(true)}
+                      onClick={() => { setIsEditingCustomEmail(true); setTestConnectionResult(null); }}
                     >
                       <Plus className="h-4 w-4" /> Start Connecting
                     </Button>
