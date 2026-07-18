@@ -3,7 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Key, Server, BookOpen, Copy, Check, Terminal, AlertCircle, Globe } from "lucide-react";
+import { Search, Key, Server, BookOpen, Copy, Check, Terminal, AlertCircle, Globe, ChevronRight } from "lucide-react";
 
 interface EndpointItem {
   method: string;

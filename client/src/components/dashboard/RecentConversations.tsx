@@ -89,7 +89,6 @@ export function RecentConversations() {
   });
 
   const isAnyChannelConnected = integrations?.some(i => i.connected) ?? false;
-  const hasLoadedLeads = Array.isArray(leadsData?.leads);
 
   // Real-time synchronization
   useEffect(() => {
@@ -149,6 +148,7 @@ export function RecentConversations() {
   });
 
   const allLeads = (leadsData as any)?.leads || [];
+  const hasLoadedLeads = Array.isArray(leadsData?.leads);
   const messages = (messagesData as any)?.messages || [];
   const leads = allLeads.filter((l: Lead) => {
     const ch = l.channel || l.metadata?.provider || 'email';
