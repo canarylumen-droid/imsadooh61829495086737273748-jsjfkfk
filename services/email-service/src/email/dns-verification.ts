@@ -257,11 +257,43 @@ async function checkMx(domain: string): Promise<DnsVerificationResult['mx']> {
   }
 }
 
-async function checkBlacklist(_domain: string): Promise<DnsVerificationResult['blacklist']> {
-  // DNSBL/RBL queries are skipped — they cause slow timeouts and false positives.
-  // Real-time blacklist checking is unreliable for individual sending domains.
-  // The reputation system (bounce/spam tracking) handles deliverability safety instead.
-  return { isBlacklisted: false, listedOn: [] };
+async function checkBlacklist(domain: string): Promise<DnsVerificationResult['blacklist']> {
+  const BLACKLISTS = [
+    'zen.spamhaus.org',
+    'bl.spamcop.net',
+    'dnsbl.sorbs.net',
+    'b.barracudacentral.org',
+    'psbl.surriel.com',
+  ];
+  const listedOn: string[] = [];
+
+  try {
+    const ips = await promisify(dns.resolve4)(domain);
+    for (const ip of ips) {
+      const reversed = ip.split('.').reverse().join('.');
+      for (const bl of BLACKLISTS) {
+        try {
+          await promisify(dns.resolve4)(`${reversed}.${bl}`);
+          listedOn.push(bl);
+        } catch {
+          // Not listed on this BL — expected for most lookups
+        }
+      }
+    }
+    // Also check the domain directly against domain-based RBLs
+    for (const bl of ['multi.surbl.org', 'uribl.spameatingmonkey.net', 'dbl.spamhaus.org']) {
+      try {
+        await promisify(dns.resolve4)(`${domain}.${bl}`);
+        listedOn.push(bl);
+      } catch {
+        // Not listed
+      }
+    }
+  } catch {
+    // DNS resolution failed for the domain itself — can't check blacklists
+  }
+
+  return { isBlacklisted: listedOn.length > 0, listedOn };
 }
 
 async function debouncedDnsQuery<T>(key: string, queryFn: () => Promise<T>): Promise<T> {

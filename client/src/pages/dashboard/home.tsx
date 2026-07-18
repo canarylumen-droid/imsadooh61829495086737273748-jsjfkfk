@@ -165,7 +165,7 @@ export default function DashboardHome() {
       }, 50);
     };
 
-    let statsTimeout: NodeJS.Timeout;
+    let statsTimeout: ReturnType<typeof setTimeout>;
     const handleStatsUpdated = () => {
       clearTimeout(statsTimeout);
       statsTimeout = setTimeout(() => {
@@ -191,6 +191,10 @@ export default function DashboardHome() {
     socket.on('activity_updated', handleActivityUpdated);
     socket.on('leads_updated', handleLeadsUpdated);
     socket.on('notification', handleActivityUpdated); // Refresh activity on notification
+    socket.on('dns_verified', () => {
+      clearTimeout(statsTimeout);
+      statsTimeout = setTimeout(() => queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] }), 300) as any;
+    });
 
     return () => {
       socket.off('settings_updated', handleSettingsUpdated);
@@ -198,6 +202,7 @@ export default function DashboardHome() {
       socket.off('activity_updated', handleActivityUpdated);
       socket.off('leads_updated', handleLeadsUpdated);
       socket.off('notification', handleActivityUpdated);
+      socket.off('dns_verified');
       clearTimeout(settingsTimeout);
       clearTimeout(statsTimeout);
       clearTimeout(activityTimeout);

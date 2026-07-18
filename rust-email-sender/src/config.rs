@@ -12,6 +12,8 @@ pub struct Config {
     pub poll_interval_ms: u64,
     pub smtp_timeout_secs: u64,
     pub smtp_port: u16,
+    pub dns_queue_name: String,
+    pub dns_result_queue_name: String,
 }
 
 impl Config {
@@ -23,6 +25,10 @@ impl Config {
                 .unwrap_or_else(|_| "email-send-queue".to_string()),
             result_queue_name: env::var("EMAIL_RESULT_QUEUE_NAME")
                 .unwrap_or_else(|_| "email-send-results".to_string()),
+            dns_queue_name: env::var("DNS_QUEUE_NAME")
+                .unwrap_or_else(|_| "dns-verify-queue".to_string()),
+            dns_result_queue_name: env::var("DNS_RESULT_QUEUE_NAME")
+                .unwrap_or_else(|_| "dns-verify-results".to_string()),
             worker_count: env::var("WORKER_COUNT")
                 .unwrap_or_else(|_| "4".to_string())
                 .parse()?,

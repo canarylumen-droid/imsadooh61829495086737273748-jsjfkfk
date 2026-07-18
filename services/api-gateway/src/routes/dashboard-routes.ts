@@ -56,7 +56,20 @@ router.post('/dns/verify', requireAuthOrApiKey, async (req: Request, res: Respon
 
     console.log(`[DNS Verify] Force check for ${domain} (User: ${userId})`);
 
-    // Real DNS Health Check
+    let overallStatus = 'verified';
+
+    // Rust-backed DNS (async)
+    if (process.env.ENABLE_RUST_DNS === 'true') {
+      try {
+        const { enqueueDnsVerification } = await import('@shared/lib/queues/dns-verify-queue.js');
+        enqueueDnsVerification(`dns_${userId}_${domain}`, userId, domain, undefined);
+        overallStatus = 'pending_rust';
+      } catch (e) {
+        console.warn('[DNS] Rust enqueue failed, falling back:', e);
+      }
+    }
+
+    // Node.js fallback (always runs for immediate response)
     const { verifyDomainDns } = await import('@services/email-service/src/email/dns-verification.js');
     const result = await verifyDomainDns(domain, undefined, true);
 
@@ -80,7 +93,7 @@ router.post('/dns/verify', requireAuthOrApiKey, async (req: Request, res: Respon
     res.json({
       success: true,
       domain,
-      status: result.overallStatus,
+      status: overallStatus === 'pending_rust' ? result.overallStatus : result.overallStatus,
       message: 'Domain reputation and DNS records verification completed.'
     });
 
@@ -146,7 +159,66 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
       console.warn('⚠️ Failed to fetch recent bounces, using empty list:', bounceError);
     }
 
-    const domainVerifications = await storage.getDomainVerifications(userId, 5);
+    // ── Real-Time DNS Verification ──────────────────────────────────────────
+    let domainVerifications = await storage.getDomainVerifications(userId, 5);
+    const emailedDomains = new Set(
+      integrations
+        .filter((i: any) => ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected)
+        .map((i: any) => {
+          try {
+            const meta = typeof i.encryptedMeta === 'string' ? JSON.parse(decrypt(i.encryptedMeta)) : (i.metadata || {});
+            const email = meta.user || meta.email || (i as any).email || '';
+            return email.includes('@') ? email.split('@')[1] : null;
+          } catch { return null; }
+        })
+        .filter(Boolean)
+    );
+
+    // If no cached verifications exist, or they're > 1 hour old, do a real-time check
+    const newestVer = domainVerifications.length > 0 ? domainVerifications[0] : null;
+    const verAge = newestVer ? Date.now() - new Date(newestVer.created_at || newestVer.createdAt).getTime() : Infinity;
+    if (emailedDomains.size > 0 && (domainVerifications.length === 0 || verAge > 3600000)) {
+      // ── Rust-backed DNS (async, if enabled) ────────────────────────
+      if (process.env.ENABLE_RUST_DNS === 'true') {
+        try {
+          const { enqueueDnsVerification } = await import('@shared/lib/queues/dns-verify-queue.js');
+          for (const domain of emailedDomains) {
+            enqueueDnsVerification(`dns_${userId}_${domain}`, userId, domain, undefined);
+          }
+        } catch (e) {
+          console.warn('[DNS] Failed to enqueue Rust DNS job:', e);
+        }
+      }
+
+      // ── Node.js fallback ───────────────────────────────────────────
+      (async () => {
+        try {
+          const { verifyDomainDns } = await import('@services/email-service/src/email/dns-verification.js');
+          for (const domain of emailedDomains) {
+            const result = await verifyDomainDns(domain, undefined, true);
+            await storage.createDomainVerification(userId, { domain, verificationResult: result });
+            // Push real-time update to the UI
+            try {
+              const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+              wsSync.notifyDnsVerified(userId, {
+                domain,
+                score: result.overallScore,
+                spf: result.spf?.valid ?? false,
+                dkim: result.dkim?.valid ?? false,
+                dmarc: result.dmarc?.valid ?? false,
+                mx: result.mx?.found ?? false,
+                blacklist: result.blacklist?.isBlacklisted ?? false,
+              });
+              wsSync.notifyStatsUpdated(userId);
+            } catch {}
+          }
+          // Refresh domainVerifications for this response
+          domainVerifications = await storage.getDomainVerifications(userId, 5);
+        } catch (e) {
+          console.warn('[DNS] Real-time verification failed:', e);
+        }
+      })();
+    }
 
     // Calculate most recent sync time from all integrations
     let lastSyncTimestamp = integrations.reduce((latest, current) => {

@@ -7,6 +7,53 @@ import { socketService } from '@shared/lib/realtime/socket-service.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
 import '@shared/lib/realtime/redis-pubsub.js';
 import { ServiceRegistry } from '@shared/lib/monitoring/service-registry.js';
+import { getSharedRedisConnection } from '@shared/lib/queues/redis-config.js';
+
+const DNS_RESULT_QUEUE = process.env.DNS_RESULT_QUEUE_NAME || 'dns-verify-results';
+
+async function startDnsResultConsumer() {
+  try {
+    const { storage } = await import('@shared/lib/storage/storage.js');
+    const redis = getSharedRedisConnection();
+    while (true) {
+      const result = await redis.brpop(DNS_RESULT_QUEUE, 2);
+      if (!result) continue;
+      try {
+        const data = JSON.parse(result[1]);
+        if (data.error) { log.warn(`[DNS] Rust verification error: ${data.error}`, { jobId: data.job_id }); continue; }
+        const { user_id, result: dnsResult } = data;
+        if (!user_id || !dnsResult) continue;
+        await storage.createDomainVerification(user_id, {
+          domain: dnsResult.domain,
+          verificationResult: {
+            spf: { found: dnsResult.spf.found, valid: dnsResult.spf.valid, record: dnsResult.spf.record, issues: dnsResult.spf.issues },
+            dkim: { found: dnsResult.dkim.found, valid: dnsResult.dkim.valid, selector: dnsResult.dkim.selector, record: dnsResult.dkim.record, issues: dnsResult.dkim.issues },
+            dmarc: { found: dnsResult.dmarc.found, valid: dnsResult.dmarc.valid, policy: dnsResult.dmarc.policy, record: dnsResult.dmarc.record, issues: dnsResult.dmarc.issues },
+            mx: { found: dnsResult.mx_found, ips: dnsResult.mx },
+            blacklist: { isBlacklisted: dnsResult.blacklist.is_blacklisted, listedOn: dnsResult.blacklist.listed_on },
+            overallScore: dnsResult.overall_score,
+            overallStatus: dnsResult.overall_status,
+          },
+        });
+        wsSync.notifyDnsVerified(user_id, {
+          domain: dnsResult.domain,
+          score: dnsResult.overall_score,
+          spf: dnsResult.spf.valid,
+          dkim: dnsResult.dkim.valid,
+          dmarc: dnsResult.dmarc.valid,
+          mx: dnsResult.mx_found,
+          blacklist: dnsResult.blacklist.is_blacklisted,
+        });
+        wsSync.notifyStatsUpdated(user_id);
+        log.info(`[DNS] Rust verified ${dnsResult.domain} for user ${user_id} (score: ${dnsResult.overall_score}, status: ${dnsResult.overall_status})`);
+      } catch (e: any) {
+        log.error(`[DNS] Failed to process Rust DNS result: ${e.message}`);
+      }
+    }
+  } catch (e: any) {
+    log.error(`[DNS] Failed to start Rust DNS consumer: ${e.message}`);
+  }
+}
 
 const log = createLogger('SOCKET');
 const serviceRegistry = new ServiceRegistry(process.env.REDIS_URL || 'redis://localhost:6379', 'socket-service');
@@ -32,6 +79,11 @@ app.get('/', (_req, res) => {
 
 wsSync.initialize(server);
 socketService.init(server);
+
+if (process.env.ENABLE_RUST_DNS === 'true') {
+  startDnsResultConsumer();
+  log.info('[DNS] Rust DNS result consumer started', { queue: DNS_RESULT_QUEUE });
+}
 
 server.listen(port, '0.0.0.0', () => {
   log.info('Socket service listening', { port, paths: ['/socket.io', '/ws'] });

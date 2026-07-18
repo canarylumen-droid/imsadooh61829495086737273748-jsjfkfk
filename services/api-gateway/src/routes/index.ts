@@ -160,7 +160,7 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api/integrations", integrationsRoutes);
   app.use("/api/objections", objectionsRoutes);
   app.use("/api/custom-training", customTrainingRoutes);
-  app.use("/api/settings", userSettingsRoutes);
+  app.use("/api", userSettingsRoutes);
   app.use("/api/sales-engine", salesEngine);
   app.use("/api/expert-chat", expertChatRoutes);
   app.use("/api/expert-chat-v2", expertChatRoutes);

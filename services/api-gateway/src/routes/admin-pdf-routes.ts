@@ -21,6 +21,27 @@ const pdf = require('pdf-parse');
 
 const router = Router();
 
+function sanitizeTextForPostgres(text: string): string {
+  // Remove characters that PostgreSQL JSONB cannot handle
+  return text
+    .replace(/\0/g, '')
+    .replace(/[\u0001-\u0008]/g, '')
+    .replace(/\u000B/g, '')
+    .replace(/\u000C/g, '')
+    .replace(/[\u000E-\u001F]/g, '')
+    .replace(/[\uFFFE\uFFFF]/g, '')
+    .trim();
+}
+
+function isMostlyPrintable(text: string): boolean {
+  if (!text || text.length < 20) return false;
+  const printable = text.split('').filter(c => {
+    const code = c.charCodeAt(0);
+    return (code >= 32 && code <= 126) || code >= 160 || c === '\n' || c === '\t' || c === '\r';
+  }).length;
+  return printable / text.length > 0.7;
+}
+
 async function extractPdfText(buffer: Buffer): Promise<string> {
   // Try pdf-parse first
   try {
@@ -28,7 +49,8 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
     if (typeof pdfParser === 'function') {
       const data = await pdfParser(buffer);
       if (data.text && data.text.length > 10) {
-        return data.text.replace(/\x00/g, '');
+        const cleaned = sanitizeTextForPostgres(data.text);
+        if (isMostlyPrintable(cleaned)) return cleaned;
       }
     }
   } catch (error) {
@@ -44,7 +66,8 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
         .map(t => t.slice(1, -1))
         .filter(t => t.length > 3 && /[a-zA-Z]/.test(t))
         .join(' ');
-      if (extracted.length > 20) return extracted;
+      const cleaned = sanitizeTextForPostgres(extracted);
+      if (cleaned.length > 20 && isMostlyPrintable(cleaned)) return cleaned;
     }
   } catch { /* silent */ }
 
@@ -58,7 +81,8 @@ async function extractPdfText(buffer: Buffer): Promise<string> {
       const content = await page.getTextContent();
       text += content.items.map((item: any) => item.str).join(' ') + '\n';
     }
-    if (text.length > 10) return text;
+    const cleaned = sanitizeTextForPostgres(text);
+    if (cleaned.length > 10 && isMostlyPrintable(cleaned)) return cleaned;
   } catch (pdfjsError) {
     console.warn("pdfjs-dist fallback also failed:", pdfjsError);
   }
@@ -288,12 +312,13 @@ router.post(
           };
           const updatedMetadata = deepMerge(existingMetadata, brandMetadata);
 
+          const cachedText = sanitizeTextForPostgres(cached.extracted_text || '');
           await storage.updateUser(userId, {
             metadata: {
               ...updatedMetadata,
-              brandContext: cached.extracted_text?.substring(0, 50000) || undefined,
+              brandContext: cachedText.substring(0, 50000) || undefined,
             },
-            brandGuidelinePdfText: cached.extracted_text || undefined,
+            brandGuidelinePdfText: cachedText || undefined,
             businessName: brandContext.companyName || user.businessName,
           });
 
@@ -318,7 +343,7 @@ router.post(
       }
 
       const pdfTextRaw = await extractPdfText(req.file.buffer);
-      const pdfText: string = pdfTextRaw;
+      const pdfText = sanitizeTextForPostgres(pdfTextRaw);
 
       if (!pdfText || pdfText.length < 10) {
         await releaseLock(lockKey).catch(err => console.warn(`[PDF Upload] Lock release failed for user ${userId}:`, err));
@@ -829,11 +854,13 @@ router.patch(
       const userId = getCurrentUserId(req);
       if (!userId) { res.status(401).json({ error: "Not authenticated" }); return; }
 
-      const { text, pdfId } = req.body as { text: string; pdfId: string };
-      if (!text || !pdfId) {
+      const { text: rawText, pdfId } = req.body as { text: string; pdfId: string };
+      if (!rawText || !pdfId) {
         res.status(400).json({ error: "text and pdfId are required" });
         return;
       }
+
+      const text = sanitizeTextForPostgres(rawText);
 
       // Update the stored extracted text
       await db.execute(sql`
