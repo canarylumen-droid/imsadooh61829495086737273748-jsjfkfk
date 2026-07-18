@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Helmet } from "react-helmet-async";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -109,6 +110,14 @@ function McpServerPage() {
   };
 
   return (
+    <>
+      <Helmet>
+        <title>MCP Server Setup | Audnix AI — Connect AI Coding Agents to Your Email Outreach Data</title>
+        <meta name="description" content="Configure Audnix MCP (Model Context Protocol) server to connect Claude, Cursor, Cline, Windsurf, and other AI coding assistants to your email outreach campaigns, leads, and analytics in real-time." />
+        <meta property="og:title" content="MCP Server — AI Agent Integration | Audnix" />
+        <meta property="og:description" content="Connect Claude, Cursor, Cline, and other AI coding agents to your Audnix email outreach data via MCP protocol. Real-time read/write access to campaigns, leads, and analytics." />
+        <meta name="robots" content="index, follow" />
+      </Helmet>
     <PageWrapper className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
@@ -249,6 +258,7 @@ function McpServerPage() {
         </CardContent>
       </Card>
     </PageWrapper>
+    </>
   );
 }
 

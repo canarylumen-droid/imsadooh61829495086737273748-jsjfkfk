@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Helmet } from "react-helmet-async";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Search, ChevronRight, Key, Server, BookOpen, Copy, Check } from "lucide-react";
@@ -146,6 +147,15 @@ export default function DeveloperDocsPage() {
   const currentSection = filteredSections.find(s => s.section === activeSection) || filteredSections[0];
 
   return (
+    <>
+      <Helmet>
+        <title>API Documentation | Audnix AI — REST API Reference for Email Outreach & Campaigns</title>
+        <meta name="description" content="Complete Audnix API documentation. REST endpoints for campaigns, leads, analytics, integrations, email, and automation. Use with API keys or session auth. CURL-ready examples." />
+        <meta property="og:title" content="Audnix AI API Documentation — REST API Reference" />
+        <meta property="og:description" content="Complete REST API reference for Audnix email outreach platform. Manage campaigns, leads, analytics, integrations, and email automation programmatically." />
+        <meta name="robots" content="index, follow" />
+        <link rel="canonical" href="https://audnixai.com/developer" />
+      </Helmet>
     <div className="min-h-screen bg-background text-foreground">
       <header className="sticky top-0 z-50 border-b bg-background">
         <div className="max-w-[1400px] mx-auto px-4 h-14 flex items-center justify-between">
@@ -292,5 +302,6 @@ export default function DeveloperDocsPage() {
         </main>
       </div>
     </div>
+    </>
   );
 }

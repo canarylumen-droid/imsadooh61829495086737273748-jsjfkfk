@@ -12,6 +12,7 @@ import DataDeletion from "@/pages/data-deletion";
 import { PrivacyModal } from "@/components/landing/PrivacyModal";
 import { NotificationSound } from "@/components/shared/NotificationSound";
 import { MailboxProvider } from "@/hooks/use-mailbox";
+import { HelmetProvider } from "react-helmet-async";
 
 import { lazy, Suspense } from "react";
 
@@ -207,13 +208,15 @@ function App() {
         <QueryClientProvider client={queryClient}>
           <MailboxProvider>
             <TooltipProvider>
-              <LenisScroll>
-                <InternetConnectionBanner />
-                <Toaster />
-                <Router />
-                <NotificationSound />
-                <PrivacyModal />
-              </LenisScroll>
+              <HelmetProvider>
+                <LenisScroll>
+                  <InternetConnectionBanner />
+                  <Toaster />
+                  <Router />
+                  <NotificationSound />
+                  <PrivacyModal />
+                </LenisScroll>
+              </HelmetProvider>
             </TooltipProvider>
           </MailboxProvider>
         </QueryClientProvider>
