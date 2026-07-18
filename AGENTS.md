@@ -520,3 +520,30 @@ Built 4 interconnected components for real-time inbox placement detection withou
 ### Config (Env Vars)
 - `FORENSICS_EMAIL` / `FORENSICS_PASSWORD` — DMARC forensics inbox
 - `SEED_MONITOR_EMAIL` / `SEED_MONITOR_PASSWORD` — Seed account for placement checking
+
+## This Session (Jul 18 2026) — Filter Pagination, Double Tick, Mobile Truncation, RecentConversations, Developer Docs Rewrite, JSON Error Handler
+
+### Fixes
+1. **RecentConversations empty state** (`RecentConversations.tsx:306-321`): Added `hasLoadedLeads` check (returns true only after `leadsData?.leads` is array) — replaces "Waiting for new leads..." spinner with actual loading indicator when data not yet loaded.
+2. **Inbox filter pagination reset** (`inbox.tsx:483-488`): Added `useEffect` that resets `page` to 0 and clears virtual range when `filterStatus`, `filterChannel`, or `searchQuery` changes. Root cause: `page` was never reset, so switching filters used wrong offset → incorrect/empty results.
+3. **Double tick guard** (`inbox.tsx:1465-1470`): Added `lead.status !== 'new'` check — prevents ✓✓/✓ from showing on leads never contacted, even when backend incorrectly returns `lastMessageDirection: 'outbound'`.
+4. **Mobile truncation** (`inbox.tsx:1449`): Brain button changed `opacity-60 md:opacity-0` → `hidden md:inline-flex md:opacity-0` — hidden on mobile, only visible on desktop hover. Frees space for lead name truncation on small screens.
+5. **Load More gap** (`inbox.tsx:1478-1492`): Reduced button container padding `p-4` → `px-3 pb-1`, reduced button height `h-10` → `h-9`. Added `h-4` spacer when no more items to prevent abrupt bottom edge.
+6. **Developer docs rewrite** (`developer-docs.tsx`): Complete rewrite with real curl examples, JSON response samples, proper endpoint paths matching actual API (leads, messages, campaigns, analytics, integrations, MCP, dashboard). Added `Helmet` meta tags for SEO, icon per section (Key, BookOpen, Terminal, Server, Globe), live search. Used `https://audnixai.com` as base URL.
+7. **Global JSON error handler** (`routes/index.ts:183-189`): Added Express error middleware after all route registrations — returns JSON `{ error: message }` instead of HTML for unhandled API errors. Includes stack trace in dev mode only.
+8. **Push to GitHub**: `7b0790cd` pushed to main.
+
+### Files Changed
+- `client/src/components/dashboard/RecentConversations.tsx` — empty state fix
+- `client/src/pages/dashboard/inbox.tsx` — filter pagination, double tick, mobile truncation, load more
+- `client/src/pages/developer-docs.tsx` — full rewrite with curl/responses/SEO
+- `services/api-gateway/src/routes/index.ts` — global JSON error handler
+- `AGENTS.md` — this session entry
+
+### Status
+- All changes pushed to GitHub (`7b0790cd` + `234e3437`). Successfully deployed to EC2.
+- `pm2 restart all` restarted all 17 services — all online.
+- SSH key saved at `/tmp/aws_temp_key` (rsa, regenerated this session) — valid for future EC2 access.
+- AWS credentials stored in `opencode.json` mcp.aws.env block (`AKIAZUAXW67WM4BNID4G` + secret key). Use Node.js AWS SDK v3 with `@aws-sdk/client-ec2-instance-connect` to push new SSH keys.
+- Build command on EC2: `cd /home/ubuntu/app/client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client`
+- Restart: `pm2 restart all`
