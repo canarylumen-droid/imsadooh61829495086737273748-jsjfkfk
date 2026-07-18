@@ -475,7 +475,7 @@ export default function InboxPage() {
 
   const simpleStatuses = ['new', 'contacted', 'converted', 'not_interested'];
 
-  const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching } = useQuery<any>({
+  const { data: leadsData, isLoading: leadsLoading, isFetching: leadsFetching, isError: leadsError } = useQuery<any>({
     queryKey: ["/api/leads", {
       limit: PAGE_SIZE,
       offset: page * PAGE_SIZE,
@@ -498,7 +498,7 @@ export default function InboxPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: channelStatus, isLoading: channelsLoading } = useQuery<any>({
+  const { data: channelStatus, isLoading: channelsLoading, isError: channelsError } = useQuery<any>({
     queryKey: ["/api/channels/all"],
     placeholderData: (prev: any) => prev,
   });
@@ -535,6 +535,12 @@ export default function InboxPage() {
       hasLoadedLeadsRef.current = true;
     }
   }, [leadsData]);
+
+  useEffect(() => {
+    if (leadsError) {
+      hasLoadedLeadsRef.current = true;
+    }
+  }, [leadsError]);
 
   // Dynamic Tags for variables insertion
   const allTags = useMemo(() => {
@@ -1278,7 +1284,7 @@ export default function InboxPage() {
             )}
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-border/5">
-            {(!hasLoadedLeadsRef.current || (leadsFetching && allLeads.length === 0) || channelsLoading) && page === 0 ? (
+            {((leadsFetching && allLeads.length === 0) || (channelsLoading && !hasLoadedLeadsRef.current && !channelsError)) && page === 0 ? (
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
@@ -1307,7 +1313,18 @@ export default function InboxPage() {
               </div>
             ) : !leadsFetching && hasLoadedLeadsRef.current && !channelsLoading && allLeads.length === 0 ? (
               <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
-                {hasAnyChannel === false ? (
+                {leadsError ? (
+                  <div className="max-w-xs text-center space-y-4">
+                    <div className="mx-auto w-16 h-16 rounded-2xl bg-destructive/10 flex items-center justify-center">
+                      <AlertCircle className="h-8 w-8 text-destructive" />
+                    </div>
+                    <p className="text-sm font-semibold text-foreground/80">Failed to load conversations</p>
+                    <p className="text-xs text-muted-foreground">The server returned an error. Please try again.</p>
+                    <Button variant="outline" size="sm" className="rounded-xl" onClick={() => queryClient.invalidateQueries({ queryKey: ["/api/leads"] })}>
+                      <RefreshCw className="h-4 w-4 mr-2" /> Retry
+                    </Button>
+                  </div>
+                ) : hasAnyChannel === false ? (
                   <div className="max-w-xs">
                     <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center mb-8 mx-auto relative group">
                       <div className="absolute inset-0 bg-primary/20 blur-xl md:blur-2xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1348,9 +1365,33 @@ export default function InboxPage() {
                   </div>
                 )}
               </div>
-            ) : filteredLeads.length === 0 ? (
+            ) : filteredLeads.length === 0 && hasLoadedLeadsRef.current && leadsFetching ? (
               <div className="p-4 space-y-4">
                 {[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
+              </div>
+            ) : filteredLeads.length === 0 && hasLoadedLeadsRef.current ? (
+              <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
+                <div className="max-w-xs">
+                  <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-500/20 to-gray-500/20 border border-slate-500/20 flex items-center justify-center mb-6 mx-auto">
+                    <InboxIcon className="h-10 w-10 text-slate-400" />
+                  </div>
+                  <p className="text-sm font-bold text-foreground/80">
+                    {searchQuery ? "No matches found" :
+                      showArchived ? "No archived leads" :
+                      filterStatus !== 'all' ? `No ${filterStatus} conversations` :
+                        "No conversations yet"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    {searchQuery ? "Try different keywords or check spelling" :
+                      showArchived ? "Leads you archive will appear here" :
+                      filterStatus === 'unread' ? "All caught up — no unread messages" :
+                      filterStatus === 'opened' ? "No opened conversations yet" :
+                      filterStatus === 'archived' ? "No archived conversations" :
+                      filterStatus !== 'all' ? "Try a different filter or check back later" :
+                        allLeads.length > 0 ? "Start a campaign to see conversations here" :
+                          "Connect a mailbox to start receiving messages"}
+                  </p>
+                </div>
               </div>
             ) : (
               <>
