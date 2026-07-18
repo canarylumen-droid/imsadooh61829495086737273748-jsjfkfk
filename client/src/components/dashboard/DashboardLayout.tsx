@@ -603,7 +603,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                     <div className="relative cursor-pointer" onClick={(e) => { e.stopPropagation(); handleNavigate('/dashboard/settings'); }}>
                       <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-primary/30 ring-offset-2 ring-offset-background" />
                       <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-primary/20 via-transparent to-primary/10 animate-spin" style={{ animationDuration: '4s' }} />
-                      <Avatar className="h-10 w-10 rounded-full border border-border shadow-sm transition-transform group-hover:scale-105 relative">
+                      <Avatar key={user?.avatar || 'sidebar-avatar'} className="h-10 w-10 rounded-full border border-border shadow-sm transition-transform group-hover:scale-105 relative">
                         <AvatarImage src={user?.avatar} />
                         <AvatarFallback className="rounded-full bg-primary/20 text-primary font-bold text-sm">
                           {(user?.name || "U").charAt(0).toUpperCase()}
@@ -624,7 +624,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                     <div className="flex items-center gap-3 mb-4">
                       <div className="relative">
                         <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-primary/20 ring-offset-2 ring-offset-background" />
-                        <Avatar className="h-12 w-12 border-2 border-primary/20 rounded-full relative">
+                        <Avatar key={user?.avatar || 'dropdown-avatar'} className="h-12 w-12 border-2 border-primary/20 rounded-full relative">
                           <AvatarImage src={user?.avatar} />
                           <AvatarFallback className="bg-primary/10 text-primary font-bold rounded-full">
                             {(user?.name || "U").charAt(0).toUpperCase()}
@@ -720,7 +720,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                   </ScrollArea>
                   <div className="p-4 border-t border-border/10 bg-muted/10 space-y-3">
                     <div className="flex items-center gap-4 p-4 rounded-3xl bg-background border border-border/40">
-                      <Avatar className="h-12 w-12 rounded-full">
+                      <Avatar key={user?.avatar || 'sheet-avatar'} className="h-12 w-12 rounded-full">
                         <AvatarImage src={user?.avatar} />
                         <AvatarFallback className="font-black bg-primary text-primary-foreground rounded-full">{(user?.name || "U")[0]}</AvatarFallback>
                       </Avatar>
@@ -1016,7 +1016,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
               <Separator orientation="vertical" className="h-6 mx-1 bg-border/40" />
 
               <div className="md:hidden">
-                <Avatar className="h-10 w-10 rounded-full border border-border/40">
+                <Avatar key={user?.avatar || 'mobile-avatar'} className="h-10 w-10 rounded-full border border-border/40">
                   <AvatarImage src={user?.avatar} />
                   <AvatarFallback className="font-bold rounded-full">{(user?.name || "U")[0]}</AvatarFallback>
                 </Avatar>

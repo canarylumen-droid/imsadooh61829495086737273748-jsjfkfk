@@ -450,7 +450,7 @@ export default function SettingsPage() {
                   <div className="relative">
                     <div className="absolute inset-0 rounded-full animate-pulse ring-2 ring-emerald-400/50 ring-offset-2 ring-offset-background" />
                     <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-emerald-400/20 via-transparent to-emerald-400/10 animate-spin" style={{ animationDuration: '4s' }} />
-                    <Avatar className="h-28 w-28 sm:h-32 sm:w-32 border-2 border-border/50 shadow-md ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300 relative rounded-full">
+                    <Avatar key={user.avatar || 'no-avatar'} className="h-28 w-28 sm:h-32 sm:w-32 border-2 border-border/50 shadow-md ring-2 ring-primary/10 group-hover:ring-primary/30 transition-all duration-300 relative rounded-full">
                       <AvatarImage src={user.avatar} className="object-cover rounded-full" />
                       <AvatarFallback className="text-3xl bg-gradient-to-br from-primary/20 to-primary/5 text-primary font-bold rounded-full">
                         {user.name?.[0]?.toUpperCase() || 'U'}
