@@ -567,8 +567,14 @@ export class DrizzleStorage implements IStorage {
     let query: any = db.select({
         lead: leads,
         provider: integrations.provider,
-        lastMessageDirection: sql<string>`(SELECT direction FROM ${messages} WHERE lead_id = ${leads.id} ORDER BY created_at DESC LIMIT 1)`,
-        lastMessageIsRead: sql<boolean>`(SELECT is_read FROM ${messages} WHERE lead_id = ${leads.id} ORDER BY created_at DESC LIMIT 1)`,
+        lastMessageData: sql<any>`(
+          SELECT row_to_json(sq) FROM (
+            SELECT direction, is_read
+            FROM ${messages}
+            WHERE lead_id = ${leads.id}
+            ORDER BY created_at DESC LIMIT 1
+          ) sq
+        )`,
       })
       .from(leads)
       .leftJoin(integrations, eq(leads.integrationId, integrations.id))
@@ -584,15 +590,24 @@ export class DrizzleStorage implements IStorage {
     }
 
     const rows = await query;
-    return rows.map((r: { lead: Lead; provider: string | null; lastMessageDirection?: string; lastMessageIsRead?: boolean }) => ({
-      ...r.lead,
-      metadata: {
-        ...(r.lead.metadata as any || {}),
-        provider: r.provider || r.lead.channel,
-        lastMessageDirection: r.lastMessageDirection || null,
-        lastMessageIsRead: r.lastMessageIsRead ?? null,
+    return rows.map((r: { lead: Lead; provider: string | null; lastMessageData?: any }) => {
+      let msgDirection: string | null = null;
+      let msgIsRead: boolean | null = null;
+      if (r.lastMessageData) {
+        const parsed = typeof r.lastMessageData === 'string' ? JSON.parse(r.lastMessageData) : r.lastMessageData;
+        msgDirection = parsed?.direction || null;
+        msgIsRead = parsed?.is_read ?? null;
       }
-    }));
+      return {
+        ...r.lead,
+        metadata: {
+          ...(r.lead.metadata as any || {}),
+          provider: r.provider || r.lead.channel,
+          lastMessageDirection: msgDirection,
+          lastMessageIsRead: msgIsRead,
+        }
+      };
+    });
   }
 
   async getLead(id: string): Promise<Lead | undefined> {

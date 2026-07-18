@@ -252,28 +252,33 @@ export default function InboxPage() {
       const isOpenEvent = payload?.action === 'email_opened';
       const isClickEvent = payload?.action === 'email_clicked';
       const isNewMsg = payload?.action === 'email_replied' || !!msgData.direction;
-      const msgDirection = msgData.direction || (isOpenEvent || isClickEvent ? 'outbound' : null);
       setAllLeads(prev => {
         const leadIndex = prev.findIndex(l => l.id === targetLeadId);
         if (leadIndex === -1) return prev;
 
         const existing = prev[leadIndex];
         const wasCold = existing.status === 'cold' || existing.status === 'new';
-        const newStatus = isOpenEvent ? 'opened' : isNewMsg && wasCold ? 'contacted' : isNewMsg && existing.status === 'contacted' ? 'replied' : existing.status;
+        const newStatus = isNewMsg && wasCold ? 'contacted' : isNewMsg && existing.status === 'contacted' ? 'replied' : existing.status;
 
-        const updatedLead = {
+        const newMeta: any = {
+          ...existing.metadata,
+          isUnread: isOpenEvent || isClickEvent ? existing.metadata?.isUnread : true,
+          ...(isOpenEvent ? { openedAt: new Date().toISOString(), opened: true, openedCount: (existing.metadata?.openedCount || 0) + 1 } : {}),
+          ...(isClickEvent ? { clickedAt: new Date().toISOString(), clicked: true } : {}),
+        };
+
+        // Only update direction/read from actual new messages, not from open/click tracking events
+        if (msgData.direction) {
+          newMeta.lastMessageDirection = msgData.direction;
+          newMeta.lastMessageIsRead = msgData.direction === 'inbound' ? null : msgData.isRead ?? false;
+        }
+
+        const updatedLead: any = {
           ...existing,
           lastMessageAt: new Date().toISOString(),
           snippet: msgData.content || msgData.snippet || existing.snippet,
           status: newStatus,
-          metadata: {
-            ...existing.metadata,
-            isUnread: isOpenEvent || isClickEvent ? existing.metadata?.isUnread : true,
-            lastMessageDirection: msgDirection || existing.metadata?.lastMessageDirection || 'inbound',
-            lastMessageIsRead: isOpenEvent || isClickEvent ? true : msgDirection === 'outbound' ? false : existing.metadata?.lastMessageIsRead,
-            ...(isOpenEvent ? { openedAt: new Date().toISOString(), opened: true, openedCount: (existing.metadata?.openedCount || 0) + 1 } : {}),
-            ...(isClickEvent ? { clickedAt: new Date().toISOString(), clicked: true } : {}),
-          }
+          metadata: newMeta,
         };
 
         const otherLeads = prev.filter(l => l.id !== targetLeadId);
@@ -1357,10 +1362,10 @@ export default function InboxPage() {
                                 <span className="text-destructive font-bold">Draft: <span className="font-normal text-muted-foreground/80">{localDrafts[lead.id]}</span></span>
                               ) : (
                                 <span className="flex items-center gap-1">
-                                  {lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
+                                  {lead.snippet && lead.metadata?.lastMessageDirection === 'outbound' && lead.metadata?.lastMessageIsRead === true && (
                                     <CheckCheck className="h-3 w-3 shrink-0 text-primary" />
                                   )}
-                                  {lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
+                                  {lead.snippet && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
                                   <span className="truncate">{lead.snippet ? stripHtml(lead.snippet).substring(0, 60) : "No messages"}</span>
@@ -1376,9 +1381,9 @@ export default function InboxPage() {
                   {leadsData?.hasMore && (
                     <div className="p-4">
                       <Button variant="outline" className="w-full text-xs font-bold uppercase tracking-widest rounded-xl h-10 border-dashed text-foreground"
-                        onClick={() => setPage(p => p + 1)} disabled={leadsLoading}>
-                        {leadsLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                        Load More
+                        onClick={() => setPage(p => p + 1)} disabled={leadsFetching}>
+                        {leadsFetching ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ChevronDown className="h-3 w-3 mr-2" />}
+                        {leadsFetching ? 'Loading...' : 'Load More'}
                       </Button>
                     </div>
                   )}
@@ -1867,10 +1872,13 @@ export default function InboxPage() {
                           {msg.metadata?.aiGenerated && <Sparkles className="h-2.5 w-2.5" />}
                           {formatTimeOnly(msg.createdAt)}
                           {msg.direction === 'outbound' && (
-                            <div className="flex ml-1">
-                              <Check className={cn("h-3 w-3", msg.openedAt ? "text-primary-foreground" : "opacity-40")} />
-                              {msg.openedAt && <Check className="h-3 w-3 -ml-2 text-primary-foreground" />}
-                            </div>
+                            <span className="ml-1">
+                              {msg.openedAt ? (
+                                <CheckCheck className="h-3 w-3 text-primary-foreground" />
+                              ) : (
+                                <Check className="h-3 w-3 opacity-40" />
+                              )}
+                            </span>
                           )}
                         </div>
                       </div>
