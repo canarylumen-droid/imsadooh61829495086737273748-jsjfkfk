@@ -145,6 +145,12 @@ export class SpamMonitorService {
 
         // Invalidate dashboard stats
         await clusterSync.notifyStatsCacheInvalidate(integration.userId).catch(() => {});
+        // Push deliverability update for real-time inbox-placement refresh
+        await clusterSync.notifyDeliverabilityUpdated(integration.userId, {
+          integrationId: integration.id,
+          spamCount,
+          source: 'spam_monitor'
+        }).catch(() => {});
       }
     } catch (err: any) {
       // Only log unexpected errors, not connection issues

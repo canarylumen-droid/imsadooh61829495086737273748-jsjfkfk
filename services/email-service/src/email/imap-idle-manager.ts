@@ -407,8 +407,8 @@ class ImapIdleManager {
      * a permanent TCP socket. This prevents OS fd exhaustion at 500+ mailboxes.
      */
     private startPollingFallback(integrationId: string, integration: Integration): void {
-        const POLL_INTERVAL_MS = 5 * 1000; // 5 seconds — near-instant polling for overflow connections
-        console.log(`[IMAP] 📅 ${integrationId} (${integration.provider}) → polling fallback (IDLE cap ${this.MAX_IDLE_CONNECTIONS} reached). Polling every 30s.`);
+        const POLL_INTERVAL_MS = 1000; // 1 second — instant polling for overflow connections
+        console.log(`[IMAP] 📅 ${integrationId} (${integration.provider}) → polling fallback (IDLE cap ${this.MAX_IDLE_CONNECTIONS} reached). Polling every 1s.`);
         const poll = async () => {
             try {
                 const { emailSyncQueue } = await import('@shared/lib/queues/email-sync-queue.js');
@@ -1122,6 +1122,12 @@ class ImapIdleManager {
                                                         spamCount: spamDetected,
                                                         message: `${spamDetected} email(s) detected in spam folder in real-time.`
                                                     }).catch(() => {});
+                                                    // Push deliverability update so UI refreshes inbox-placement stats immediately
+                                                    wsSync.notifyDeliverabilityUpdated(userId, {
+                                                        integrationId,
+                                                        spamCount: spamDetected,
+                                                        source: 'imap_idle'
+                                                    });
                                                 }
                                             }
                                         } catch (spamErr) {
@@ -1134,6 +1140,10 @@ class ImapIdleManager {
                                     
                                     // Always notify stats updated for real-time KPIs
                                     wsSync.notifyStatsUpdated(userId);
+                                    // Invalidate server-side dashboard stats cache
+                                    import('@shared/lib/realtime/redis-pubsub.js').then(({ clusterSync }) => {
+                                      clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
+                                    }).catch(() => {});
                                     
                                     // Trigger autonomous AI reply for new inbound messages
                                     if (direction === 'inbound' && !isSpam) {
@@ -1669,6 +1679,180 @@ class ImapIdleManager {
         }
     }
 
+    /**
+     * Fire-and-forget: after sending, scan the Sent folder for the sent email's
+     * headers to detect any delivery-related flags from the sending provider.
+     * For Gmail: checks X-Gmail-Labels for outbound spam flagging.
+     * For Outlook: checks X-Forefront-Antispam-Report headers.
+     * This is best-effort — no error thrown, just logged.
+     */
+    public async checkSentFolderPlacement(
+        userId: string,
+        integrationId: string,
+        trackingToken: string,
+        sentAt: Date,
+        config: { smtp_user?: string; smtp_host?: string; smtp_port?: number; smtp_pass?: string; imap_host?: string; imap_port?: number }
+    ): Promise<void> {
+        const TIMEOUT_MS = 8000;
+        const startTime = Date.now();
+        let placementDetected: string | null = null;
+        let source: string | null = null;
+
+        try {
+            const imapHost = config.imap_host || config.smtp_host?.replace('smtp', 'imap') || '';
+            const imapPort = config.imap_port || 993;
+
+            if (!imapHost || !config.smtp_user || !config.smtp_pass) {
+                return; // No IMAP available
+            }
+
+            // Build search window: sentAt +/- 30 seconds
+            const since = new Date(sentAt.getTime() - 30000);
+            const before = new Date(sentAt.getTime() + 30000);
+
+            const imapOptions: any = {
+                user: config.smtp_user,
+                password: config.smtp_pass,
+                host: imapHost,
+                port: imapPort,
+                tls: parseInt(String(imapPort)) === 993,
+                family: 4,
+                lookup: (hostname: string, options: any, callback: any) => {
+                    const dns = require('dns');
+                    dns.resolve4(hostname, (err: any, addresses: string[]) => {
+                        if (err || !addresses || addresses.length === 0) {
+                            return callback(err || new Error('No IPv4 found'), null, 4);
+                        }
+                        callback(null, addresses[0], 4);
+                    });
+                },
+                tlsOptions: { rejectUnauthorized: false },
+                authTimeout: 5000,
+                connTimeout: 5000
+            };
+
+            const imap = new Imap(imapOptions);
+
+            const sentFolder = this.folders.get(integrationId)?.sent?.[0] || 'Sent';
+
+            await new Promise<void>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    try { if (imap.state !== 'disconnected') imap.end(); } catch { }
+                    resolve();
+                }, TIMEOUT_MS);
+
+                imap.once('ready', () => {
+                    imap.openBox(sentFolder, true, (err: any, box: any) => {
+                        if (err || !box || box.messages?.total === 0) {
+                            clearTimeout(timeout);
+                            try { imap.end(); } catch { }
+                            resolve();
+                            return;
+                        }
+
+                        // Search by X-Audnix-Id header using HEADER search
+                        const searchCriteria = ['HEADER', 'X-Audnix-Id', trackingToken];
+                        if (!trackingToken) {
+                            clearTimeout(timeout);
+                            try { imap.end(); } catch { }
+                            resolve();
+                            return;
+                        }
+
+                        imap.search(searchCriteria, (searchErr: any, results: number[]) => {
+                            if (searchErr || !results || results.length === 0) {
+                                clearTimeout(timeout);
+                                try { imap.end(); } catch { }
+                                resolve();
+                                return;
+                            }
+
+                            // Fetch headers of the matching message
+                            const fetch = imap.seq.fetch(results.slice(0, 1).join(','), {
+                                bodies: 'HEADER.FIELDS (X-GMAIL-LABELS X-FOREFRONT-ANTISPAM-REPORT X-MICROSOFT-ANTISPAM X-SPAM-FLAG X-SPAM-STATUS)',
+                                struct: true
+                            });
+
+                            fetch.on('message', (msg: any) => {
+                                msg.on('body', (stream: any) => {
+                                    let headerData = '';
+                                    stream.on('data', (chunk: string) => { headerData += chunk; });
+                                    stream.on('end', () => {
+                                        const headers = headerData.toLowerCase();
+                                        // Gmail: check if email was flagged by outbound filter
+                                        if (headers.includes('x-gmail-labels')) {
+                                            if (headers.includes('spam') || headers.includes('junk') || headers.includes('trash')) {
+                                                placementDetected = 'spam';
+                                                source = 'sent_folder_gmail_labels';
+                                            }
+                                        }
+                                        // Outlook: check spam headers
+                                        if (headers.includes('x-forefront-antispam-report') || headers.includes('x-microsoft-antispam')) {
+                                            if (headers.includes('spam') || headers.includes('bulk') || headers.includes('phish')) {
+                                                placementDetected = 'spam';
+                                                source = 'sent_folder_outlook_header';
+                                            }
+                                        }
+                                        // Generic spam flag headers
+                                        if (headers.includes('x-spam-flag: yes') || headers.includes('x-spam-status: yes')) {
+                                            placementDetected = 'spam';
+                                            source = 'sent_folder_spam_flag';
+                                        }
+                                    });
+                                });
+                            });
+
+                            fetch.once('end', () => {
+                                clearTimeout(timeout);
+                                try { imap.end(); } catch { }
+                                resolve();
+                            });
+
+                            fetch.once('error', () => {
+                                clearTimeout(timeout);
+                                try { imap.end(); } catch { }
+                                resolve();
+                            });
+                        });
+                    });
+                });
+
+                imap.once('error', () => {
+                    clearTimeout(timeout);
+                    resolve();
+                });
+
+                imap.connect();
+            });
+
+            // If detected spam, update email_tracking and fire deliverability event
+            if (placementDetected) {
+                console.log(`[Placement] Sent folder scan for ${trackingToken}: detected ${placementDetected} via ${source}`);
+                const { db } = await import('@shared/lib/db/db.js');
+                const { sql } = await import('drizzle-orm');
+                await db.execute(sql`
+                    UPDATE email_tracking
+                    SET placement = ${placementDetected},
+                        placement_updated_at = NOW()
+                    WHERE token = ${trackingToken}
+                      AND placement = 'unknown'
+                `);
+                const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+                await Promise.all([
+                    clusterSync.notifyDeliverabilityUpdated(userId, {
+                        integrationId,
+                        placement: placementDetected,
+                        source
+                    }),
+                    clusterSync.notifyStatsUpdated(userId, { integrationId, type: 'placement_update' }),
+                    clusterSync.notifyStatsCacheInvalidate(userId)
+                ]);
+            }
+        } catch (err) {
+            console.warn(`[Placement] checkSentFolderPlacement error for ${trackingToken}:`, (err as Error)?.message);
+        }
+    }
+
     public async syncHistoricalEmails(userId: string, integrationId: string, limit: number = 5000): Promise<{ success: boolean; count: number; error?: string }> {
         let tempImap: Imap | null = null;
         let folderMap = this.connections.get(integrationId);
@@ -2137,7 +2321,12 @@ class ImapIdleManager {
             return await new Promise((resolve) => {
                 const imap = new Imap(imapOptions);
                 const messages: any[] = [];
+                let pendingMessages = 0;
                 const safeEnd = () => { try { if (imap.state !== 'disconnected') imap.end(); } catch { console.warn('[IMAP] Error in fetchNewMessages safeEnd for', integrationId); } };
+
+                const tryResolve = () => {
+                    if (pendingMessages <= 0) { safeEnd(); }
+                };
 
                 imap.once('ready', () => {
                     imap.openBox('INBOX', true, (err: any, box: any) => {
@@ -2150,23 +2339,44 @@ class ImapIdleManager {
                         const f = imap.seq.fetch(fetchRange, { bodies: ['HEADER', 'TEXT'], struct: true });
 
                         f.on('message', (msg: any) => {
+                            pendingMessages++;
                             const item: any = {};
+                            let bodyResolved = false;
+
+                            const pushItem = () => {
+                                if (bodyResolved) {
+                                    messages.push(item);
+                                    pendingMessages--;
+                                    tryResolve();
+                                } else {
+                                    // Wait for body to resolve then push
+                                    const check = setInterval(() => {
+                                        if (bodyResolved) {
+                                            clearInterval(check);
+                                            messages.push(item);
+                                            pendingMessages--;
+                                            tryResolve();
+                                        }
+                                    }, 5);
+                                }
+                            };
 
                             msg.on('body', (stream: any) => {
                                 let raw = '';
                                 stream.on('data', (chunk: Buffer) => { raw += chunk.toString('utf8'); });
-                                stream.once('end', async () => {
-                                        try {
-                                            const parsed = await simpleParser(raw);
-                                            item.subject  = parsed.subject || '(no subject)';
-                                            item.from     = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
-                                            item.to       = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
-                                            item.date     = parsed.date?.toISOString() || new Date().toISOString();
-                                            item.snippet  = (parsed.text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-                                        } catch {
-                                            console.warn('[IMAP] Failed to parse email body during fetchNewMessages');
-                                        }
+                                stream.once('end', () => {
+                                    simpleParser(raw).then(parsed => {
+                                        item.subject  = parsed.subject || '(no subject)';
+                                        item.from     = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
+                                        item.to       = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
+                                        item.date     = parsed.date?.toISOString() || new Date().toISOString();
+                                        item.snippet  = (parsed.text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+                                    }).catch(() => {
+                                        console.warn('[IMAP] Failed to parse email body during fetchNewMessages');
+                                    }).finally(() => {
+                                        bodyResolved = true;
                                     });
+                                });
                             });
 
                             msg.once('attributes', (attrs: any) => {
@@ -2174,11 +2384,13 @@ class ImapIdleManager {
                                 item.messageId = attrs.envelope?.messageId || `imap-${integrationId}-${attrs.uid}`;
                             });
 
-                            msg.once('end', () => messages.push(item));
+                            msg.once('end', () => pushItem());
                         });
 
                         f.once('error', () => { safeEnd(); resolve(messages); });
-                        f.once('end', () => safeEnd());
+                        f.once('end', () => {
+                            if (pendingMessages <= 0) safeEnd();
+                        });
                     });
                 });
 

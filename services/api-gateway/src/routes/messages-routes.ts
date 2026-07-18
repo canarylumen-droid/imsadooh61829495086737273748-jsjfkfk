@@ -3,6 +3,7 @@ import { storage } from "@shared/lib/storage/storage.js";
 import { requireAuthOrApiKey, getCurrentUserId } from "../middleware/auth.js";
 import { sendEmail } from "@shared/lib/channels/email.js";
 import { sendInstagramMessage } from "@shared/lib/channels/instagram.js";
+import { invalidateStatsCache } from './dashboard-routes.js';
 
 const router = Router();
 
@@ -206,6 +207,9 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
       res.status(500).json({ error: "Failed to update lead status" });
       return;
     }
+
+    // Invalidate server-side dashboard stats cache before socket push
+    invalidateStatsCache(userId);
 
     // Notify via WebSocket
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');

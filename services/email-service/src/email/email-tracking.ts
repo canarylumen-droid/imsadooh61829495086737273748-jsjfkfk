@@ -227,6 +227,18 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
         clusterSync.notifyStatsCacheInvalidate(trackingInfo.user_id)
       );
 
+      // Push placement update to deliverability page on first open
+      // (Spam doesn't load images, so an open = inbox delivery)
+      if (event.type === 'open') {
+        socketPromises.push(
+          clusterSync.notifyDeliverabilityUpdated(trackingInfo.user_id, {
+            integrationId: trackingInfo.integration_id,
+            placement: 'inbox',
+            source: 'tracking_pixel'
+          })
+        );
+      }
+
       // Fire all socket notifications in parallel, don't block DB writes
       Promise.all(socketPromises).catch(err =>
         console.error('Failed to fire tracking socket events:', err)
@@ -238,7 +250,9 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
       await db.execute(sql`
         UPDATE email_tracking 
         SET first_opened_at = COALESCE(first_opened_at, ${event.timestamp.toISOString()}),
-            open_count = COALESCE(open_count, 0) + 1
+            open_count = COALESCE(open_count, 0) + 1,
+            placement = CASE WHEN placement = 'unknown' THEN 'inbox' ELSE placement END,
+            placement_updated_at = COALESCE(placement_updated_at, ${event.timestamp.toISOString()})
         WHERE token = ${event.messageId}
       `);
     } else if (event.type === 'click') {

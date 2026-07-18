@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -96,7 +97,31 @@ const chartConfig = {
 };
 
 export default function AnalyticsPage() {
-    useRealtime();
+    const { socket } = useRealtime();
+    const queryClient = useQueryClient();
+
+    useEffect(() => {
+        if (!socket) return;
+        const refreshFull = () => queryClient.invalidateQueries({ queryKey: ["/api/dashboard/analytics/full"] });
+        const refreshInboxPlacement = () => queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
+        const refreshStats = () => {
+            queryClient.invalidateQueries({ queryKey: ["/api/dashboard/analytics/full"] });
+            queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats/previous"] });
+        };
+        socket.on("stats_updated", refreshStats);
+        socket.on("deliverability_updated", refreshInboxPlacement);
+        socket.on("integration_reputation_updated", refreshInboxPlacement);
+        socket.on("activity_updated", refreshFull);
+        socket.on("leads_updated", refreshFull);
+        return () => {
+            socket.off("stats_updated", refreshStats);
+            socket.off("deliverability_updated", refreshInboxPlacement);
+            socket.off("integration_reputation_updated", refreshInboxPlacement);
+            socket.off("activity_updated", refreshFull);
+            socket.off("leads_updated", refreshFull);
+        };
+    }, [socket, queryClient]);
+
     const [dateRange, setDateRange] = useState<1 | 7 | 30 | 60 | 90>(7);
     const [showEmail, setShowEmail] = useState(true);
     const [showInstagram, setShowInstagram] = useState(true);

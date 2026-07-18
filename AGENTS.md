@@ -341,3 +341,87 @@ Cleared `imap:active:*` (5 keys) + `lock:imap:conn:*` (5 keys), restarted the wo
 - `84932256` — inbox cleanup: tick only for our sent messages, cleaner lead list, no horizontal scroll
 - `6936aa54` — fix: avatar upload — proper MIME type for S3, CSP img-src, avatar opens settings
 - `0e16174f` — fix: inbox UI cleanup — archive toggle, header weight, empty state, snippet truncation, status tag
+
+## This Session (Jul 18 2026) — Real-Time KPI + Spam Detection Fixes
+
+### Root Cause: KPIs Not Updating for Manual Conversations
+Dashboard home KPIs (SENT, OPEN RATE, RESPONSES, CONVERTED) only updated from campaign data, not manual inbox sends. Two issues:
+1. **Server-side 5s cache** (`statsCache` in `dashboard-routes.ts:20-23`) was never invalidated when a manual message was sent — `notifyStatsUpdated` fired socket event, client refetched, but server returned stale cached data up to 5s
+2. **Missing page-level socket listeners** on warmup, analytics, and deliverability pages
+
+### Fixes Applied
+
+#### Server-Side (API Gateway)
+1. **`messages-routes.ts:6,211-212`** — Added `invalidateStatsCache(userId)` import + call after every manual message send, clearing the 5s cache immediately before socket push
+2. **`dashboard-routes.ts:23`** — Reduced `statsCache` TTL from 5000ms → 500ms (near-real-time)
+3. **`imap-idle-manager.ts:1143-1146`** — Added `clusterSync.notifyStatsCacheInvalidate(userId)` alongside `wsSync.notifyStatsUpdated(userId)` so IMAP events also clear server cache
+4. **`imap-idle-manager.ts:1124-1133`** — Added `wsSync.notifyDeliverabilityUpdated(...)` on real-time spam detection (alongside existing `notifyActivityUpdated`)
+5. **`spam-monitor.ts:148-153`** — Added `clusterSync.notifyDeliverabilityUpdated(...)` on spam folder scan detection
+
+#### Client-Side (Pages)
+6. **`warmup.tsx:35,37`** — Added `socket.on("stats_updated", handler)` listener → invalidates `/api/warmup/status`
+7. **`deliverability.tsx:40-41,46-51`** — Added `stats_updated`, `deliverability_updated`, `integration_reputation_updated` listeners → invalidates `/api/stats/inbox-placement`
+8. **`analytics.tsx:99-130`** — Added full socket listeners: `stats_updated` → analytics + previous stats; `deliverability_updated`/`integration_reputation_updated` → inbox-placement; `activity_updated`/`leads_updated` → full analytics
+9. **`use-realtime.tsx:476-483`** — Expanded global `stats_updated` handler to also invalidate `/api/stats/inbox-placement`, `/api/warmup/status`, `/api/dashboard/analytics/full`
+
+### How the Data Flow Works Now
+```
+Manual inbox send → messages-routes.ts
+  → invalidateStatsCache(userId)  // clears 500ms server cache
+  → wsSync.notifyStatsUpdated(userId)  // fires stats_updated socket event
+    → client global handler invalidates all stat query keys
+    → client page-level listeners invalidate page-specific keys
+    → client refetches → server returns fresh data (cache cleared)
+```
+
+```
+IMAP spam detection → imap-idle-manager.ts
+  → db update SET placement='spam'
+  → clusterSync.notifyActivityUpdated({ type: 'spam_detected' })
+  → wsSync.notifyDeliverabilityUpdated(...)  // deliverability_updated
+  → wsSync.notifyStatsUpdated(userId)
+  → clusterSync.notifyStatsCacheInvalidate(userId)  // clears server cache via Redis pub/sub
+    → ALL of the above fire simultaneously — UI updates in <1s
+```
+
+### Files Changed
+- `services/api-gateway/src/routes/messages-routes.ts` — cache invalidation import + call
+- `services/api-gateway/src/routes/dashboard-routes.ts` — cache TTL 5000→500ms
+- `services/email-service/src/email/imap-idle-manager.ts` — deliverability_updated + cache invalidation
+- `services/email-service/src/email/spam-monitor.ts` — deliverability_updated
+- `client/src/pages/dashboard/warmup.tsx` — stats_updated listener
+- `client/src/pages/dashboard/deliverability.tsx` — stats_updated/deliverability_updated listeners
+- `client/src/pages/dashboard/analytics.tsx` — full socket listener suite
+- `client/src/hooks/use-realtime.tsx` — expanded stats_updated scope
+
+## This Session (Jul 18 2026) — Instant Deliverability: placement='delivered' on Send
+
+### What Changed
+1. **`email.ts`** — Added `updateSendPlacement()` function that sets `placement='delivered'` (SMTP 250 accepted) and fires `deliverability_updated` + `stats_updated` + `stats_cache_invalidate` socket events after EVERY successful email send. Called fire-and-forget for all 3 provider types: custom SMTP, Gmail API, Outlook API.
+
+2. **`imap-idle-manager.ts`** — Added `checkSentFolderPlacement()` method that opens temporary IMAP connection to Sent folder, searches for email by `X-Audnix-Id` header, and reads `X-Gmail-Labels`/`X-Forefront-Antispam-Report` headers. If spam flagged, updates `email_tracking.placement` and fires `deliverability_updated`. Best-effort (password auth only, not wired for OAuth Gmail/Outlook).
+
+3. **`websocket-sync.ts`** — Expanded `notifyDeliverabilityUpdated` type to accept `integrationId`, `placement`, `email`, `spamCount` fields in addition to existing fields.
+
+### Data Flow
+```
+Send email → SMTP 250 OK (or Gmail/Outlook API 200)
+  → updateSendPlacement() fire-and-forget
+    → UPDATE email_tracking SET placement='delivered'
+    → clusterSync.notifyDeliverabilityUpdated(userId, { placement, source, integrationId })
+    → clusterSync.notifyStatsUpdated(userId)
+    → clusterSync.notifyStatsCacheInvalidate(userId)
+    → All pages receive deliverability_updated + stats_updated
+    → deliverability page shows instant "delivered" placement
+```
+
+### Limitations
+- `delivered` = MTA accepted (SMTP 250 or API 200). NOT recipient inbox placement.
+- Overridden by later signals: open → `inbox`, bounce → `bounced`, FBL → `spam`, spam folder → `spam`
+- Sent folder header scan only works for password-auth IMAP (custom SMTP). Gmail/Outlook need OAuth-based IMAP (not wired due to token refresh complexity).
+- `X-Gmail-Labels`/`X-Forefront-Antispam-Report` on Sent folder emails show sender-side flags, not recipient-side delivery info.
+
+### Files Changed
+- `shared/lib/channels/email.ts` — `updateSendPlacement()` function + calls after each provider send
+- `services/email-service/src/email/imap-idle-manager.ts` — `checkSentFolderPlacement()` method
+- `shared/lib/realtime/websocket-sync.ts` — expanded `notifyDeliverabilityUpdated` type

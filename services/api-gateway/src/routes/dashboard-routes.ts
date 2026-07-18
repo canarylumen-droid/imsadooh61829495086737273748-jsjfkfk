@@ -19,7 +19,7 @@ const resolveTxt = promisify(dns.resolveTxt);
 // In-memory cache for dashboard stats (5s)
 const statsCache = new LRUCache<string, any>({ 
   max: 500,
-  ttl: 1000 * 5 // Reduced to 5 seconds for real-time sync
+  ttl: 1000 * 0.5 // 500ms — near-real-time, prevents stampede on rapid refetches
 });
 
 /**

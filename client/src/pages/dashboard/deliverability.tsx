@@ -37,7 +37,16 @@ export default function DeliverabilityPage() {
     const handler = () => queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
     socket.on("leads_updated", handler);
     socket.on("warmup_update", handler);
-    return () => { socket.off("leads_updated", handler); socket.off("warmup_update", handler); };
+    socket.on("stats_updated", handler);
+    socket.on("deliverability_updated", handler);
+    socket.on("integration_reputation_updated", handler);
+    return () => {
+      socket.off("leads_updated", handler);
+      socket.off("warmup_update", handler);
+      socket.off("stats_updated", handler);
+      socket.off("deliverability_updated", handler);
+      socket.off("integration_reputation_updated", handler);
+    };
   }, [socket, queryClient]);
 
   const { data: integrationsData, isLoading, refetch } = useQuery({

@@ -380,14 +380,18 @@ class WebSocketSyncServer {
   }
 
   notifyDeliverabilityUpdated(userId: string, data: {
-    type: 'seed_placement' | 'reputation' | 'campaign_alert';
+    type?: 'seed_placement' | 'reputation' | 'campaign_alert';
     campaignId?: string;
     domain?: string;
     inboxRate?: number;
     spamRate?: number;
-    action?: 'warn' | 'pause' | 'completed';
+    action?: string;
     folder?: string;
     source?: string;
+    integrationId?: string;
+    placement?: string;
+    email?: string;
+    spamCount?: number;
   }) {
     this.emitToUser(userId, 'deliverability_updated', {
       ...data,

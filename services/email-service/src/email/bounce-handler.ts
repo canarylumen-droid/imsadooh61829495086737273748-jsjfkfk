@@ -105,6 +105,18 @@ class BounceHandler {
 
       console.log(`📧 ${event.bounceType.toUpperCase()} bounce recorded: ${event.email} (Integration: ${integrationId})`);
 
+      // Update email_tracking.placement based on bounce type
+      if (event.messageId) {
+        const { emailTracking: etSchema } = await import('@audnix/shared');
+        await db.update(etSchema)
+          .set({
+            placement: event.bounceType === 'spam' ? 'spam' : 'bounced',
+            placementUpdatedAt: new Date()
+          })
+          .where(eq(etSchema.token, event.messageId))
+          .catch((err: any) => console.warn('[Bounce] Failed to update email_tracking placement:', err?.message));
+      }
+
       // --- NEW: Trigger AI Reputation Assessment ---
       if (integrationId) {
         const { calculateReputationScore } = await import('./reputation-monitor.js');
@@ -180,6 +192,14 @@ class BounceHandler {
         leadId: event.leadId,
         email: event.email
       });
+
+      // Push deliverability update so inbox-placement stats refresh immediately
+      await clusterSync.notifyDeliverabilityUpdated(event.userId, {
+        integrationId,
+        bounceType: event.bounceType,
+        placement: event.bounceType === 'spam' ? 'spam' : 'bounced',
+        source: 'bounce_handler'
+      }).catch(() => {});
 
       // Create audit log for activity feed
       await storage.createAuditLog({

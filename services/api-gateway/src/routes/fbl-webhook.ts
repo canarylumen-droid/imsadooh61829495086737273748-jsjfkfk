@@ -105,6 +105,40 @@ async function suppressEmailAddress(email: string, metadata: Record<string, any>
       await calculateReputationScore(lead.integrationId).catch((err: any) => {
         log.warn('Failed to recalculate reputation after FBL complaint', { integrationId: lead.integrationId, error: err.message });
       });
+
+      // Update email_tracking.placement to 'spam' for this recipient
+      try {
+        const { sql: runSql } = await import('drizzle-orm');
+        const token = metadata?.messageId;
+        if (token) {
+          await db.execute(runSql`
+            UPDATE email_tracking 
+            SET placement = 'spam', placement_updated_at = NOW()
+            WHERE token = ${token}
+          `);
+        } else {
+          // Fallback: match by recipient email within last 7 days
+          await db.execute(runSql`
+            UPDATE email_tracking 
+            SET placement = 'spam', placement_updated_at = NOW()
+            WHERE recipient_email = ${email}
+              AND sent_at > NOW() - INTERVAL '7 days'
+              AND placement = 'unknown'
+          `);
+        }
+      } catch (err: any) {
+        log.warn('Failed to update email_tracking placement from FBL', { email, error: err.message });
+      }
+
+      // Push deliverability update
+      try {
+        const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+        await clusterSync.notifyDeliverabilityUpdated(lead.userId, {
+          integrationId: lead.integrationId,
+          placement: 'spam',
+          source: 'fbl_webhook'
+        }).catch(() => {});
+      } catch (_) {}
     }
 
     // Audit trail

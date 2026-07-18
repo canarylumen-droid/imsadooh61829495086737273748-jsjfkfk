@@ -472,11 +472,14 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       }
     });
 
-    // STATS UPDATES (instant KPI refresh)
+    // STATS UPDATES (instant KPI refresh across all pages)
     socketInstance.on('stats_updated', () => {
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats/previous'] });
       queryClient.invalidateQueries({ queryKey: ['/api/email/stats'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/warmup/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
     });
 
     // CAMPAIGN UPDATES

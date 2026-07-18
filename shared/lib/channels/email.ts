@@ -985,6 +985,16 @@ export async function sendEmail(
         targetUrl: firstUrl,
         metadata: { trackingId, integrationId: integration.id, ...(options.isTest ? { isTest: true } : {}) }
       });
+      // Fire-and-forget: update placement to 'delivered' (SMTP 250 = MTA accepted)
+      updateSendPlacement({
+        trackingId,
+        userId,
+        integrationId: integration.id,
+        recipientEmail,
+        placement: 'delivered',
+        provider: 'custom_email',
+        source: 'smtp_response'
+      }).catch(e => console.warn('[Placement] Failed to update deliverability (custom SMTP):', e?.message));
     }
     return result;
   }
@@ -1107,6 +1117,16 @@ export async function sendEmail(
           targetUrl: firstUrl,
           metadata: { trackingId, integrationId: integration.id, ...(options.isTest ? { isTest: true } : {}) }
         });
+        // Fire-and-forget: optimistic 'delivered' (Gmail API accepted)
+        updateSendPlacement({
+          trackingId,
+          userId,
+          integrationId: integration.id,
+          recipientEmail,
+          placement: 'delivered',
+          provider: 'gmail',
+          source: 'gmail_api'
+        }).catch(e => console.warn('[Placement] Failed to update deliverability (Gmail):', e?.message));
       }
     } else if (integration.provider === 'outlook') {
       result = await sendOutlookMessage(
@@ -1150,6 +1170,16 @@ export async function sendEmail(
           targetUrl: firstUrl,
           metadata: { trackingId, integrationId: integration.id, ...(options.isTest ? { isTest: true } : {}) }
         });
+        // Fire-and-forget: optimistic 'delivered' (Outlook API accepted)
+        updateSendPlacement({
+          trackingId,
+          userId,
+          integrationId: integration.id,
+          recipientEmail,
+          placement: 'delivered',
+          provider: 'outlook',
+          source: 'outlook_api'
+        }).catch(e => console.warn('[Placement] Failed to update deliverability (Outlook):', e?.message));
       }
     } else {
       throw new Error(`Unsupported email provider: ${integration.provider}`);
@@ -1304,7 +1334,8 @@ function createMimeMessage(
   inReplyTo?: string,
   references?: string,
   replyTo?: string,
-  leadId?: string
+  leadId?: string,
+  trackingId?: string
 ): string {
   const boundary = '----=_Part_' + Date.now();
 
@@ -1355,6 +1386,11 @@ function createMimeMessage(
   }
   if (replyTo) {
     headers.push(`Reply-To: ${replyTo}`);
+  }
+  // Add custom tracking ID header for IMAP Sent-folder placement detection
+  const headerTrackingId = trackingId || messageId;
+  if (headerTrackingId) {
+    headers.push(`X-Audnix-Id: ${headerTrackingId}`);
   }
   const parts = [
     ...headers,
@@ -1513,6 +1549,48 @@ export async function sendSystemEmail(
   } catch (err: any) {
     console.error('[Email] ❌ Failed to send system email:', err.message);
     return false;
+  }
+}
+
+/**
+ * Update email_tracking.placement and fire deliverability_updated socket event.
+ * Called fire-and-forget after every successful send.
+ */
+async function updateSendPlacement(opts: {
+  trackingId: string;
+  userId: string;
+  integrationId?: string;
+  recipientEmail: string;
+  placement: string;
+  provider: string;
+  source: string;
+}): Promise<void> {
+  try {
+    const { db } = await import('@shared/lib/db/db.js');
+    const { sql } = await import('drizzle-orm');
+    await db.execute(sql`
+      UPDATE email_tracking
+      SET placement = ${opts.placement},
+          placement_updated_at = NOW()
+      WHERE token = ${opts.trackingId}
+        AND placement = 'unknown'
+    `);
+    const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+    await Promise.all([
+      clusterSync.notifyDeliverabilityUpdated(opts.userId, {
+        integrationId: opts.integrationId,
+        placement: opts.placement,
+        source: opts.source,
+        email: opts.recipientEmail
+      }),
+      clusterSync.notifyStatsUpdated(opts.userId, {
+        integrationId: opts.integrationId,
+        type: 'send'
+      }),
+      clusterSync.notifyStatsCacheInvalidate(opts.userId)
+    ]);
+  } catch (err) {
+    console.warn('[Placement] updateSendPlacement error:', (err as Error)?.message);
   }
 }
 

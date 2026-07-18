@@ -1356,4 +1356,119 @@ ssh -i /tmp/aws_temp_key ubuntu@54.227.164.241 "
 
 ---
 
+## 22. Session Log — Jul 18 2026 — Real-Time KPI + Spam Detection Fixes
+
+### 22.1 Root Cause: KPIs Not Updating for Manual Conversations
+
+Dashboard home KPIs (SENT, OPEN RATE, RESPONSES, CONVERTED) only updated from campaign data, not manual inbox sends. Two issues:
+
+1. **Server-side 5s cache** (`statsCache` in `dashboard-routes.ts:20-23`) was never invalidated when a manual message was sent — `notifyStatsUpdated` fired socket event, client refetched, but server returned stale cached data up to 5s
+2. **Missing page-level socket listeners** on warmup, analytics, and deliverability pages — these pages had no `stats_updated` handler, so they never refreshed when stats changed
+
+### 22.2 Fixes Applied
+
+#### Server-Side (API Gateway + Email Service)
+
+| File | Line | Change |
+|------|------|--------|
+| `messages-routes.ts:6,212` | Import + call `invalidateStatsCache(userId)` after every manual message send | Clears the 5s server cache immediately before socket push |
+| `dashboard-routes.ts:23` | Reduced `statsCache` TTL from 5000ms → **500ms** | Near-real-time; prevents stampede on rapid refetches |
+| `imap-idle-manager.ts:1143-1146` | Added `clusterSync.notifyStatsCacheInvalidate(userId)` alongside `wsSync.notifyStatsUpdated(userId)` | IMAP events also clear server cache |
+| `imap-idle-manager.ts:1124-1133` | Added `wsSync.notifyDeliverabilityUpdated(...)` on real-time spam detection | UI refreshes inbox-placement stats immediately when email lands in spam |
+| `spam-monitor.ts:148-153` | Added `clusterSync.notifyDeliverabilityUpdated(...)` on spam folder scan | Same — but for the periodic spam scanner |
+
+#### Client-Side (Pages)
+
+| File | Change |
+|------|--------|
+| `warmup.tsx:35,37` | Added `socket.on("stats_updated", handler)` → invalidates `/api/warmup/status` |
+| `deliverability.tsx:40-41,46-51` | Added `stats_updated`, `deliverability_updated`, `integration_reputation_updated` → invalidates `/api/stats/inbox-placement` |
+| `analytics.tsx:99-130` | **New full socket listener suite** (had zero before): `stats_updated` → full analytics + previous stats; `deliverability_updated`/`integration_reputation_updated` → inbox-placement; `activity_updated`/`leads_updated` → full analytics |
+| `use-realtime.tsx:476-483` | Expanded global `stats_updated` handler to also invalidate `/api/stats/inbox-placement`, `/api/warmup/status`, `/api/dashboard/analytics/full` |
+
+### 22.3 Data Flow Now
+
+**Manual inbox send:**
+```
+messages-routes.ts
+  → invalidateStatsCache(userId)          // clears 500ms server cache
+  → wsSync.notifyStatsUpdated(userId)     // fires stats_updated socket event
+    → client global handler invalidates all stat query keys
+    → client page-level listeners invalidate page-specific keys
+    → client refetches → server returns fresh data (cache cleared)
+```
+
+**IMAP spam detection:**
+```
+imap-idle-manager.ts
+  → db update SET placement='spam'
+  → clusterSync.notifyActivityUpdated({ type: 'spam_detected' })
+  → wsSync.notifyDeliverabilityUpdated(...)        // deliverability_updated event
+  → wsSync.notifyStatsUpdated(userId)              // stats_updated event
+  → clusterSync.notifyStatsCacheInvalidate(userId) // clears server cache via Redis pub/sub
+  └── ALL fire simultaneously — UI updates in <1s
+```
+
+### 22.4 Files Changed
+
+| File | Changes |
+|------|---------|
+| `services/api-gateway/src/routes/messages-routes.ts` | Added `invalidateStatsCache` import + call after message send |
+| `services/api-gateway/src/routes/dashboard-routes.ts` | Cache TTL 5000→500ms |
+| `services/email-service/src/email/imap-idle-manager.ts` | Added `deliverability_updated` + cache invalidation on spam detection |
+| `services/email-service/src/email/spam-monitor.ts` | Added `notifyDeliverabilityUpdated` on spam scan |
+| `client/src/pages/dashboard/warmup.tsx` | Added `stats_updated` listener |
+| `client/src/pages/dashboard/deliverability.tsx` | Added `stats_updated`/`deliverability_updated`/`integration_reputation_updated` listeners |
+| `client/src/pages/dashboard/analytics.tsx` | Full socket listener suite (was missing entirely) |
+| `client/src/hooks/use-realtime.tsx` | Expanded `stats_updated` to cover inbox-placement, warmup, analytics |
+
+## 23. Session Log — Jul 18 2026 (Late) — Auto Folder Placement Detection
+
+### 23.1 The Problem
+The `email_tracking.placement` column was only set to `'spam'` when emails were found in the spam folder via IMAP IDLE. Bounces, opens, and FBL complaints didn't update placement — so the deliverability page only showed spam data, never accurate inbox/bounce/spam split.
+
+### 23.2 How It Works Now
+
+The system auto-detects folder placement from **4 independent signals** and sets `email_tracking.placement` accordingly:
+
+| Signal | Source | Sets Placement | When |
+|--------|--------|----------------|------|
+| **Open (tracking pixel)** | `email-tracking.ts` | `'inbox'` | When recipient opens email (spam doesn't load images) |
+| **Bounce (SMTP/DSN)** | `bounce-handler.ts` | `'bounced'` or `'spam'` | When email bounces hard/soft → `'bounced'`; spam bounce → `'spam'` |
+| **FBL Complaint** | `fbl-webhook.ts` | `'spam'` | When Gmail/Outlook/SendGrid/SES reports spam complaint |
+| **IMAP Spam Folder** | `imap-idle-manager.ts` | `'spam'` | When IMAP detects email in spam folder (matched by subject) |
+
+### 23.3 Every Placement Change Fires `deliverability_updated`
+
+All 4 paths now fire `clusterSync.notifyDeliverabilityUpdated(userId, { ... })` so the deliverability page's inbox-placement stats refresh in real-time (no polling, no refresh needed).
+
+### 23.4 Matching by Tracking Token
+
+Every outbound email now includes `X-Audnix-Id: <trackingToken>` header (via `email.ts:createMimeMessage`). When the IMAP syncs the Sent folder, this header enables precise matching between the sent email and its `email_tracking` record — enabling future IMAP-level placement detection.
+
+### 23.5 Files Changed (Batch 2)
+
+| File | Changes |
+|------|---------|
+| `shared/lib/channels/email.ts` | Added `X-Audnix-Id` header + `trackingId` param to `createMimeMessage` |
+| `services/email-service/src/email/email-tracking.ts` | On open: set `placement = 'inbox'` + fire `deliverability_updated` |
+| `services/email-service/src/email/bounce-handler.ts` | On bounce: set `placement = 'bounced'\|'spam'` + fire `deliverability_updated` |
+| `services/api-gateway/src/routes/fbl-webhook.ts` | On spam complaint: set `placement = 'spam'` + fire `deliverability_updated` |
+
+### 23.6 Data Flow
+
+```
+Email Sent → X-Audnix-Id header embedded
+  │
+  ├─ Bounces → bounce-handler.ts → placement='bounced'/'spam' → deliverability_updated
+  ├─ Opens → email-tracking.ts → placement='inbox' → deliverability_updated  
+  ├─ FBL Complaint → fbl-webhook.ts → placement='spam' → deliverability_updated
+  └─ Spam Folder → imap-idle-manager.ts → placement='spam' → deliverability_updated
+       │
+       └─ ALL → UseRealtime global handler invalidates inbox-placement + dashboard stats
+              └─ Deliverability page shows live accurate split of inbox/bounce/spam
+```
+
+---
+
 *© 2026 AUDNIX OPERATIONS CO. — [Developer Portal](https://audnixai.com/developer)*

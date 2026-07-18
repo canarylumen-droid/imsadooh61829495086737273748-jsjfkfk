@@ -71,9 +71,8 @@ async function processEmailForLead(
 
     if (isHistorical) {
       results.skipped++;
-      return; // Completely ignore pre-connection emails — no leads, no messages, no notifications.
+      return;
     }
-    // ─────────────────────────────────────────────────────────────────────────
 
     // Skip warmup emails (defensive — should have been filtered upstream by IMAP idle)
     if (email.isWarmup || (email.headers && (
@@ -82,6 +81,12 @@ async function processEmailForLead(
     ))) {
       results.skipped++;
       return;
+    }
+
+    // ── BOUNCE DSN DETECTION ─────────────────────────────────────────────────
+    // Run BEFORE transactional/spam filters so mailer-daemon bounces are caught.
+    if (direction === 'inbound') {
+      await handleBounceDSN(userId, email);
     }
 
     // Skip if email is transactional (only for inbound)
@@ -236,32 +241,6 @@ async function processEmailForLead(
       });
     } catch (e) {
       // Ignore duplicates
-    }
-
-    // DETECT BOUNCES: Using isTransactionalEmail + subject check
-    if (direction === 'inbound' && isTransactionalEmail(email)) {
-      const subject = (email.subject || '').toLowerCase();
-      const isBounce = subject.includes('undeliverable') ||
-        subject.includes('bounced') ||
-        subject.includes('delivery failure') ||
-        subject.includes('failure notice');
-
-      if (isBounce) {
-        try {
-          const { bounceHandler } = await import('@services/email-service/src/email/bounce-handler.js');
-          await bounceHandler.recordBounce({
-            userId,
-            leadId: lead.id,
-            integrationId: lead.integrationId || undefined,
-            email: email.from || lead.email,
-            bounceType: subject.includes('permanent') ? 'hard' : 'soft',
-            reason: email.text?.substring(0, 500) || 'Delivery failure (Imported)'
-          });
-          console.log(`[EMAIL_IMPORT] Recorded bounce for lead ${lead.id} (${lead.email})`);
-        } catch (bounceErr) {
-          console.error('[EMAIL_IMPORT] Failed to record bounce:', bounceErr);
-        }
-      }
     }
 
     // Notify UI of new message and potentially lead status change
@@ -739,6 +718,147 @@ function extractNameFromEmail(emailAddress: string): string {
   } catch {
     return 'Contact';
   }
+}
+
+/**
+ * Detect and handle bounce DSN (Delivery Status Notification) emails.
+ * Runs BEFORE transactional/spam filters so mailer-daemon bounces are
+ * linked back to the original sent email_tracking record.
+ */
+async function handleBounceDSN(userId: string, email: any): Promise<void> {
+  const from = (email.from || '').toLowerCase();
+  const subject = (email.subject || '').toLowerCase();
+
+  // Check if this is a bounce DSN email
+  const isMailerDaemon = from.includes('mailer-daemon') ||
+    from.includes('postmaster') ||
+    from.includes('mailerdaemon');
+  const isBounceSubject = subject.includes('undeliverable') ||
+    subject.includes('bounced') ||
+    subject.includes('delivery failure') ||
+    subject.includes('failure notice') ||
+    subject.includes('returned mail') ||
+    subject.includes('delivery status notification');
+
+  if (!isMailerDaemon && !isBounceSubject) return;
+
+  console.log(`[BounceDSN] Detected bounce DSN from ${email.from}: "${email.subject}"`);
+
+  // Extract the original recipient from the bounce body
+  const originalRecipient = extractBounceOriginalRecipient(email);
+
+  // We know the sender of the bounce IS our user (it's their own mailbox),
+  // so the user_id is known. The original_recipient is who they tried to email.
+  if (!originalRecipient) {
+    console.warn('[BounceDSN] Could not extract original recipient from bounce — skipping');
+    return;
+  }
+
+  try {
+    // Find the email_tracking record by recipient email and user
+    const { db } = await import('@shared/lib/db/db.js');
+    const { sql } = await import('drizzle-orm');
+
+    const result = await db.execute(sql`
+      SELECT token, id, user_id, integration_id, recipient_email, lead_id
+      FROM email_tracking
+      WHERE user_id = ${userId}
+        AND LOWER(recipient_email) = ${originalRecipient.toLowerCase()}
+        AND placement IN ('delivered', 'unknown')
+        AND sent_at > NOW() - INTERVAL '7 days'
+      ORDER BY sent_at DESC
+      LIMIT 1
+    `);
+
+    const sentEmail = result.rows?.[0] as any;
+    if (!sentEmail) {
+      console.warn(`[BounceDSN] No matching email_tracking for recipient ${originalRecipient}`);
+      return;
+    }
+
+    console.log(`[BounceDSN] Matched to email_tracking token=${sentEmail.token}, updating placement to 'bounced'`);
+
+    // Update email_tracking.placement
+    const bounceType = subject.includes('permanent') || subject.includes('550') ? 'hard' : 'soft';
+    await db.execute(sql`
+      UPDATE email_tracking
+      SET placement = 'bounced',
+          placement_updated_at = NOW(),
+          metadata = COALESCE(metadata, '{}'::jsonb) || 
+            jsonb_build_object('bounce_type', ${bounceType}, 'bounce_reason', ${(email.text || '').substring(0, 500)})
+      WHERE id = ${sentEmail.id}
+    `);
+
+    // Record in bounce_handler for bounce stats
+    try {
+      const { bounceHandler } = await import('@services/email-service/src/email/bounce-handler.js');
+      await bounceHandler.recordBounce({
+        userId: sentEmail.user_id,
+        leadId: sentEmail.lead_id,
+        integrationId: sentEmail.integration_id,
+        email: originalRecipient,
+        bounceType: bounceType as any,
+        reason: (email.text || email.html || '').substring(0, 500) || 'Delivery failure (DSN detected)'
+      });
+    } catch (bhErr) {
+      console.warn('[BounceDSN] Failed to record in bounceHandler:', (bhErr as Error)?.message);
+    }
+
+    // Fire deliverability_updated + stats socket events for real-time UI
+    try {
+      const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+      await Promise.all([
+        clusterSync.notifyDeliverabilityUpdated(userId, {
+          integrationId: sentEmail.integration_id,
+          placement: 'bounced',
+          source: 'dsn_detection',
+          email: originalRecipient
+        }),
+        clusterSync.notifyStatsUpdated(userId, {
+          integrationId: sentEmail.integration_id,
+          type: 'bounce'
+        }),
+        clusterSync.notifyStatsCacheInvalidate(userId)
+      ]);
+    } catch (socketErr) {
+      console.warn('[BounceDSN] Failed to fire socket events:', (socketErr as Error)?.message);
+    }
+  } catch (err) {
+    console.error('[BounceDSN] Error processing bounce:', (err as Error)?.message);
+  }
+}
+
+/**
+ * Extract the original recipient email from a bounce DSN.
+ * The body contains the original email headers including the To: address.
+ */
+function extractBounceOriginalRecipient(email: any): string | null {
+  const body = email.text || email.html || '';
+
+  // Try to find X-Audnix-Id in the bounce body to narrow down the search
+  // The original email headers are typically included in the DSN body
+  // Look for patterns like "Original-Recipient:" or "Final-Recipient:"
+  const originalRecipientMatch = body.match(/Original-Recipient:\s*rfc822;\s*(\S+@\S+)/i)
+    || body.match(/Final-Recipient:\s*rfc822;\s*(\S+@\S+)/i);
+
+  if (originalRecipientMatch) {
+    return originalRecipientMatch[1].replace(/[<>]/g, '');
+  }
+
+  // Fallback: look for X-Audnix-Id in the body, then rely on To: parse
+  // The bounce body often contains the original message headers
+  // Try to find the To: header from the original message
+  const toMatch = body.match(/^To:\s*(.*@.*)$/im);
+  if (toMatch) {
+    const addr = toMatch[1].replace(/[<>"']/g, '').trim();
+    if (addr.includes('@')) return addr;
+  }
+
+  // Return the original email "to" from email_tracking perspective
+  // If email has original_to field or similar
+  if (email.originalTo) return email.originalTo;
+
+  return null;
 }
 
 
