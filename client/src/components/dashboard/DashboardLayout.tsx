@@ -156,7 +156,7 @@ const ThemeSwitcher = () => {
 
 function cacheBustSrc(src?: string): string | undefined {
   if (!src) return undefined;
-  return src.includes('?') ? src : `${src}?cb=${Date.now()}`;
+  return src;
 }
 
 export function DashboardLayout({ children, fullHeight = false }: { children: React.ReactNode, fullHeight?: boolean }) {

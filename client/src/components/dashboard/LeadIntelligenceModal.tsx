@@ -163,17 +163,19 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90dvh] overflow-y-auto bg-gradient-to-br from-background to-muted/20 border-border/60 p-4 sm:p-6">
-                <DialogHeader className="pb-4 border-b border-border/40">
-                    <div className="flex items-center gap-3">
-                        <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/30">
-                            <Brain className="h-6 w-6" />
-                        </div>
-                        <div>
-                            <DialogTitle className="text-xl">Lead Overview</DialogTitle>
-                            <DialogDescription>
-                                AI-generated analysis for <span className="font-semibold text-foreground">{lead?.name}</span>
-                            </DialogDescription>
+            <DialogContent className="w-[95vw] sm:max-w-4xl max-h-[90dvh] overflow-y-auto overflow-x-hidden bg-gradient-to-br from-background to-muted/20 border-border/60 p-0 sm:p-6">
+                <DialogHeader className="pb-4 border-b border-border/40 p-4 sm:p-0">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground shadow-lg shadow-primary/30 shrink-0">
+                                <Brain className="h-6 w-6" />
+                            </div>
+                            <div className="min-w-0">
+                                <DialogTitle className="text-lg sm:text-xl truncate">Lead Overview</DialogTitle>
+                                <DialogDescription className="truncate">
+                                    AI analysis for <span className="font-semibold text-foreground">{lead?.name}</span>
+                                </DialogDescription>
+                            </div>
                         </div>
                     </div>
                 </DialogHeader>
@@ -188,7 +190,7 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                       initial="hidden"
                       animate="visible"
                       variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-                      className="space-y-6 pt-2"
+                      className="space-y-6 pt-2 px-4 sm:px-0 break-words"
                     >
                         {/* Executive AI Summary / Key Takeaway */}
                     <motion.div

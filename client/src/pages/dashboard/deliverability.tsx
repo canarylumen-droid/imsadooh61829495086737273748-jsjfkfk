@@ -49,6 +49,8 @@ export default function DeliverabilityPage() {
     };
   }, [socket, queryClient]);
 
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const { data: integrationsData, isLoading, refetch } = useQuery({
     queryKey: ['/api/integrations'],
     select: (d: any) => (d.integrations || d || []).filter((i: any) => ['gmail', 'outlook', 'custom_email'].includes(i.provider)),
@@ -107,8 +109,8 @@ export default function DeliverabilityPage() {
             <p className="text-sm text-muted-foreground">Per-mailbox spam score, blacklist status, DNS health, and bounce monitoring. Updates every 2 minutes.</p>
           </div>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { refetch(); queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] }); }} disabled={isLoading}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} /> Refresh
+        <Button variant="outline" size="sm" onClick={async () => { setIsRefreshing(true); await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] })]); setIsRefreshing(false); }} disabled={isRefreshing}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> {isRefreshing ? 'Refreshing...' : 'Refresh'}
         </Button>
       </div>
 
