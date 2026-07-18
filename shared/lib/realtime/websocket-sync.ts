@@ -399,6 +399,13 @@ class WebSocketSyncServer {
     });
   }
 
+  notifyWarmupUpdated(userId: string, data: { mailboxIds: string[]; status: string }) {
+    this.emitToUser(userId, 'warmup_update', {
+      ...data,
+      timestamp: new Date().toISOString()
+    });
+  }
+
   notifyDnsVerified(userId: string, data: { domain: string; score: number; spf: boolean; dkim: boolean; dmarc: boolean; mx: boolean; blacklist: boolean }) {
     this.emitToUser(userId, 'dns_verified', {
       ...data,

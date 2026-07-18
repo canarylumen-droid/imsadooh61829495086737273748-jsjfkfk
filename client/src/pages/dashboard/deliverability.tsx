@@ -1,16 +1,19 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRealtime } from "@/hooks/use-realtime";
 import { PageWrapper } from '@/components/ui/page-wrapper';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, Target } from 'lucide-react';
+import { apiRequest } from '@/lib/queryClient';
+import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, Target, Thermometer, Play, Loader2 } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+import { useToast } from '@/hooks/use-toast';
 
 interface PlacementMailbox {
   integrationId: string;
@@ -31,6 +34,7 @@ export default function DeliverabilityPage() {
   const { socket } = useRealtime();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!socket) return;
@@ -59,6 +63,28 @@ export default function DeliverabilityPage() {
   const { data: placementData } = useQuery<InboxPlacementData>({
     queryKey: ["/api/stats/inbox-placement", { days: 30 }],
   });
+
+  const { data: warmupData } = useQuery<any>({
+    queryKey: ["/api/dashboard/warmup-status"],
+    staleTime: 15_000,
+  });
+
+  const toggleWarmupMutation = useMutation({
+    mutationFn: async ({ mailboxIds, enabled }: { mailboxIds: string[]; enabled: boolean }) => {
+      const res = await apiRequest("POST", "/api/warmup/toggle", { mailboxIds, enabled });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/warmup-status"] });
+      toast({ title: "Warmup Updated" });
+    },
+  });
+
+  const warmupMailboxes: any[] = warmupData?.mailboxes || [];
+
+  const handleToggleWarmup = (mailboxId: string, currentStatus: string) => {
+    toggleWarmupMutation.mutate({ mailboxIds: [mailboxId], enabled: currentStatus !== 'active' });
+  };
 
   const mailboxes: any[] = integrationsData || [];
   const placementByIntegrationId = useMemo(() => {
@@ -178,6 +204,57 @@ export default function DeliverabilityPage() {
               </Card>
             )}
           </div>
+
+          {/* Warmup Section — per-mailbox toggles */}
+          <Card className="bg-card/50 border-border/40">
+            <CardHeader className="p-4 pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+                  <Thermometer className="w-4 h-4 text-amber-500" /> Warmup
+                </CardTitle>
+                <Badge variant="outline" className="text-[9px] font-medium">
+                  {warmupMailboxes.filter((m: any) => m.warmupStatus === 'active').length} warming
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-4 pt-2 space-y-1">
+              {warmupMailboxes.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">No warmup data available.</p>
+              ) : (
+                warmupMailboxes.slice(0, 10).map((mb: any) => {
+                  const isActive = mb.warmupStatus === 'active';
+                  const warmupCount = mb.warmupLimit > 0 ? mb.warmupLimit : Math.max(4, Math.min(15, Math.round(mb.dailyLimit * 0.15)));
+                  return (
+                    <div key={mb.mailboxId} className="flex items-center justify-between py-1.5 border-b border-border/10 last:border-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Switch
+                          checked={isActive}
+                          onCheckedChange={() => handleToggleWarmup(mb.mailboxId, mb.warmupStatus)}
+                          disabled={toggleWarmupMutation.isPending}
+                          className="scale-75 origin-left shrink-0"
+                        />
+                        <div className="min-w-0">
+                          <p className="text-xs font-medium truncate">{mb.email}</p>
+                          <p className="text-[9px] text-muted-foreground">{warmupCount} warmup/day • {mb.reputationScore} rep</p>
+                        </div>
+                      </div>
+                      <Badge
+                        variant={isActive ? "default" : "secondary"}
+                        className={cn("text-[9px] font-medium shrink-0 ml-2", isActive && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20")}
+                      >
+                        {isActive ? "Active" : "Off"}
+                      </Badge>
+                    </div>
+                  );
+                })
+              )}
+              {warmupMailboxes.length > 10 && (
+                <p className="text-[9px] text-muted-foreground text-center pt-1">
+                  +{warmupMailboxes.length - 10} more mailboxes — go to Warmup page to manage all
+                </p>
+              )}
+            </CardContent>
+          </Card>
 
           <InboxPlacementPie />
 

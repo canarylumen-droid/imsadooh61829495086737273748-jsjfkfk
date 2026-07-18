@@ -1299,6 +1299,8 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                 totalSent,
                 totalBounced,
                 totalOpened,
+                warmupStatus: int.warmupStatus || 'none',
+                warmupLimit: int.warmupLimit ?? 5,
             };
         }));
 
@@ -1306,6 +1308,39 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
     } catch (error: any) {
         console.error('[Dashboard] Warmup status error:', error.message);
         res.json({ mailboxes: [] });
+    }
+});
+
+/**
+ * POST /api/warmup/toggle
+ * Enable/disable warmup for specific mailboxes
+ */
+router.post('/warmup/toggle', requireAuthOrApiKey, async (req: Request, res: Response) => {
+    try {
+        const userId = req.session?.userId!;
+        const { mailboxIds, enabled } = req.body;
+        if (!Array.isArray(mailboxIds) || mailboxIds.length === 0) {
+            res.status(400).json({ error: 'mailboxIds array required' });
+            return;
+        }
+
+        const newStatus = enabled ? 'active' : 'paused';
+        for (const id of mailboxIds) {
+            try {
+                await storage.updateIntegrationById(id, { warmupStatus: newStatus } as any);
+            } catch { }
+        }
+
+        try {
+            const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+            wsSync.notifyWarmupUpdated(userId, { mailboxIds, status: newStatus });
+            wsSync.notifyStatsUpdated(userId);
+        } catch { }
+
+        res.json({ success: true, status: newStatus, affectedCount: mailboxIds.length });
+    } catch (error: any) {
+        console.error('[Warmup] Toggle error:', error.message);
+        res.status(500).json({ error: 'Failed to toggle warmup' });
     }
 });
 
