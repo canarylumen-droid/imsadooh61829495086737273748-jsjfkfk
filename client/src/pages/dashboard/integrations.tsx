@@ -294,7 +294,7 @@ export default function IntegrationsPage() {
   const { socket } = useRealtime();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { selectedMailboxId } = useMailbox();
+  const { selectedMailboxId, setSelectedMailboxId } = useMailbox();
   const [customEmailConfig, setCustomEmailConfig] = useState({
     smtpHost: '',
     smtpPort: '587',
@@ -450,12 +450,14 @@ export default function IntegrationsPage() {
     if (socket) {
       socket.on('stats_updated', handleStatsUpdated);
       socket.on('integration_health_updated', handleStatsUpdated);
+      socket.on('deliverability_updated', handleStatsUpdated);
     }
 
     return () => {
       if (socket) {
         socket.off('stats_updated', handleStatsUpdated);
         socket.off('integration_health_updated', handleStatsUpdated);
+        socket.off('deliverability_updated', handleStatsUpdated);
       }
     };
   }, [queryClient, socket]);
@@ -1401,7 +1403,16 @@ export default function IntegrationsPage() {
                       </div>
                     )}
                     {pagedMailboxes.map((mailbox) => (
-                      <div key={mailbox.id} className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3 sm:p-6 rounded-xl sm:rounded-2xl bg-muted/20 border border-border/40 hover:border-primary/30 transition-all group">
+                      <div
+                        key={mailbox.id}
+                        onClick={() => setSelectedMailboxId(mailbox.id)}
+                        className={cn(
+                          "flex flex-col lg:flex-row lg:items-center justify-between gap-3 p-3 sm:p-6 rounded-xl sm:rounded-2xl transition-all cursor-pointer",
+                          selectedMailboxId === mailbox.id
+                            ? "bg-primary/5 border-primary/30 shadow-[0_0_15px_rgba(var(--primary),0.08)]"
+                            : "bg-muted/20 border border-border/40 hover:border-primary/30"
+                        )}
+                      >
                         <div className="flex items-center gap-3 sm:gap-4">
                           <div className={cn(
                             "h-8 w-8 sm:h-12 sm:w-12 rounded-lg sm:rounded-xl flex items-center justify-center border transition-all duration-300 shrink-0",
@@ -1470,17 +1481,17 @@ export default function IntegrationsPage() {
 
                         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mt-2 lg:mt-0">
                           {mailbox.connected && (
-                            <div className="grid grid-cols-3 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto">
+                            <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto">
                               <div className="flex flex-col justify-center">
-                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Reputation</span>
+                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Delivery</span>
                                 <span className={cn(
                                   "text-xs sm:text-sm font-black",
-                                  mailbox.reputationScore === null || mailbox.reputationScore === undefined ? "text-sky-500" :
-                                  mailbox.reputationScore >= 80 ? "text-emerald-500" :
-                                  mailbox.reputationScore >= 50 ? "text-amber-500" : "text-destructive"
+                                  mailbox.deliveryRate === null || mailbox.deliveryRate === undefined ? "text-sky-500" :
+                                  mailbox.deliveryRate >= 95 ? "text-emerald-500" :
+                                  mailbox.deliveryRate >= 80 ? "text-amber-500" : "text-destructive"
                                 )}>
-                                  {mailbox.reputationScore !== undefined && mailbox.reputationScore !== null 
-                                    ? `${mailbox.reputationScore}/100` 
+                                  {mailbox.deliveryRate !== null && mailbox.deliveryRate !== undefined
+                                    ? `${mailbox.deliveryRate}%`
                                     : "Init..."}
                                 </span>
                               </div>
@@ -1489,15 +1500,28 @@ export default function IntegrationsPage() {
                                 <span className={cn(
                                   "text-xs sm:text-sm font-black",
                                   mailbox.bounceRate === null || mailbox.bounceRate === undefined ? "text-sky-500" :
-                                  ((mailbox.bounceRate ?? 0) * 100) < 2 ? "text-emerald-500" :
-                                  ((mailbox.bounceRate ?? 0) * 100) < 5 ? "text-amber-500" : "text-destructive"
+                                  mailbox.bounceRate < 2 ? "text-emerald-500" :
+                                  mailbox.bounceRate < 5 ? "text-amber-500" : "text-destructive"
                                 )}>
-                                  {mailbox.bounceRate !== undefined && mailbox.bounceRate !== null
-                                    ? `${((mailbox.bounceRate ?? 0) * 100).toFixed(1)}%`
+                                  {mailbox.bounceRate !== null && mailbox.bounceRate !== undefined
+                                    ? `${mailbox.bounceRate}%`
                                     : "Init..."}
                                 </span>
                               </div>
-                              <div className="flex flex-col justify-center border-l border-border/40 pl-3 min-w-[90px]">
+                              <div className="flex flex-col justify-center border-l border-border/40 pl-2">
+                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Inbox</span>
+                                <span className={cn(
+                                  "text-xs sm:text-sm font-black",
+                                  mailbox.placementRate === null || mailbox.placementRate === undefined ? "text-sky-500" :
+                                  mailbox.placementRate >= 90 ? "text-emerald-500" :
+                                  mailbox.placementRate >= 70 ? "text-amber-500" : "text-destructive"
+                                )}>
+                                  {mailbox.placementRate !== null && mailbox.placementRate !== undefined
+                                    ? `${mailbox.placementRate}%`
+                                    : "Init..."}
+                                </span>
+                              </div>
+                              <div className="flex flex-col justify-center border-l border-border/40 pl-2">
                                 <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status</span>
                                 <span className="text-xs font-black text-emerald-400 tabular-nums">
                                   {mailbox.connected ? "Active" : "Inactive"}

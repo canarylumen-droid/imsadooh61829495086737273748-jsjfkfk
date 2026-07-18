@@ -21,6 +21,8 @@ import {
   TrendingUp,
   TrendingDown,
   MessageSquare,
+  AlertTriangle,
+  Target,
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useLocation } from "wouter";
@@ -370,6 +372,29 @@ export default function DashboardHome() {
       borderColor: "border-primary/20",
       glow: "hover:shadow-[0_0_20px_rgba(var(--primary),0.15)]"
     },
+    {
+      label: "BOUNCE RATE",
+      value: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "—" : (stats.globalBounceRate * 100).toFixed(1),
+      suffix: (stats?.globalBounceRate === null || stats?.globalBounceRate === undefined) ? "" : "%",
+      icon: AlertTriangle,
+      percentage: null,
+      trend: "neutral",
+      color: "text-rose-500",
+      bgColor: "bg-rose-500/10",
+      borderColor: "border-rose-500/20",
+      glow: "hover:shadow-[0_0_20px_rgba(244,63,94,0.15)]"
+    },
+    {
+      label: "DEALS",
+      value: stats?.wonCount ?? stats?.pipelineValue ?? 0,
+      icon: Target,
+      percentage: calculatePercentageChange(stats?.wonCount ?? 0, previousStats?.wonCount ?? previousStats?.conversions ?? 0),
+      trend: previousStats ? ((stats?.wonCount ?? 0) > (previousStats?.wonCount ?? previousStats?.conversions ?? 0) ? "up" : (stats?.wonCount ?? 0) < (previousStats?.wonCount ?? previousStats?.conversions ?? 0) ? "down" : "neutral") : "neutral",
+      color: "text-violet-500",
+      bgColor: "bg-violet-500/10",
+      borderColor: "border-violet-500/20",
+      glow: "hover:shadow-[0_0_20px_rgba(139,92,246,0.15)]"
+    },
   ];
 
   if (statsLoading || userLoading) {
@@ -503,7 +528,7 @@ export default function DashboardHome() {
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, ease: "easeOut" }}
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7 gap-3"
         >
           {summaryMetrics.map((metric: any, index: number) => {
             const Icon = metric.icon;

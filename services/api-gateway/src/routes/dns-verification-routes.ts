@@ -5,6 +5,7 @@ import { apiLimiter } from '../middleware/rate-limit.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import { sendError } from '@shared/lib/api/error-response.js';
+import { invalidateStatsCache } from './dashboard-routes.js';
 
 const router = Router();
 
@@ -64,6 +65,22 @@ router.post('/verify', requireAuthOrApiKey, apiLimiter, async (req: Request, res
           ON CONFLICT (user_id, domain) 
           DO UPDATE SET verification_result = ${JSON.stringify(result)}::jsonb, created_at = NOW()
         `);
+
+        invalidateStatsCache(userId);
+
+        try {
+          const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+          wsSync.notifyDnsVerified(userId, {
+            domain: cleanDomain,
+            score: result.overallScore,
+            spf: result.spf?.valid ?? false,
+            dkim: result.dkim?.valid ?? false,
+            dmarc: result.dmarc?.valid ?? false,
+            mx: result.mx?.found ?? false,
+            blacklist: result.blacklist?.isBlacklisted ?? false,
+          });
+          wsSync.notifyStatsUpdated(userId);
+        } catch {}
       } catch (dbError) {
         console.log('Domain verification table may not exist yet, skipping storage');
       }

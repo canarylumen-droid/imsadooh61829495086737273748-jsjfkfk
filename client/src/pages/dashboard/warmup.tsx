@@ -35,7 +35,15 @@ export default function WarmupPage() {
     socket.on("warmup_update", handler);
     socket.on("mailbox_updated", handler);
     socket.on("stats_updated", handler);
-    return () => { socket.off("warmup_update", handler); socket.off("mailbox_updated", handler); socket.off("stats_updated", handler); };
+    socket.on("deliverability_updated", handler);
+    socket.on("integration_reputation_updated", handler);
+    return () => {
+      socket.off("warmup_update", handler);
+      socket.off("mailbox_updated", handler);
+      socket.off("stats_updated", handler);
+      socket.off("deliverability_updated", handler);
+      socket.off("integration_reputation_updated", handler);
+    };
   }, [socket, queryClient]);
 
   const { data: warmupData, isLoading } = useQuery<any>({

@@ -1011,54 +1011,79 @@ router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): 
     const userId = getCurrentUserId(req)!;
     const allIntegrations = await storage.getIntegrations(userId);
 
-    // Include ALL email-capable providers in the unified mailbox view
-    // showing both connected and recently disconnected for cleanup
     const emailProviders = ['custom_email', 'gmail', 'outlook'];
-    
+
     const { db } = await import('@shared/lib/db/db.js');
-    const { leads: leadsSchema, messages: msgSchema } = await import('@audnix/shared');
+    const { emailTracking: et, bounceTracker: bt } = await import('@audnix/shared');
     const { and, eq, sql, inArray } = await import('drizzle-orm');
 
     const emailIntegrations = allIntegrations.filter(i => emailProviders.includes(i.provider));
     const integrationIds = emailIntegrations.map(i => i.id);
 
-    // Bulk-fetch bounce counts in a single query instead of N+1
-    let bouncyCounts: { integrationId: string; count: number }[] = [];
-    let outreachedCounts: { integrationId: string; count: number }[] = [];
+    let sentMap = new Map<string, number>();
+    let inboxMap = new Map<string, number>();
+    let spamMap = new Map<string, number>();
+    let bounceMap = new Map<string, { hard: number; soft: number; spam: number; total: number }>();
+    let deliveredMap = new Map<string, number>();
 
     if (integrationIds.length > 0) {
-      bouncyCounts = await db.select({
-        integrationId: leadsSchema.integrationId,
-        count: sql<number>`count(*)`,
+      const [sentRows] = await db.select({
+        integrationId: et.integrationId,
+        count: sql<number>`count(*)::int`,
       })
-        .from(leadsSchema)
-        .where(and(
-          eq(leadsSchema.userId, userId),
-          eq(leadsSchema.status, 'bouncy'),
-          inArray(leadsSchema.integrationId, integrationIds)
-        ))
-        .groupBy(leadsSchema.integrationId) as any;
+        .from(et)
+        .where(and(inArray(et.integrationId, integrationIds), sql`${et.createdAt} > NOW() - INTERVAL '14 days'`))
+        .groupBy(et.integrationId);
 
-      outreachedCounts = await db.select({
-        integrationId: msgSchema.integrationId,
-        count: sql<number>`count(distinct ${msgSchema.leadId})`,
+      sentMap = new Map((sentRows || []).map((r: any) => [r.integrationId, Number(r.count)]));
+
+      const [inboxRows] = await db.select({
+        integrationId: et.integrationId,
+        count: sql<number>`count(*)::int`,
       })
-        .from(msgSchema)
-        .where(and(
-          eq(msgSchema.userId, userId),
-          eq(msgSchema.direction, 'outbound'),
-          inArray(msgSchema.integrationId, integrationIds)
-        ))
-        .groupBy(msgSchema.integrationId) as any;
+        .from(et)
+        .where(and(inArray(et.integrationId, integrationIds), eq(et.placement, 'inbox'), sql`${et.createdAt} > NOW() - INTERVAL '14 days'`))
+        .groupBy(et.integrationId);
+
+      inboxMap = new Map((inboxRows || []).map((r: any) => [r.integrationId, Number(r.count)]));
+
+      const [spamRows] = await db.select({
+        integrationId: et.integrationId,
+        count: sql<number>`count(*)::int`,
+      })
+        .from(et)
+        .where(and(inArray(et.integrationId, integrationIds), eq(et.placement, 'spam'), sql`${et.createdAt} > NOW() - INTERVAL '14 days'`))
+        .groupBy(et.integrationId);
+
+      spamMap = new Map((spamRows || []).map((r: any) => [r.integrationId, Number(r.count)]));
+
+      const bounceRows = await db.select({
+        integrationId: bt.integrationId,
+        type: bt.bounceType,
+        count: sql<number>`count(*)::int`,
+      })
+        .from(bt)
+        .where(and(inArray(bt.integrationId, integrationIds), sql`${bt.createdAt} > NOW() - INTERVAL '14 days'`))
+        .groupBy(bt.integrationId, bt.bounceType) as any;
+
+      for (const row of bounceRows || []) {
+        const existing = bounceMap.get(row.integrationId) || { hard: 0, soft: 0, spam: 0, total: 0 };
+        existing[row.type as string] += Number(row.count);
+        existing.total += Number(row.count);
+        bounceMap.set(row.integrationId, existing);
+      }
     }
 
-    const bouncyMap = new Map(bouncyCounts.map(r => [r.integrationId, Number(r.count)]));
-    const outreachedMap = new Map(outreachedCounts.map(r => [r.integrationId, Number(r.count)]));
-
     const mailboxes = emailIntegrations.map(i => {
-      const bouncy = bouncyMap.get(i.id) || 0;
-      const outreached = outreachedMap.get(i.id) || 0;
-      const calculatedBounceRate = outreached > 0 ? (bouncy / outreached) : 0;
+      const sent = sentMap.get(i.id) || 0;
+      const inbox = inboxMap.get(i.id) || 0;
+      const spam = spamMap.get(i.id) || 0;
+      const bounce = bounceMap.get(i.id) || { hard: 0, soft: 0, spam: 0, total: 0 };
+      const delivered = Math.max(0, sent - bounce.total);
+      const placementRate = sent > 0 ? Number(((inbox / sent) * 100).toFixed(1)) : null;
+      const spamRate = sent > 0 ? Number(((spam / sent) * 100).toFixed(1)) : null;
+      const bounceRate = sent > 0 ? Number(((bounce.total / sent) * 100).toFixed(1)) : null;
+      const deliveryRate = sent > 0 ? Number(((delivered / sent) * 100).toFixed(1)) : null;
 
       return {
         id: i.id,
@@ -1068,16 +1093,22 @@ router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): 
         healthStatus: (i as any).healthStatus || 'connected',
         lastSync: i.lastSync,
         reputationScore: (i as any).reputationScore ?? null,
-        bounceRate: calculatedBounceRate,
-        // Part 7: Normalize null → 50 so the frontend always gets a number
         dailyLimit: (i as any).dailyLimit ?? 50,
+        sent,
+        inbox,
+        spam,
+        delivered,
+        bounceCount: bounce.total,
+        placementRate,
+        spamRate,
+        bounceRate,
+        deliveryRate,
       };
     });
 
     res.json({
       success: true,
       integrations: mailboxes,
-      // Legacy single-mailbox fields for any existing UI that reads them
       connected: mailboxes.length > 0,
       email: mailboxes[0]?.email || null
     });
