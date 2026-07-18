@@ -41,7 +41,7 @@ export function createApp() {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", "data:", "blob:", "https://*.s3.amazonaws.com", "https://*.s3.us-east-1.amazonaws.com"],
+        imgSrc: ["'self'", "data:", "blob:", "https://*.s3.amazonaws.com", "https://*.s3.us-east-1.amazonaws.com", "https://*.s3.dualstack.us-east-1.amazonaws.com"],
         connectSrc: ["'self'", "https://www.audnixai.com", "wss://www.audnixai.com", "https://audnixai.com", "wss://audnixai.com"],
       },
     },

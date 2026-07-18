@@ -168,7 +168,7 @@ export default function InboxPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const leadListRef = useRef<HTMLDivElement>(null);
-  const ROW_HEIGHT = 90;
+  const ROW_HEIGHT = 72;
   const BUFFER = 10;
 
   const [activeReplyTab, setActiveReplyTab] = useState<'text'>('text');
@@ -1305,12 +1305,12 @@ export default function InboxPage() {
                         }}
                         onContextMenu={(e) => handleContextMenu(e, 'inbox', lead)}
                         className={cn(
-                          "p-5 cursor-pointer border-b border-border/10 transition-all relative group flex gap-4",
+                          "p-3 cursor-pointer border-b border-border/10 transition-all relative group flex gap-3",
                           leadId === lead.id ? "bg-primary/10" : "hover:bg-muted/30",
                           lead.metadata?.isUnread && "bg-primary/5",
                           selectedLeadIds.includes(lead.id) && "bg-primary/20"
                         )}
-                        style={{ position: 'absolute', top: realIdx * 90, left: 0, right: 0 }}
+                        style={{ position: 'absolute', top: realIdx * 72, left: 0, right: 0 }}
                       >
                         <div className={cn(
                           "absolute left-2 top-1/2 -translate-y-1/2 z-10 transition-all",
@@ -1324,11 +1324,11 @@ export default function InboxPage() {
                         </div>
                         {leadId === lead.id && <motion.div layoutId="activeLead" className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />}
                         <div className={cn("flex gap-3 items-center transition-all", (selectedLeadIds.length > 0 || selectedLeadIds.includes(lead.id)) && "pl-8")}>
-                          <Avatar className="h-12 w-12 border-2 border-background shadow-sm transition-transform group-hover:scale-105 shrink-0 rounded-full">
+                          <Avatar className="h-10 w-10 border-2 border-background shadow-sm shrink-0 rounded-full">
                             <AvatarImage src={lead.avatar} />
-                            <AvatarFallback className={cn("font-bold text-sm rounded-full", lead.id === leadId ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{lead.name?.[0]}</AvatarFallback>
+                            <AvatarFallback className={cn("font-semibold text-xs rounded-full", lead.id === leadId ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{lead.name?.[0]}</AvatarFallback>
                           </Avatar>
-                          <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex-1 min-w-0 space-y-0.5">
                             <div className="flex justify-between items-start gap-1">
                               <span className="text-sm font-semibold truncate text-foreground flex-1 min-w-0" title={lead.name}>
                                 {lead.name}
@@ -1359,17 +1359,7 @@ export default function InboxPage() {
                                 </span>
                               )}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <Badge {...({ variant: "outline", className: cn("text-[9px] h-4 px-1 rounded-sm border-0 uppercase font-black tracking-wider", statusStyles[lead.status as keyof typeof statusStyles] || statusStyles.cold) } as any)}>
-                                {getLeadStatusDisplay(lead.status)}
-                              </Badge>
-                              {lead.integrationId && mailboxLookup[lead.integrationId] && (
-                                <span className="text-[9px] text-muted-foreground/50 truncate max-w-[100px]" title={mailboxLookup[lead.integrationId]?.email || ''}>
-                                  via {mailboxLookup[lead.integrationId]?.email?.split('@')[0] || mailboxLookup[lead.integrationId]?.name || 'mailbox'}
-                                </span>
-                              )}
-                              {lead.metadata?.isUnread && (() => { const isOld = new Date().getTime() - new Date(lead.createdAt).getTime() > 24 * 60 * 60 * 1000; return !isOld ? <span className="h-2 w-2 rounded-full bg-primary animate-pulse" /> : null; })()}
-                            </div>
+                            {lead.metadata?.isUnread && (() => { const isOld = new Date().getTime() - new Date(lead.createdAt).getTime() > 24 * 60 * 60 * 1000; return !isOld ? <div className="flex items-center gap-2"><span className="h-1.5 w-1.5 rounded-full bg-primary" /></div> : null; })()}
                           </div>
                         </div>
                       </div>);

@@ -166,6 +166,8 @@ class AdvancedStorageService {
         console.error('[AdvancedStorage] Pre-sign failed:', err.message);
       }
     }
+    // If pre-sign failed on an S3 URI, return the raw s3:// URI so the caller can fall back
+    if (key.startsWith('s3://')) return key;
     // For local / Redis-buffered files, return the static serving path
     const localKey = key.replace(`s3://${this.bucketName ?? 'unknown'}/`, '');
     return `/uploads/${localKey}`;
