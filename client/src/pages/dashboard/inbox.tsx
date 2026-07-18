@@ -417,6 +417,10 @@ export default function InboxPage() {
     const handleLeadsUpdated = (payload: any) => {
       if (payload?.event === 'BULK_DELETE' && payload.leadIds) {
         setAllLeads(prev => prev.filter(l => !payload.leadIds.includes(l.id)));
+      } else if (payload?.event === 'INSERT' && payload.lead) {
+        setAllLeads(prev => [payload.lead, ...prev]);
+      } else if (payload?.leadId && payload?.status) {
+        setAllLeads(prev => prev.map(l => l.id === payload.leadId ? { ...l, status: payload.status } : l));
       }
       queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
     };
