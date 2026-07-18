@@ -136,9 +136,12 @@ export default function AnalyticsPage() {
         queryKey: ["/api/dashboard/stats/previous", { integrationId: selectedMailboxId }],
     });
 
-    const calculatePercentageChange = (current: number, previous: number | undefined): { percentage: string; isUp: boolean; isNeutral: boolean } => {
-        if (previous === undefined || previous === 0) return { percentage: "—", isUp: false, isNeutral: true };
-        const change = ((current - previous) / previous) * 100;
+    const calculatePercentageChange = (current: number | null | undefined, previous: number | null | undefined): { percentage: string; isUp: boolean; isNeutral: boolean } => {
+        const c = current ?? 0;
+        const p = previous ?? 0;
+        if (p === 0 || current === null || previous === null) return { percentage: "—", isUp: false, isNeutral: true };
+        const change = ((c - p) / p) * 100;
+        if (isNaN(change) || !isFinite(change)) return { percentage: "—", isUp: false, isNeutral: true };
         return {
             percentage: `${change > 0 ? "+" : ""}${change.toFixed(2)}%`,
             isUp: change > 0,
@@ -164,37 +167,37 @@ export default function AnalyticsPage() {
                     <>
                         <StatCard
                             label="Total Sent"
-                            value={filteredMetrics?.sent || 0}
+                            value={filteredMetrics?.sent ?? 0}
                             icon={Send}
-                            trend={calculatePercentageChange(filteredMetrics?.sent || 0, previousStats?.messages).percentage}
-                            isUp={calculatePercentageChange(filteredMetrics?.sent || 0, previousStats?.messages).isUp}
+                            trend={calculatePercentageChange(filteredMetrics?.sent, previousStats?.messages).percentage}
+                            isUp={calculatePercentageChange(filteredMetrics?.sent, previousStats?.messages).isUp}
                             color="text-blue-500"
                             index={0}
                         />
                         <StatCard
                             label="Open Rate"
-                            value={`${isNaN(Number(filteredMetrics?.openRate)) ? "0.00" : Number(filteredMetrics?.openRate || 0).toFixed(2)}%`}
+                            value={filteredMetrics?.openRate != null ? `${filteredMetrics.openRate.toFixed(2)}%` : "—"}
                             icon={Eye}
-                            trend={calculatePercentageChange(filteredMetrics?.openRate || 0, previousStats?.openRate).percentage}
-                            isUp={calculatePercentageChange(filteredMetrics?.openRate || 0, previousStats?.openRate).isUp}
+                            trend={calculatePercentageChange(filteredMetrics?.openRate, previousStats?.openRate).percentage}
+                            isUp={calculatePercentageChange(filteredMetrics?.openRate, previousStats?.openRate).isUp}
                             color="text-amber-500"
                             index={1}
                         />
                         <StatCard
                             label="Response Rate"
-                            value={`${isNaN(Number(filteredMetrics?.responseRate)) ? "0.00" : Number(filteredMetrics?.responseRate || 0).toFixed(2)}%`}
+                            value={filteredMetrics?.responseRate != null ? `${filteredMetrics.responseRate.toFixed(2)}%` : "—"}
                             icon={MessageCircle}
-                            trend={calculatePercentageChange(filteredMetrics?.responseRate || 0, previousStats?.responseRate).percentage}
-                            isUp={calculatePercentageChange(filteredMetrics?.responseRate || 0, previousStats?.responseRate).isUp}
+                            trend={calculatePercentageChange(filteredMetrics?.responseRate, previousStats?.responseRate).percentage}
+                            isUp={calculatePercentageChange(filteredMetrics?.responseRate, previousStats?.responseRate).isUp}
                             color="text-fuchsia-500"
                             index={2}
                         />
                         <StatCard
                             label="Revenue"
-                            value={`$${(filteredMetrics?.closedRevenue || 0).toLocaleString()}`}
+                            value={filteredMetrics?.closedRevenue != null ? `$${filteredMetrics.closedRevenue.toLocaleString()}` : "—"}
                             icon={DollarSign}
-                            trend={calculatePercentageChange((filteredMetrics?.closedRevenue || 0), (previousStats?.closedRevenue || 0)).percentage}
-                            isUp={calculatePercentageChange((filteredMetrics?.closedRevenue || 0), (previousStats?.closedRevenue || 0)).isUp}
+                            trend={calculatePercentageChange(filteredMetrics?.closedRevenue, previousStats?.closedRevenue).percentage}
+                            isUp={calculatePercentageChange(filteredMetrics?.closedRevenue, previousStats?.closedRevenue).isUp}
                             color="text-emerald-500"
                             index={3}
                         />
@@ -209,10 +212,10 @@ export default function AnalyticsPage() {
                         />
                         <StatCard
                             label="Calls Booked"
-                            value={filteredMetrics?.booked || 0}
+                            value={filteredMetrics?.booked ?? 0}
                             icon={CalendarCheck2}
-                            trend={calculatePercentageChange(filteredMetrics?.booked || 0, previousStats?.convertedLeads).percentage}
-                            isUp={calculatePercentageChange(filteredMetrics?.booked || 0, previousStats?.convertedLeads).isUp}
+                            trend={calculatePercentageChange(filteredMetrics?.booked, previousStats?.convertedLeads).percentage}
+                            isUp={calculatePercentageChange(filteredMetrics?.booked, previousStats?.convertedLeads).isUp}
                             color="text-primary"
                             index={5}
                         />
@@ -604,15 +607,15 @@ export default function AnalyticsPage() {
                             </thead>
                             <tbody className="divide-y divide-border/10">
                                 {[
-                                    { label: "Messages Sent", currentVal: filteredMetrics?.sent, previousVal: previousStats?.messages },
-                                    { label: "Email Open Rate", current: `${Number(filteredMetrics?.openRate || 0).toFixed(2)}%`, previous: `${Number(previousStats?.openRate || 0).toFixed(2)}%`, currentVal: filteredMetrics?.openRate, previousVal: previousStats?.openRate },
-                                    { label: "Engagement Rate", current: `${Number(filteredMetrics?.responseRate || 0).toFixed(2)}%`, previous: `${Number(previousStats?.responseRate || 0).toFixed(2)}%`, currentVal: filteredMetrics?.responseRate, previousVal: previousStats?.responseRate },
-                                    { label: "Total Bookings", currentVal: filteredMetrics?.booked, previousVal: previousStats?.convertedLeads },
-                                    { label: "Gross Revenue", current: `$${(filteredMetrics?.closedRevenue || 0).toLocaleString()}`, previous: `$${(previousStats?.closedRevenue || 0).toLocaleString()}`, currentVal: filteredMetrics?.closedRevenue, previousVal: previousStats?.closedRevenue },
+                                    { label: "Messages Sent", currentVal: filteredMetrics?.sent, previousVal: previousStats?.messages, suffix: "" },
+                                    { label: "Email Open Rate", current: filteredMetrics?.openRate != null ? `${filteredMetrics.openRate.toFixed(2)}%` : "—", previous: previousStats?.openRate != null ? `${previousStats.openRate.toFixed(2)}%` : "—", currentVal: filteredMetrics?.openRate, previousVal: previousStats?.openRate, suffix: "%" },
+                                    { label: "Engagement Rate", current: filteredMetrics?.responseRate != null ? `${filteredMetrics.responseRate.toFixed(2)}%` : "—", previous: previousStats?.responseRate != null ? `${previousStats.responseRate.toFixed(2)}%` : "—", currentVal: filteredMetrics?.responseRate, previousVal: previousStats?.responseRate, suffix: "%" },
+                                    { label: "Total Bookings", currentVal: filteredMetrics?.booked, previousVal: previousStats?.convertedLeads, suffix: "" },
+                                    { label: "Gross Revenue", current: filteredMetrics?.closedRevenue != null ? `$${filteredMetrics.closedRevenue.toLocaleString()}` : "—", previous: previousStats?.closedRevenue != null ? `$${previousStats.closedRevenue.toLocaleString()}` : "—", currentVal: filteredMetrics?.closedRevenue, previousVal: previousStats?.closedRevenue, suffix: "$" },
                                 ].map((row, idx) => {
                                     const { percentage, isUp, isNeutral } = calculatePercentageChange(
-                                        Number(row.currentVal || 0),
-                                        Number(row.previousVal || 0)
+                                        row.currentVal,
+                                        row.previousVal
                                     );
 
                                     return (

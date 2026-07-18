@@ -1,6 +1,7 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { 
   ShieldCheck, 
   AlertTriangle, 
@@ -11,10 +12,12 @@ import {
   TrendingUp,
   TrendingDown,
   RefreshCw,
-  Zap
+  Zap,
+  ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
+import { useNavigate } from "wouter";
 
 interface ReputationCardProps {
   score: number | null;
@@ -44,6 +47,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
   isLoading,
   hasIntegrations = true
 }) => {
+  const navigate = useNavigate();
   const getStatusColor = (s: string) => {
     switch (s) {
       case 'healthy': return 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
@@ -194,6 +198,16 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
               : "CRITICAL. Minimum volume to recover health.")}
           </p>
         </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/dashboard/integrations')}
+          className="w-full h-8 rounded-lg text-[10px] font-medium text-muted-foreground/60 hover:text-primary hover:bg-primary/5 border border-border/10"
+        >
+          <ExternalLink className="w-3 h-3 mr-1.5" />
+          View all domains in Integrations
+        </Button>
       </CardContent>
     </Card>
   );

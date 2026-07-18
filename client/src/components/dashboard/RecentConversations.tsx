@@ -131,12 +131,11 @@ export function RecentConversations() {
   }, [socket, selectedMailboxId, selectedLead?.id, queryClient]);
 
   const { data: leadsData, isLoading: leadsLoading } = useQuery({
-    queryKey: ["/api/leads", { integrationId: selectedMailboxId, channel: selectedChannel, limit: 10 }],
+    queryKey: ["/api/leads", { integrationId: selectedMailboxId, limit: 20 }],
     queryFn: async () => {
       const url = new URL("/api/leads", window.location.origin);
       if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
-      url.searchParams.set("channel", selectedChannel);
-      url.searchParams.set("limit", "10");
+      url.searchParams.set("limit", "20");
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Failed to fetch leads");
       return res.json();
@@ -148,8 +147,13 @@ export function RecentConversations() {
     enabled: !!selectedLead,
   });
 
-  const leads = (leadsData as any)?.leads || [];
+  const allLeads = (leadsData as any)?.leads || [];
   const messages = (messagesData as any)?.messages || [];
+  const leads = allLeads.filter((l: Lead) => {
+    const ch = l.channel || l.metadata?.provider || 'email';
+    if (selectedChannel === 'email') return ['email', 'gmail', 'outlook'].includes(ch);
+    return ch === selectedChannel;
+  });
 
   if (selectedLead) {
     return (

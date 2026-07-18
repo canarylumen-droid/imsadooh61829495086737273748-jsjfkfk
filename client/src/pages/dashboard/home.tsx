@@ -440,14 +440,14 @@ export default function DashboardHome() {
               className="flex w-full md:w-auto"
             />
             {stats?.sync?.isAutonomous && (
-              <Badge variant="outline" className="px-3 py-1.5 bg-green-500/10 text-green-500 border-green-500/20 rounded-lg font-bold text-[11px] animate-pulse">
-                <span className="w-2 h-2 mr-2 bg-green-500 rounded-full inline-block" />
-                Live
+              <Badge variant="outline" className="px-3 py-1.5 bg-emerald-500/10 text-emerald-500 border-emerald-500/20 rounded-lg font-semibold text-[10px]">
+                <span className="w-1.5 h-1.5 mr-1.5 bg-emerald-500 rounded-full inline-block animate-pulse" />
+                Engine Live
               </Badge>
             )}
             {stats?.sync?.lastSync && !stats?.sync?.isAutonomous && (
-              <Badge variant="outline" className="px-3 py-1.5 bg-muted/30 text-muted-foreground border-border/40 rounded-lg font-bold text-[11px]">
-                <RefreshCw className="w-3 h-3 mr-2 opacity-50" />
+              <Badge variant="outline" className="px-3 py-1.5 bg-muted/20 text-muted-foreground border-border/30 rounded-lg font-medium text-[10px]">
+                <RefreshCw className="w-3 h-3 mr-1.5 opacity-40" />
                 Synced {formatRelativeTime(stats.sync.lastSync)}
               </Badge>
             )}
@@ -653,35 +653,38 @@ export default function DashboardHome() {
               <ReputationTrendChart />
             </div>
 
-            <Card className="border-border/50 rounded-lg">
-              <CardHeader className="pb-3 border-b border-border/40">
-                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">System Health</CardTitle>
+            <Card className="border-border/50 rounded-lg bg-card/40">
+              <CardHeader className="pb-3 border-b border-border/10">
+                <CardTitle className="text-[10px] font-semibold uppercase tracking-[0.15em] text-muted-foreground/60 flex items-center gap-2">
+                  <Activity className="w-3.5 h-3.5 text-primary/60" />
+                  System Status
+                </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 space-y-5">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium flex items-center gap-3">
-                    <div className={cn("h-2 w-2 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]",
-                      (stats?.sync?.status === "Autonomous" && stats?.leads !== 0) ? "bg-emerald-500 shadow-emerald-500/40" : "bg-amber-500 shadow-amber-500/40"
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/10">
+                  <span className="text-xs font-medium text-foreground/80 flex items-center gap-2.5">
+                    <div className={cn("h-2 w-2 rounded-full",
+                      (stats?.sync?.status === "Autonomous" && stats?.leads !== 0) ? "bg-emerald-500" : "bg-amber-400"
                     )} />
-                    AI Automation
+                    AI Engine
                   </span>
-                  <Badge variant="secondary" className={cn("border-0 text-[10px] uppercase font-bold tracking-tighter",
-                    stats?.sync?.status === "Autonomous" ? "bg-emerald-500/10 text-emerald-600" : "bg-amber-500/10 text-amber-600"
+                  <Badge variant="outline" className={cn("border-0 text-[9px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-md",
+                    stats?.sync?.status === "Autonomous" ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
                   )}>
-                    {stats?.sync?.status === "Autonomous" ? "Active" : "Idle"}
+                    {stats?.sync?.status === "Autonomous" ? "Active" : "Standby"}
                   </Badge>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium flex items-center gap-3">
-                    <div className={cn("h-2 w-2 rounded-full shadow-[0_0_8px_rgba(16,185,129,0.4)]",
-                      isSmtpConnected ? "bg-emerald-500 shadow-emerald-500/40" : "bg-red-500 shadow-red-500/40"
+                <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-muted/10">
+                  <span className="text-xs font-medium text-foreground/80 flex items-center gap-2.5">
+                    <div className={cn("h-2 w-2 rounded-full",
+                      isSmtpConnected ? "bg-emerald-500" : "bg-rose-400"
                     )} />
-                    Deliverability Guard
+                    Mail Channels
                   </span>
-                  <Badge variant="secondary" className={cn("border-0 text-[10px] uppercase font-bold tracking-tighter",
-                    isSmtpConnected ? "bg-emerald-500/10 text-emerald-600" : "bg-red-500/10 text-red-600"
+                  <Badge variant="outline" className={cn("border-0 text-[9px] uppercase font-semibold tracking-wider px-2 py-0.5 rounded-md",
+                    isSmtpConnected ? "bg-emerald-500/10 text-emerald-500" : "bg-rose-500/10 text-rose-500"
                   )}>
-                    {isSmtpConnected ? "Active" : "Inactive"}
+                    {isSmtpConnected ? "Connected" : "Disconnected"}
                   </Badge>
                 </div>
               </CardContent>

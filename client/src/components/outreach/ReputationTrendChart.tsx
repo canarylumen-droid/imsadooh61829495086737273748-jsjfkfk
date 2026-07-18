@@ -120,30 +120,7 @@ export const ReputationTrendChart = () => {
   }
 
   if (!data?.seedsConfigured) {
-    return (
-      <Card className="border-border/50 rounded-xl bg-card/40 relative overflow-hidden">
-        <CardHeader className="pb-2 border-b border-border/10">
-          <CardTitle className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1.5">
-            <Target className="w-3.5 h-3.5" />
-            Inbox Placement
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center text-center py-6 gap-3">
-          <div className="p-3 rounded-full bg-amber-500/10">
-            <Mail className="w-5 h-5 text-amber-400" />
-          </div>
-          <div className="space-y-1">
-            <h3 className="text-sm font-bold text-foreground">Add 20 seed emails to enable</h3>
-            <p className="text-[11px] text-muted-foreground leading-relaxed max-w-xs">
-              Configure seed accounts in your environment to track inbox placement rates across providers.
-            </p>
-          </div>
-          <Badge variant="outline" className="text-[9px] font-bold text-muted-foreground/60 border-dashed">
-            SEED_NETWORK = DISABLED
-          </Badge>
-        </CardContent>
-      </Card>
-    );
+    return null;
   }
 
   return (
