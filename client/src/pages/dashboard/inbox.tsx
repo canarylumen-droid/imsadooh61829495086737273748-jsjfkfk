@@ -1355,7 +1355,7 @@ export default function InboxPage() {
                                   {lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <span className="truncate">{lead.snippet ? stripHtml(lead.snippet).substring(0, 120) : "No messages"}</span>
+                                  <span className="truncate">{lead.snippet ? stripHtml(lead.snippet).substring(0, 60) : "No messages"}</span>
                                 </span>
                               )}
                             </p>

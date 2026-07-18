@@ -763,28 +763,17 @@ router.post('/user/avatar', requireAuthOrApiKey, uploadAvatar.single('avatar'), 
     const ext = path.extname(file.originalname) || '.jpg';
     const filename = `${userId}_${Date.now()}${ext}`;
 
-    let avatarUrl: string | null = null;
+    // Always save locally for reliable serving
+    const localDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
+    await fs.mkdir(localDir, { recursive: true });
+    const localPath = path.join(localDir, path.basename(filename));
+    await fs.writeFile(localPath, file.buffer);
+    let avatarUrl = `/uploads/avatars/${path.basename(filename)}`;
 
-    try {
-      avatarUrl = await uploadToSupabase('avatars', filename, file.buffer);
-      // If uploadToSupabase returned raw s3:// URI (pre-sign failed), save locally too
-      if (avatarUrl && avatarUrl.startsWith('s3://')) {
-        const localDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
-        await fs.mkdir(localDir, { recursive: true });
-        await fs.writeFile(path.join(localDir, path.basename(filename)), file.buffer);
-        avatarUrl = `/uploads/avatars/${path.basename(filename)}`;
-      }
-    } catch (supaErr) {
-      console.warn('[Avatar] Supabase upload failed, saving locally:', supaErr);
-    }
-
-    if (!avatarUrl) {
-      const localDir = path.join(process.cwd(), 'public', 'uploads', 'avatars');
-      await fs.mkdir(localDir, { recursive: true });
-      const localPath = path.join(localDir, path.basename(filename));
-      await fs.writeFile(localPath, file.buffer);
-      avatarUrl = `/uploads/avatars/${path.basename(filename)}`;
-    }
+    // Also try S3 upload as backup (non-critical)
+    uploadToSupabase('avatars', filename, file.buffer).catch((err: any) =>
+      console.warn('[Avatar] S3 backup upload failed (non-critical):', err?.message)
+    );
 
     await storage.updateUser(userId, { avatar: avatarUrl });
 
