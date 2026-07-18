@@ -470,10 +470,14 @@ Send email → SMTP 250 OK (or Gmail/Outlook API 200)
 ### Inbox Filter Fix
 **Issue**: Status filter drop-down showed "No X conversations" empty state because `simpleStatuses` was missing `'unsubscribed'`, so API wasn't filtering by that status. Also, socket `leads_updated` handler only patched `allLeads` state on `BULK_DELETE` — individual lead status changes (like unsubscribe) required a full query refetch with timing-dependent reactivity.
 
-**Fix**: Added `'unsubscribed'` to `simpleStatuses`. Updated `handleLeadsUpdated` to patch `allLeads` state directly for:
-- `{ leadId, status }` — immediate status update in state
-- `{ event: 'INSERT', lead }` — immediate lead insertion in state
-- `{ event: 'BULK_DELETE', leadIds }` — existing behavior
+**Fix**: Replaced `simpleStatuses` (manually maintained list) with `apiStatusFilters` (Set of all DB status values: new, contacted, converted, not_interested, unsubscribed, cold, booked, warm, replied). Metadata-based filters (opened, unread, read, inventory) stay client-side. Updated `handleLeadsUpdated` to patch `allLeads` state directly for single-lead status changes, INSERT events, and BULK_DELETE.
+
+### Notification Fix
+**Root cause**: `createNotification()` in `drizzle-storage.ts:3073` used `wsSync` (direct Socket.IO in-process) instead of `clusterSync` (Redis pub/sub). In background workers (email, brain, outreach, billing), `wsSync.io` is `null`, so the push was silently lost. 19 of 34 notification creation sites across the codebase were broken.
+
+**Fix**: Changed `wsSync.notifyNotification(userId, notification)` → `clusterSync.notifyNotification(userId, notification)` in `createNotification()`. Also fixed same pattern in `paged-email-importer.ts:279` and `lead-scoring-engine.ts:189` (`wsSync.notifyStatsUpdated` → `clusterSync.notifyStatsUpdated`).
+
+**Polling**: Removed 15s polling. Now uses `refetchInterval: false` when socket is connected (pure real-time) and falls back to 5s polling when `isConnected` is false (socket disconnected/not started).
 
 ### Build Fix
 **ReputationCard.tsx**: Used `useNavigate` from `wouter` (not exported) → changed to `useLocation` (returns `[location, setLocation]`).

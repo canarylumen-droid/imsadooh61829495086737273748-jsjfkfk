@@ -9,6 +9,7 @@ mod mailer;
 mod queue;
 mod dns;
 mod config;
+mod telemetry;
 
 use config::Config;
 use queue::EmailJob;
@@ -73,8 +74,30 @@ async fn main() -> Result<()> {
                 let pool = mailer_pool.clone();
                 let redis = redis_conn.clone();
                 let rq = email_result_queue.clone();
+                let resolver = dns_resolver.clone();
 
                 tokio::spawn(async move {
+                    let domain = job.recipient.split('@').nth(1).unwrap_or("unknown").to_string();
+
+                    // Run SMTP telemetry probe before sending
+                    if let Ok(mx_records) = resolver.resolve_mx(&domain).await {
+                        if let Some(mx) = mx_records.first() {
+                            let mx_host = mx.exchange.trim_end_matches('.').to_string();
+                            match telemetry::SmtpTelemetry::probe(&job.recipient, &domain, &mx_host).await {
+                                Ok(report) => {
+                                    if matches!(report.suspected_placement, telemetry::PlacementGuess::TarpittedSpamQueue | telemetry::PlacementGuess::Rejected | telemetry::PlacementGuess::GreylistedOrThrottled) {
+                                        log::warn!("[{}] Telemetry risk: {:?} for {} via {} ({}ms)", job.id, report.suspected_placement, job.recipient, mx_host, report.rcpt_latency_ms);
+                                    } else {
+                                        log::debug!("[{}] Telemetry OK: {:?} for {} ({}ms)", job.id, report.suspected_placement, job.recipient, report.rcpt_latency_ms);
+                                    }
+                                }
+                                Err(e) => {
+                                    log::debug!("[{}] Telemetry skipped (non-fatal): {}", job.id, e);
+                                }
+                            }
+                        }
+                    }
+
                     let result = pool.send_via_job(&job).await;
 
                     let result_json = serde_json::json!({

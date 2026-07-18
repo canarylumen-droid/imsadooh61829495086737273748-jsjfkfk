@@ -218,5 +218,10 @@ export function createApp() {
 
   app.use(session(sessionConfig));
 
+  // Start forensic handler for DMARC/seed placement events
+  import('@shared/lib/realtime/forensic-handler.js').then(({ initForensicHandler }) => {
+    initForensicHandler().catch((e: any) => console.warn('[App] Forensic handler init:', e.message));
+  });
+
   return app;
 }
