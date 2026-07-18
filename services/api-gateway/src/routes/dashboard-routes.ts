@@ -1344,6 +1344,74 @@ router.post('/warmup/toggle', requireAuthOrApiKey, async (req: Request, res: Res
     }
 });
 
+/**
+ * GET /api/warmup/activity
+ * Returns hourly warmup activity for the last 24 hours
+ */
+router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Response) => {
+    try {
+        const userId = req.session?.userId!;
+        const mailboxId = req.query.mailboxId as string | undefined;
+
+        const { db } = await import('@shared/lib/db/db.js');
+        const { warmupMailboxes, warmupInteractions } = await import('@audnix/shared');
+        const { eq, and, gte, sql, inArray } = await import('drizzle-orm');
+
+        let warmupMailboxIds: string[];
+        if (mailboxId) {
+            const [wm] = await db.select({ id: warmupMailboxes.id })
+                .from(warmupMailboxes)
+                .where(and(eq(warmupMailboxes.integrationId, mailboxId), eq(warmupMailboxes.userId, userId)));
+            if (!wm) { res.json({ hours: [] }); return; }
+            warmupMailboxIds = [wm.id];
+        } else {
+            const wms = await db.select({ id: warmupMailboxes.id })
+                .from(warmupMailboxes)
+                .where(eq(warmupMailboxes.userId, userId));
+            warmupMailboxIds = wms.map((w: any) => w.id);
+        }
+
+        if (warmupMailboxIds.length === 0) { res.json({ hours: [] }); return; }
+
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        const rows = await db.select({
+            hour: sql<number>`EXTRACT(HOUR FROM ${warmupInteractions.sentAt})::int`,
+            sends: sql<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound')`,
+            opens: sql<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound' AND ${warmupInteractions.status} = 'delivered')`,
+            bounces: sql<number>`count(*) filter (where ${warmupInteractions.status} = 'bounced' OR ${warmupInteractions.status} = 'failed')`,
+        })
+            .from(warmupInteractions)
+            .where(and(
+                inArray(warmupInteractions.fromMailboxId, warmupMailboxIds),
+                gte(warmupInteractions.sentAt, twentyFourHoursAgo),
+            ))
+            .groupBy(sql`EXTRACT(HOUR FROM ${warmupInteractions.sentAt})`)
+            .orderBy(sql`EXTRACT(HOUR FROM ${warmupInteractions.sentAt})`);
+
+        const hoursMap = new Map<number, { sends: number; opens: number; bounces: number }>();
+        for (const row of rows) {
+            hoursMap.set(row.hour, {
+                sends: Number(row.sends),
+                opens: Number(row.opens),
+                bounces: Number(row.bounces),
+            });
+        }
+
+        const hours = Array.from({ length: 24 }, (_, i) => ({
+            hour: String(i).padStart(2, '0'),
+            sends: hoursMap.get(i)?.sends || 0,
+            opens: hoursMap.get(i)?.opens || 0,
+            bounces: hoursMap.get(i)?.bounces || 0,
+        }));
+
+        res.json({ hours });
+    } catch (error: any) {
+        console.error('[Warmup] Activity error:', error.message);
+        res.json({ hours: [] });
+    }
+});
+
 export default router;
 
 

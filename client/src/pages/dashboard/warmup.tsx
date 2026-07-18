@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
   Shield, Mail, Clock, AlertTriangle, CheckCircle2, Thermometer,
   Loader2, Play, Plus, Search, ChevronDown, Activity,
@@ -48,7 +49,10 @@ export default function WarmupPage() {
 
   useEffect(() => {
     if (!socket) return;
-    const handler = () => queryClient.invalidateQueries({ queryKey: ["/api/dashboard/warmup-status"] });
+    const handler = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/warmup-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/warmup/activity"] });
+    };
     socket.on("warmup_update", handler);
     socket.on("stats_updated", handler);
     return () => {
@@ -63,7 +67,14 @@ export default function WarmupPage() {
     staleTime: 10_000,
   });
 
+  const { data: activityData } = useQuery<any>({
+    queryKey: ["/api/warmup/activity"],
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
+
   const warmupStatuses: MailboxWarmup[] = warmupData?.mailboxes || [];
+  const activityHours: { hour: string; sends: number; opens: number; bounces: number }[] = activityData?.hours || [];
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return warmupStatuses;
@@ -238,6 +249,65 @@ export default function WarmupPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* 24h Activity Chart */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            24-Hour Warmup Activity
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {activityHours.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              No warmup data in the last 24 hours
+            </div>
+          ) : (
+            <div className="w-full h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={activityHours} barCategoryGap="20%">
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.4} />
+                  <XAxis
+                    dataKey="hour"
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={2}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={30}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'hsl(var(--card))',
+                      borderColor: 'hsl(var(--border))',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                    formatter={(value: number, name: string) => [
+                      value, name.charAt(0).toUpperCase() + name.slice(1)
+                    ]}
+                    labelFormatter={(hour: string) => `${hour}:00`}
+                  />
+                  <Legend
+                    iconType="circle"
+                    iconSize={8}
+                    wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }}
+                  />
+                  <Bar dataKey="sends" name="Sends" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={16} />
+                  <Bar dataKey="opens" name="Opens" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={16} />
+                  <Bar dataKey="bounces" name="Bounces" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={16} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Mailbox Warmup List */}
       <Card>
