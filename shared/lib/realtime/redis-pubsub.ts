@@ -132,6 +132,7 @@ class RedisPubSub {
         break;
       case 'DELIVERABILITY_UPDATE': wsSync.notifyDeliverabilityUpdated(userId, payload); break;
       case 'WARMUP_UPDATE': wsSync.notifyWarmupUpdated(userId, payload); break;
+      case 'CALENDAR_UPDATE': wsSync.notifyCalendarUpdated(userId, payload); break;
       default:
         wsSync.broadcastToUser(userId, { type: type.toLowerCase(), payload });
     }
@@ -236,6 +237,10 @@ class RedisPubSub {
 
   async notifyWarmupUpdated(userId: string, data: any) {
     await this.broadcast('WARMUP_UPDATE', userId, data);
+  }
+
+  async notifyCalendarUpdated(userId: string, data?: any) {
+    await this.broadcast('CALENDAR_UPDATE', userId, data);
   }
 
   private async handleEvent(message: string) {

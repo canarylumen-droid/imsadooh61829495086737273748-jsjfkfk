@@ -200,6 +200,10 @@ export class FollowUpWorker {
         const uniqueUsers = Array.from(new Set<string>(activeRules.map((r: any) => String(r.userId))));
         for (const userId of uniqueUsers) {
           await AutomationRuleEngine.processProactiveRules(userId);
+          try {
+            const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+            await clusterSync.notifyCalendarUpdated(userId);
+          } catch (_) {}
         }
       } catch (autoErr) {
         console.error('[FollowUpWorker] Automation scan failed:', autoErr);
