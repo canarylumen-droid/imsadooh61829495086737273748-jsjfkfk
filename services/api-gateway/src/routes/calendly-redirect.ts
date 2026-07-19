@@ -59,6 +59,7 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     //    when users reconnect via OAuth without manually disconnecting first.
     const existingIntegration = await storage.getIntegration(userId, 'calendly');
     if (existingIntegration) {
+      await calendlyOAuth.revokeToken(userId).catch(() => {});
       await storage.deleteIntegrationById(existingIntegration.id);
     }
 

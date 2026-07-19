@@ -179,16 +179,17 @@ export class CalendlyOAuth {
 
       if (token) {
         console.log(`[Calendly OAuth] Revoking token for user: ${userId}`);
+        const params = new URLSearchParams({
+          client_id: this.config.clientId,
+          client_secret: this.config.clientSecret,
+          token: token,
+        });
         const response = await fetch('https://auth.calendly.com/oauth/revoke', {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
           },
-          body: JSON.stringify({
-            client_id: this.config.clientId,
-            client_secret: this.config.clientSecret,
-            token: token
-          }),
+          body: params.toString(),
         });
 
         if (!response.ok) {
