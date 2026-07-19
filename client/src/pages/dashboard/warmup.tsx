@@ -13,7 +13,7 @@ import { useMailbox } from "@/hooks/use-mailbox";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import {
   Shield, Mail, Clock, AlertTriangle, CheckCircle2, Thermometer,
   Loader2, Play, Plus, Search, ChevronDown, Activity,
@@ -277,7 +277,7 @@ export default function WarmupPage() {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center gap-2 text-base">
-              <BarChart3 className="h-4 w-4 text-primary" />
+              <TrendingUp className="h-4 w-4 text-primary" />
               Warmup Activity
             </CardTitle>
             <div className="flex items-center gap-1 bg-muted/40 rounded-lg p-0.5">
@@ -301,14 +301,14 @@ export default function WarmupPage() {
         <CardContent>
           {activityPeriods.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              <BarChart3 className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <TrendingUp className="h-8 w-8 mx-auto mb-2 opacity-40" />
               No warmup data in this period
             </div>
           ) : (
             <div className="w-full h-48">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={activityPeriods} barCategoryGap={isHourly ? "20%" : "10%"}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.4} />
+                <LineChart data={activityPeriods}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" opacity={0.3} />
                   <XAxis
                     dataKey="period"
                     tick={{ fontSize: isHourly ? 10 : 8, fill: 'hsl(var(--muted-foreground))' }}
@@ -339,10 +339,10 @@ export default function WarmupPage() {
                     iconSize={8}
                     wrapperStyle={{ fontSize: '11px', paddingTop: '4px' }}
                   />
-                  <Bar dataKey="sends" name="Sends" fill="#3b82f6" radius={[3, 3, 0, 0]} maxBarSize={isHourly ? 16 : 32} />
-                  <Bar dataKey="opens" name="Opens" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={isHourly ? 16 : 32} />
-                  <Bar dataKey="bounces" name="Bounces" fill="#ef4444" radius={[3, 3, 0, 0]} maxBarSize={isHourly ? 16 : 32} />
-                </BarChart>
+                  <Line type="monotone" dataKey="sends" name="Sends" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+                  <Line type="monotone" dataKey="opens" name="Opens" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+                  <Line type="monotone" dataKey="bounces" name="Bounces" stroke="#ef4444" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           )}
