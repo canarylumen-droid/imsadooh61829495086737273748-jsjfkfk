@@ -361,6 +361,7 @@ export default function CalendarPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({ title: "Calendly disconnected" });
     },
     onError: (err: any) => {
@@ -435,16 +436,16 @@ export default function CalendarPage() {
         throw new Error(err.error || "Failed to start Calendly connection");
       }
       const data = await res.json();
-      if (data.authUrl) window.location.href = data.authUrl;
+      if (data.authUrl) {
+        // Force a fresh redirect — avoids stale browser state after disconnect
+        window.location.replace(data.authUrl);
+      } else {
+        throw new Error("No authorization URL returned");
+      }
       return data;
     },
     onError: (err: any) => {
-      const msg = err?.message || "";
-      if (msg.includes("already") || msg.includes("in use")) {
-        toast({ title: "Already in use", description: "This Calendly account is connected to another Audnix account. Disconnect it first.", variant: "destructive" });
-      } else {
-        toast({ title: "Connection failed", description: msg, variant: "destructive" });
-      }
+      toast({ title: "Connection failed", description: err?.message || "Try again", variant: "destructive" });
     },
   });
 

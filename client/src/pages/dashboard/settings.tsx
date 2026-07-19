@@ -531,10 +531,15 @@ export default function SettingsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-5 text-[9px] font-black uppercase tracking-widest text-primary hover:bg-primary/5 p-0"
-                          onClick={() => {
-                            fetch('/api/oauth/connect/calendly')
-                              .then(res => res.json())
-                              .then(data => { if (data.authUrl) window.location.href = data.authUrl; });
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/oauth/connect/calendly', { credentials: 'include' });
+                              if (!res.ok) throw new Error('Failed to connect');
+                              const data = await res.json();
+                              if (data.authUrl) window.location.href = data.authUrl;
+                            } catch (e) {
+                              toast({ title: 'Connection failed', description: 'Could not start Calendly OAuth', variant: 'destructive' });
+                            }
                           }}
                         >
                           <Plus className="h-2.5 w-2.5 mr-1" /> Connect
