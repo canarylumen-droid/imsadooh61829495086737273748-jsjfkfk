@@ -395,10 +395,10 @@ export default function DashboardHome() {
     },
     {
       label: "DEALS",
-      value: stats?.wonCount ?? stats?.pipelineValue ?? 0,
+      value: stats?.conversions ?? stats?.convertedLeads ?? 0,
       icon: Target,
-      percentage: calculatePercentageChange(stats?.wonCount ?? 0, previousStats?.wonCount ?? previousStats?.conversions ?? 0),
-      trend: previousStats ? ((stats?.wonCount ?? 0) > (previousStats?.wonCount ?? previousStats?.conversions ?? 0) ? "up" : (stats?.wonCount ?? 0) < (previousStats?.wonCount ?? previousStats?.conversions ?? 0) ? "down" : "neutral") : "neutral",
+      percentage: calculatePercentageChange(stats?.conversions ?? 0, previousStats?.conversions ?? 0),
+      trend: previousStats ? ((stats?.conversions ?? 0) > (previousStats?.conversions ?? 0) ? "up" : (stats?.conversions ?? 0) < (previousStats?.conversions ?? 0) ? "down" : "neutral") : "neutral",
       color: "text-violet-500",
       bgColor: "bg-violet-500/10",
       borderColor: "border-violet-500/20",

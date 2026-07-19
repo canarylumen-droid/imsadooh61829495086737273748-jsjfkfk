@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import http from 'http';
 
-type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error' | 'new_mail' | 'mailbox_status' | 'integration_reputation_updated' | 'deliverability_updated' | 'dns_verified';
+type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error' | 'new_mail' | 'mailbox_status' | 'integration_reputation_updated' | 'deliverability_updated' | 'dns_verified' | 'warmup_update';
 
 interface SyncMessage {
   type: MessageType;

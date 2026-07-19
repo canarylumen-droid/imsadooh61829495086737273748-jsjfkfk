@@ -309,7 +309,6 @@ export function startEmailSyncWorker() {
                     console.error(`[EmailSyncQueue] Failed to create lead from inbound email ${senderAddr}:`, leadErr.message);
                   }
                 }
-              }
 
                 // ── PHASE 3: Re-notify after DB write succeeds ─────────────────
                 if (saved && (lead || isNewLead)) {
@@ -318,6 +317,7 @@ export function startEmailSyncWorker() {
                     clusterSync.notifyStatsCacheInvalidate(userId),
                   ]);
                 }
+              }
 
               console.log(`[EmailSyncQueue] ✅ New mail processed for ${integrationId}: ${newMessages.length} message(s)`);
             } catch (err: any) {

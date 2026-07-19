@@ -721,7 +721,7 @@ export default function SettingsPage() {
                           className="rounded-xl h-11 bg-background border-border/40"
                           onKeyDown={e => {
                             if (e.key === 'Enter' && newKeyName.trim() && !createApiKeyMutation.isPending) {
-                              createApiKeyMutation.mutate(newKeyName.trim());
+                              createApiKeyMutation.mutate({ name: newKeyName.trim(), scope: newKeyScope });
                             }
                           }}
                         />

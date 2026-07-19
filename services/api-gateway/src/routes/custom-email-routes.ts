@@ -1023,11 +1023,11 @@ router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): 
     let sentMap = new Map<string, number>();
     let inboxMap = new Map<string, number>();
     let spamMap = new Map<string, number>();
-    let bounceMap = new Map<string, { hard: number; soft: number; spam: number; total: number }>();
+    let bounceMap = new Map<string, Record<string, number>>();
     let deliveredMap = new Map<string, number>();
 
     if (integrationIds.length > 0) {
-      const [sentRows] = await db.select({
+      const sentRows = await db.select({
         integrationId: et.integrationId,
         count: sql<number>`count(*)::int`,
       })
@@ -1037,7 +1037,7 @@ router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): 
 
       sentMap = new Map((sentRows || []).map((r: any) => [r.integrationId, Number(r.count)]));
 
-      const [inboxRows] = await db.select({
+      const inboxRows = await db.select({
         integrationId: et.integrationId,
         count: sql<number>`count(*)::int`,
       })
@@ -1047,7 +1047,7 @@ router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): 
 
       inboxMap = new Map((inboxRows || []).map((r: any) => [r.integrationId, Number(r.count)]));
 
-      const [spamRows] = await db.select({
+      const spamRows = await db.select({
         integrationId: et.integrationId,
         count: sql<number>`count(*)::int`,
       })
@@ -1067,8 +1067,8 @@ router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): 
         .groupBy(bt.integrationId, bt.bounceType) as any;
 
       for (const row of bounceRows || []) {
-        const existing = bounceMap.get(row.integrationId) || { hard: 0, soft: 0, spam: 0, total: 0 };
-        existing[row.type as string] += Number(row.count);
+        const existing: Record<string, number> = bounceMap.get(row.integrationId) || { hard: 0, soft: 0, spam: 0, total: 0 };
+        existing[row.type] += Number(row.count);
         existing.total += Number(row.count);
         bounceMap.set(row.integrationId, existing);
       }

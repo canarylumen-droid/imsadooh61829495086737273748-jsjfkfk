@@ -42,15 +42,16 @@ async function handleDmarcReport(payload: any) {
   if (!recipient) return;
 
   try {
-    const { db } = await import('@shared/lib/mysql.js');
-    const [rows]: any = await db.query(
+    const { getMySqlPool, connectMySql } = await import('@shared/lib/mysql.js');
+    const pool = getMySqlPool() || await connectMySql();
+    const [rows]: any = await pool.query(
       `SELECT id, user_id FROM email_tracking WHERE recipient_email = ? ORDER BY created_at DESC LIMIT 1`,
       [recipient]
     );
     if (!rows?.length) return;
 
     const { id, user_id } = rows[0];
-    await db.query(
+    await pool.query(
       `UPDATE email_tracking SET placement = 'spam', spam_detected_at = NOW() WHERE id = ?`,
       [id]
     );
@@ -73,8 +74,9 @@ async function handleSeedPlacement(payload: any) {
   if (!messageId) return;
 
   try {
-    const { db } = await import('@shared/lib/mysql.js');
-    const [rows]: any = await db.query(
+    const { getMySqlPool, connectMySql } = await import('@shared/lib/mysql.js');
+    const pool = getMySqlPool() || await connectMySql();
+    const [rows]: any = await pool.query(
       `SELECT id, user_id FROM email_tracking WHERE message_id = ? OR metadata->>'$.messageId' = ? ORDER BY created_at DESC LIMIT 1`,
       [messageId, messageId]
     );
@@ -83,7 +85,7 @@ async function handleSeedPlacement(payload: any) {
     const { id, user_id } = rows[0];
     const placement = payload.placement || 'inbox';
 
-    await db.query(
+    await pool.query(
       `UPDATE email_tracking SET placement = ?, seed_folder = ? WHERE id = ?`,
       [placement, payload.folder || null, id]
     );

@@ -272,6 +272,8 @@ export class LeadRecoveryWorker {
       brainstormedObjections: analysis.brainstormedObjections,
     });
 
+    if (!lead) return;
+
     await logRecoveryEvent(tenantId, "LeadAnalyzed", {
       mailboxId,
       leadId: String(lead.id),

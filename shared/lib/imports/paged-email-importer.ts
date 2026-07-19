@@ -276,6 +276,7 @@ async function processEmailForLead(
           });
 
           // Notify UI to play sound and show toast
+          const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
           clusterSync.notifyNotification(userId, {
             type: 'lead_activity',
             title: 'New Reply Received',

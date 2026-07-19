@@ -1279,7 +1279,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                 } catch (_) {}
                 results.push({
                     mailboxId: int.id,
-                    email: int.smtpUser || int.email || 'Unknown',
+                    email: (int as any).smtpUser || (int as any).email || 'Unknown',
                     provider: int.provider,
                     isWarmingUp,
                     dailyLimit,

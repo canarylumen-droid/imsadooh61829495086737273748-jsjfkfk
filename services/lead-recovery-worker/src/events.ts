@@ -22,5 +22,6 @@ export async function logRecoveryEvent(
   payload: Record<string, unknown> = {}
 ): Promise<{ id: string }> {
   await connectMySql();
-  return createRecoveryEventLog(tenantId, action, payload);
+  const result = await createRecoveryEventLog(tenantId, action, payload);
+  return result || { id: '' };
 }

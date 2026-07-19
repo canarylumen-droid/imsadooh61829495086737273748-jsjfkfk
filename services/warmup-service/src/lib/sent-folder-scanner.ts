@@ -94,8 +94,10 @@ export async function scanSentFolder(mailboxId: string): Promise<void> {
             lowerSubject.includes('returned mail')
           ) continue;
 
-          const bodyText = (msg.bodyParts?.get('')?.text || '').trim();
-          const bodyHtml = (msg.bodyParts?.get('')?.html || '').trim();
+          const bodyBuf = msg.bodyParts?.get('');
+          const bodyStr = bodyBuf ? bodyBuf.toString('utf-8').trim() : '';
+          const bodyText = bodyStr.replace(/<[^>]*>/g, '').trim();
+          const bodyHtml = bodyStr;
 
           subjects.push(subject);
           templates.push({

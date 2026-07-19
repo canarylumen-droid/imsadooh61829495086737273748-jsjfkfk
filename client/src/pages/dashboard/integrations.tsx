@@ -357,7 +357,7 @@ export default function IntegrationsPage() {
   const { data: customEmailStatus, refetch: refetchStatus } = useQuery<{
     connected: boolean;
     email: string | null;
-    integrations: Array<{ id: string; email: string; connected: boolean; provider: string; reputationScore?: number; bounceRate?: number; dailyLimit?: number }>;
+    integrations: Array<{ id: string; email: string; connected: boolean; provider: string; reputationScore?: number; bounceRate?: number; dailyLimit?: number; warmupStatus?: string; deliveryRate?: number; placementRate?: number }>;
   }>({
     queryKey: ["/api/custom-email/status"],
     placeholderData: (prev) => prev,

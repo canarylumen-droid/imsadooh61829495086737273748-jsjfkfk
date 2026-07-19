@@ -143,7 +143,7 @@ use std::net::SocketAddr;use std::time::Duration;use tokio::io::{AsyncBufReadExt
     let my_domain = "outbound.yourdomain.com";
 
     println!("Launching asymmetric real-time SMTP telemetry probe...");
-    match run_telemetry_probe(target_recipient, my_domain).await {
+    match run_telemetry_probe(target_recipient, my_domain).await {2
         Ok(report) => {
             println!("\n=== TELEMETRY METRICS RECEIVED ===");
             println!("MX Gateway Server    : {}", report.mx_host);
