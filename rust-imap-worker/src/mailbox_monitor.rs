@@ -53,6 +53,22 @@ impl MailboxMonitor {
         let mailboxes = self.mailboxes.clone();
         let redis_url = self.redis_url.clone();
 
+        // Clean up stale imap:active:* keys on startup so Node.js email worker
+        // reconnects mailboxes after Rust crash/restart.
+        let stale_keys: Vec<String> = redis::cmd("KEYS")
+            .arg("imap:active:*")
+            .query_async(&mut redis_conn)
+            .await
+            .unwrap_or_default();
+        if !stale_keys.is_empty() {
+            let count: usize = redis::cmd("DEL")
+                .arg(&stale_keys)
+                .query_async(&mut redis_conn)
+                .await
+                .unwrap_or(0);
+            info!("MailboxMonitor: Cleaned up {} stale imap:active:* key(s) on startup", count);
+        }
+
         info!("MailboxMonitor: Starting IDLE monitors for user mailboxes");
 
         // Drain any existing mailbox configs first (bulk load)
@@ -159,12 +175,13 @@ async fn monitor_mailbox_loop(
     let mut consecutive_failures = 0;
 
     // Register as active in Redis so Node.js knows to skip this mailbox.
-    // Uses SET with 5-min TTL so stale entries auto-expire if Rust crashes.
-    let active_key = format!("mailbox-monitor:active:{}", integration_id);
+    // Uses key `imap:active:{integration_id}` (matching IMAP_KEYS.active()) with 35-min TTL
+    // so stale entries auto-expire if Rust crashes, matching Node.js IMAP_TTL.active.
+    let active_key = format!("imap:active:{}", integration_id);
     let active_client = redis::Client::open(redis_url.as_str());
     if let Ok(client) = active_client {
         if let Ok(mut conn) = client.get_multiplexed_tokio_connection().await {
-            let _: Result<(), _> = conn.set_ex::<_, _, ()>(&active_key, "1", 300).await;
+            let _: Result<(), _> = conn.set_ex::<_, _, ()>(&active_key, "1", 2100).await;
         }
     }
 
@@ -172,7 +189,7 @@ async fn monitor_mailbox_loop(
     async fn refresh_active(redis_url: &str, key: &str) {
         if let Ok(client) = redis::Client::open(redis_url) {
             if let Ok(mut conn) = client.get_multiplexed_tokio_connection().await {
-                let _: Result<(), _> = conn.expire::<_, ()>(key, 300).await;
+                let _: Result<(), _> = conn.expire::<_, ()>(key, 2100).await;
             }
         }
     }
@@ -358,10 +375,11 @@ async fn run_idle_session(
             let body = extract_body_text(&full_raw);
 
             // Publish to Redis for Node.js processing
+            // Format: { event, payload: { type, user_id, ... } } — matches inbound-email-handler.ts
             let payload = serde_json::json!({
                 "type": "INBOUND_EMAIL",
-                "integration_id": integration_id,
                 "user_id": config.user_id,
+                "integration_id": integration_id,
                 "uid": uid,
                 "message_id": headers.get("message-id").cloned().unwrap_or_default(),
                 "from": headers.get("from").cloned().unwrap_or_default(),
