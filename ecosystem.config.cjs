@@ -392,12 +392,8 @@ module.exports = {
       instances: 0,
       exec_mode: 'fork',
       env: {
-        RUST_LOG: 'info',
+        RUST_LOG: 'warn',
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
-        IMAP_QUEUE_NAME: 'audnix-email-sync',
-        IMAP_RESULT_QUEUE_NAME: 'audnix-email-sync',
-        WORKER_COUNT: '2',
-        IDLE_TIMEOUT_SECS: '600'
       },
       error_file: './logs/rust-imap-error.log',
       out_file: './logs/rust-imap-out.log',

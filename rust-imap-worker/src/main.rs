@@ -1,8 +1,4 @@
-use std::sync::Arc;
-use std::time::Duration;
 use anyhow::Result;
-use redis::AsyncCommands;
-use tokio::sync::Semaphore;
 
 mod imap_client;
 mod dmarc_ruf;
@@ -10,30 +6,6 @@ mod seed_monitor;
 mod mailbox_monitor;
 
 use imap_client::ImapConnection;
-
-#[derive(Debug, Clone, serde::Deserialize)]
-pub struct ImapJob {
-    pub id: String,
-    pub integration_id: String,
-    pub email: String,
-    pub imap_host: String,
-    pub imap_port: u16,
-    pub username: String,
-    pub password: String,
-    pub folder: Option<String>,
-    pub use_tls: Option<bool>,
-}
-
-async fn process_imap_job(job: &ImapJob) -> Result<String> {
-    let folder = job.folder.as_deref().unwrap_or("INBOX");
-    let mut conn = ImapConnection::new(folder.to_string());
-    conn.connect(&job.imap_host, job.imap_port, job.use_tls.unwrap_or(true)).await?;
-    conn.authenticate(&job.username, &job.password).await?;
-    conn.select(folder).await?;
-    let data = conn.fetch(0).await?;
-    conn.logout().await?;
-    Ok(data)
-}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -103,72 +75,10 @@ async fn main() -> Result<()> {
         });
     }
 
-    // Start Mailbox Monitor (user mailbox IDLE connections)
-    if std::env::var("DISABLE_MAILBOX_MONITOR").is_err() {
-        log::info!("Starting Mailbox Monitor for user mailboxes");
-        let monitor = mailbox_monitor::MailboxMonitor::new(redis_url.clone());
-        tokio::spawn(async move {
-            if let Err(e) = monitor.run().await {
-                log::error!("Mailbox monitor failed: {}", e);
-            }
-        });
-    } else {
-        log::info!("Mailbox Monitor DISABLED via DISABLE_MAILBOX_MONITOR");
-    }
-
-    let queue_name = std::env::var("IMAP_QUEUE_NAME")
-        .unwrap_or_else(|_| "imap-queue".to_string());
-    let result_queue = std::env::var("IMAP_RESULT_QUEUE_NAME")
-        .unwrap_or_else(|_| "imap-results".to_string());
-    let max_concurrent: usize = std::env::var("WORKER_COUNT")
-        .unwrap_or_else(|_| "2".to_string()).parse().unwrap_or(2);
-
-    log::info!("Audnix IMAP Worker starting...");
-    log::info!("Redis: {}", redis_url);
-
-    let redis_client = redis::Client::open(redis_url.as_str())?;
-    let redis_conn = redis::aio::ConnectionManager::new(redis_client.clone()).await?;
-    let semaphore = Arc::new(Semaphore::new(max_concurrent));
-
-    log::info!("Listening on queue: {} (event-driven, infinite block)", queue_name);
-
-    // Event-driven loop: BRPOP with 0.0 = infinite block, zero polling
-    loop {
-        let job_opt: Option<(String, Vec<u8>)> = redis_conn.clone()
-            .brpop(&queue_name, 0.0).await.ok();
-
-        if let Some((_, raw_bytes)) = job_opt {
-            let job_json = String::from_utf8_lossy(&raw_bytes).to_string();
-            let job: ImapJob = match serde_json::from_str(&job_json) {
-                Ok(j) => j,
-                Err(e) => {
-                    log::error!("Failed to deserialize IMAP job: {}", e);
-                    continue;
-                }
-            };
-
-            // Skip if this integration is being handled by the mailbox monitor
-            // (the mailbox monitor handles persistent IDLE, this queue is for ad-hoc jobs)
-            let permit = semaphore.clone().acquire_owned().await.unwrap();
-            let redis = redis_conn.clone();
-            let rq = result_queue.clone();
-
-            tokio::spawn(async move {
-                let result = process_imap_job(&job).await;
-                let result_json = serde_json::json!({
-                    "job_id": job.id,
-                    "integration_id": job.integration_id,
-                    "status": if result.is_ok() { "ok" } else { "error" },
-                    "error": result.as_ref().err().map(|e| e.to_string()),
-                    "timestamp": chrono::Utc::now().to_rfc3339(),
-                });
-                let mut conn = redis.clone();
-                let _: () = conn.lpush(&rq, result_json.to_string()).await
-                    .unwrap_or_else(|e| log::error!("Failed to write result: {}", e));
-                drop(permit);
-            });
-        }
-    }
+    // Start Mailbox Monitor (user mailbox IDLE connections) — handles 500+ mailboxes
+    log::info!("Audnix IMAP Worker starting... Mailbox Monitor active (event-driven, zero polling)");
+    let monitor = mailbox_monitor::MailboxMonitor::new(redis_url.clone());
+    monitor.run().await?;
 }
 
 async fn test_imap_connect(

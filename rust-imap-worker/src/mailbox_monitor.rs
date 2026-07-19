@@ -55,69 +55,97 @@ impl MailboxMonitor {
 
         info!("MailboxMonitor: Starting IDLE monitors for user mailboxes");
 
-        // Main loop: check for new/removed mailbox configs, spawn monitors
+        // Drain any existing mailbox configs first (bulk load)
         loop {
-            // Check for new mailboxes to add
-            loop {
-                let entry: Option<String> = redis_conn
-                    .lpop(REDIS_ADD_QUEUE, None)
-                    .await
-                    .unwrap_or(None);
-                match entry {
-                    Some(json) => {
-                        match serde_json::from_str::<MailboxConfig>(&json) {
-                            Ok(config) => {
-                                let mut map = mailboxes.lock().await;
-                                if !map.contains_key(&config.integration_id) {
-                                    info!("MailboxMonitor: Adding mailbox {} ({})", config.integration_id, config.email);
-                                    let state = MailboxState {
-                                        config: config.clone(),
-                                        last_uid: 0,
-                                        uidvalidity: 0,
-                                    };
-                                    map.insert(config.integration_id.clone(), state);
+            let entry: Option<String> = redis_conn
+                .lpop(REDIS_ADD_QUEUE, None)
+                .await
+                .unwrap_or(None);
+            match entry {
+                Some(json) => {
+                    if let Ok(config) = serde_json::from_str::<MailboxConfig>(&json) {
+                        let mut map = mailboxes.lock().await;
+                        if !map.contains_key(&config.integration_id) {
+                            info!("MailboxMonitor: Adding mailbox {} ({})", config.integration_id, config.email);
+                            let state = MailboxState {
+                                config: config.clone(),
+                                last_uid: 0,
+                                uidvalidity: 0,
+                            };
+                            map.insert(config.integration_id.clone(), state);
+                            let mid = config.integration_id.clone();
+                            let redis = redis_url.clone();
+                            let mailboxes_clone = mailboxes.clone();
+                            tokio::spawn(async move {
+                                monitor_mailbox_loop(mid, redis, mailboxes_clone).await;
+                            });
+                        }
+                    }
+                }
+                None => break,
+            }
+        }
 
-                                    // Spawn the monitoring task
-                                    let mid = config.integration_id.clone();
-                                    let redis = redis_url.clone();
-                                    let mailboxes_clone = mailboxes.clone();
-                                    tokio::spawn(async move {
-                                        monitor_mailbox_loop(mid, redis, mailboxes_clone).await;
-                                    });
-                                } else {
-                                    debug!("MailboxMonitor: {} already monitored, updating config", config.integration_id);
-                                    if let Some(s) = map.get_mut(&config.integration_id) {
-                                        s.config = config;
-                                    }
+        // Also drain any pending removals
+        loop {
+            let entry: Option<String> = redis_conn
+                .lpop(REDIS_REMOVE_QUEUE, None)
+                .await
+                .unwrap_or(None);
+            match entry {
+                Some(id) => {
+                    let mut map = mailboxes.lock().await;
+                    if map.remove(&id).is_some() {
+                        info!("MailboxMonitor: Removed mailbox {}", id);
+                    }
+                }
+                None => break,
+            }
+        }
+
+        info!("MailboxMonitor: Loaded {} mailbox(es), entering event-driven mode", mailboxes.lock().await.len());
+
+        // Event-driven loop: BLPOP with 0.0 = infinite block, zero polling
+        loop {
+            let result: Option<(String, String)> = redis_conn
+                .blpop(vec![REDIS_ADD_QUEUE, REDIS_REMOVE_QUEUE], 0.0)
+                .await
+                .unwrap_or(None);
+
+            if let Some((list, value)) = result {
+                if list == REDIS_ADD_QUEUE {
+                    match serde_json::from_str::<MailboxConfig>(&value) {
+                        Ok(config) => {
+                            let mut map = mailboxes.lock().await;
+                            if !map.contains_key(&config.integration_id) {
+                                info!("MailboxMonitor: Adding mailbox {} ({})", config.integration_id, config.email);
+                                let state = MailboxState {
+                                    config: config.clone(),
+                                    last_uid: 0,
+                                    uidvalidity: 0,
+                                };
+                                map.insert(config.integration_id.clone(), state);
+                                let mid = config.integration_id.clone();
+                                let redis = redis_url.clone();
+                                let mailboxes_clone = mailboxes.clone();
+                                tokio::spawn(async move {
+                                    monitor_mailbox_loop(mid, redis, mailboxes_clone).await;
+                                });
+                            } else {
+                                if let Some(s) = map.get_mut(&config.integration_id) {
+                                    s.config = config;
                                 }
                             }
-                            Err(e) => {
-                                warn!("MailboxMonitor: Invalid mailbox config JSON: {}", e);
-                            }
                         }
+                        Err(e) => warn!("MailboxMonitor: Invalid mailbox config JSON: {}", e),
                     }
-                    None => break,
+                } else if list == REDIS_REMOVE_QUEUE {
+                    let mut map = mailboxes.lock().await;
+                    if map.remove(&value).is_some() {
+                        info!("MailboxMonitor: Removed mailbox {}", value);
+                    }
                 }
             }
-
-            // Check for mailboxes to remove
-            loop {
-                let entry: Option<String> = redis_conn
-                    .lpop(REDIS_REMOVE_QUEUE, None)
-                    .await
-                    .unwrap_or(None);
-                match entry {
-                    Some(integration_id) => {
-                        let mut map = mailboxes.lock().await;
-                        if map.remove(&integration_id).is_some() {
-                            info!("MailboxMonitor: Removed mailbox {}", integration_id);
-                        }
-                    }
-                    None => break,
-                }
-            }
-
-            time::sleep(Duration::from_secs(5)).await;
         }
     }
 }

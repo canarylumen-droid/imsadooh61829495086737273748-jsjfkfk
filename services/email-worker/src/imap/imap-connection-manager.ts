@@ -176,6 +176,14 @@ export class ImapConnectionManager {
         return;
       }
 
+      // Delegate custom_email (password-auth) to Rust IMAP worker — handles 500+ mailboxes
+      if (integration.provider === 'custom_email') {
+        buildMailboxConfig(integration as any).then(config => {
+          if (config) pushMailboxToRustMonitor(config).catch(() => {});
+        }).catch(() => {});
+        return;
+      }
+
       await this._establishConnection(integration as ImapIntegration);
     } catch (error: any) {
       console.error(`[IMAP] connectMailbox failed for ${integrationId}:`, error.message);
