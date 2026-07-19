@@ -271,6 +271,16 @@ class ImapIdleManager {
                     continue;
                 }
 
+                // Delegate custom_email (password-auth mailboxes) to Rust IMAP worker
+                if (integration.provider === 'custom_email') {
+                    const { buildMailboxConfig, pushMailboxToRustMonitor } = await import('@shared/lib/realtime/mailbox-monitor-bridge.js');
+                    const config = await buildMailboxConfig(integration as any);
+                    if (config) {
+                        await pushMailboxToRustMonitor(config).catch(() => {});
+                    }
+                    continue;
+                }
+
                 const currentIdleCount = this.connections.size;
                 if (currentIdleCount < this.MAX_IDLE_CONNECTIONS) {
                     console.log(`🔌 Opening real-time IMAP IDLE connection for integration ${integration.id} (${integration.provider}, User: ${integration.userId})`);
