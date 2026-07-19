@@ -42,28 +42,22 @@ async function handleDmarcReport(payload: any) {
   if (!recipient) return;
 
   try {
-    const { getMySqlPool, connectMySql } = await import('@shared/lib/mysql.js');
-    const pool = getMySqlPool() || await connectMySql();
-    const [rows]: any = await pool.query(
-      `SELECT id, user_id FROM email_tracking WHERE recipient_email = ? ORDER BY created_at DESC LIMIT 1`,
-      [recipient]
-    );
-    if (!rows?.length) return;
+    const { db } = await import('@shared/lib/db/db.js');
+    const { sql } = await import('drizzle-orm');
+    const result: any = await db.execute(sql`SELECT id, user_id FROM email_tracking WHERE recipient_email = ${recipient} ORDER BY created_at DESC LIMIT 1`);
+    const row = result?.rows?.[0];
+    if (!row) return;
 
-    const { id, user_id } = rows[0];
-    await pool.query(
-      `UPDATE email_tracking SET placement = 'spam', spam_detected_at = NOW() WHERE id = ?`,
-      [id]
-    );
+    await db.execute(sql`UPDATE email_tracking SET placement = 'spam' WHERE id = ${row.id}`);
 
     const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
-    await clusterSync.notifyDeliverabilityUpdated(user_id, {
+    await clusterSync.notifyDeliverabilityUpdated(row.user_id, {
       placement: 'spam',
       source: 'dmarc_ruf',
       email: recipient,
-      emailTrackingId: id,
+      emailTrackingId: row.id,
     });
-    await clusterSync.notifyStatsUpdated(user_id);
+    await clusterSync.notifyStatsUpdated(row.user_id);
   } catch (e: any) {
     console.warn('[ForensicHandler] DMARC report error:', e.message);
   }
@@ -74,31 +68,25 @@ async function handleSeedPlacement(payload: any) {
   if (!messageId) return;
 
   try {
-    const { getMySqlPool, connectMySql } = await import('@shared/lib/mysql.js');
-    const pool = getMySqlPool() || await connectMySql();
-    const [rows]: any = await pool.query(
-      `SELECT id, user_id FROM email_tracking WHERE message_id = ? OR metadata->>'$.messageId' = ? ORDER BY created_at DESC LIMIT 1`,
-      [messageId, messageId]
-    );
-    if (!rows?.length) return;
+    const { db } = await import('@shared/lib/db/db.js');
+    const { sql } = await import('drizzle-orm');
+    const result: any = await db.execute(sql`SELECT id, user_id FROM email_tracking WHERE token = ${messageId} OR message_id = ${messageId} ORDER BY created_at DESC LIMIT 1`);
+    const row = result?.rows?.[0];
+    if (!row) return;
 
-    const { id, user_id } = rows[0];
     const placement = payload.placement || 'inbox';
 
-    await pool.query(
-      `UPDATE email_tracking SET placement = ?, seed_folder = ? WHERE id = ?`,
-      [placement, payload.folder || null, id]
-    );
+    await db.execute(sql`UPDATE email_tracking SET placement = ${placement}, seed_folder = ${payload.folder || null} WHERE id = ${row.id}`);
 
     const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
-    await clusterSync.notifyDeliverabilityUpdated(user_id, {
+    await clusterSync.notifyDeliverabilityUpdated(row.user_id, {
       placement,
       source: 'seed_monitor',
       email: payload.seed_email,
-      emailTrackingId: id,
+      emailTrackingId: row.id,
       seedFolder: payload.folder,
     });
-    await clusterSync.notifyStatsUpdated(user_id);
+    await clusterSync.notifyStatsUpdated(row.user_id);
   } catch (e: any) {
     console.warn('[ForensicHandler] Seed placement error:', e.message);
   }
