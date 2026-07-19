@@ -35,6 +35,7 @@ import {
     MapPin,
 } from "lucide-react";
 
+import { cn } from "@/lib/utils";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 
 interface IntelligenceData {
@@ -263,6 +264,38 @@ export function LeadIntelligenceModal({ isOpen, onOpenChange, lead }: LeadIntell
                                     );
                                 })}
                             </motion.div>
+                        )}
+
+                        {/* Conversation — recent messages with this lead */}
+                        {messagesData?.messages && messagesData.messages.length > 0 && (
+                          <motion.div variants={{ hidden: { opacity: 0, y: 10 }, visible: { opacity: 1, y: 0 } }} className="space-y-2">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+                              <Mail className="h-3 w-3" /> Recent Conversation
+                            </p>
+                            <div className="space-y-1.5 max-h-[200px] overflow-y-auto rounded-xl border border-border/30 bg-muted/10 p-2">
+                              {messagesData.messages.slice(-5).map((msg: Message) => (
+                                <div key={msg.id} className={cn(
+                                  "p-2.5 rounded-lg text-xs leading-relaxed break-words",
+                                  msg.direction === 'inbound'
+                                    ? "bg-background border border-border/20 ml-4"
+                                    : "bg-primary/5 border border-primary/10 mr-4"
+                                )}>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <Badge variant="outline" className={cn(
+                                      "text-[7px] font-bold uppercase tracking-widest px-1 py-0",
+                                      msg.direction === 'inbound' ? "text-emerald-500 border-emerald-500/30" : "text-primary border-primary/30"
+                                    )}>
+                                      {msg.direction === 'inbound' ? '→ In' : '← Out'}
+                                    </Badge>
+                                    <span className="text-[8px] text-muted-foreground">
+                                      {new Date(msg.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  <p className="text-foreground/80">{msg.body.length > 200 ? msg.body.substring(0, 200) + '…' : msg.body}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
                         )}
 
                         {/* Contact & Action */}

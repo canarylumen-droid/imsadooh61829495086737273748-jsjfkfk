@@ -263,10 +263,10 @@ export function RecentConversations() {
     <Card className="h-full flex flex-col border-border/40 bg-card/40 backdrop-blur-xl rounded-[2rem] overflow-hidden">
       <div className="p-6 border-b border-white/5 space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/40">Recent Relay Events</h2>
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 border border-primary/20">
-            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            <span className="text-[9px] font-black text-primary uppercase">Sync Active</span>
+          <h2 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/40">Recent Activity</h2>
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+            <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-wider">Live</span>
           </div>
         </div>
 

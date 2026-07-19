@@ -905,12 +905,12 @@ export default function IntegrationsPage() {
       </div>
 
       <Tabs defaultValue="connected" className="w-full">
-        <TabsList className="bg-muted/50 p-1 rounded-full w-full max-w-[400px] mb-8">
-          <TabsTrigger value="connected" className="rounded-full px-8 py-2 text-sm font-medium">
-            Channels
+        <TabsList className="bg-muted/50 p-1 rounded-xl mb-8 w-full flex overflow-x-auto no-scrollbar justify-start gap-1 border border-border/30">
+          <TabsTrigger value="connected" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Mail className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Email
           </TabsTrigger>
-          <TabsTrigger value="voice" className="rounded-full px-8 py-2 text-sm font-medium">
-            Voice Cloning
+          <TabsTrigger value="voice" className="flex-shrink-0 rounded-lg px-4 md:px-5 py-2.5 font-bold text-xs md:text-sm whitespace-nowrap data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Mic className="h-3.5 w-3.5 mr-2 hidden sm:inline" /> Voice
           </TabsTrigger>
         </TabsList>
 
