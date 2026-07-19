@@ -87,7 +87,7 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
   if (isInitializing) {
     await new Promise(resolve => setTimeout(resolve, 250));
     if (redisClient) {
-      try { await redisClient.ping(); return redisClient; } catch { redisClient = null; }
+      try { await (redisClient as any).ping(); return redisClient; } catch { redisClient = null; }
     }
     return redisClient;
   }

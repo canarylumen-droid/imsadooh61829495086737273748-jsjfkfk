@@ -217,6 +217,7 @@ export function createOutboundWorker(): Worker {
       if (result.success) {
         clusterSync.notifyStatsUpdated(sender[0].userId).catch(() => {});
         clusterSync.notifyWarmupUpdated(sender[0].userId, { mailboxId: sender[0].integrationId, status: 'active' }).catch(() => {});
+        await threadManager.advanceThread(
           threadId,
           messageId,
           'outbound',

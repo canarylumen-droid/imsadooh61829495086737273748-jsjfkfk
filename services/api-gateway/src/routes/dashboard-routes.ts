@@ -472,8 +472,10 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
     const replyByInt = new Map(replyStats.map(r => [r.integrationId, r]));
     const bounceByInt = new Map<string, { hard: number; soft: number; spam: number }>();
     for (const b of bounceStats) {
-      if (!bounceByInt.has(b.integrationId)) bounceByInt.set(b.integrationId, { hard: 0, soft: 0, spam: 0 });
-      const entry = bounceByInt.get(b.integrationId)!;
+      const intId = b.integrationId;
+      if (!intId) continue;
+      if (!bounceByInt.has(intId)) bounceByInt.set(intId, { hard: 0, soft: 0, spam: 0 });
+      const entry = bounceByInt.get(intId)!;
       if (b.bounceType === 'hard') entry.hard = b.count;
       else if (b.bounceType === 'soft') entry.soft = b.count;
       else if (b.bounceType === 'spam') entry.spam = b.count;

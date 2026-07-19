@@ -156,6 +156,7 @@ class RedisPubSub {
     // Retry once with a fresh client if first attempt fails
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
+        if (!pubClient) throw new Error('pubClient is null');
         await pubClient.publish(REDIS_CHANNEL, message);
         return; // success
       } catch (err: any) {
@@ -231,6 +232,10 @@ class RedisPubSub {
 
   async notifyDeliverabilityUpdated(userId: string, data: any) {
     await this.broadcast('DELIVERABILITY_UPDATE', userId, data);
+  }
+
+  async notifyWarmupUpdated(userId: string, data: any) {
+    await this.broadcast('WARMUP_UPDATE', userId, data);
   }
 
   private async handleEvent(message: string) {

@@ -462,7 +462,8 @@ export async function upsertRecoveryState(
       | "lastSyncAt"
       | "syncRequestedAt"
       | "syncStatus"
-      | "availableAt",
+      | "availableAt"
+      | "errorMessage",
       unknown
     >
   >

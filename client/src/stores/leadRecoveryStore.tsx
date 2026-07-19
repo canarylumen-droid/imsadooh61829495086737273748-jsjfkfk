@@ -15,6 +15,7 @@ export interface LeadRecoveryMailbox {
   lastSyncAt?: string | null;
   syncRequestedAt?: string | null;
   syncStatus?: "idle" | "queued" | "syncing" | "completed" | "failed";
+  errorMessage?: string | null;
 }
 
 export interface RecoveredLead {

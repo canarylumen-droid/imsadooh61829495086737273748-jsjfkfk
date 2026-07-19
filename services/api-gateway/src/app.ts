@@ -229,7 +229,7 @@ export function createApp() {
   });
 
   // Push all active custom email integrations to the Rust mailbox monitor
-  import('./boot-rust-monitor.js').then(({ pushActiveMailboxesToRust }) => {
+  import('./routes/boot-rust-monitor.js').then(({ pushActiveMailboxesToRust }) => {
     pushActiveMailboxesToRust().catch((e: any) => console.warn('[App] Boot Rust monitor:', e.message));
   });
 

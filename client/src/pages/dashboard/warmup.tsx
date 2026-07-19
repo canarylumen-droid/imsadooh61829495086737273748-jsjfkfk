@@ -42,7 +42,7 @@ const ITEMS_PER_PAGE = 20;
 
 export default function WarmupPage() {
   const { socket } = useRealtime();
-  const { mailboxes, selectedMailboxId } = useMailbox();
+  const { mailboxes, selectedMailboxId, setSelectedMailboxId } = useMailbox();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");

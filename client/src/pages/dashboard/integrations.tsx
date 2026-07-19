@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   Activity,
   Unplug,
+  Mic,
   RefreshCw,
   ArrowRight,
   Search,
