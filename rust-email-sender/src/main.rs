@@ -33,12 +33,37 @@ async fn main() -> Result<()> {
     // Initialize DNS resolver
     let dns_resolver = DnsResolver::new().await?;
 
+    // Initialize telemetry probe with MX-level caching
+    let telemetry = telemetry::SmtpTelemetry::new();
+
     // Semaphore to limit concurrent sends
     let send_semaphore = Arc::new(Semaphore::new(config.max_concurrent_sends));
 
+    // Batch accumulator for Redis LPUSH — coalesce results to reduce round-trips
+    let batch_buf: Arc<tokio::sync::Mutex<Vec<String>>> = Arc::new(tokio::sync::Mutex::new(Vec::with_capacity(100)));
+
+    // Flush batch every 100ms or 100 items
+    {
+        let bb = batch_buf.clone();
+        let rq = config.result_queue_name.clone();
+        let mut redis = redis_conn.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                let mut buf = bb.lock().await;
+                if !buf.is_empty() {
+                    let batch: Vec<String> = buf.drain(..).collect();
+                    // Pipeline all LPUSH commands
+                    for item in batch {
+                        let _: Result<(), _> = redis.lpush(&rq, &item).await;
+                    }
+                }
+            }
+        });
+    }
+
     let email_queue = config.queue_name.clone();
     let dns_queue = config.dns_queue_name.clone();
-    let email_result_queue = config.result_queue_name.clone();
     let dns_result_queue = config.dns_result_queue_name.clone();
 
     log::info!("Listening on email queue: {}", email_queue);
@@ -69,15 +94,17 @@ async fn main() -> Result<()> {
                 let redis = redis_conn.clone();
                 let rq = email_result_queue.clone();
                 let resolver = dns_resolver.clone();
+                let tele = telemetry.clone();
+                let batch = batch_buf.clone();
 
                 tokio::spawn(async move {
                     let domain = job.recipient.split('@').nth(1).unwrap_or("unknown").to_string();
 
-                    // Run SMTP telemetry probe before sending
+                    // Run SMTP telemetry probe before sending (cached per MX host)
                     if let Ok(mx_records) = resolver.resolve_mx(&domain).await {
                         if let Some(mx) = mx_records.first() {
                             let mx_host = mx.exchange.trim_end_matches('.').to_string();
-                            match telemetry::SmtpTelemetry::probe(&job.recipient, &domain, &mx_host).await {
+                            match tele.probe(&job.recipient, &domain, &mx_host).await {
                                 Ok(report) => {
                                     if matches!(report.suspected_placement, telemetry::PlacementGuess::TarpittedSpamQueue | telemetry::PlacementGuess::Rejected | telemetry::PlacementGuess::GreylistedOrThrottled) {
                                         log::warn!("[{}] Telemetry risk: {:?} for {} via {} ({}ms)", job.id, report.suspected_placement, job.recipient, mx_host, report.rcpt_latency_ms);
@@ -107,9 +134,9 @@ async fn main() -> Result<()> {
                         "timestamp": chrono::Utc::now().to_rfc3339(),
                     });
 
-                    let mut conn = redis.clone();
-                    let _: () = conn.lpush(&rq, result_json.to_string()).await
-                        .unwrap_or_else(|e| log::error!("Failed to write result: {}", e));
+                    // Batch the result instead of per-message LPUSH
+                    let mut buf = batch.lock().await;
+                    buf.push(result_json.to_string());
 
                     match result {
                         Ok(_) => log::info!("[{}] Sent to {}", job.id, job.recipient),

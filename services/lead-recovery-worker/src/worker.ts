@@ -39,8 +39,6 @@ export class LeadRecoveryWorker {
     await this.runOnce();
 
     // Subscribe to sync-requested events via Redis Pub/Sub.
-    // When the user clicks "Sync" in the UI, the API publishes an event
-    // and the worker processes it immediately — no polling needed.
     try {
       const { subscribe } = await import('@services/event-bus/src/redis-pubsub.js');
       subscribe('lead-recovery:sync-requested', async (msg: any) => {
@@ -51,8 +49,15 @@ export class LeadRecoveryWorker {
       });
       console.log("[LeadRecoveryWorker] ✅ Subscribed to lead-recovery:sync-requested");
     } catch (err) {
-      console.warn("[LeadRecoveryWorker] Redis Pub/Sub unavailable — will rely on manual triggers only");
+      console.warn("[LeadRecoveryWorker] Redis Pub/Sub unavailable — fallback to polling");
     }
+
+    // Polling fallback: every 30s check for pending syncs (safe if Redis event was lost)
+    this.interval = setInterval(() => {
+      if (!this.processing) {
+        this.runOnce().catch(err => console.error('[LeadRecoveryWorker] Poll cycle error:', err.message));
+      }
+    }, 30_000);
   }
 
   async stop() {
@@ -121,24 +126,6 @@ export class LeadRecoveryWorker {
   }
 
   private async processState(tenantId: string, mailboxId?: string) {
-    // SAFETY GUARD: Only run lead recovery for tenants with active campaigns.
-    // This prevents unnecessary IMAP connections and AI analysis when
-    // there are no campaigns running (consistent with outreach-engine pattern).
-    try {
-      const { db } = await import('@shared/lib/db/db.js');
-      const { outreachCampaigns } = await import('@audnix/shared');
-      const { eq, and } = await import('drizzle-orm');
-      const activeCampaigns = await db.select({ id: outreachCampaigns.id })
-        .from(outreachCampaigns)
-        .where(and(eq(outreachCampaigns.userId, tenantId), eq(outreachCampaigns.status, 'active')))
-        .limit(1);
-      if (activeCampaigns.length === 0) {
-        return; // No active campaigns — skip recovery for this tenant
-      }
-    } catch {
-      return; // DB unavailable — skip gracefully
-    }
-
     const integrations = await storage.getIntegrations(tenantId);
     const candidates = integrations.filter((integration) =>
       integration.connected &&
@@ -190,7 +177,7 @@ export class LeadRecoveryWorker {
       try { await completeMailboxSync(tenantId, mailboxId); } catch {}
       try { await logRecoveryEvent(tenantId, "SyncCompleted", { mailboxId, fetched: emails.length, analyzed, filtered }); } catch {}
     } catch (error: any) {
-      try { await failMailboxSync(tenantId, mailboxId); } catch {}
+      try { await failMailboxSync(tenantId, mailboxId, error.message?.substring(0, 500)); } catch {}
       try { await logRecoveryEvent(tenantId, "SyncFailed", { mailboxId, error: error.message }); } catch {}
     }
   }

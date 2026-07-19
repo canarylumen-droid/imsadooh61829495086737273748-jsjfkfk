@@ -61,7 +61,18 @@ export async function getSubClient(): Promise<RedisClientType | null> {
 }
 
 export async function getRedisClient(): Promise<RedisClientType | null> {
-  if (redisClient) return redisClient;
+  // Check if the existing client is still alive by testing with a simple PING
+  if (redisClient) {
+    try {
+      await redisClient.ping();
+      return redisClient;
+    } catch {
+      // Client is dead — nullify and reconnect
+      console.warn('[RedisClient] Existing client is dead, reconnecting...');
+      try { await redisClient.quit(); } catch {}
+      redisClient = null;
+    }
+  }
 
   const rawRedisUrl = process.env.REDIS_URL;
   const redisHost = process.env.REDIS_HOST;
@@ -75,6 +86,9 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
 
   if (isInitializing) {
     await new Promise(resolve => setTimeout(resolve, 250));
+    if (redisClient) {
+      try { await redisClient.ping(); return redisClient; } catch { redisClient = null; }
+    }
     return redisClient;
   }
 
@@ -126,6 +140,13 @@ export async function getRedisClient(): Promise<RedisClientType | null> {
     client.on('connect', () => console.log('[RedisClient] Redis connecting'));
     client.on('ready', () => console.log('[RedisClient] Redis ready'));
     client.on('reconnecting', () => console.warn('[RedisClient] Redis reconnecting'));
+
+    // CRITICAL: Nullify the client when the connection is permanently lost
+    // so getRedisClient() creates a fresh one next time.
+    client.on('end', () => {
+      console.warn('[RedisClient] Connection ended, nullifying client ref');
+      redisClient = null;
+    });
 
     await client.connect();
     redisClient = instrumentRedisClient(client, 'redis-shared') as RedisClientType;

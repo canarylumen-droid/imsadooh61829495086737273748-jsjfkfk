@@ -105,7 +105,7 @@ router.get("/", requireAuthOrApiKey, async (req: Request, res: Response): Promis
         includeArchived === 'true' ? undefined : eq(leadsTable.archived, false),
         status && status !== 'all' ? eq(leadsTable.status, status as any) : undefined,
         channel ? eq(leadsTable.channel, channel as any) : undefined,
-        integrationId ? or(eq(leadsTable.integrationId, integrationId as string), isNull(leadsTable.integrationId)) : undefined
+        integrationId ? eq(leadsTable.integrationId, integrationId as string) : undefined
       ));
 
     res.json({

@@ -668,16 +668,24 @@ export default function InboxPage() {
   useEffect(() => {
     const el = leadListRef.current;
     if (!el) return;
+    let rafId: number | null = null;
     const onScroll = () => {
-      const scrollTop = el.scrollTop;
-      const viewH = el.clientHeight;
-      const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
-      const end = Math.min(filteredLeads.length, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + BUFFER);
-      setVirtualRange({ start, end });
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const scrollTop = el!.scrollTop;
+        const viewH = el!.clientHeight;
+        const start = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+        const end = Math.min(filteredLeads.length, Math.ceil((scrollTop + viewH) / ROW_HEIGHT) + BUFFER);
+        setVirtualRange({ start, end });
+      });
     };
     el.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
-    return () => el.removeEventListener('scroll', onScroll);
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      el.removeEventListener('scroll', onScroll);
+    };
   }, [filteredLeads.length]);
 
   // Detect if a message body contains HTML

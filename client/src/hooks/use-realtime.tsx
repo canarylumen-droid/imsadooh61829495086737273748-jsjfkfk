@@ -3,6 +3,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
 import { useToast } from '@/hooks/use-toast';
 
+// Debounce helper — coalesces rapid calls within `ms` window
+function createDebounce<T extends (...args: any[]) => void>(fn: T, ms: number): T {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const debounced = (...args: any[]) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      timer = null;
+      fn(...args);
+    }, ms);
+  };
+  return debounced as unknown as T;
+}
+
 // Register service worker for PWA
 const registerServiceWorker = async () => {
   if ('serviceWorker' in navigator) {
@@ -110,6 +123,39 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   );
 
+  // Debounced query invalidators — prevent refetch storms at 50 emails/sec
+  const debouncedInvalidateStats = useRef(createDebounce(() => {
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats/previous'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/email/stats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/warmup/status'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/warmup-status'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
+  }, 300)).current;
+
+  const debouncedInvalidateLeads = useRef(createDebounce(() => {
+    queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
+    queryClient.invalidateQueries({ queryKey: ['prospects'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/prospecting/leads'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/leads/stats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/activity'] });
+  }, 300)).current;
+
+  const debouncedInvalidateMessages = useRef(createDebounce(() => {
+    queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/activity'] });
+  }, 300)).current;
+
+  const debouncedInvalidateWarmup = useRef(createDebounce(() => {
+    queryClient.invalidateQueries({ queryKey: ['/api/dashboard/warmup-status'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/warmup/activity'] });
+    queryClient.invalidateQueries({ queryKey: ['/api/warmup/status'] });
+  }, 300)).current;
+
   // Computed for backward compatibility
   const isConnected = connectionStatus === 'connected';
 
@@ -206,15 +252,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
     // LEADS UPDATES
     socketInstance.on('leads_updated', (payload: any) => {
-      // Data payload: { event: 'INSERT'|'UPDATE', lead: object }
-
-      // Invalidate leads queries and dashboard stats
-      queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
-      queryClient.invalidateQueries({ queryKey: ['prospects'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/prospecting/leads'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/leads/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/activity'] });
+      debouncedInvalidateLeads();
 
       // Handle INSERT notifications
       if (payload?.event === 'INSERT' && payload.lead && payload.type !== 'bulk_import') {
@@ -261,10 +299,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
     // MESSAGES UPDATES
     socketInstance.on('messages_updated', (payload: any) => {
-
-      // Invalidate queries
-      queryClient.invalidateQueries({ queryKey: ['/api/conversations'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/leads'] });
+      debouncedInvalidateMessages();
       // Invalidate specific lead conversation if needed
       if (payload?.message?.leadId) {
         queryClient.invalidateQueries({ queryKey: ["/api/messages", payload.message.leadId] });
@@ -474,13 +509,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
     // STATS UPDATES (instant KPI refresh across all pages)
     socketInstance.on('stats_updated', () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats/previous'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/email/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/warmup/status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/warmup-status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
+      debouncedInvalidateStats();
     });
 
     // CAMPAIGN UPDATES
@@ -508,9 +537,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
     // WARMUP UPDATES
     socketInstance.on('warmup_update', () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/warmup-status'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/warmup/activity'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/warmup/status'] });
+      debouncedInvalidateWarmup();
     });
 
     // ENGINE ALERTS (SAFETY INTERLOCK)

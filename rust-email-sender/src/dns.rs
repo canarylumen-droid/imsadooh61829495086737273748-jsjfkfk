@@ -121,6 +121,24 @@ impl DnsResolver {
             })
             .collect();
         records.sort_by_key(|r| r.priority);
+
+        // Create a partial DnsVerificationResult for caching the MX records
+        let partial = DnsVerificationResult {
+            domain: domain.to_string(),
+            mx: records.clone(),
+            mx_found: !records.is_empty(),
+            spf: SpfResult { found: false, valid: false, record: None, issues: vec![] },
+            dkim: DkimResult { found: false, valid: false, selector: None, record: None, issues: vec![] },
+            dmarc: DmarcResult { found: false, valid: false, policy: None, record: None, issues: vec![] },
+            blacklist: BlacklistResult { is_blacklisted: false, listed_on: vec![] },
+            overall_score: 0,
+            overall_status: "unknown".to_string(),
+        };
+        self.cache.insert(cache_key, CachedEntry {
+            result: partial,
+            inserted_at: Instant::now(),
+        });
+
         Ok(records)
     }
 

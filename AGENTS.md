@@ -658,4 +658,138 @@ Built 4 interconnected components for real-time inbox placement detection withou
 ### Deploy Required
 - `git push github main`
 - EC2: `cd /home/ubuntu/app && git pull && cd client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client && pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-imap audnix-worker-brain`
+
+## This Session (Jul 19 2026) — Calendar Page Fix: Real Disconnect/Connect, Date Events Panel, Polling Fallback
+
+### Summary
+Fixed calendar page: Google Calendar/Calendly disconnect buttons (no more disabled "Connected"), Calendly OAuth connect from page (no more token input), OAuth error handling with "already in use" detection, 15s polling fallback when socket disconnected, selected-date events panel.
+
+### Changes
+
+1. **Google Calendar disconnect** (`calendar.tsx:793`): Changed disabled "Connected" ghost button → destructive "Disconnect" button wired to `disconnectGoogleMutation`. Calls `POST /api/oauth/google-calendar/disconnect`. In settings sheet too.
+
+2. **Calendly OAuth connect** (`calendar.tsx:770`): Replaced "Connect" button that opened settings sheet → triggers OAuth redirect to `/api/oauth/connect/calendly`. Removed old manual token-based `connectCalendlyMutation`. In settings sheet too.
+
+3. **Google Calendar OAuth error handling** (`calendar.tsx:396-408`): `connectGoogleMutation` now checks `response.ok`, throws proper error message.
+
+4. **"Already in use" detection** (`calendar.tsx:428-433`): `connectCalendlyOAuthMutation.onError` checks for "already"/"in use" in error message → shows specific "already in use" toast.
+
+5. **Polling fallback** (`calendar.tsx:246`): All 5 queries get `refetchInterval: isConnected ? false : 15000` — 15s polling when socket disconnects, pure real-time when connected.
+
+6. **Socket listeners** (`calendar.tsx:188-197`): Added `settings_updated` + `calendar_updated` → full query invalidation (real-time refresh after connect/disconnect).
+
+7. **Selected date events panel** (`calendar.tsx:722-790`): New card between calendar grid and upcoming list showing all events for the clicked date, sorted by time, with lead name + meeting URL.
+
+8. **Better error messages**: All mutations (`updateSettings`, `disconnectCalendly`, `disconnectGoogle`) have `onError` handlers showing error descriptions.
+
+9. **Google Calendar `notifySettingsUpdated`** (`oauth.ts:418`): Added `wsSync.notifySettingsUpdated(userId)` after Google Calendar disconnect so calendar page refreshes instantly.
+
+### Files Changed
+- `client/src/pages/dashboard/calendar.tsx` — All disconnect/connect buttons, OAuth mutations, polling
+- `services/api-gateway/src/routes/oauth.ts` — Google Calendar disconnect now fires notifySettingsUpdated
+- `AGENTS.md` — this session entry
+
+### Deploy
+- Push to GitHub, pull on EC2, build client, restart api-gateway only
 - Rust: `cd rust-email-sender && cargo build --release && pm2 restart audnix-rust-email-sender`
+
+## This Session (Jul 19 2026) — Warmup Page: Real Data, Per-Mailbox Progress Cards, All Mailboxes Listed
+
+### Summary
+Fixed warmup page to show ALL connected mailboxes (not just 1), added per-mailbox "Active Warmup Progress" detail cards with real sent/opened/bounced counts, fixed "Fully Warmed" KPI (was "Not Enrolled"), fixed "Unknown" email display by using `accountType` from integrations table.
+
+### Changes
+
+1. **Fully Warmed KPI** (`warmup.tsx:248-250`): Changed "Not Enrolled" count → "Fully Warmed" count (mailboxes with `warmupPercent >= 100` and `totalSent > 0`).
+
+2. **Active Warmup Progress cards** (`warmup.tsx:347-410`): New section between chart and mailbox list showing per-mailbox detail cards for each actively warming mailbox. Each card shows: email, provider, warmup/day, outreach/day, today's progress bar with percentage, stage label (e.g., "Day 6-10: Gaining Momentum"), and sent/opened/bounced stats grid.
+
+3. **Email display fix** (`dashboard-routes.ts:1271`): Changed `(int as any).smtpUser || (int as any).email || 'Unknown'` → `accountType` first (the standard email field on integrations table), then fallbacks.
+
+### Files Changed
+- `client/src/pages/dashboard/warmup.tsx` — Fully Warmed KPI, Active Progress cards
+- `services/api-gateway/src/routes/dashboard-routes.ts` — email field uses accountType
+
+### Deploy
+- `git push github main` then on EC2: `cd /home/ubuntu/app && git pull && cd client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client && pm2 restart audnix-api-gateway`
+
+## This Session (Jul 19 2026) — Inbox Mailbox Filter + Integrations Modal + ∞→actual count
+
+### Changes
+
+1. **Inbox leads filter by mailbox** (`drizzle-storage.ts:507-511`, `ai-routes.ts:108`): Changed `OR integrationId IS NULL` → `eq(leads.integrationId, integrationId)` — when a mailbox is selected, inbox shows ONLY leads assigned to that mailbox. Unassigned leads only show in "All Mailboxes" view.
+
+2. **∞ UNLIMITED → actual count** (`integrations.tsx:1397,922`): Changed "∞ UNLIMITED" and "5 / ∞" to show `{count} Connected` and `{count} / {count}`.
+
+3. **View All Mailboxes modal** (`integrations.tsx`): New "≡ View All" button next to "Add Mailbox" opens a dialog with 2-column grid of all connected mailboxes. Each card shows: email + provider, DNS badges (SPF/DKIM/DMARC/MX/BL), 4-column stats (Delivery%/Bounce%/Inbox%/Rep), Focus + Disconnect actions.
+
+4. **Lead import routing** (`bulk-actions-routes.ts:104-109`): Uses existing `mailbox-router.ts` with smart MX routing: @gmail→Gmail, @outlook→Outlook, same-domain→custom_email, round-robin fallback. Already distributed evenly.
+
+### Files Changed
+- `shared/lib/storage/drizzle-storage.ts` — inbox integrationId filter (no OR IS NULL)
+- `services/api-gateway/src/routes/ai-routes.ts` — same filter for total count
+- `client/src/pages/dashboard/integrations.tsx` — ∞→count, View All modal, DNS badges
+- `AGENTS.md` — this entry
+
+### Deploy
+- `git push github main` then on EC2:
+```bash
+cd /home/ubuntu/app && git pull
+npm ci
+cd client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client
+cd /home/ubuntu/app/rust-email-sender && cargo build --release
+cd /home/ubuntu/app/rust-imap-worker && cargo build --release
+pm2 restart all
+```
+
+---
+
+## This Session (Jul 19 2026) — REAL-TIME FIX + LEAD RECOVERY + CI/CD + VULNS
+
+### Critical Fixes
+
+1. **Redis pub/sub fire-and-forget** (`redis-pubsub.ts`): 
+   - **Root cause**: `STATS_CACHE_INVALIDATE` handler used `require()` which throws `ReferenceError` in ESM mode (project uses `"type": "module"`). Empty `catch (_) {}` silently swallowed the error → `invalidateStatsCache` NEVER fired → server stats cache was NEVER invalidated via Redis events.
+   - **Fix**: Replaced `require()` with in-process LRU cache `pendingInvalidations`. `STATS_CACHE_INVALIDATE` now sets `pendingInvalidations.set(userId, true)` and the stats endpoint checks this before serving cached data.
+   - **Also**: `broadcast()` now retries once with a fresh client on publish failure.
+
+2. **Redis client stale connection** (`redis.ts`):
+   - **Root cause**: `redisClient` was never nullified on connection loss. After reconnect strategy exhausted, `getRedisClient()` returned a dead zombie client → `publish()` silently failed.
+   - **Fix**: Added `client.on('end')` handler that sets `redisClient = null`. Added `ping()` health check before returning cached client. Added race condition fix for concurrent `getRedisClient()` calls.
+
+3. **KPIs not updating on reply/open** — Fixed by #1 fixing `STATS_CACHE_INVALIDATE`. The data path now works: DB updated → `clusterSync.notifyStatsCacheInvalidate(userId)` → Redis pub/sub → API gateway subscriber → `pendingInvalidations.set(userId)` → next stats request bypasses cache.
+
+4. **Lead recovery** (`worker.ts`, `mysql.ts`, `lead-recovery.tsx`, `lead-recovery-routes.ts`):
+   - **Root cause A**: Safety guard blocked processing if no active campaigns → syncStatus stuck at "queued" → user saw nothing happen
+   - **Root cause B**: No polling fallback — purely event-driven via Redis. If Redis event was lost, sync never processed
+   - **Root cause C**: `failMailboxSync` didn't store error message → UI showed unhelpful "failed" badge
+   - **Fix A**: Removed active-campaigns safety guard — lead recovery works independently
+   - **Fix B**: Added 30s polling interval as fallback when Redis unavailable
+   - **Fix C**: Added `error_message` column to `lead_recovery_state` table, update `failMailboxSync()` signature to accept error message, display in UI
+   - **Fix D**: Sync endpoint now clears `errorMessage: null` when re-queueing
+
+5. **Integration page real-time** (`integrations.tsx`):
+   - Added `settings_updated` + `integration_reputation_updated` socket listeners → full invalidation on connect/disconnect/reputation changes
+
+### CI/CD + Vulns
+6. **npm vulnerabilities**: Overrode `uuid@^14.0.0` (was `^10.0.0`). Removed unused `aws-sdk` v2 dependency (project uses `@aws-sdk/*` v3). 2 moderate vulns remain (`google-it` → `request`, no fix path).
+7. **Deploy workflow**: Created `.github/workflows/deploy-ec2.yml` matching actual S3+PM2 deployment process (not Docker/ECS/Vercel).
+8. **CodeQL**: 12 alerts remain (1 critical SSRF, 6 high sanitization, 2 high tainted-format, 1 high URL substring, 1 high token validation, 1 medium redirect). Need to review on GitHub after push.
+
+### Files Changed
+- `shared/lib/realtime/redis-pubsub.ts` — required()→LRU cache, retry logic, pendingInvalidations export
+- `shared/lib/redis/redis.ts` — stale client health check, end handler, race condition fix
+- `services/api-gateway/src/routes/dashboard-routes.ts` — import pendingInvalidations, check cache before serving
+- `client/src/pages/dashboard/integrations.tsx` — added settings_updated + integration_reputation_updated listeners
+- `services/lead-recovery-worker/src/worker.ts` — removed safety guard, added 30s polling fallback, pass error to failMailboxSync
+- `shared/lib/mysql.ts` — added error_message column to lead_recovery_state, updated upsert/fail functions
+- `services/api-gateway/src/routes/lead-recovery-routes.ts` — return errorMessage, clear on sync
+- `client/src/pages/dashboard/lead-recovery.tsx` — display errorMessage in red, red badge for failed
+- `.github/workflows/deploy-ec2.yml` — new file, real EC2 deploy process
+- `shared/lib/storage/drizzle-storage.ts` — (pre-existing changes)
+- `client/src/hooks/use-realtime.tsx` — (pre-existing debounce changes)
+
+### Known Remaining Issues
+- 2 moderate npm vulns (`google-it` → `request`, no fix)
+- 12 CodeQL alerts (to review on GitHub after push)
+- `aws-deploy.yml`, `deploy.yml`, `vercel-deploy.yml` are stale — only `deploy-ec2.yml` matches actual deployment

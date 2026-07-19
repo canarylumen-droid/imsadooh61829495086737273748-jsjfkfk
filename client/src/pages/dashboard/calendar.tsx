@@ -83,7 +83,7 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRealtime } from "@/hooks/use-realtime";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PremiumLoader } from "@/components/ui/premium-loader";
@@ -179,8 +179,21 @@ const STATUS_CONFIG: Record<string, { color: string; icon: React.ReactNode; labe
 
 export default function CalendarPage() {
   const { toast } = useToast();
-  useRealtime();
+  const { socket, isConnected } = useRealtime();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar/"] });
+    };
+    socket.on("settings_updated", handleUpdate);
+    socket.on("calendar_updated", handleUpdate);
+    return () => {
+      socket.off("settings_updated", handleUpdate);
+      socket.off("calendar_updated", handleUpdate);
+    };
+  }, [socket, queryClient]);
   const { selectedMailboxId, setSelectedMailboxId } = useMailbox();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
@@ -188,7 +201,6 @@ export default function CalendarPage() {
   const [showSettingsSheet, setShowSettingsSheet] = useState(false);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState<CalendarEvent | null>(null);
-  const [calendlyToken, setCalendlyToken] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
   const [newEvent, setNewEvent] = useState({
     summary: "",
@@ -198,29 +210,36 @@ export default function CalendarPage() {
     attendeeEmail: "",
   });
 
+  const pollingMs = isConnected ? false : 15000;
+
   const { data: settingsData, isLoading: settingsLoading } = useQuery<{ settings: CalendarSettings }>({
     queryKey: ["/api/calendar/settings"],
     retry: 3,
+    refetchInterval: pollingMs,
   });
 
   const { data: bookingsData, isLoading: bookingsLoading } = useQuery<{ bookings: CalendarBooking[] }>({
     queryKey: ["/api/calendar/bookings"],
     retry: 3,
+    refetchInterval: pollingMs,
   });
 
   const { data: aiLogsData } = useQuery<{ logs: AIActionLog[] }>({
     queryKey: ["/api/calendar/ai-logs"],
     retry: 3,
+    refetchInterval: pollingMs,
   });
 
   const { data: eventsData } = useQuery<{ events: Array<{ id: string; title?: string; summary?: string; startTime?: string; start?: { dateTime?: string }; endTime?: string; end?: { dateTime?: string }; meetingUrl?: string; hangoutLink?: string; isAiBooked?: boolean; leadName?: string | null }> }>({
     queryKey: ["/api/oauth/google-calendar/events"],
     retry: 3,
+    refetchInterval: pollingMs,
   });
 
   const { data: slotsData } = useQuery<{ slots: Array<{ start: string; end: string; available: boolean }> }>({
     queryKey: ["/api/calendar/slots", { daysAhead: 14 }],
     retry: 3,
+    refetchInterval: pollingMs,
   });
 
   const settings = settingsData?.settings;
@@ -329,23 +348,8 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/settings"] });
       toast({ title: "Settings updated" });
     },
-    onError: () => {
-      toast({ title: "Failed to update settings", variant: "destructive" });
-    },
-  });
-
-  const connectCalendlyMutation = useMutation({
-    mutationFn: async (token: string) => {
-      const response = await apiRequest("POST", "/api/calendar/connect-calendly", { token });
-      return response.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/calendar/settings"] });
-      setCalendlyToken("");
-      toast({ title: "Calendly connected", description: `Connected as ${data.username}` });
-    },
-    onError: (error: any) => {
-      toast({ title: "Failed to connect", description: error.message, variant: "destructive" });
+    onError: (err: any) => {
+      toast({ title: "Failed to update settings", description: err?.message || "", variant: "destructive" });
     },
   });
 
@@ -358,6 +362,9 @@ export default function CalendarPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/bookings"] });
       toast({ title: "Calendly disconnected" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to disconnect", description: err?.message || "", variant: "destructive" });
     },
   });
 
@@ -387,9 +394,57 @@ export default function CalendarPage() {
   const connectGoogleMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/oauth/connect/google-calendar", { credentials: "include" });
+      if (!response.ok) {
+        const text = await response.text();
+        let err;
+        try { err = JSON.parse(text); } catch { err = { error: text }; }
+        throw new Error(err.error || "Failed to start Google connection");
+      }
       const data = await response.json();
       if (data.authUrl) window.location.href = data.authUrl;
       return data;
+    },
+    onError: (err: any) => {
+      toast({ title: "Connection failed", description: err?.message || "", variant: "destructive" });
+    },
+  });
+
+  const disconnectGoogleMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/oauth/google-calendar/disconnect", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar/settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/calendar/bookings"] });
+      toast({ title: "Google Calendar disconnected" });
+    },
+    onError: (err: any) => {
+      const msg = err?.message || "Failed to disconnect";
+      toast({ title: "Disconnect failed", description: msg, variant: "destructive" });
+    },
+  });
+
+  const connectCalendlyOAuthMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/oauth/connect/calendly", { credentials: "include" });
+      if (!res.ok) {
+        const text = await res.text();
+        let err;
+        try { err = JSON.parse(text); } catch { err = { error: text }; }
+        throw new Error(err.error || "Failed to start Calendly connection");
+      }
+      const data = await res.json();
+      if (data.authUrl) window.location.href = data.authUrl;
+      return data;
+    },
+    onError: (err: any) => {
+      const msg = err?.message || "";
+      if (msg.includes("already") || msg.includes("in use")) {
+        toast({ title: "Already in use", description: "This Calendly account is connected to another Audnix account. Disconnect it first.", variant: "destructive" });
+      } else {
+        toast({ title: "Connection failed", description: msg, variant: "destructive" });
+      }
     },
   });
 
@@ -654,6 +709,72 @@ export default function CalendarPage() {
             </CardContent>
           </Card>
 
+          {/* Selected Date Events */}
+          <Card className="bg-[#050505] border-white/5 rounded-2xl">
+            <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm font-bold text-white flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-primary" /> {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+              </CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs text-white/40 h-7" onClick={() => setSelectedDate(new Date())}>Today</Button>
+            </CardHeader>
+            <CardContent className="p-4 pt-0">
+              {eventsForDate(selectedDate).length > 0 ? (
+                <div className="space-y-2">
+                  {eventsForDate(selectedDate)
+                    .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime())
+                    .map(event => (
+                      <div
+                        key={event.id}
+                        onClick={() => setShowEventDetail(event)}
+                        className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] hover:bg-white/5 border border-white/5 cursor-pointer transition-colors"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className={cn(
+                            "flex flex-col items-center justify-center w-12 h-12 rounded-lg shrink-0",
+                            event.isAiBooked ? 'bg-gradient-to-br from-purple-500/20 to-indigo-500/20 border border-purple-500/20' : 'bg-white/5 border border-white/10'
+                          )}>
+                            <span className="text-[9px] font-medium text-white/40 uppercase">{new Date(event.startTime).toLocaleDateString('en-US', { month: 'short' })}</span>
+                            <span className="text-lg font-bold text-white">{new Date(event.startTime).getDate()}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{event.title}</p>
+                            <p className="text-xs text-white/40 truncate">
+                              {new Date(event.startTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                              {' - '}
+                              {new Date(event.endTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+                              {event.leadName && ` · ${event.leadName}`}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 ml-2">
+                          {event.isAiBooked && (
+                            <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20 text-[9px]">
+                              <Bot className="h-2.5 w-2.5 mr-1" /> AI
+                            </Badge>
+                          )}
+                          {event.meetingUrl && (
+                            <Button size="icon" variant="ghost" className="h-8 w-8" asChild>
+                              <a href={event.meetingUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                                <Video className="h-3.5 w-3.5 text-white/40" />
+                              </a>
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <CalendarIcon className="h-8 w-8 text-white/10 mx-auto mb-2" />
+                  <p className="text-sm text-white/20">No events on this day</p>
+                  <Button variant="outline" size="sm" className="mt-3 text-xs border-white/10 bg-white/5" onClick={() => { setShowCreateDialog(true); }}>
+                    <Plus className="h-3 w-3 mr-1" /> Create Event
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Upcoming Events List */}
           <Card className="bg-[#050505] border-white/5 rounded-2xl">
             <CardHeader className="p-4 pb-2">
@@ -732,7 +853,7 @@ export default function CalendarPage() {
                     Disconnect
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" className="text-xs border-white/10 bg-white/5" onClick={() => setShowSettingsSheet(true)}>
+                  <Button size="sm" variant="outline" className="text-xs border-white/10 bg-white/5" onClick={() => connectCalendlyOAuthMutation.mutate()}>
                     Connect
                   </Button>
                 )}
@@ -750,7 +871,9 @@ export default function CalendarPage() {
                   </div>
                 </div>
                 {settings?.googleCalendarEnabled ? (
-                  <Button size="sm" variant="ghost" className="text-xs text-emerald-400" disabled>Connected</Button>
+                  <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs" onClick={() => disconnectGoogleMutation.mutate()}>
+                    Disconnect
+                  </Button>
                 ) : (
                   <Button size="sm" variant="outline" className="text-xs border-white/10 bg-white/5" onClick={() => connectGoogleMutation.mutate()}>
                     Connect
@@ -922,8 +1045,7 @@ export default function CalendarPage() {
                     <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 text-xs" onClick={() => disconnectCalendlyMutation.mutate()}>Disconnect</Button>
                   ) : (
                     <div className="flex gap-2">
-                      <Input placeholder="API Token" value={calendlyToken} onChange={(e) => setCalendlyToken(e.target.value)} className="w-32 h-8 text-xs rounded-lg bg-white/5 border-white/10" />
-                      <Button size="sm" className="rounded-lg text-xs" onClick={() => connectCalendlyMutation.mutate(calendlyToken)}>Connect</Button>
+                      <Button size="sm" className="rounded-lg text-xs" onClick={() => connectCalendlyOAuthMutation.mutate()}>Connect Calendly</Button>
                     </div>
                   )}
                 </CardContent>
@@ -940,7 +1062,7 @@ export default function CalendarPage() {
                     </div>
                   </div>
                   {settings?.googleCalendarEnabled ? (
-                    <span className="text-xs text-emerald-400">Connected</span>
+                    <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 text-xs" onClick={() => disconnectGoogleMutation.mutate()}>Disconnect</Button>
                   ) : (
                     <Button size="sm" className="rounded-lg text-xs" onClick={() => connectGoogleMutation.mutate()}>Connect</Button>
                   )}

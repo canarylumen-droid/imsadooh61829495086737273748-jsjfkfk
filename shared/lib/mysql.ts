@@ -70,6 +70,7 @@ export interface LeadRecoveryStateRow {
   syncStatus: SyncStatus;
   isBusy: boolean;
   availableAt: Date | null;
+  errorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -234,6 +235,13 @@ export async function ensureTables(): Promise<void> {
       INDEX idx_sync_status (sync_status)
     )
   `);
+
+  // Add error_message column if it doesn't exist
+  try {
+    await p.query(`ALTER TABLE lead_recovery_state ADD COLUMN error_message TEXT NULL AFTER sync_status`);
+  } catch {
+    // Column already exists
+  }
 
   await p.query(`
     CREATE TABLE IF NOT EXISTS recovered_leads (
@@ -429,17 +437,18 @@ export async function completeMailboxSync(
 
 export async function failMailboxSync(
   tenantId: string,
-  mailboxId: string
+  mailboxId: string,
+  errorMessage?: string
 ): Promise<void> {
   const p = getMySqlPool();
   if (!p) return;
   const availableAt = new Date(Date.now() + 60 * 60 * 1000);
   await p.query(
-    `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, sync_status, available_at, last_sync_at)
-     VALUES (?, ?, ?, 0, 'failed', ?, NOW())
+    `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, sync_status, available_at, last_sync_at, error_message)
+     VALUES (?, ?, ?, 0, 'failed', ?, NOW(), ?)
      ON DUPLICATE KEY UPDATE
-       is_busy = 0, sync_status = 'failed', available_at = ?, last_sync_at = NOW()`,
-    [generateId(), tenantId, mailboxId, availableAt, availableAt]
+       is_busy = 0, sync_status = 'failed', available_at = ?, last_sync_at = NOW(), error_message = ?`,
+    [generateId(), tenantId, mailboxId, availableAt, errorMessage || null, availableAt, errorMessage || null]
   );
 }
 
@@ -462,7 +471,7 @@ export async function upsertRecoveryState(
   if (!p) return;
   const allowed = [
     "is_active", "is_busy", "last_sync_at", "sync_requested_at",
-    "sync_status", "available_at",
+    "sync_status", "available_at", "error_message",
   ];
   const mapped = mapDataToSnakeCase(data as Record<string, unknown>, allowed);
 

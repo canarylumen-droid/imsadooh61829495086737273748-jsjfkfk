@@ -1,8 +1,10 @@
-use std::time::Duration;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use anyhow::Result;
+use dashmap::DashMap;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::time::Instant;
+use tokio::time::Instant as TokioInstant;
 use log::debug;
 
 #[derive(Debug, Clone)]
@@ -25,17 +27,57 @@ pub struct TelemetryReport {
     pub suspected_placement: PlacementGuess,
 }
 
-pub struct SmtpTelemetry;
+pub struct SmtpTelemetry {
+    cache: DashMap<String, TelemetryCacheEntry>,
+    ttl: Duration,
+}
+
+struct TelemetryCacheEntry {
+    report: TelemetryReport,
+    inserted_at: Instant,
+}
 
 impl SmtpTelemetry {
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            cache: DashMap::new(),
+            ttl: Duration::from_secs(300), // 5-minute cache per MX host
+        })
+    }
+
     pub async fn probe(
+        self: &Arc<Self>,
+        recipient_email: &str,
+        sender_domain: &str,
+        mx_host: &str,
+    ) -> Result<TelemetryReport> {
+        let cache_key = mx_host.to_string();
+
+        // Check cache first
+        if let Some(entry) = self.cache.get(&cache_key) {
+            if entry.inserted_at.elapsed() < self.ttl {
+                return Ok(entry.report.clone());
+            }
+        }
+
+        let report = Self::probe_raw(recipient_email, sender_domain, mx_host).await?;
+
+        self.cache.insert(cache_key, TelemetryCacheEntry {
+            report: report.clone(),
+            inserted_at: Instant::now(),
+        });
+
+        Ok(report)
+    }
+
+    async fn probe_raw(
         recipient_email: &str,
         sender_domain: &str,
         mx_host: &str,
     ) -> Result<TelemetryReport> {
         let addr = format!("{}:25", mx_host);
 
-        let start_connect = Instant::now();
+        let start_connect = TokioInstant::now();
         let stream = tokio::time::timeout(
             Duration::from_secs(5),
             TcpStream::connect(&addr),
@@ -49,7 +91,7 @@ impl SmtpTelemetry {
         debug!("Banner: {}", line.trim());
         line.clear();
 
-        let start_handshake = Instant::now();
+        let start_handshake = TokioInstant::now();
 
         reader.get_mut().write_all(format!("EHLO {}\r\n", sender_domain).as_bytes()).await?;
         loop {
@@ -63,7 +105,7 @@ impl SmtpTelemetry {
         reader.read_line(&mut line).await?;
         line.clear();
 
-        let start_rcpt = Instant::now();
+        let start_rcpt = TokioInstant::now();
         reader.get_mut().write_all(format!("RCPT TO:<{}>\r\n", recipient_email).as_bytes()).await?;
         reader.read_line(&mut line).await?;
         let rcpt_latency_ms = start_rcpt.elapsed().as_millis();

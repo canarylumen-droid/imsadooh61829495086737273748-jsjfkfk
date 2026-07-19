@@ -1,13 +1,30 @@
 import { getRedisClient } from '@shared/lib/redis/redis.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { LRUCache } from 'lru-cache';
 
 const REDIS_CHANNEL = 'audnix-cluster:events';
+
+// Events that can be safely debounced — coalesce rapid fire into single delivery
+const DEBOUNCEABLE_EVENTS = new Set([
+  'STATS_UPDATE', 'LEADS_UPDATE', 'MESSAGES_UPDATE',
+  'STATS_CACHE_INVALIDATE', 'DELIVERABILITY_UPDATE',
+  'CAMPAIGN_STATS_UPDATE', 'CAMPAIGNS_UPDATE',
+]);
+
+const DEBOUNCE_WINDOW_MS = 200;
+
+// In-memory stats cache invalidation set — avoids ESM require() issue
+// Keyed by userId, TTL 10s auto-cleanup.
+const pendingInvalidations = new LRUCache<string, boolean>({ max: 1000, ttl: 10_000 });
 
 class RedisPubSub {
   private isSubscribed: boolean = false;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 50;
+  private debounceBuffer: Map<string, Set<string>> = new Map();
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pubClientRef: any = null;
 
   constructor() {
     this.init();
@@ -31,7 +48,6 @@ class RedisPubSub {
         await this.handleEvent(message);
       });
 
-      // Handle disconnection
       subClient.on('error', (err: any) => {
         console.error('[RedisPubSub] Subscriber error:', err.message);
         this.isSubscribed = false;
@@ -59,69 +75,120 @@ class RedisPubSub {
       console.error('[RedisPubSub] Max reconnect attempts reached. Real-time disabled.');
       return;
     }
-
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
     this.reconnectAttempts++;
-    console.log(`[RedisPubSub] Retrying in ${delay}ms (attempt ${this.reconnectAttempts})`);
-    
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
       this.init();
     }, delay);
   }
 
-  /**
-   * Broadcast an event to the entire cluster via Redis pub/sub.
-   */
-  async broadcast(type: string, userId: string, payload: any = {}) {
-    try {
-      const pubClient = await getRedisClient();
-      if (!pubClient) {
-        // Redis down — try direct wsSync as fallback (works if same process)
-        this.fallbackDirect(type, userId, payload);
-        return;
+  private flushDebouncedEvents() {
+    this.debounceTimer = null;
+    for (const [userId, eventTypes] of this.debounceBuffer) {
+      for (const type of eventTypes) {
+        this.relayEvent(type, userId, {});
       }
-      const message = JSON.stringify({ type, userId, payload, timestamp: Date.now() });
-      await pubClient.publish(REDIS_CHANNEL, message);
-    } catch (err: any) {
-      console.error('[RedisPubSub] Broadcast failed:', err.message);
-      // Fallback to direct wsSync
-      this.fallbackDirect(type, userId, payload);
+    }
+    this.debounceBuffer.clear();
+  }
+
+  private isDebounceNeeded(type: string): boolean {
+    return DEBOUNCEABLE_EVENTS.has(type);
+  }
+
+  private debounceOrRelay(type: string, userId: string, payload: any) {
+    if (!this.isDebounceNeeded(type)) {
+      this.relayEvent(type, userId, payload);
+      return;
+    }
+    let types = this.debounceBuffer.get(userId);
+    if (!types) {
+      types = new Set();
+      this.debounceBuffer.set(userId, types);
+    }
+    types.add(type);
+    if (!this.debounceTimer) {
+      this.debounceTimer = setTimeout(() => this.flushDebouncedEvents(), DEBOUNCE_WINDOW_MS);
     }
   }
 
-  /**
-   * Fallback: if Redis is down, try direct wsSync (works in api-gateway process only)
-   */
+  private relayEvent(type: string, userId: string, payload: any) {
+    switch (type) {
+      case 'STATS_UPDATE': wsSync.notifyStatsUpdated(userId, payload); break;
+      case 'LEADS_UPDATE': wsSync.notifyLeadsUpdated(userId, payload); break;
+      case 'MESSAGES_UPDATE': wsSync.notifyMessagesUpdated(userId, payload); break;
+      case 'CAMPAIGN_STATS_UPDATE': wsSync.notifyCampaignStatsUpdated(userId, payload?.campaignId || ''); break;
+      case 'CAMPAIGNS_UPDATE': wsSync.notifyCampaignsUpdated(userId); break;
+      case 'ACTIVITY_UPDATE': wsSync.notifyActivityUpdated(userId, payload); break;
+      case 'NEW_MAIL': wsSync.notifyNewMail(userId, payload); break;
+      case 'NOTIFICATION': wsSync.notifyNotification(userId, payload); break;
+      case 'DESKTOP_NOTIFICATION': wsSync.notifyDesktopNotification(userId, payload); break;
+      case 'STATS_CACHE_INVALIDATE':
+        // Mark userId for cache invalidation — the stats endpoint checks this
+        // instead of using a broken require() in ESM context.
+        pendingInvalidations.set(userId, true);
+        wsSync.broadcastToUser(userId, { type: 'stats_cache_invalidate', payload: {} });
+        break;
+      case 'DELIVERABILITY_UPDATE': wsSync.notifyDeliverabilityUpdated(userId, payload); break;
+      case 'WARMUP_UPDATE': wsSync.notifyWarmupUpdated(userId, payload); break;
+      default:
+        wsSync.broadcastToUser(userId, { type: type.toLowerCase(), payload });
+    }
+  }
+
+  async broadcast(type: string, userId: string, payload: any = {}) {
+    let pubClient = null;
+    try {
+      pubClient = await getRedisClient();
+    } catch {
+      this.fallbackDirect(type, userId, payload);
+      return;
+    }
+
+    if (!pubClient) {
+      this.fallbackDirect(type, userId, payload);
+      return;
+    }
+
+    const message = JSON.stringify({ type, userId, payload, timestamp: Date.now() });
+
+    // Retry once with a fresh client if first attempt fails
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        await pubClient.publish(REDIS_CHANNEL, message);
+        return; // success
+      } catch (err: any) {
+        if (attempt === 0) {
+          console.warn(`[RedisPubSub] Publish failed (attempt 1), refreshing client: ${err.message}`);
+          try {
+            pubClient = await getRedisClient();
+          } catch { break; }
+        } else {
+          console.error(`[RedisPubSub] Publish failed (attempt 2), falling back: ${err.message}`);
+        }
+      }
+    }
+
+    // Both attempts failed — try direct wsSync fallback
+    this.fallbackDirect(type, userId, payload);
+  }
+
   private fallbackDirect(type: string, userId: string, payload: any) {
     try {
-      switch (type) {
-        case 'STATS_UPDATE': wsSync.notifyStatsUpdated(userId, payload); break;
-        case 'LEADS_UPDATE': wsSync.notifyLeadsUpdated(userId, payload); break;
-        case 'MESSAGES_UPDATE': wsSync.notifyMessagesUpdated(userId, payload); break;
-        case 'CAMPAIGN_STATS_UPDATE': wsSync.notifyCampaignStatsUpdated(userId, payload?.campaignId || ''); break;
-        case 'CAMPAIGNS_UPDATE': wsSync.notifyCampaignsUpdated(userId); break;
-        case 'ACTIVITY_UPDATE': wsSync.notifyActivityUpdated(userId, payload); break;
-        case 'NEW_MAIL': wsSync.notifyNewMail(userId, payload); break;
-        case 'NOTIFICATION': wsSync.notifyNotification(userId, payload); break;
-        case 'DESKTOP_NOTIFICATION': wsSync.notifyDesktopNotification(userId, payload); break;
-        case 'STATS_CACHE_INVALIDATE':
-          try {
-            const mod = require('@services/api-gateway/src/routes/dashboard-routes.js');
-            if (typeof mod.invalidateStatsCache === 'function') {
-              mod.invalidateStatsCache(userId);
-            }
-          } catch (_) {}
-          break;
-        case 'DELIVERABILITY_UPDATE': wsSync.notifyDeliverabilityUpdated(userId, payload); break;
-        case 'WARMUP_UPDATE': wsSync.notifyWarmupUpdated(userId, payload); break;
-      }
+      this.relayEvent(type, userId, payload);
     } catch (_) {}
   }
 
-  /**
-   * Convenience methods for common event types.
-   */
+  // Check if a userId's stats cache needs invalidation (called by stats endpoint)
+  static isStatsCacheStale(userId: string): boolean {
+    return pendingInvalidations.has(userId);
+  }
+
+  static markStatsCacheRefreshed(userId: string) {
+    pendingInvalidations.delete(userId);
+  }
+
   async notifyStatsUpdated(userId: string, data?: any) {
     await this.broadcast('STATS_UPDATE', userId, data);
   }
@@ -169,54 +236,12 @@ class RedisPubSub {
   private async handleEvent(message: string) {
     try {
       const event = JSON.parse(message);
-      
-      // Relay the event to the local WebSockets for the target user.
-      switch (event.type) {
-        case 'STATS_UPDATE':
-          wsSync.notifyStatsUpdated(event.userId, event.payload);
-          break;
-        case 'LEADS_UPDATE':
-          wsSync.notifyLeadsUpdated(event.userId, event.payload);
-          break;
-        case 'MESSAGES_UPDATE':
-          wsSync.notifyMessagesUpdated(event.userId, event.payload);
-          break;
-        case 'CAMPAIGN_STATS_UPDATE':
-          wsSync.notifyCampaignStatsUpdated(event.userId, event.payload?.campaignId || '');
-          break;
-        case 'CAMPAIGNS_UPDATE':
-          wsSync.notifyCampaignsUpdated(event.userId);
-          break;
-        case 'ACTIVITY_UPDATE':
-          wsSync.notifyActivityUpdated(event.userId, event.payload);
-          break;
-        case 'NEW_MAIL':
-          wsSync.notifyNewMail(event.userId, event.payload);
-          break;
-        case 'NOTIFICATION':
-          wsSync.notifyNotification(event.userId, event.payload);
-          break;
-        case 'DESKTOP_NOTIFICATION':
-          wsSync.notifyDesktopNotification(event.userId, event.payload);
-          break;
-        case 'STATS_CACHE_INVALIDATE':
-          try {
-            const mod = await import('@services/api-gateway/src/routes/dashboard-routes.js');
-            if (typeof mod.invalidateStatsCache === 'function') {
-              mod.invalidateStatsCache(event.userId);
-            }
-          } catch (_) { /* not in api-gateway process, ignore */ }
-          break;
-        case 'DELIVERABILITY_UPDATE':
-          wsSync.notifyDeliverabilityUpdated(event.userId, event.payload);
-          break;
-        default:
-          wsSync.broadcastToUser(event.userId, { type: event.type.toLowerCase(), payload: event.payload });
-      }
+      this.debounceOrRelay(event.type, event.userId, event.payload);
     } catch (err: any) {
       console.error('[RedisPubSub] Error handling message:', err.message);
     }
   }
 }
 
+export { pendingInvalidations, RedisPubSub };
 export const clusterSync = new RedisPubSub();

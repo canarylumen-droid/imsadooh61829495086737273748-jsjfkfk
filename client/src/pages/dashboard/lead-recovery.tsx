@@ -148,9 +148,12 @@ function LeadRecoveryContent() {
                     </div>
                     {mailbox.isBusy ? <Clock className="h-4 w-4 text-amber-500" /> : <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
                   </div>
-                  {mailbox.availableAt && <p className="mt-2 text-xs text-muted-foreground">Available {new Date(mailbox.availableAt).toLocaleString()}</p>}
-                  <div className="mt-2 flex items-center justify-between gap-2">
-                    <Badge variant="outline" className="text-[10px] capitalize">{mailbox.syncStatus || "idle"}</Badge>
+                    {mailbox.availableAt && <p className="mt-2 text-xs text-muted-foreground">Available {new Date(mailbox.availableAt).toLocaleString()}</p>}
+                    {mailbox.errorMessage && mailbox.syncStatus === "failed" && (
+                      <p className="mt-1 text-[10px] text-destructive/80 break-words">{mailbox.errorMessage}</p>
+                    )}
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <Badge variant="outline" className={cn("text-[10px] capitalize", mailbox.syncStatus === "failed" && "border-destructive/40 text-destructive")}>{mailbox.syncStatus || "idle"}</Badge>
                     <Button variant="ghost" size="sm" className="h-7 px-2 text-[10px]" onClick={() => store.syncNow(mailbox.id)}>
                       Sync
                     </Button>

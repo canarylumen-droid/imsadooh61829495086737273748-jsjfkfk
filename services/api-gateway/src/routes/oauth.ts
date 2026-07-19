@@ -412,6 +412,8 @@ router.post('/google-calendar/disconnect', async (req: Request, res: Response): 
 
     await storage.disconnectIntegration(userId, 'google_calendar');
 
+    wsSync.notifySettingsUpdated(userId);
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error disconnecting Google Calendar:', error);

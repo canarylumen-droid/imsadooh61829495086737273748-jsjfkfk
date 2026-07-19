@@ -257,6 +257,11 @@ export async function runDatabaseMigrations() {
 
                 -- Bounce Tracker Integration ID
                 IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='bounce_tracker') THEN
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'bounce_tracker_composite_idx') THEN
+                        CREATE INDEX bounce_tracker_composite_idx ON bounce_tracker(integration_id, bounce_type, created_at);
+                    END IF;
+                END IF;
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='bounce_tracker') THEN
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='bounce_tracker' AND column_name='integration_id') THEN
                         ALTER TABLE bounce_tracker ADD COLUMN integration_id UUID REFERENCES integrations(id) ON DELETE CASCADE;
                     END IF;
@@ -276,6 +281,9 @@ export async function runDatabaseMigrations() {
                 IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'leads_archived_idx') THEN
                     CREATE INDEX leads_archived_idx ON leads(archived);
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'leads_updated_at_idx') THEN
+                    CREATE INDEX leads_updated_at_idx ON leads(updated_at);
+                END IF;
 
                 -- Messages
                 IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'msgs_user_id_idx') THEN
@@ -287,6 +295,9 @@ export async function runDatabaseMigrations() {
                 IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'msgs_integration_id_idx') THEN
                     CREATE INDEX msgs_integration_id_idx ON messages(integration_id);
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'msgs_thread_id_idx') THEN
+                    CREATE INDEX msgs_thread_id_idx ON messages(thread_id);
+                END IF;
 
                 -- Integrations
                 IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'integrations_user_id_idx') THEN
@@ -296,6 +307,13 @@ export async function runDatabaseMigrations() {
                 -- Outreach Campaigns
                 IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'campaigns_user_id_idx') THEN
                     CREATE INDEX campaigns_user_id_idx ON outreach_campaigns(user_id);
+                END IF;
+
+                -- Bounce tracker composite index
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='bounce_tracker') THEN
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'bounce_tracker_composite_idx') THEN
+                        CREATE INDEX bounce_tracker_composite_idx ON bounce_tracker(integration_id, bounce_type, created_at);
+                    END IF;
                 END IF;
 
                 -- Campaign Leads (HIGH PRIORITY — 50-100K leads per campaign)
@@ -663,6 +681,12 @@ export async function runDatabaseMigrations() {
                     END IF;
                     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_tracking_placement_idx') THEN
                         CREATE INDEX email_tracking_placement_idx ON email_tracking(placement);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_tracking_created_at_idx') THEN
+                        CREATE INDEX email_tracking_created_at_idx ON email_tracking(created_at);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_tracking_user_created_idx') THEN
+                        CREATE INDEX email_tracking_user_created_idx ON email_tracking(user_id, created_at);
                     END IF;
                 END IF;
 

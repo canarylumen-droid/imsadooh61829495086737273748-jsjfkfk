@@ -332,6 +332,7 @@ export default function IntegrationsPage() {
   const [mailboxSearch, setMailboxSearch] = useState("");
   const [mailboxPage, setMailboxPage] = useState(0);
   const [showAllMailboxes, setShowAllMailboxes] = useState(false);
+  const [showMailboxModal, setShowMailboxModal] = useState(false);
   const MAILBOXES_PER_PAGE = 25;
 
   const [integrationPage, setIntegrationPage] = useState(1);
@@ -463,11 +464,18 @@ export default function IntegrationsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
     };
+    const handleSettingsUpdated = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+    };
 
     if (socket) {
       socket.on('stats_updated', handleStatsUpdated);
       socket.on('integration_health_updated', handleStatsUpdated);
       socket.on('deliverability_updated', handleStatsUpdated);
+      socket.on('settings_updated', handleSettingsUpdated);
+      socket.on('integration_reputation_updated', handleStatsUpdated);
     }
 
     return () => {
@@ -475,6 +483,8 @@ export default function IntegrationsPage() {
         socket.off('stats_updated', handleStatsUpdated);
         socket.off('integration_health_updated', handleStatsUpdated);
         socket.off('deliverability_updated', handleStatsUpdated);
+        socket.off('settings_updated', handleSettingsUpdated);
+        socket.off('integration_reputation_updated', handleStatsUpdated);
       }
     };
   }, [queryClient, socket]);
@@ -919,7 +929,7 @@ export default function IntegrationsPage() {
                   "rounded-full px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-widest border-border/50 bg-muted/20",
                   getActivePlanId(userData) === 'enterprise' ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5" : "text-muted-foreground"
                 )}>
-                  {connectedMailboxesCount} / {limit === -1 ? '∞' : limit}
+                  {connectedMailboxesCount} / {limit === -1 ? connectedMailboxesCount : limit}
                 </Badge>
                 <Badge variant="outline" className="rounded-full px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] font-bold uppercase tracking-widest border-primary/20 bg-primary/5 text-primary">
                   Advanced
@@ -1394,7 +1404,7 @@ export default function IntegrationsPage() {
                                 ? "text-amber-500 border-amber-500/20 bg-amber-500/5"
                                 : "text-primary border-primary/20 bg-primary/5"
                           )}>
-                            {getActivePlanId(userData) === 'enterprise' ? "∞ UNLIMITED" : `${connectedMailboxesCount} / ${limit}`}
+                            {getActivePlanId(userData) === 'enterprise' ? `${connectedMailboxesCount} Connected` : `${connectedMailboxesCount} / ${limit}`}
                           </Badge>
                         </div>
                         {limit !== -1 && (
@@ -1444,6 +1454,14 @@ export default function IntegrationsPage() {
                         </Link>
                       )}
                       
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-full gap-2 border-white/10 bg-white/5"
+                        onClick={() => setShowMailboxModal(true)}
+                      >
+                        <span className="h-3.5 w-3.5">≡</span> View All
+                      </Button>
                       <Button
                         size="sm"
                         className="rounded-full gap-2 shadow-lg shadow-primary/20"
@@ -2008,6 +2026,110 @@ export default function IntegrationsPage() {
           </Card>
         </TabsContent>
       </Tabs >
+
+      {/* Mailbox List Modal */}
+      <Dialog open={showMailboxModal} onOpenChange={setShowMailboxModal}>
+        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>All Connected Mailboxes</DialogTitle>
+            <DialogDescription>
+              {allMailboxes.length} mailbox{allMailboxes.length !== 1 ? 'es' : ''} • delivery & reputation overview
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 py-2">
+            {allMailboxes.map((mailbox: any) => {
+              const deliveryRate = mailbox.deliveryRate !== null && mailbox.deliveryRate !== undefined ? mailbox.deliveryRate : null;
+              const bounceRate = mailbox.bounceRate !== null && mailbox.bounceRate !== undefined ? mailbox.bounceRate : null;
+              const placementRate = mailbox.placementRate !== null && mailbox.placementRate !== undefined ? mailbox.placementRate : null;
+              const repScore = mailbox.reputationScore !== null && mailbox.reputationScore !== undefined ? mailbox.reputationScore : null;
+              return (
+                <Card key={mailbox.id} className="border-border/40 bg-card/50 hover:bg-card transition-colors">
+                  <CardContent className="p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold truncate">{mailbox.email || 'Connected Mailbox'}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          {mailbox.provider === 'gmail' ? 'Gmail' : mailbox.provider === 'outlook' ? 'Outlook' : 'Custom SMTP'}
+                        </p>
+                      </div>
+                      <Badge className={cn(
+                        "text-[8px] shrink-0 ml-2",
+                        mailbox.connected ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"
+                      )}>
+                        {mailbox.connected ? 'Active' : 'Disconnected'}
+                      </Badge>
+                    </div>
+
+                    {/* DNS badges */}
+                    <div className="flex flex-wrap gap-1">
+                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
+                        mailbox.dns?.spf ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                      )}>SPF</Badge>
+                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
+                        mailbox.dns?.dkim ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                      )}>DKIM</Badge>
+                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
+                        mailbox.dns?.dmarc ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                      )}>DMARC</Badge>
+                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
+                        mailbox.dns?.mx ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                      )}>MX</Badge>
+                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
+                        !mailbox.dns?.blacklist ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
+                      )}>BL</Badge>
+                    </div>
+
+                    {/* Stats grid */}
+                    <div className="grid grid-cols-4 gap-2">
+                      <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 text-center">
+                        <p className={cn("text-xs font-bold", deliveryRate !== null ? deliveryRate >= 95 ? "text-emerald-500" : deliveryRate >= 80 ? "text-amber-500" : "text-red-500" : "text-sky-500")}>
+                          {deliveryRate !== null ? `${deliveryRate}%` : 'Init...'}
+                        </p>
+                        <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Delivery</p>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 text-center">
+                        <p className={cn("text-xs font-bold", bounceRate !== null ? bounceRate < 2 ? "text-emerald-500" : bounceRate < 5 ? "text-amber-500" : "text-red-500" : "text-sky-500")}>
+                          {bounceRate !== null ? `${bounceRate}%` : 'Init...'}
+                        </p>
+                        <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Bounce</p>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 text-center">
+                        <p className={cn("text-xs font-bold", placementRate !== null ? placementRate >= 90 ? "text-emerald-500" : placementRate >= 70 ? "text-amber-500" : "text-red-500" : "text-sky-500")}>
+                          {placementRate !== null ? `${placementRate}%` : 'Init...'}
+                        </p>
+                        <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Inbox</p>
+                      </div>
+                      <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 text-center">
+                        <p className={cn("text-xs font-bold", repScore !== null ? repScore >= 80 ? "text-emerald-500" : repScore >= 50 ? "text-amber-500" : "text-red-500" : "text-sky-500")}>
+                          {repScore !== null ? repScore : '—'}
+                        </p>
+                        <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Rep</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <Button variant="outline" size="sm" className="flex-1 h-7 text-[10px] rounded-lg"
+                        onClick={() => { setSelectedMailboxId(mailbox.id); setShowMailboxModal(false); }}>
+                        Focus
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-7 text-[10px] text-destructive hover:bg-destructive/10 rounded-lg"
+                        onClick={() => { setShowMailboxModal(false); confirmDisconnect(mailbox.provider, mailbox.id); }}>
+                        Disconnect
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+            {allMailboxes.length === 0 && (
+              <div className="col-span-2 text-center py-12 text-muted-foreground">
+                <Mail className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm">No mailboxes connected</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageWrapper>
   );
 }

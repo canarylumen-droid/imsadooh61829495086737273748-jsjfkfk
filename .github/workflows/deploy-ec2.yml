@@ -1,0 +1,66 @@
+# =============================================================================
+# Audnix — Deploy to EC2 (SSH-based deployment)
+# =============================================================================
+# Triggers: Push to main after CI Pipeline succeeds, or manual dispatch
+#
+# Required GitHub Secrets:
+#   AWS_EC2_HOST      — 54.227.164.241
+#   AWS_EC2_USER      — ubuntu
+#   AWS_EC2_SSH_KEY   — contents of the EC2 SSH private key (.pem)
+# =============================================================================
+
+name: Deploy to EC2
+
+on:
+  workflow_run:
+    workflows: ["CI Pipeline"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ${{ secrets.AWS_EC2_USER }}
+          key: ${{ secrets.AWS_EC2_SSH_KEY }}
+          port: 22
+          command_timeout: 30m
+          script: |
+            set -e
+
+            echo "=== Pulling latest code ==="
+            cd /home/ubuntu/app
+            git stash -- package.json package-lock.json 2>/dev/null || true
+            git pull origin main
+
+            echo "=== Installing dependencies ==="
+            npm ci
+
+            echo "=== Building client ==="
+            cd client
+            NODE_OPTIONS='--max-old-space-size=2048' npm run build:client
+
+            echo "=== Restarting all PM2 services ==="
+            cd /home/ubuntu/app
+            pm2 restart all
+
+            echo "=== Deploy complete ==="
+
+      - name: Notify success
+        if: success()
+        run: echo "Deployed commit ${{ github.sha }} to EC2"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "Deploy FAILED for commit ${{ github.sha }}"

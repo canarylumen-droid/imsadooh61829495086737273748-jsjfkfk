@@ -505,10 +505,8 @@ export class DrizzleStorage implements IStorage {
     
     // Isolation and Pre-campaign visibility
     if (options.integrationId) {
-      // Show leads assigned to THIS mailbox OR Inventory (unassigned leads)
-      // This ensures you see leads that *could* be assigned to this integration
-      const { or, isNull, eq } = await import('drizzle-orm');
-      conditions.push(or(eq(leads.integrationId, options.integrationId), isNull(leads.integrationId)) as any);
+      const { eq } = await import('drizzle-orm');
+      conditions.push(eq(leads.integrationId, options.integrationId) as any);
     }
 
     if (!options.includeArchived) {

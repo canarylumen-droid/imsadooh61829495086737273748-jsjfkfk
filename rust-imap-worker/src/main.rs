@@ -120,7 +120,7 @@ async fn main() -> Result<()> {
 
     loop {
         let job_opt: Option<(String, Vec<u8>)> = redis_conn.clone()
-            .brpop(&queue_name, 0.1).await.ok();
+            .brpop(&queue_name, 0.0).await.ok();
         let job_json = job_opt.map(|(_, v)| String::from_utf8_lossy(&v).to_string());
 
         if let Some(json) = job_json {

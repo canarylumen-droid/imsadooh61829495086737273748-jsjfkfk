@@ -9,6 +9,7 @@ import { decrypt } from '@shared/lib/crypto/encryption.js';
 import dns from 'dns';
 import { promisify } from 'util';
 import { LRUCache } from 'lru-cache';
+import { pendingInvalidations } from '@shared/lib/realtime/redis-pubsub.js';
 import { uploadAvatar, uploadToSupabase } from '@shared/lib/storage/file-upload.js';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -27,6 +28,8 @@ const statsCache = new LRUCache<string, any>({
  * Call this when leads, conversions, or messages are updated.
  */
 export function invalidateStatsCache(userId: string) {
+  // Also mark in redis-pubsub's invalidations set (for cross-process events)
+  pendingInvalidations.set(userId, true);
   // Delete both specific integration caches and the 'all' cache
   const keysToDelete = Array.from(statsCache.keys()).filter(k => k.startsWith(`${userId}:`));
   keysToDelete.forEach(k => statsCache.delete(k));
@@ -135,6 +138,13 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
 
     const { integrationId } = req.query;
     const cacheKey = `${userId}:${integrationId || 'all'}`;
+
+    // Check if a STATS_CACHE_INVALIDATE event was received — don't serve stale cache
+    if (pendingInvalidations.has(userId)) {
+      pendingInvalidations.delete(userId);
+      statsCache.delete(cacheKey);
+    }
+
     const cached = statsCache.get(cacheKey); // Use .get for NodeCache
 
     if (cached) { // NodeCache handles expiration internally
@@ -336,7 +346,7 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
     // [NEW] Workspace Benchmarks (Global Comparison)
     const { db } = await import('@shared/lib/db/db.js');
     const { leads: leadsSchema, messages: msgSchema } = await import('@audnix/shared');
-    const { sql: dSql, eq: dEq, and: dAnd, gt: dGt } = await import('drizzle-orm');
+    const { sql: dSql, eq: dEq, and: dAnd } = await import('drizzle-orm');
 
     // Phase 7 Fix: Use SQL aggregation for average lead score to avoid OOM
     const [scoreResult] = await db.select({
@@ -412,78 +422,96 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
         blacklist: mappedVerifications.some(v => v.result?.blacklist?.isBlacklisted)
     };
 
-    // Per-mailbox analytics
+    // Per-mailbox analytics — 3 grouped queries instead of 9 per mailbox
     const { emailTracking: emailTrackingSchema, bounceTracker: bounceTrackerSchema } = await import('@audnix/shared');
     const { emailMessages: emailMessagesSchema } = await import('@audnix/shared');
-    const perMailboxStats = await Promise.all(
-      integrations.map(async (int: any) => {
-        const [sent] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(emailTrackingSchema)
-          .where(dAnd(dEq(emailTrackingSchema.integrationId, int.id), dSql`${emailTrackingSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        const [opened] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(emailTrackingSchema)
-          .where(dAnd(dEq(emailTrackingSchema.integrationId, int.id), dGt(emailTrackingSchema.openCount, 0), dSql`${emailTrackingSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        const [clicked] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(emailTrackingSchema)
-          .where(dAnd(dEq(emailTrackingSchema.integrationId, int.id), dGt(emailTrackingSchema.clickCount, 0), dSql`${emailTrackingSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        // Replies = inbound messages to this mailbox (most important metric)
-        const [replies] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(emailMessagesSchema)
-          .where(dAnd(dEq(emailMessagesSchema.integrationId, int.id), dEq(emailMessagesSchema.direction, 'inbound'), dSql`${emailMessagesSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        // Inbox placement stats
-        const [inboxPlaced] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(emailTrackingSchema)
-          .where(dAnd(dEq(emailTrackingSchema.integrationId, int.id), dEq(emailTrackingSchema.placement, 'inbox'), dSql`${emailTrackingSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        const [spamPlaced] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(emailTrackingSchema)
-          .where(dAnd(dEq(emailTrackingSchema.integrationId, int.id), dEq(emailTrackingSchema.placement, 'spam'), dSql`${emailTrackingSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        // Spam complaints = recipient clicked "Report Spam" (feedback loop) OR server bounced as spam
-        const [spamComplaints] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(bounceTrackerSchema)
-          .where(dAnd(dEq(bounceTrackerSchema.integrationId, int.id), dEq(bounceTrackerSchema.bounceType, 'spam'), dSql`${bounceTrackerSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        // Hard bounces = permanent failure (invalid address, domain doesn't exist)
-        const [hardBounces] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(bounceTrackerSchema)
-          .where(dAnd(dEq(bounceTrackerSchema.integrationId, int.id), dEq(bounceTrackerSchema.bounceType, 'hard'), dSql`${bounceTrackerSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        // Soft bounces = temporary failure (mailbox full, server down)
-        const [softBounces] = await db.select({ count: dSql<number>`count(*)::int` })
-          .from(bounceTrackerSchema)
-          .where(dAnd(dEq(bounceTrackerSchema.integrationId, int.id), dEq(bounceTrackerSchema.bounceType, 'soft'), dSql`${bounceTrackerSchema.createdAt} > NOW() - INTERVAL '14 days'`));
-        const totalSent = sent?.count || 0;
-        const totalBounces = (hardBounces?.count || 0) + (softBounces?.count || 0) + (spamComplaints?.count || 0);
-        return {
-          integrationId: int.id,
-          provider: int.provider,
-          accountType: int.accountType,
-          connected: int.connected,
-          sent: totalSent,
-          opened: opened?.count || 0,
-          clicked: clicked?.count || 0,
-          replies: replies?.count || 0,
-          // Inbox placement
-          inboxPlaced: inboxPlaced?.count || 0,
-          spamPlaced: spamPlaced?.count || 0,
-          unknownPlacement: Math.max(0, totalSent - (inboxPlaced?.count || 0) - (spamPlaced?.count || 0)),
-          // Breakdown of delivery issues
-          hardBounces: hardBounces?.count || 0,
-          softBounces: softBounces?.count || 0,
-          spamComplaints: spamComplaints?.count || 0,
-          totalBounces,
-          // Rates
-          openRate: totalSent > 0 ? Number(((opened?.count || 0) / totalSent * 100).toFixed(1)) : 0,
-          clickRate: totalSent > 0 ? Number(((clicked?.count || 0) / totalSent * 100).toFixed(1)) : 0,
-          replyRate: totalSent > 0 ? Number(((replies?.count || 0) / totalSent * 100).toFixed(1)) : 0,
-          bounceRate: totalSent > 0 ? Number((totalBounces / totalSent * 100).toFixed(1)) : 0,
-          spamComplaintRate: totalSent > 0 ? Number(((spamComplaints?.count || 0) / totalSent * 100).toFixed(1)) : 0,
-          // Inbox placement rates
-          inboxPlacementRate: totalSent > 0 ? Number(((inboxPlaced?.count || 0) / totalSent * 100).toFixed(1)) : 0,
-          spamPlacementRate: totalSent > 0 ? Number(((spamPlaced?.count || 0) / totalSent * 100).toFixed(1)) : 0,
-          // Deliverability estimate (sent - bounces - complaints)
-          delivered: Math.max(0, totalSent - totalBounces),
-          deliverabilityRate: totalSent > 0 ? Number(((Math.max(0, totalSent - totalBounces) / totalSent) * 100).toFixed(1)) : 0,
-        };
-      })
-    );
+    const integrationIds = integrations.map((i: any) => i.id);
+    const fourteenDaysAgo = dSql`NOW() - INTERVAL '14 days'`;
+
+    // 1. Email tracking grouped by integrationId — all tracking stats in one query
+    const trackingStats = integrationIds.length > 0 ? await db.select({
+      integrationId: emailTrackingSchema.integrationId,
+      sent: dSql<number>`count(*)::int`,
+      opened: dSql<number>`count(*) FILTER (WHERE ${emailTrackingSchema.openCount} > 0)::int`,
+      clicked: dSql<number>`count(*) FILTER (WHERE ${emailTrackingSchema.clickCount} > 0)::int`,
+      inboxPlaced: dSql<number>`count(*) FILTER (WHERE ${emailTrackingSchema.placement} = 'inbox')::int`,
+      spamPlaced: dSql<number>`count(*) FILTER (WHERE ${emailTrackingSchema.placement} = 'spam')::int`,
+    }).from(emailTrackingSchema)
+      .where(dAnd(
+        dSql`${emailTrackingSchema.integrationId} = ANY(ARRAY[${dSql.raw(integrationIds.map(id => `'${id}'`).join(','))}]::uuid[])`,
+        dSql`${emailTrackingSchema.createdAt} > ${fourteenDaysAgo}`
+      ))
+      .groupBy(emailTrackingSchema.integrationId) : [];
+
+    // 2. Email messages (replies) grouped by integrationId
+    const replyStats = integrationIds.length > 0 ? await db.select({
+      integrationId: emailMessagesSchema.integrationId,
+      count: dSql<number>`count(*)::int`,
+    }).from(emailMessagesSchema)
+      .where(dAnd(
+        dSql`${emailMessagesSchema.integrationId} = ANY(ARRAY[${dSql.raw(integrationIds.map(id => `'${id}'`).join(','))}]::uuid[])`,
+        dEq(emailMessagesSchema.direction, 'inbound'),
+        dSql`${emailMessagesSchema.createdAt} > ${fourteenDaysAgo}`
+      ))
+      .groupBy(emailMessagesSchema.integrationId) : [];
+
+    // 3. Bounce tracker grouped by integrationId + bounceType
+    const bounceStats = integrationIds.length > 0 ? await db.select({
+      integrationId: bounceTrackerSchema.integrationId,
+      bounceType: bounceTrackerSchema.bounceType,
+      count: dSql<number>`count(*)::int`,
+    }).from(bounceTrackerSchema)
+      .where(dAnd(
+        dSql`${bounceTrackerSchema.integrationId} = ANY(ARRAY[${dSql.raw(integrationIds.map(id => `'${id}'`).join(','))}]::uuid[])`,
+        dSql`${bounceTrackerSchema.createdAt} > ${fourteenDaysAgo}`
+      ))
+      .groupBy(bounceTrackerSchema.integrationId, bounceTrackerSchema.bounceType) : [];
+
+    // Index results by integrationId for O(1) lookups
+    const trackingByInt = new Map(trackingStats.map(r => [r.integrationId, r]));
+    const replyByInt = new Map(replyStats.map(r => [r.integrationId, r]));
+    const bounceByInt = new Map<string, { hard: number; soft: number; spam: number }>();
+    for (const b of bounceStats) {
+      if (!bounceByInt.has(b.integrationId)) bounceByInt.set(b.integrationId, { hard: 0, soft: 0, spam: 0 });
+      const entry = bounceByInt.get(b.integrationId)!;
+      if (b.bounceType === 'hard') entry.hard = b.count;
+      else if (b.bounceType === 'soft') entry.soft = b.count;
+      else if (b.bounceType === 'spam') entry.spam = b.count;
+    }
+
+    const perMailboxStats = integrations.map((int: any) => {
+      const t = trackingByInt.get(int.id);
+      const r = replyByInt.get(int.id);
+      const b = bounceByInt.get(int.id) || { hard: 0, soft: 0, spam: 0 };
+      const totalSent = t?.sent || 0;
+      const totalBounces = b.hard + b.soft + b.spam;
+      return {
+        integrationId: int.id,
+        provider: int.provider,
+        accountType: int.accountType,
+        connected: int.connected,
+        sent: totalSent,
+        opened: t?.opened || 0,
+        clicked: t?.clicked || 0,
+        replies: r?.count || 0,
+        inboxPlaced: t?.inboxPlaced || 0,
+        spamPlaced: t?.spamPlaced || 0,
+        unknownPlacement: Math.max(0, totalSent - (t?.inboxPlaced || 0) - (t?.spamPlaced || 0)),
+        hardBounces: b.hard,
+        softBounces: b.soft,
+        spamComplaints: b.spam,
+        totalBounces,
+        openRate: totalSent > 0 ? Number(((t?.opened || 0) / totalSent * 100).toFixed(1)) : 0,
+        clickRate: totalSent > 0 ? Number(((t?.clicked || 0) / totalSent * 100).toFixed(1)) : 0,
+        replyRate: totalSent > 0 ? Number(((r?.count || 0) / totalSent * 100).toFixed(1)) : 0,
+        bounceRate: totalSent > 0 ? Number((totalBounces / totalSent * 100).toFixed(1)) : 0,
+        spamComplaintRate: totalSent > 0 ? Number((b.spam / totalSent * 100).toFixed(1)) : 0,
+        inboxPlacementRate: totalSent > 0 ? Number(((t?.inboxPlaced || 0) / totalSent * 100).toFixed(1)) : 0,
+        spamPlacementRate: totalSent > 0 ? Number(((t?.spamPlaced || 0) / totalSent * 100).toFixed(1)) : 0,
+        delivered: Math.max(0, totalSent - totalBounces),
+        deliverabilityRate: totalSent > 0 ? Number(((Math.max(0, totalSent - totalBounces) / totalSent) * 100).toFixed(1)) : 0,
+      };
+    });
 
     const responseData = {
       ...stats,
@@ -1228,6 +1256,28 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
         const wmByIntegration = new Map(allWarmup.map(w => [w.integrationId, w]));
 
         const results: any[] = [];
+
+        // Single grouped query for warmup interactions — replaces N+1 per mailbox
+        const enrolledIds = allWarmup.filter(w => w.id).map(w => w.id);
+        let interactionStats = new Map<string, { sent: number; bounced: number; opened: number }>();
+        if (enrolledIds.length > 0) {
+            try {
+                const agg = await db.select({
+                    mailboxId: warmupInteractions.fromMailboxId,
+                    sent: sqlFn<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound')::int`,
+                    bounced: sqlFn<number>`count(*) filter (where ${warmupInteractions.status} IN ('bounced', 'failed'))::int`,
+                    opened: sqlFn<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound' AND ${warmupInteractions.status} = 'delivered')::int`,
+                }).from(warmupInteractions)
+                    .where(inArray(warmupInteractions.fromMailboxId, enrolledIds))
+                    .groupBy(warmupInteractions.fromMailboxId);
+                interactionStats = new Map(agg.map(r => [r.mailboxId, {
+                    sent: Number(r.sent) || 0,
+                    bounced: Number(r.bounced) || 0,
+                    opened: Number(r.opened) || 0,
+                }]));
+            } catch (_) {}
+        }
+
         for (const int of emailInts) {
             try {
                 const wm = wmByIntegration.get(int.id);
@@ -1243,17 +1293,12 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
 
                 let totalSent = 0, totalBounced = 0, totalOpened = 0;
                 if (isEnrolled && wm) {
-                    try {
-                        const [sentRow] = await db.select({ count: sqlFn`count(*)::int` }).from(warmupInteractions)
-                            .where(and(eq(warmupInteractions.fromMailboxId, wm.id), eq(warmupInteractions.direction, 'outbound')));
-                        totalSent = Number(sentRow?.count) || 0;
-                        const [bounceRow] = await db.select({ count: sqlFn`count(*)::int` }).from(warmupInteractions)
-                            .where(and(eq(warmupInteractions.fromMailboxId, wm.id), inArray(warmupInteractions.status, ['bounced', 'failed'])));
-                        totalBounced = Number(bounceRow?.count) || 0;
-                        const [openRow] = await db.select({ count: sqlFn`count(*)::int` }).from(warmupInteractions)
-                            .where(and(eq(warmupInteractions.fromMailboxId, wm.id), eq(warmupInteractions.status, 'delivered')));
-                        totalOpened = Number(openRow?.count) || 0;
-                    } catch (_) {}
+                    const stats = interactionStats.get(wm.id);
+                    if (stats) {
+                        totalSent = stats.sent;
+                        totalBounced = stats.bounced;
+                        totalOpened = stats.opened;
+                    }
                 }
 
                 const warmupPercent = isWarmingUp && dailyLimit > 0
@@ -1268,7 +1313,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
 
                 results.push({
                     mailboxId: int.id,
-                    email: (int as any).smtpUser || (int as any).email || 'Unknown',
+                    email: (int as any).accountType || (int as any).smtpUser || (int as any).email || (int as any).smtp_username || ((int as any).encryptedMeta ? 'Connected' : 'Unknown'),
                     provider: int.provider,
                     isWarmingUp,
                     isEnrolled,

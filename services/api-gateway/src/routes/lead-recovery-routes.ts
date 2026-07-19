@@ -79,6 +79,7 @@ async function getMailboxDetails(tenantId: string) {
         lastSyncAt: state?.lastSyncAt?.toISOString?.() || null,
         syncRequestedAt: state?.syncRequestedAt?.toISOString?.() || null,
         syncStatus: state?.syncStatus || "idle",
+        errorMessage: state?.errorMessage || null,
       };
     })
   );
@@ -172,6 +173,7 @@ router.post("/sync", async (req, res) => {
       availableAt: null,
       syncRequestedAt,
       syncStatus: "queued",
+      errorMessage: null,
     });
   }
 
