@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   connectMySql,
   hasMySqlUri,
+  getMySqlPool,
   getLeadRecoveryStates,
   getActiveLeadRecoveryState,
   promptConfigExists,
@@ -203,6 +204,9 @@ router.post("/sync", async (req, res) => {
 
 router.post("/deactivate", async (req, res) => {
   const tenantId = tenantIdFrom(req);
+  if (!hasMySqlUri() || !getMySqlPool()) {
+    return res.status(503).json({ error: "Lead recovery database is not available" });
+  }
   await deactivateAllRecoveryStates(tenantId);
   recoveryEvents.emitRecovery({ tenantId, action: "RecoveryDeactivated" });
   res.json({ success: true });

@@ -1,14 +1,171 @@
-To build a self-hosted, lightning-fast deliverability and inbox-placement tracking engine inside your existing Rust system—without seeds, open pixels, or Google Postmaster dependencies—you must build an Asynchronous Telemetry & Active Handshake Probe Engine.
-Because Gmail and custom enterprise servers treat a connection differently based on structural patterns, your Rust application needs to analyze the exact milestones of the SMTP handshake, monitor internal state leaks, and capture automated out-of-band server responses.
-Below is the architectural breakdown and the fully functional production-grade Rust blueprint using tokio, trust-dns-resolver, and custom async TCP/TLS streams to build this internal intelligence engine.
-------------------------------
-## Architecture Strategy: The 4 Core Telemetry Pillars
 
-   1. Precision Tarpit & Latency Delta Timing (tokio::time::Instant)
-   * The Logic: When a mail server suspects an IP or domain of spamming, it actively engages in "tarpitting" (intentionally delaying responses after RCPT TO or DATA commands to burn spammer resources). A clean inbox path responds in 15–40ms. A spam/greylist path will suddenly spike to 1000ms–5000ms or drop the connection right after DATA.
-   2. SMTP Command Fingerprinting & 4xx/5xx Inspection
-   * The Logic: Catching specific SMTP extension strings during EHLO and analyzing variations in error responses. If a custom domain returns an immediate 250 OK but Gmail pauses and responds with an explicit multi-line payload, your engine decodes this to score placement.
-   3. Out-of-Band DMARC/RUF & ARF Bounce Parser
+
+Toggle theme
+
+
+Calendar
+Manage bookings and availability
+
+
+treasure@network.replyflow.pro
+Copy Booking Link
+Settings
+New Event
+0
+
+Total Bookings
+
+0
+
+Upcoming
+
+0
+
+AI Booked
+
+Disconnected
+
+Calendly
+
+
+July 2026
+
+Today
+Month
+Week
+Sun
+Mon
+Tue
+Wed
+Thu
+Fri
+Sat
+
+28
+
+29
+
+30
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+
+9
+
+10
+
+11
+
+12
+
+13
+
+14
+
+15
+
+16
+
+17
+
+18
+
+19
+
+20
+
+21
+
+22
+
+23
+
+24
+
+25
+
+26
+
+27
+
+28
+
+29
+
+30
+
+31
+
+1
+
+2
+
+3
+
+4
+
+5
+
+6
+
+7
+
+8
+Upcoming
+No upcoming bookings
+Calendly
+
+Not connected
+
+Connect
+Google Calendar
+
+Connected
+
+Connected
+AI Activity
+act
+9:07:01 PM
+Good timing (80%) with moderate intent (50%) - opportune moment for DM
+
+act
+9:51:16 PM
+Autonomous outreach dispatch triggered
+
+act
+9:46:17 PM
+Autonomous outreach dispatch triggered
+
+act
+9:45:16 PM
+Autonomous outreach dispatch triggered
+
+Available Slots
+Mon, Jul 20
+10:00 AM
+Mon, Jul 20
+10:30 AM
+Mon, Jul 20
+11:00 AM
+Mon, Jul 20
+11:30 AM
+Mon, Jul 20
+12:00 PM
+Mon, Jul 20
+12:30 PM   3. Out-of-Band DMARC/RUF & ARF Bounce Parser
    * The Logic: If an email is sent to a custom domain or Gmail and hits a rigid spam posture, the receiving MTA will generate an ARF (Abuse Reporting Format) or DMARC Failure Report (RUF). Your app runs a background parser that instantly scans a dedicated inbound mailbox for these specific XML payloads to flag a placement failure.
    4. Active MX Pre-Flight Probing
    * The Logic: Before sending a real message, your Rust code performs an ultra-fast simulation handshake up to the DATA command, measures the server’s structural reaction, and backs out gracefully with a RSET or QUIT to calculate risk score profiles dynamically.

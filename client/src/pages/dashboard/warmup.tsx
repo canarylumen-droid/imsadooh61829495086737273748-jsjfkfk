@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { useMailbox } from "@/hooks/use-mailbox";
+import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
@@ -110,8 +111,9 @@ export default function WarmupPage() {
   const hasMailboxConnected = mailboxes.length > 0;
 
   const avgReputation = warmupStatuses.length > 0
-    ? Math.round(warmupStatuses.reduce((s, m) => s + m.reputationScore, 0) / warmupStatuses.length)
-    : 0;
+    ? Math.round(warmupStatuses.reduce((s, m) => s + (m.reputationScore || 0), 0) / warmupStatuses.length)
+    : null;
+  const hasReputationData = warmupStatuses.some(m => m.totalSent > 0);
 
   const getStageLabel = (pct: number) => {
     if (pct <= 10) return "Day 1-2: Warming Up";
@@ -194,10 +196,11 @@ export default function WarmupPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Badge variant={activeMailboxes.length > 0 ? "default" : "secondary"} className="text-xs">
+          <MailboxSwitcher value={selectedMailboxId} onValueChange={setSelectedMailboxId} />
+          <Badge variant={activeMailboxes.length > 0 ? "default" : "secondary"} className={cn("text-xs shrink-0", activeMailboxes.length > 0 && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20")}>
             {activeMailboxes.length > 0
-              ? `${activeMailboxes.length} warming`
-              : warmupStatuses.length > 0 ? "All warmed" : "—"}
+              ? `Warmup set (${activeMailboxes.length})`
+              : warmupStatuses.length > 0 ? "Warmup paused" : "—"}
           </Badge>
           {warmupStatuses.length > 0 && (
             <Button
@@ -261,7 +264,7 @@ export default function WarmupPage() {
                 <Shield className="h-5 w-5 text-purple-500" />
               </div>
               <div className="min-w-0">
-                <p className="text-2xl font-bold">{avgReputation}</p>
+                <p className="text-2xl font-bold">{hasReputationData ? avgReputation : '--'}</p>
                 <p className="text-xs text-muted-foreground truncate">Avg Reputation</p>
               </div>
             </div>
@@ -444,8 +447,8 @@ export default function WarmupPage() {
 
                     {/* Reputation */}
                     <div className="text-center hidden md:block">
-                      <p className={cn("text-sm font-bold", getReputationColor(mb.reputationScore))}>
-                        {mb.reputationScore}
+                      <p className={cn("text-sm font-bold", mb.totalSent > 0 ? getReputationColor(mb.reputationScore) : "text-muted-foreground")}>
+                        {mb.totalSent > 0 ? mb.reputationScore : '--'}
                       </p>
                       <div className="flex items-center justify-center gap-0.5">
                         <Thermometer className={cn("h-2.5 w-2.5", getReputationColor(mb.reputationScore))} />
