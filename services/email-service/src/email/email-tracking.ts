@@ -254,7 +254,19 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
             placement = CASE WHEN placement IN ('unknown', 'delivered') THEN 'inbox' ELSE placement END,
             placement_updated_at = COALESCE(placement_updated_at, ${event.timestamp.toISOString()})
         WHERE token = ${event.messageId}
-      `);
+      `).catch(async (sqlErr: any) => {
+        if (sqlErr?.message?.includes('placement_updated_at')) {
+          await db.execute(sql`
+            UPDATE email_tracking 
+            SET first_opened_at = COALESCE(first_opened_at, ${event.timestamp.toISOString()}),
+                open_count = COALESCE(open_count, 0) + 1,
+                placement = CASE WHEN placement IN ('unknown', 'delivered') THEN 'inbox' ELSE placement END
+            WHERE token = ${event.messageId}
+          `);
+        } else {
+          throw sqlErr;
+        }
+      });
     } else if (event.type === 'click') {
       await db.execute(sql`
         UPDATE email_tracking 
