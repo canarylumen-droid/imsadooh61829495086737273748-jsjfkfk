@@ -90,7 +90,7 @@ impl ImapConnection {
         }
     }
 
-    pub async fn select(&mut self, folder: &str) -> Result<()> {
+    pub async fn select(&mut self, folder: &str) -> Result<String> {
         let tag = self.next_tag();
         let cmd = format!("{} SELECT \"{}\"\r\n", tag, folder);
         self.send_command(&cmd).await?;
@@ -99,7 +99,7 @@ impl ImapConnection {
         if response.contains(&format!("{} OK", tag)) {
             self.folder = folder.to_string();
             debug!("Selected folder: {}", folder);
-            Ok(())
+            Ok(response)
         } else {
             anyhow::bail!("SELECT failed for {}: {}", folder, response);
         }
