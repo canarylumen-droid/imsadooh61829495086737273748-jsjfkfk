@@ -18,6 +18,7 @@ import { warmupInboundQueue } from '../queues/warmup-queues.js';
 import { seedFleetManager } from '../engine/seed-fleet-manager.js';
 import { reputationRecovery } from '../engine/reputation-recovery.js';
 import crypto from 'crypto';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 function decryptWarmupSecret(ciphertext: string): string {
   if (!ciphertext || !ciphertext.includes(':')) return ciphertext;
@@ -214,7 +215,8 @@ export function createOutboundWorker(): Worker {
 
       // Only advance thread, increment daily count, and queue reply if send succeeded
       if (result.success) {
-        await threadManager.advanceThread(
+        clusterSync.notifyStatsUpdated(sender[0].userId).catch(() => {});
+        clusterSync.notifyWarmupUpdated(sender[0].userId, { mailboxId: sender[0].integrationId, status: 'active' }).catch(() => {});
           threadId,
           messageId,
           'outbound',

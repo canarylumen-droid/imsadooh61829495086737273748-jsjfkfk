@@ -25,8 +25,10 @@ interface MailboxWarmup {
   email: string;
   provider: string;
   isWarmingUp: boolean;
+  isEnrolled: boolean;
   dailyLimit: number;
-  providerMax: number;
+  dailySentCount: number;
+  dailyReceivedCount: number;
   daysSinceConnected: number;
   warmupPercent: number;
   reputationScore: number;
@@ -34,7 +36,6 @@ interface MailboxWarmup {
   totalBounced: number;
   totalOpened: number;
   warmupStatus: string;
-  warmupLimit: number;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -152,13 +153,6 @@ export default function WarmupPage() {
     toggleWarmupMutation.mutate({ mailboxIds: [mailboxId], enabled });
   };
 
-  // Compute warmup email count per mailbox
-  const getWarmupEmailCount = (mb: MailboxWarmup) => {
-    if (mb.warmupLimit > 0) return mb.warmupLimit;
-    const pct = 0.10 + ((mb.mailboxId.charCodeAt(mb.mailboxId.length - 1) % 15) / 100);
-    return Math.max(4, Math.min(15, Math.round(mb.dailyLimit * pct)));
-  };
-
   if (!hasMailboxConnected) {
     return (
       <div className="space-y-6">
@@ -251,8 +245,8 @@ export default function WarmupPage() {
                 <CheckCircle2 className="h-5 w-5 text-emerald-500" />
               </div>
               <div className="min-w-0">
-                <p className="text-2xl font-bold">{warmupStatuses.filter(m => !m.isWarmingUp && m.warmupStatus === 'none').length}</p>
-                <p className="text-xs text-muted-foreground truncate">Fully Warmed</p>
+                <p className="text-2xl font-bold">{warmupStatuses.filter(m => !m.isEnrolled).length}</p>
+                <p className="text-xs text-muted-foreground truncate">Not Enrolled</p>
               </div>
             </div>
           </CardContent>
@@ -397,7 +391,7 @@ export default function WarmupPage() {
               {/* Header Row */}
               <div className="hidden md:grid grid-cols-[1fr_100px_100px_80px_80px_70px] gap-3 px-3 py-2 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                 <span>Mailbox</span>
-                <span className="text-center">Warmup/Day</span>
+                <span className="text-center">Sent Today</span>
                 <span className="text-center">Daily Limit</span>
                 <span className="text-center">Rep</span>
                 <span className="text-center">Progress</span>
@@ -406,7 +400,7 @@ export default function WarmupPage() {
 
               {pagedMailboxes.map((mb) => {
                 const warmupEnabled = mb.warmupStatus === 'active';
-                const warmupCount = getWarmupEmailCount(mb);
+                const warmupCount = mb.dailySentCount;
                 return (
                   <div
                     key={mb.mailboxId}
@@ -442,7 +436,7 @@ export default function WarmupPage() {
                     {/* Daily Limit */}
                     <div className="text-center hidden md:block">
                       <p className="text-sm font-medium">{mb.dailyLimit}</p>
-                      <p className="text-[9px] text-muted-foreground">{mb.providerMax} max</p>
+                      <p className="text-[9px] text-muted-foreground">{mb.dailyLimit} limit</p>
                     </div>
 
                     {/* Reputation */}
@@ -527,7 +521,7 @@ export default function WarmupPage() {
               <div className="pt-4 border-t border-border/40 mt-4">
                 <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
                   Warmup sends {activeMailboxes.length > 0 ? 'active' : 'no'} — warmup emails build reputation without counting toward your daily sending limit.
-                  {activeMailboxes.length > 0 && ` ${activeMailboxes.length} mailbox(es) warming up with a total of ${activeMailboxes.reduce((s, m) => s + getWarmupEmailCount(m), 0)} warmup emails/day.`}
+                  {activeMailboxes.length > 0 && ` ${activeMailboxes.length} mailbox(es) warming up with a total of ${activeMailboxes.reduce((s, m) => s + m.dailySentCount, 0)} warmup emails sent today.`}
                 </p>
               </div>
             </>
@@ -551,7 +545,7 @@ export default function WarmupPage() {
                   <div className="min-w-0">
                     <p className="font-medium truncate">{mb.email}</p>
                     <p className="text-xs text-muted-foreground">
-                      {mb.provider} • {getWarmupEmailCount(mb)} warmup/day • {mb.dailyLimit} outreach/day
+                      {mb.provider} • {mb.dailySentCount} sent today • {mb.dailyLimit} limit
                     </p>
                   </div>
                   <Badge variant="outline" className="text-amber-500 border-amber-500/30 shrink-0 ml-2">

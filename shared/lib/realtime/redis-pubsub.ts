@@ -114,6 +114,7 @@ class RedisPubSub {
           } catch (_) {}
           break;
         case 'DELIVERABILITY_UPDATE': wsSync.notifyDeliverabilityUpdated(userId, payload); break;
+        case 'WARMUP_UPDATE': wsSync.notifyWarmupUpdated(userId, payload); break;
       }
     } catch (_) {}
   }

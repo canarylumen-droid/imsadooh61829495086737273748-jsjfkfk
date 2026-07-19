@@ -479,6 +479,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/email/stats'] });
       queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
       queryClient.invalidateQueries({ queryKey: ['/api/warmup/status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/warmup-status'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
     });
 
@@ -503,6 +504,13 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
         queryClient.invalidateQueries({ queryKey: [`/api/outreach/campaigns/${payload.campaignId}/stats`] });
       }
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
+    });
+
+    // WARMUP UPDATES
+    socketInstance.on('warmup_update', () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/warmup-status'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/warmup/activity'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/warmup/status'] });
     });
 
     // ENGINE ALERTS (SAFETY INTERLOCK)
