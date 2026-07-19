@@ -1526,9 +1526,7 @@ export default function IntegrationsPage() {
                               <h4 className={cn("text-xs sm:text-sm font-bold transition-colors truncate max-w-[160px] sm:max-w-xs", !mailbox.connected ? "text-muted-foreground" : "text-foreground")}>
                                 {mailbox.email}
                               </h4>
-                              {mailbox.connected ? (
-                                <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Active</Badge>
-                              ) : (
+                              {!mailbox.connected && (
                                 <Badge variant="outline" className="text-muted-foreground border-muted text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Disconnected</Badge>
                               )}
                               {mailbox.connected && mailbox.warmupStatus === 'active' && (

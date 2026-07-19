@@ -140,8 +140,9 @@ export default function DeliverabilityPage() {
   const totalBounces = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realBounceCount ?? 0), 0);
   const totalSpam = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realSpamCount ?? 0), 0);
   const totalSent = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realSentCount ?? 0), 0);
-  const globalBounceRate = totalSent > 0 ? ((totalBounces / totalSent) * 100).toFixed(1) : null;
-  const globalSpamRate = totalSent > 0 ? ((totalSpam / totalSent) * 100).toFixed(1) : null;
+  const hasRealPlacementData = enrichedMailboxes.some(m => (m._realInboxCount ?? 0) > 0 || (m._realSpamCount ?? 0) > 0 || (m._realBounceCount ?? 0) > 0);
+  const globalBounceRate = totalSent > 0 && hasRealPlacementData ? ((totalBounces / totalSent) * 100).toFixed(1) : null;
+  const globalSpamRate = totalSent > 0 && hasRealPlacementData ? ((totalSpam / totalSent) * 100).toFixed(1) : null;
 
   return (
     <PageWrapper className="space-y-6">
@@ -330,7 +331,7 @@ export default function DeliverabilityPage() {
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Inbox Rate</p>
                           <p className={cn("text-sm font-bold", inboxRate >= 90 ? "text-emerald-500" : inboxRate >= 50 ? "text-amber-500" : "text-red-500")}>
-                            {mb._hasRealData ? `${inboxRate}%` : '—'}
+                            {mb._hasRealData && (mb._realInboxCount > 0 || mb._realSpamCount > 0 || mb._realBounceCount > 0) ? `${inboxRate}%` : '—'}
                           </p>
                         </div>
                         <div>
@@ -378,11 +379,16 @@ function InboxPlacementPie() {
 
   const { totals } = data || { totals: { sent: 0, inbox: 0, spam: 0, bounce: 0, rate: '0%' } };
 
+  const pending = totals.sent - totals.inbox - totals.spam - totals.bounce;
+
   const pieData = [
     { name: 'Inbox', value: totals.inbox, color: '#10b981' },
+    { name: 'Pending', value: pending, color: '#6b7280' },
     { name: 'Spam', value: totals.spam, color: '#ef4444' },
     { name: 'Bounce', value: totals.bounce, color: '#f59e0b' },
   ].filter(d => d.value > 0);
+
+  const hasRealPlacement = totals.inbox > 0 || totals.spam > 0 || totals.bounce > 0;
 
   const dayLabel = pieDays === 1 ? '24h' : `${pieDays}d`;
 
@@ -428,12 +434,15 @@ function InboxPlacementPie() {
                   </div>
                 ))}
                 <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/20">
-                  {totals.sent} total tracked &middot; {totals.rate} inbox rate
+                  {totals.sent} tracked{hasRealPlacement ? ` · ${totals.rate} inbox` : pending > 0 ? ' · awaiting opens' : ''}
                 </p>
               </div>
             </div>
           ) : (
-            <p className="text-xs text-muted-foreground">No tracked email data for this period — send emails to see placement breakdown.</p>
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">No emails tracked this period.</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">Send emails to see placement breakdown.</p>
+            </div>
           )}
         </CardContent>
       </Card>
