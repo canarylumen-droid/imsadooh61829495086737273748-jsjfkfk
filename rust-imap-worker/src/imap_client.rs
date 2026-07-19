@@ -143,15 +143,22 @@ impl ImapConnection {
         let cmd = format!("{} IDLE\r\n", tag);
         self.send_command(&cmd).await?;
 
-        let response = self.read_response().await?;
-        if response.contains("+ idling") || response.contains("+ IDLE") {
-            self.is_idle = true;
-            self.last_activity = std::time::Instant::now();
-            debug!("Entered IDLE mode on {}", self.folder);
-            Ok(())
-        } else {
-            anyhow::bail!("IDLE command failed: {}", response);
+        // IDLE returns "+ idling" (untagged continuation), NOT a tagged response.
+        // Use read_raw() to get the immediate continuation response.
+        for _ in 0..5 {
+            let response = self.read_raw().await?;
+            if response.contains("+ idling") || response.contains("+ IDLE") {
+                self.is_idle = true;
+                self.last_activity = std::time::Instant::now();
+                debug!("Entered IDLE mode on {}", self.folder);
+                return Ok(());
+            }
+            if response.contains(&format!("{} NO", tag)) || response.contains(&format!("{} BAD", tag)) {
+                anyhow::bail!("IDLE command failed: {}", response);
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
         }
+        anyhow::bail!("IDLE enter timeout: no + idling response after 5 attempts");
     }
 
     pub async fn idle_done(&mut self) -> Result<()> {
