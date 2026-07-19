@@ -7,6 +7,7 @@ use tokio::sync::Semaphore;
 mod imap_client;
 mod dmarc_ruf;
 mod seed_monitor;
+mod mailbox_monitor;
 
 use imap_client::ImapConnection;
 
@@ -102,6 +103,19 @@ async fn main() -> Result<()> {
         });
     }
 
+    // Start Mailbox Monitor (user mailbox IDLE connections)
+    if std::env::var("DISABLE_MAILBOX_MONITOR").is_err() {
+        log::info!("Starting Mailbox Monitor for user mailboxes");
+        let monitor = mailbox_monitor::MailboxMonitor::new(redis_url.clone());
+        tokio::spawn(async move {
+            if let Err(e) = monitor.run().await {
+                log::error!("Mailbox monitor failed: {}", e);
+            }
+        });
+    } else {
+        log::info!("Mailbox Monitor DISABLED via DISABLE_MAILBOX_MONITOR");
+    }
+
     let queue_name = std::env::var("IMAP_QUEUE_NAME")
         .unwrap_or_else(|_| "imap-queue".to_string());
     let result_queue = std::env::var("IMAP_RESULT_QUEUE_NAME")
@@ -116,15 +130,16 @@ async fn main() -> Result<()> {
     let redis_conn = redis::aio::ConnectionManager::new(redis_client.clone()).await?;
     let semaphore = Arc::new(Semaphore::new(max_concurrent));
 
-    log::info!("Listening on queue: {}", queue_name);
+    log::info!("Listening on queue: {} (event-driven, infinite block)", queue_name);
 
+    // Event-driven loop: BRPOP with 0.0 = infinite block, zero polling
     loop {
         let job_opt: Option<(String, Vec<u8>)> = redis_conn.clone()
             .brpop(&queue_name, 0.0).await.ok();
-        let job_json = job_opt.map(|(_, v)| String::from_utf8_lossy(&v).to_string());
 
-        if let Some(json) = job_json {
-            let job: ImapJob = match serde_json::from_str(&json) {
+        if let Some((_, raw_bytes)) = job_opt {
+            let job_json = String::from_utf8_lossy(&raw_bytes).to_string();
+            let job: ImapJob = match serde_json::from_str(&job_json) {
                 Ok(j) => j,
                 Err(e) => {
                     log::error!("Failed to deserialize IMAP job: {}", e);
@@ -132,6 +147,8 @@ async fn main() -> Result<()> {
                 }
             };
 
+            // Skip if this integration is being handled by the mailbox monitor
+            // (the mailbox monitor handles persistent IDLE, this queue is for ad-hoc jobs)
             let permit = semaphore.clone().acquire_owned().await.unwrap();
             let redis = redis_conn.clone();
             let rq = result_queue.clone();

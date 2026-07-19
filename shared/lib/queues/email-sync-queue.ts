@@ -88,17 +88,33 @@ export function startEmailSyncWorker() {
 
             console.log(`[EmailSyncQueue] 📬 process-new-mail for ${integrationId} (user ${userId}, count ${count})`);
 
-            try {
-              // Fetch the integration to build IMAP connection config
-              const integration = await getCachedIntegration(integrationId);
-              if (!integration || !integration.connected) {
-                console.warn(`[EmailSyncQueue] Integration ${integrationId} not connected — skipping new-mail fetch`);
-                return;
-              }
+              try {
+                // Fetch the integration to build IMAP connection config
+                const integration = await getCachedIntegration(integrationId);
+                if (!integration || !integration.connected) {
+                  console.warn(`[EmailSyncQueue] Integration ${integrationId} not connected — skipping new-mail fetch`);
+                  return;
+                }
 
-              // Fetch only the newest messages (envelope only, no body — keeps this fast)
-              // imapIdleManager handles IMAP session reuse
-              const newMessages = await imapIdleManager.fetchNewMessages(userId, integrationId, count || 1);
+                // Skip if Rust mailbox monitor is handling this integration (custom_email only)
+                if (integration.provider === 'custom_email') {
+                  try {
+                    const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+                    const redis = await getRedisClient();
+                    if (redis) {
+                      const key = `mailbox-monitor:active:${integrationId}`;
+                      const rustActive = await redis.exists(key);
+                      if (rustActive) {
+                        // Rust is handling IDLE for this mailbox — skip Node.js processing
+                        return;
+                      }
+                    }
+                  } catch { /* non-critical */ }
+                }
+
+                // Fetch only the newest messages (envelope only, no body — keeps this fast)
+                // imapIdleManager handles IMAP session reuse
+                const newMessages = await imapIdleManager.fetchNewMessages(userId, integrationId, count || 1);
 
               if (!newMessages || newMessages.length === 0) {
                 // Even without a message, ping the UI to refresh (EXISTS may be a flag change)

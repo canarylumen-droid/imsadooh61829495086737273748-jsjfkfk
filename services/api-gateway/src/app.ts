@@ -223,5 +223,15 @@ export function createApp() {
     initForensicHandler().catch((e: any) => console.warn('[App] Forensic handler init:', e.message));
   });
 
+  // Start inbound email handler for Rust IMAP-detected replies
+  import('@shared/lib/realtime/inbound-email-handler.js').then(({ initInboundEmailHandler }) => {
+    initInboundEmailHandler().catch((e: any) => console.warn('[App] Inbound email handler init:', e.message));
+  });
+
+  // Push all active custom email integrations to the Rust mailbox monitor
+  import('./boot-rust-monitor.js').then(({ pushActiveMailboxesToRust }) => {
+    pushActiveMailboxesToRust().catch((e: any) => console.warn('[App] Boot Rust monitor:', e.message));
+  });
+
   return app;
 }

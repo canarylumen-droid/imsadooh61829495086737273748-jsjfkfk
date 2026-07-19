@@ -22,7 +22,7 @@ impl ImapConnection {
         Self {
             stream: None,
             tag_counter: 0,
-            buffer: BytesMut::with_capacity(8192),
+            buffer: BytesMut::with_capacity(16384),
             is_authenticated: false,
             is_idle: false,
             last_activity: std::time::Instant::now(),
@@ -64,7 +64,6 @@ impl ImapConnection {
             anyhow::bail!("Non-TLS IMAP is not supported for security reasons");
         }
 
-        // Read server greeting (untagged "* OK ..." line)
         self.buffer.clear();
         let greeting = self.read_raw().await?;
         if !greeting.contains("* OK") && !greeting.contains("* PREAUTH") {
@@ -106,6 +105,39 @@ impl ImapConnection {
         }
     }
 
+    /// Extract UIDNEXT from SELECT response — the next UID to be assigned.
+    /// Returns 0 if not found (fallback: use fetch from 1).
+    pub fn get_uidnext(&self, response: &str) -> u32 {
+        for line in response.lines() {
+            let lower = line.trim().to_lowercase();
+            if let Some(pos) = lower.find("uidnext") {
+                let after = &lower[pos + 7..].trim();
+                if let Some(space) = after.find(' ') {
+                    if let Ok(uid) = after[..space].trim().parse::<u32>() {
+                        return uid;
+                    }
+                }
+            }
+        }
+        0
+    }
+
+    /// Extract UIDVALIDITY from SELECT response.
+    pub fn get_uidvalidity(&self, response: &str) -> u32 {
+        for line in response.lines() {
+            let lower = line.trim().to_lowercase();
+            if let Some(pos) = lower.find("uidvalidity") {
+                let after = &lower[pos + 11..].trim();
+                if let Some(space) = after.find(' ') {
+                    if let Ok(uid) = after[..space].trim().parse::<u32>() {
+                        return uid;
+                    }
+                }
+            }
+        }
+        0
+    }
+
     pub async fn idle(&mut self) -> Result<()> {
         let tag = self.next_tag();
         let cmd = format!("{} IDLE\r\n", tag);
@@ -133,6 +165,46 @@ impl ImapConnection {
         Ok(())
     }
 
+    /// Wait for an IDLE push notification from the server.
+    /// In IDLE mode, the server sends untagged lines like "* N EXISTS".
+    /// This reads data until we detect EXISTS/RECENT or hit the timeout.
+    /// Returns the raw data received, or empty string on timeout.
+    pub async fn wait_for_idle_push(&mut self, timeout_secs: u64) -> Result<String> {
+        if !self.is_idle || self.stream.is_none() {
+            anyhow::bail!("Not in IDLE mode");
+        }
+        let stream = self.stream.as_mut().unwrap();
+        let mut temp = [0u8; 16384];
+
+        loop {
+            let read_fut = stream.read(&mut temp);
+            match tokio::time::timeout(Duration::from_secs(timeout_secs), read_fut).await {
+                Ok(Ok(n)) if n > 0 => {
+                    self.last_activity = std::time::Instant::now();
+                    let data = String::from_utf8_lossy(&temp[..n]).to_string();
+                    debug!("IDLE push received: {} bytes", n);
+
+                    if data.contains("EXISTS") || data.contains("RECENT") {
+                        return Ok(data);
+                    }
+                    // Keep waiting — the server may send multiple untagged lines
+                }
+                Ok(Ok(_)) => {
+                    // Connection closed
+                    anyhow::bail!("IMAP connection closed during IDLE");
+                }
+                Ok(Err(e)) => {
+                    anyhow::bail!("IDLE read error: {}", e);
+                }
+                Err(_) => {
+                    // Timeout — recycle time
+                    debug!("IDLE timeout after {}s", timeout_secs);
+                    return Ok(String::new());
+                }
+            }
+        }
+    }
+
     pub async fn noop(&mut self) -> Result<()> {
         let tag = self.next_tag();
         let cmd = format!("{} NOOP\r\n", tag);
@@ -152,10 +224,30 @@ impl ImapConnection {
         Ok(())
     }
 
+    /// Fetch headers for all messages from last_uid+1 onwards.
     pub async fn fetch(&mut self, last_uid: u32) -> Result<String> {
         self.idle_done().await?;
         let tag = self.next_tag();
-        let cmd = format!("{} FETCH {}:* (UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID)])\r\n", tag, last_uid + 1);
+        let cmd = format!("{} FETCH {}:* (UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES CONTENT-TYPE)])\r\n", tag, last_uid + 1);
+        self.send_command(&cmd).await?;
+        let mut data = String::new();
+        loop {
+            let response = self.read_response().await?;
+            data.push_str(&response);
+            if response.contains(&format!("{} OK", tag)) {
+                break;
+            }
+        }
+        self.last_activity = std::time::Instant::now();
+        Ok(data)
+    }
+
+    /// Fetch the full email (headers + body) for a specific UID.
+    /// Returns raw IMAP response with full RFC822 content.
+    pub async fn fetch_full(&mut self, uid: u32) -> Result<String> {
+        self.idle_done().await?;
+        let tag = self.next_tag();
+        let cmd = format!("{} UID FETCH {} (UID FLAGS BODY[] INTERNALDATE)\r\n", tag, uid);
         self.send_command(&cmd).await?;
         let mut data = String::new();
         loop {

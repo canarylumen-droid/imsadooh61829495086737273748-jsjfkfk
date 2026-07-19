@@ -50,6 +50,7 @@ import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 import { getRedisClient } from '@shared/lib/redis/redis.js';
 import { IMAP_KEYS, IMAP_TTL, CIRCUIT_BREAKER } from '@shared/lib/redis/imap-keys.js';
 import { imapCircuitTrippedTotal, imapCircuitStatus } from '@shared/lib/monitoring/metrics-service.js';
+import { pushMailboxToRustMonitor, removeMailboxFromRustMonitor, buildMailboxConfig } from '@shared/lib/realtime/mailbox-monitor-bridge.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -200,6 +201,12 @@ export class ImapConnectionManager {
     }
     await this._redisRelease(integrationId);
     await this._workerLoadUpdate();
+
+    // Remove from Rust mailbox monitor
+    if (data.integration.provider === 'custom_email') {
+      removeMailboxFromRustMonitor(integrationId).catch(() => {});
+    }
+
     console.log(`[IMAP] Cleanly disconnected ${integrationId}`);
   }
 
@@ -458,6 +465,13 @@ export class ImapConnectionManager {
       console.log(`[IMAP] 📭 IDLE started on INBOX for ${integration.id}`);
 
       this._setupTimers(clientData);
+
+      // Push custom_email config to Rust mailbox monitor for persistent IMAP IDLE
+      if (integration.provider === 'custom_email') {
+        buildMailboxConfig(integration as any).then(config => {
+          if (config) pushMailboxToRustMonitor(config).catch(() => {});
+        }).catch(() => {});
+      }
 
     } catch (error: any) {
       this.connections.delete(integration.id);
