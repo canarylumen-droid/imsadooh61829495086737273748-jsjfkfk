@@ -204,7 +204,7 @@ router.post('/api/mcp/key/create', requireAuth, async (req: Request, res: Respon
     }
 
     const level = permission_level === 'read' ? 'read_only' : (permission_level === 'read_only' || permission_level === 'read_write' ? permission_level : 'read_write');
-    const rawKey = `audnix_${crypto.randomBytes(8).toString('hex')}`;
+    const rawKey = `audnix_${crypto.randomBytes(15).toString('hex')}`;
     const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
     await db.execute(sql`
@@ -240,7 +240,7 @@ router.post('/api/mcp/key/regenerate', requireAuth, async (req: Request, res: Re
     const { id } = req.body;
     if (!id) { res.status(400).json({ error: 'Key ID is required' }); return; }
 
-    const rawKey = `audnix_${crypto.randomBytes(32).toString('hex')}`;
+    const rawKey = `audnix_${crypto.randomBytes(15).toString('hex')}`;
     const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
 
     await db.execute(sql`

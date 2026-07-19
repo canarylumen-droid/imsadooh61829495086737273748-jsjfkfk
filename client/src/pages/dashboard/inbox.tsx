@@ -1485,7 +1485,7 @@ export default function InboxPage() {
                                   {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{lead.snippet ? stripHtml(lead.snippet).substring(0, 80) : "No messages"}</span>
+                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{lead.snippet ? stripHtml(lead.snippet).substring(0, 52) : "No messages"}</span>
                                 </span>
                               )}
                             </p>
@@ -1870,7 +1870,7 @@ export default function InboxPage() {
                           </TooltipTrigger>
                           <TooltipContent 
                             side="bottom" 
-                            className="bg-black/90 text-white border-white/10 text-[10px] py-2 px-3 rounded-lg shadow-2xl"
+                            className="bg-popover text-popover-foreground border-border/30 text-[10px] py-2 px-3 rounded-lg shadow-2xl"
                           >
                             {!isGlobalAiEngineOn 
                               ? "Global AI Engine is disabled. Individual lead automation is paused."

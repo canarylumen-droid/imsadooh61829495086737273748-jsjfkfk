@@ -40,6 +40,7 @@ function DeveloperPage() {
   const [showFullKey, setShowFullKey] = useState(false);
   const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
   const [renameName, setRenameName] = useState("");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!socket) return;
@@ -181,42 +182,72 @@ function DeveloperPage() {
         </Dialog>
       </div>
 
-      {newKeyData && showFullKey && (
-        <Card className="border-emerald-500/30 bg-emerald-500/[0.02]">
-          <CardContent className="p-5">
-            <div className="flex items-start gap-4">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <Key className="h-5 w-5 text-emerald-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-emerald-300">{newKeyData.name}</p>
-                <p className="text-xs text-muted-foreground mb-1">
-                  <Badge variant="outline" className="text-[9px]">
-                    {newKeyData.permissionLevel === "read_only" ? "Read only" : "Read & Write"}
-                  </Badge>
-                </p>
-                <p className="text-sm text-muted-foreground mb-3">Copy this key now. You won't see it again.</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 p-2.5 bg-black/50 rounded-lg border font-mono text-sm break-all select-all">
-                    {newKeyData.key}
-                  </code>
-                  <Button onClick={() => copyKey(newKeyData.key)} size="sm">
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
-                  </Button>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowFullKey(false)}
-                className="text-muted-foreground hover:text-foreground mt-1 rounded-full hover:bg-muted p-1 transition-colors"
-                title="Dismiss"
-              >
-                <X className="h-4 w-4" />
-              </button>
+      {/* API Key reveal modal — shows full key once, then gone */}
+      <Dialog open={showFullKey && !!newKeyData} onOpenChange={(open) => { if (!open) setShowFullKey(false); }}>
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-emerald-500" />
+              Your API Key
+            </DialogTitle>
+            <DialogDescription>
+              Copy this key now. <strong>You won't be able to see it again</strong> for security reasons.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="flex items-center gap-2 text-sm">
+              <span className="font-semibold text-foreground">{newKeyData?.name}</span>
+              <Badge variant="outline" className="text-[9px]">
+                {newKeyData?.permissionLevel === "read_only" ? "Read only" : "Read & Write"}
+              </Badge>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <div className="flex gap-2">
+              <code className="flex-1 p-3 bg-muted rounded-xl border font-mono text-xs break-all select-all">
+                {newKeyData?.key}
+              </code>
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-xl shrink-0 h-11 w-11"
+                onClick={() => {
+                  if (newKeyData?.key) copyKey(newKeyData.key);
+                  setCopied(true);
+                  setTimeout(() => {
+                    setCopied(false);
+                    setShowFullKey(false);
+                    setNewKeyData(null);
+                  }, 1200);
+                }}
+              >
+                {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+            <div className="flex items-center gap-2 p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
+              <Shield className="h-4 w-4 text-amber-500 shrink-0" />
+              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                Treat this like a password. Never share it or commit it to code.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="default"
+              className="w-full"
+              onClick={() => {
+                if (newKeyData?.key) copyKey(newKeyData.key);
+                setCopied(true);
+                setTimeout(() => {
+                  setCopied(false);
+                  setShowFullKey(false);
+                  setNewKeyData(null);
+                }, 1200);
+              }}
+            >
+              {copied ? <><Check className="h-4 w-4 mr-2 text-emerald-500" /> Copied</> : <><Copy className="h-4 w-4 mr-2" /> Copy & Close</>}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <div className="overflow-x-auto">

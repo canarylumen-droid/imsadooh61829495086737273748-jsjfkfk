@@ -886,24 +886,24 @@ export default function CalendarPage() {
 
           {/* AI Activity */}
           {settings?.autoBookingEnabled && aiLogs.length > 0 && (
-            <Card className="bg-[#050505] border-white/5 rounded-xl">
+            <Card className="bg-card/50 border-border/40 rounded-xl">
               <CardHeader className="p-4 pb-2">
-                <CardTitle className="text-sm font-bold text-white flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-purple-400" /> AI Activity
+                <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary" /> AI Activity
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <ScrollArea className="h-[200px]">
-                  <div className="space-y-2">
+                  <div className="space-y-1.5">
                     {aiLogs.slice(0, 5).map(log => (
-                      <div key={log.id} className="p-2.5 rounded-lg bg-white/[0.02] border border-white/5">
+                      <div key={log.id} className="p-2.5 rounded-lg bg-muted/20 border border-border/30">
                         <div className="flex items-center gap-2 mb-1">
-                          <Badge variant={log.decision === 'act' ? 'default' : 'secondary'} className="text-[9px] h-4">
-                            {log.decision}
+                          <Badge variant={log.decision === 'act' ? 'default' : 'secondary'} className="text-[9px] h-4 font-bold">
+                            {log.decision === 'act' ? 'Acted' : 'Skipped'}
                           </Badge>
-                          <span className="text-[10px] text-white/30">{new Date(log.createdAt).toLocaleTimeString()}</span>
+                          <span className="text-[10px] text-muted-foreground">{new Date(log.createdAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                        <p className="text-[11px] text-white/50 line-clamp-2">{log.reasoning}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-2">{log.reasoning}</p>
                       </div>
                     ))}
                   </div>

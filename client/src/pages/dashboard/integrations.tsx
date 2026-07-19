@@ -1277,7 +1277,7 @@ export default function IntegrationsPage() {
                                       <p className="text-[10px] text-muted-foreground">Search for <strong>"App Passwords"</strong> and generate a code.</p>
                                     </div>
                                   </div>
-                                  <div className="pt-2 border-t border-white/5 space-y-2">
+                                  <div className="pt-2 border-t border-border/20 space-y-2">
                                     <p className="text-[9px] font-black uppercase tracking-widest text-orange-500/60">Getting Connection Error?</p>
                                     <p className="text-[10px] text-muted-foreground leading-snug">Ensure <strong>IMAP</strong> is set to "Enabled" in your email provider. Your regular password will not work.</p>
                                   </div>
@@ -1457,7 +1457,7 @@ export default function IntegrationsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full gap-2 border-white/10 bg-white/5"
+                        className="rounded-full gap-2 border-border/30 bg-muted/20"
                         onClick={() => setShowMailboxModal(true)}
                       >
                         <span className="h-3.5 w-3.5">≡</span> View All
@@ -1858,7 +1858,7 @@ export default function IntegrationsPage() {
                                       if (record === 'BLACKLIST') {
                                         const isBlacklisted = rec?.isBlacklisted || rec?.listedOn?.length > 0;
                                         return (
-                                          <div key={record} className="flex flex-col items-center gap-1 p-1 rounded bg-black/20">
+                                          <div key={record} className="flex flex-col items-center gap-1 p-1 rounded bg-muted/30">
                                             <span className="text-[7px] font-bold text-muted-foreground uppercase">BL</span>
                                             <div className={cn("h-1 w-full rounded-full", isBlacklisted ? "bg-red-500" : "bg-emerald-500")} />
                                           </div>
@@ -1867,7 +1867,7 @@ export default function IntegrationsPage() {
                                       const isFound = rec?.found;
                                       const isValid = rec?.valid ?? true;
                                       return (
-                                        <div key={record} className="flex flex-col items-center gap-1 p-1 rounded bg-black/20">
+                                        <div key={record} className="flex flex-col items-center gap-1 p-1 rounded bg-muted/30">
                                           <span className="text-[7px] font-bold text-muted-foreground uppercase">{record}</span>
                                           <div className={cn("h-1 w-full rounded-full", isFound && isValid ? "bg-emerald-500" : isFound ? "bg-amber-500" : "bg-red-500")} />
                                         </div>

@@ -378,7 +378,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         onClick={() => handleNavigate(item.path)}
         className={`relative flex items-center gap-3 px-3 py-2 rounded-xl transition-all cursor-pointer group mb-1 hover-bounce ${isActive
           ? "bg-primary/10 text-primary font-bold shadow-sm"
-          : "text-muted-foreground hover:bg-white/5 dark:hover:bg-white/10 hover:text-foreground dark:hover:text-white"
+          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
       >
         <Icon className={`h-4 w-4 transition-colors ${isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"}`} />
@@ -574,7 +574,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                                 initial={{ opacity: 0, x: -10 }} 
                                 animate={{ opacity: 1, x: 0 }}
                                 transition={{ delay: i * 0.1 }}
-                                className="flex flex-col gap-1 p-2 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors"
+                                className="flex flex-col gap-1 p-2 rounded-xl bg-muted/20 border border-border/20 hover:bg-muted/30 transition-colors"
                               >
                                 <div className="flex items-center justify-between">
                                   <span className="text-[9px] font-bold text-foreground/80 truncate max-w-[80px]">{log.leadName || "System"}</span>

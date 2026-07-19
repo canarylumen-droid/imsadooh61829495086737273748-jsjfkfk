@@ -143,7 +143,13 @@ export function RecentConversations() {
   });
 
   const { data: messagesData, isLoading: messagesLoading } = useQuery({
-    queryKey: ["/api/leads", selectedLead?.id, "messages"],
+    queryKey: ["/api/messages", selectedLead?.id],
+    queryFn: async () => {
+      if (!selectedLead?.id) return { messages: [] };
+      const res = await fetch(`/api/messages/${selectedLead.id}`, { credentials: "include" });
+      if (!res.ok) return { messages: [] };
+      return res.json();
+    },
     enabled: !!selectedLead,
   });
 
@@ -159,23 +165,23 @@ export function RecentConversations() {
   if (selectedLead) {
     return (
       <Card className="h-full flex flex-col border-border/40 bg-card/40 backdrop-blur-xl rounded-[2rem] overflow-hidden shadow-2xl">
-        <div className="p-6 border-b border-white/5 flex items-center gap-4">
+        <div className="p-6 border-b border-border/30 flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setSelectedLead(null)}
-            className="rounded-full hover:bg-white/5 h-10 w-10 transition-transform active:scale-95"
+            className="rounded-full hover:bg-muted/50 h-10 w-10 transition-transform active:scale-95"
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <Avatar className="h-12 w-12 border-2 border-white/5">
-            <AvatarFallback className={`${channelConfig[selectedLead.channel].bgColor} ${channelConfig[selectedLead.channel].textColor} font-black text-lg`}>
+          <Avatar className="h-12 w-12 border-2 border-border/30">
+            <AvatarFallback className={`${channelConfig[selectedLead.channel]?.bgColor || channelConfig.email.bgColor} ${channelConfig[selectedLead.channel]?.textColor || channelConfig.email.textColor} font-black text-lg`}>
               {selectedLead.name.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div className="flex-1">
-            <h3 className="text-lg font-black tracking-tight text-white uppercase">{selectedLead.name}</h3>
-            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-muted-foreground/40">
+            <h3 className="text-lg font-semibold tracking-tight text-foreground uppercase">{selectedLead.name}</h3>
+            <div className="flex items-center gap-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
               {(() => {
                 const provider = selectedLead.metadata?.provider || selectedLead.channel;
                 const config = channelConfig[provider] || channelConfig.email;
@@ -232,7 +238,7 @@ export function RecentConversations() {
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.body}</p>
                     {message.audioUrl && (
-                      <div className="mt-2 pt-2 border-t border-white/20">
+                      <div className="mt-2 pt-2 border-t border-border/30">
                         <audio controls className="w-full max-w-xs">
                           <source src={message.audioUrl} type="audio/mpeg" />
                         </audio>
@@ -261,16 +267,16 @@ export function RecentConversations() {
 
   return (
     <Card className="h-full flex flex-col border-border/40 bg-card/40 backdrop-blur-xl rounded-[2rem] overflow-hidden">
-      <div className="p-6 border-b border-white/5 space-y-6">
+      <div className="p-6 border-b border-border/20 space-y-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/40">Recent Activity</h2>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.4em] text-muted-foreground">Recent Activity</h2>
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-[8px] font-bold text-emerald-500 uppercase tracking-wider">Live</span>
           </div>
         </div>
 
-        <div className="flex p-1.5 bg-background/40 backdrop-blur-md rounded-2xl border border-white/5 relative">
+        <div className="flex p-1.5 bg-muted/20 backdrop-blur-md rounded-2xl border border-border/20 relative">
           {(Object.keys(channelConfig) as Channel[]).map((channel) => {
             const config = channelConfig[channel];
             const ChannelIcon = config.icon;
@@ -280,7 +286,7 @@ export function RecentConversations() {
               <button
                 key={channel}
                 onClick={() => setSelectedChannel(channel)}
-                className={`flex-1 relative z-10 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 ${isActive ? "text-white" : "text-white/20 hover:text-white/40"
+                className={`flex-1 relative z-10 py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 ${isActive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground"
                   }`}
               >
                 {isActive && (
@@ -291,7 +297,7 @@ export function RecentConversations() {
                   />
                 )}
                 <ChannelIcon className="h-4 w-4 relative z-20" />
-                <span className="text-[10px] font-black uppercase tracking-widest relative z-20">{config.label}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-widest relative z-20">{config.label}</span>
               </button>
             );
           })}
@@ -343,10 +349,10 @@ export function RecentConversations() {
                     >
                       <button
                         onClick={() => setSelectedLead(lead)}
-                        className="w-full p-4 rounded-2xl border border-white/5 bg-background/20 hover:bg-white/5 hover:border-white/10 transition-all text-left group relative overflow-hidden"
+                        className="w-full p-4 rounded-2xl border border-border/20 bg-muted/10 hover:bg-muted/30 hover:border-border/60 transition-all text-left group relative overflow-hidden"
                       >
                         <div className="flex items-center gap-4">
-                          <Avatar className="h-12 w-12 rounded-2xl border-2 border-white/5 transition-transform group-hover:scale-110">
+                          <Avatar className="h-12 w-12 rounded-2xl border-2 border-border/20 transition-transform group-hover:scale-110">
                             <AvatarFallback className={`${config.bgColor} ${config.textColor} font-black text-md`}>
                               {lead.name.charAt(0).toUpperCase()}
                             </AvatarFallback>
@@ -354,30 +360,30 @@ export function RecentConversations() {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1.5">
-                              <h4 className="font-extrabold text-white text-md uppercase tracking-tight group-hover:text-primary transition-colors">
+                              <h4 className="font-semibold text-foreground text-md uppercase tracking-tight group-hover:text-primary transition-colors">
                                 {lead.name}
                               </h4>
-                              <span className="text-[9px] font-black uppercase tracking-widest text-white/20">
+                              <span className="text-[9px] font-medium uppercase tracking-widest text-muted-foreground/40">
                                 {formatRelativeTime(lead.lastMessageAt)}
                               </span>
                             </div>
 
                             <div className="flex items-center gap-3">
-                              <div className={`p-1.5 rounded-lg bg-background/60 border border-white/5 ${config.textColor}`}>
+                              <div className={`p-1.5 rounded-lg bg-muted/30 border border-border/20 ${config.textColor}`}>
                                 <ChannelIcon className="h-3 w-3" />
                               </div>
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-black uppercase tracking-widest text-white/20">Score:</span>
-                                <span className={`text-[10px] font-black ${lead.score > 80 ? 'text-orange-500' : 'text-primary'}`}>{lead.score}</span>
+                                <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/40">Score:</span>
+                                <span className={`text-[10px] font-bold ${lead.score > 80 ? 'text-orange-500' : 'text-primary'}`}>{lead.score}</span>
                               </div>
                               <Badge
                                 variant="outline"
                                 className={
                                   lead.status === "converted"
-                                    ? "bg-purple-500/10 text-purple-500 border-purple-500/20 text-[9px] font-black px-2 mt-0.5"
+                                    ? "bg-purple-500/10 text-purple-500 border-purple-500/20 text-[9px] font-bold px-2 mt-0.5"
                                     : lead.status === "replied"
-                                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-black px-2 mt-0.5"
-                                      : "bg-primary/10 text-primary border-primary/20 text-[9px] font-black px-2 mt-0.5"
+                                      ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] font-bold px-2 mt-0.5"
+                                      : "bg-primary/10 text-primary border-primary/20 text-[9px] font-bold px-2 mt-0.5"
                                 }
                               >
                                 {lead.status.toUpperCase()}
