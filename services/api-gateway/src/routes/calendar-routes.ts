@@ -44,25 +44,37 @@ router.get('/settings', requireAuthOrApiKey, async (req: Request, res: Response)
     const googleIntegration = integrations.find(i => i.provider === 'google_calendar' && i.connected);
 
     let calendlyUsername = null;
+    let calendlySchedulingUrl = null;
     if (calendlyIntegration?.encryptedMeta) {
       try {
         const { decrypt } = await import('@shared/lib/crypto/encryption.js');
         const decrypted = await decrypt(calendlyIntegration.encryptedMeta);
         const data = JSON.parse(decrypted);
         calendlyUsername = data.username || 'connected';
+        calendlySchedulingUrl = data.schedulingUrl || null;
       } catch { }
     }
+
+    const [userRow] = await db
+      .select({ calendarLink: users.calendarLink, calendlyUserUri: users.calendlyUserUri })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const calendarLink = userRow?.calendarLink || calendlySchedulingUrl || (calendlyUsername ? `https://calendly.com/${calendlyUsername}` : null);
 
     res.json({ 
       settings: settings ? {
         ...settings,
         calendlyEnabled: !!calendlyIntegration,
         calendlyUsername,
+        calendarLink,
         googleCalendarEnabled: !!googleIntegration,
       } : {
         id: null,
         calendlyEnabled: !!calendlyIntegration,
         calendlyUsername,
+        calendarLink,
         googleCalendarEnabled: !!googleIntegration,
         autoBookingEnabled: false,
         minIntentScore: 70,

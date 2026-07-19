@@ -93,6 +93,7 @@ interface CalendarSettings {
   id: string;
   calendlyEnabled: boolean;
   calendlyUsername: string | null;
+  calendarLink: string | null;
   googleCalendarEnabled: boolean;
   autoBookingEnabled: boolean;
   minIntentScore: number;
@@ -471,9 +472,9 @@ export default function CalendarPage() {
   });
 
   const copyBookingLink = useCallback(() => {
-    const link = settings?.calendlyUsername
-      ? `https://calendly.com/${settings.calendlyUsername}`
-      : `${window.location.origin}/book`;
+    const link = (settings as any)?.calendarLink
+      || (settings?.googleCalendarEnabled ? `/api/oauth/google-calendar/events` : null)
+      || '';
     navigator.clipboard.writeText(link);
     setCopiedLink(true);
     toast({ title: "Booking link copied" });
@@ -1230,9 +1231,7 @@ export default function CalendarPage() {
           <div className="space-y-4 pt-2">
             <div className="p-3 rounded-xl bg-white/5 border border-white/10">
               <p className="text-xs text-white/40 break-all">
-                {settings?.calendlyUsername
-                  ? `https://calendly.com/${settings.calendlyUsername}`
-                  : `${window.location.origin}/book`}
+                {(settings as any)?.calendarLink || 'No booking link configured'}
               </p>
             </div>
             <div className="flex gap-2">
@@ -1241,7 +1240,7 @@ export default function CalendarPage() {
                 {copiedLink ? "Copied" : "Copy Link"}
               </Button>
               <Button variant="outline" className="rounded-xl border-white/10 bg-white/5" asChild>
-                <a href={settings?.calendlyUsername ? `https://calendly.com/${settings.calendlyUsername}` : '#'} target="_blank" rel="noopener noreferrer">
+                <a href={(settings as any)?.calendarLink || '#'} target="_blank" rel="noopener noreferrer">
                   <ExternalLink className="h-4 w-4" />
                 </a>
               </Button>
