@@ -311,6 +311,14 @@ export function startEmailSyncWorker() {
                 }
               }
 
+                // ── PHASE 3: Re-notify after DB write succeeds ─────────────────
+                if (saved && (lead || isNewLead)) {
+                  await Promise.allSettled([
+                    clusterSync.notifyStatsUpdated(userId, { integrationId, type: isNewLead ? 'new_lead' : 'reply' }),
+                    clusterSync.notifyStatsCacheInvalidate(userId),
+                  ]);
+                }
+
               console.log(`[EmailSyncQueue] ✅ New mail processed for ${integrationId}: ${newMessages.length} message(s)`);
             } catch (err: any) {
               console.error(`[EmailSyncQueue] process-new-mail failed for ${integrationId}:`, err.message);

@@ -1380,6 +1380,7 @@ export default function InboxPage() {
                           "Connect a mailbox to start receiving messages"}
                   </p>
                 </div>
+              )}
               </div>
             ) : filteredLeads.length === 0 && hasLoadedLeadsRef.current && leadsFetching ? (
               <div className="p-4 space-y-4">

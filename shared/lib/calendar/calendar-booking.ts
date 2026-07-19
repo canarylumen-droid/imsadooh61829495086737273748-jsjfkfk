@@ -274,6 +274,18 @@ export async function sendBookingLinkToLead(
  * Book meeting when lead accepts
  * Priority: User's Calendly → User's Google Calendar → Audnix's fallback Calendly
  */
+async function markLeadAsBooked(userId: string, leadEmail: string): Promise<void> {
+  try {
+    const lead = await storage.getLeadByEmail(leadEmail, userId);
+    if (lead && lead.status !== 'booked' && lead.status !== 'converted') {
+      await storage.updateLead(lead.id, { status: 'booked' });
+      console.log(`📅 Lead ${lead.id} (${leadEmail}) marked as booked`);
+    }
+  } catch (err: any) {
+    console.warn(`Failed to mark lead ${leadEmail} as booked:`, err.message);
+  }
+}
+
 export async function bookMeeting(
   userId: string,
   leadEmail: string,
@@ -304,6 +316,7 @@ export async function bookMeeting(
         );
 
         if (result.success) {
+          await markLeadAsBooked(userId, leadEmail);
           console.log(`✅ Meeting booked via user's Calendly: ${result.eventId}`);
           return {
             success: true,
@@ -346,6 +359,7 @@ export async function bookMeeting(
           console.warn('Google Calendar event creation failed, trying Audnix fallback Calendly');
           // Continue to Audnix fallback
         } else {
+          await markLeadAsBooked(userId, leadEmail);
           console.log(`✅ Meeting booked via Google Calendar: ${event.id}`);
           return {
             success: true,
