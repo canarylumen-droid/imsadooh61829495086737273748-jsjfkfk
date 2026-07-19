@@ -464,6 +464,11 @@ export class ImapConnectionManager {
       await client.mailboxOpen('INBOX');
       console.log(`[IMAP] 📭 IDLE started on INBOX for ${integration.id}`);
 
+      // Initial inbox scan: fetch unseen messages since last sync
+      this._scanExistingInbox(client, integration).catch((err: any) =>
+        console.warn(`[IMAP] Initial inbox scan failed for ${integration.id}:`, err.message)
+      );
+
       this._setupTimers(clientData);
 
       // Push custom_email config to Rust mailbox monitor for persistent IMAP IDLE
@@ -620,6 +625,30 @@ export class ImapConnectionManager {
     if (data.heartbeatInterval) clearInterval(data.heartbeatInterval);
     if (data.recycleTimeout)    clearTimeout(data.recycleTimeout);
     if (data.reconnectTimeout)  clearTimeout(data.reconnectTimeout);
+  }
+
+  private async _scanExistingInbox(client: any, integration: ImapIntegration): Promise<void> {
+    try {
+      const unseen = await client.search({ unseen: true });
+      const count = Array.isArray(unseen) ? unseen.length : 0;
+      if (count === 0) {
+        console.log(`[IMAP] No unseen messages in INBOX for ${integration.id} — skipping initial scan`);
+        return;
+      }
+      console.log(`[IMAP] 🔍 Initial inbox scan: ${count} unseen for ${integration.id}`);
+
+      if (emailSyncQueue) {
+        await emailSyncQueue.add('process-new-mail', {
+          type: 'process-new-mail',
+          integrationId: integration.id,
+          userId: integration.userId,
+          count,
+          initialScan: true,
+        }, { priority: 1 });
+      }
+    } catch (err: any) {
+      console.warn(`[IMAP] _scanExistingInbox error for ${integration.id}:`, err.message);
+    }
   }
 
   // ── Reactive Reconnect ──────────────────────────────────────────────────────

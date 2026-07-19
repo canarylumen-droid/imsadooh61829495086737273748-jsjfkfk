@@ -509,6 +509,7 @@ export default function InboxPage() {
     enabled: !!leadId,
     placeholderData: (prev: any) => prev,
     staleTime: 0,
+    refetchOnMount: true,
     refetchOnWindowFocus: true,
   });
 
