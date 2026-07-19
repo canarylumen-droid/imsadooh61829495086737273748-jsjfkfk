@@ -236,6 +236,12 @@ export default function CalendarPage() {
     refetchInterval: pollingMs,
   });
 
+  const { data: calendarEventsData } = useQuery<{ events: Array<{ id: string; title: string; startTime: string; endTime: string; meetingUrl: string | null; isAiBooked: boolean; leadName?: string | null; provider: string; status: string; attendeeEmail: string | null; leadId: string | null }> }>({
+    queryKey: ["/api/calendar/events"],
+    retry: 3,
+    refetchInterval: pollingMs,
+  });
+
   const { data: slotsData } = useQuery<{ slots: Array<{ start: string; end: string; available: boolean }> }>({
     queryKey: ["/api/calendar/slots", { daysAhead: 14 }],
     retry: 3,
@@ -246,6 +252,7 @@ export default function CalendarPage() {
   const bookings = bookingsData?.bookings || [];
   const aiLogs = aiLogsData?.logs || [];
   const googleEvents = eventsData?.events || [];
+  const syncedEvents = calendarEventsData?.events || [];
   const availableSlots = slotsData?.slots || [];
 
   const allEvents: CalendarEvent[] = useMemo(() => [
@@ -277,7 +284,21 @@ export default function CalendarPage() {
       attendeeEmail: null,
       leadId: null,
     })),
-  ].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()), [bookings, googleEvents]);
+    ...syncedEvents.map(e => ({
+      id: e.id,
+      title: e.title,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      meetingUrl: e.meetingUrl,
+      isAiBooked: e.isAiBooked,
+      leadName: e.leadName || e.attendeeEmail,
+      provider: e.provider,
+      status: e.status,
+      intentScore: null,
+      attendeeEmail: e.attendeeEmail,
+      leadId: e.leadId,
+    })),
+  ].sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()), [bookings, googleEvents, syncedEvents]);
 
   const aiScheduledCount = allEvents.filter(e => e.isAiBooked).length;
   const totalBookings = allEvents.length;

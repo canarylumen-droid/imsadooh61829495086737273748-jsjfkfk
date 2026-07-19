@@ -167,6 +167,9 @@ async function handleMeetingBooked(event: CalendlyWebhookEvent): Promise<void> {
       }
     });
 
+    // Notify calendar page for real-time update
+    wsSync.notifyCalendarUpdated(userId, { event: 'INSERT', provider: 'calendly', attendeeEmail });
+
     // POST-TRANSACTION: Non-critical operations (Circuit Breaker Pattern)
     const [freshLead] = await db.select().from(leads).where(
         leadIdFromTracking ? eq(leads.id, leadIdFromTracking) : and(eq(leads.userId, userId), eq(leads.email, attendeeEmail))
@@ -206,11 +209,6 @@ async function handleMeetingBooked(event: CalendlyWebhookEvent): Promise<void> {
       title: 'New Meeting Booked! 📅',
       message: `${invitee.name} just scheduled a meeting via Calendly.`,
       metadata: { leadId: freshLead?.id, attendeeEmail }
-    });
-
-    wsSync.broadcastToUser(userId, {
-      type: 'CALENDAR_UPDATED',
-      payload: { attendeeEmail, status: 'scheduled' }
     });
 
   } catch (error) {
@@ -253,6 +251,10 @@ async function handleMeetingCancelled(event: CalendlyWebhookEvent): Promise<void
           });
         }
       }
+
+      if (activeUserId) {
+        wsSync.notifyCalendarUpdated(activeUserId, { event: 'UPDATE', status: 'cancelled' });
+      }
     });
 
   } catch (error) {
@@ -283,6 +285,10 @@ async function handleMeetingNoShow(event: CalendlyWebhookEvent): Promise<void> {
             .set({ status: 'no_show', updatedAt: new Date() })
             .where(and(eq(leads.userId, booking.userId), eq(leads.email, booking.attendeeEmail || '')))
             .returning();
+
+          if (booking) {
+            wsSync.notifyCalendarUpdated(booking.userId, { event: 'UPDATE', status: 'no_show' });
+          }
 
           if (updatedLead) {
             wsSync.notifyLeadsUpdated(booking.userId, { event: 'UPDATE', leadId: updatedLead.id });

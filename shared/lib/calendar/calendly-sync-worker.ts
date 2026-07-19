@@ -127,10 +127,7 @@ async function syncCalendlyEventsForUser(userId: string): Promise<number> {
       }
 
       // Notify calendar update
-      wsSync.broadcastToUser(userId, {
-        type: 'CALENDAR_UPDATED',
-        payload: { attendeeEmail: invitee.email, status: 'scheduled' }
-      });
+      wsSync.notifyCalendarUpdated(userId, { attendeeEmail: invitee.email, status: 'scheduled' });
 
       console.log(`[Calendly Sync] Synced new event: ${name} for ${invitee.email}`);
     }

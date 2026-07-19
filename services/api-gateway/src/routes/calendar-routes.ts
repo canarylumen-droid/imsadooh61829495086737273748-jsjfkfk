@@ -9,7 +9,7 @@ import {
 import { validateCalendlyToken } from '@shared/lib/calendar/calendly.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
-import { users, calendarSettings, calendarBookings, aiActionLogs } from '@audnix/shared';
+import { users, calendarSettings, calendarBookings, calendarEvents, aiActionLogs } from '@audnix/shared';
 import { eq, desc } from 'drizzle-orm';
 import type { ChannelType } from '@shared/types.js';
 import { calendlyOAuth } from '@services/api-gateway/src/oauth/calendly.js';
@@ -134,6 +134,25 @@ router.get('/bookings', requireAuthOrApiKey, async (req: Request, res: Response)
   } catch (error: any) {
     console.error('Error getting bookings:', error.message);
     res.status(500).json({ error: 'Failed to get bookings' });
+  }
+});
+
+/**
+ * Get calendar events (synced from Calendly, Google Calendar, etc.)
+ */
+router.get('/events', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req)!;
+    const events = await db
+      .select()
+      .from(calendarEvents)
+      .where(eq(calendarEvents.userId, userId))
+      .orderBy(desc(calendarEvents.startTime))
+      .limit(100);
+    res.json({ events });
+  } catch (error: any) {
+    console.error('Error getting calendar events:', error.message);
+    res.status(500).json({ error: 'Failed to get events' });
   }
 });
 
