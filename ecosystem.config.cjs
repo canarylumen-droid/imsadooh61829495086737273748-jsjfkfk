@@ -153,7 +153,7 @@ module.exports = {
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
         MYSQL_HOST: 'database-3.cuns46ao86xu.us-east-1.rds.amazonaws.com',
         MYSQL_USER: 'admin',
-        MYSQL_PASSWORD: 'TrexJetTechnology2008!',
+        MYSQL_PASSWORD: 'TrexJetTechnology2008!.',
         MYSQL_DATABASE: 'lead_recovery'
       },
       error_file: './logs/lead-recovery-error.log',
