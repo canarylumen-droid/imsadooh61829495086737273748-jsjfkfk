@@ -56,6 +56,7 @@ router.get('/', requireAuthOrApiKey, async (req: Request, res: Response): Promis
       provider: integration.provider,
       connected: integration.connected,
       accountType: integration.accountType,
+      email: integration.accountType || '',
       lastSync: integration.lastSync,
       createdAt: integration.createdAt,
       dailyLimit: (integration as any).dailyLimit ?? 50,

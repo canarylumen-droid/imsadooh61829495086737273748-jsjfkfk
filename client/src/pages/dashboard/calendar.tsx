@@ -1,3 +1,5 @@
+import { useMailbox } from "@/hooks/use-mailbox";
+import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -179,6 +181,7 @@ export default function CalendarPage() {
   const { toast } = useToast();
   useRealtime();
   const queryClient = useQueryClient();
+  const { selectedMailboxId, setSelectedMailboxId } = useMailbox();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
   const [showEventDetail, setShowEventDetail] = useState<CalendarEvent | null>(null);
@@ -413,6 +416,7 @@ export default function CalendarPage() {
           <p className="text-white/40 text-sm mt-1">Manage bookings and availability</p>
         </div>
         <div className="flex items-center gap-3">
+          <MailboxSwitcher value={selectedMailboxId} onValueChange={setSelectedMailboxId} />
           <Button
             onClick={copyBookingLink}
             variant="outline"
@@ -742,11 +746,11 @@ export default function CalendarPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-white">Google Calendar</p>
-                    <p className="text-[10px] text-white/40">{settings?.googleCalendarEnabled ? 'Connected' : 'Not connected'}</p>
+                    <p className="text-[10px] text-emerald-400">{settings?.googleCalendarEnabled ? 'Connected' : 'Not connected'}</p>
                   </div>
                 </div>
                 {settings?.googleCalendarEnabled ? (
-                  <Button size="sm" variant="ghost" className="text-xs text-white/40" disabled>Connected</Button>
+                  <Button size="sm" variant="ghost" className="text-xs text-emerald-400" disabled>Connected</Button>
                 ) : (
                   <Button size="sm" variant="outline" className="text-xs border-white/10 bg-white/5" onClick={() => connectGoogleMutation.mutate()}>
                     Connect

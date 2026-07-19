@@ -62,7 +62,7 @@ export default function WarmupPage() {
     };
   }, [socket, queryClient]);
 
-  const { data: warmupData, isLoading } = useQuery<any>({
+  const { data: warmupData, isLoading, isError } = useQuery<any>({
     queryKey: ["/api/dashboard/warmup-status", selectedMailboxId],
     queryFn: async () => {
       const url = new URL("/api/dashboard/warmup-status", window.location.origin);
@@ -73,6 +73,8 @@ export default function WarmupPage() {
     },
     refetchOnWindowFocus: true,
     staleTime: 10_000,
+    retry: 3,
+    retryDelay: 1000,
   });
 
   const { data: activityData } = useQuery<any>({
