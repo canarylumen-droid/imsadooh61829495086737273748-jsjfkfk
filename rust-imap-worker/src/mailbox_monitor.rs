@@ -492,7 +492,7 @@ fn parse_fetch_response(raw: &str) -> HashMap<u32, HashMap<String, String>> {
 /// Handles simple MIME messages and quoted-printable content.
 fn extract_body_text(raw: &str) -> String {
     // Find the body content between (BODY[] and the closing )
-    let mut body_start = None;
+    let mut body_start: Option<usize> = None;
     let mut depth = 0;
     let mut in_body = false;
 

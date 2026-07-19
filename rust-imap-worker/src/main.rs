@@ -78,7 +78,7 @@ async fn main() -> Result<()> {
     // Start Mailbox Monitor (user mailbox IDLE connections) — handles 500+ mailboxes
     log::info!("Audnix IMAP Worker starting... Mailbox Monitor active (event-driven, zero polling)");
     let monitor = mailbox_monitor::MailboxMonitor::new(redis_url.clone());
-    monitor.run().await?;
+    monitor.run().await
 }
 
 async fn test_imap_connect(
