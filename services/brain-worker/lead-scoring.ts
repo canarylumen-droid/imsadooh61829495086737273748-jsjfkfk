@@ -45,11 +45,36 @@ async function startLeadScoringService() {
 
           log.reasoning(`Lead score calculated: ${scoringResult.score}/100. Intent: ${scoringResult.intent}`, { leadId });
 
-          // Update CRM via internal task (or direct DB for now, moving to internal-crm queue later)
+          // Fetch current lead to avoid overwriting active states
+          const [currentLead] = await db.select({
+            status: leads.status,
+            lastMessageAt: leads.lastMessageAt
+          }).from(leads).where(eq(leads.id, leadId)).limit(1);
+
+          if (!currentLead) {
+            log.warn('Lead not found, skipping score update', { leadId });
+            return;
+          }
+
+          // Never downgrade an engaged lead: only set to 'cold' if
+          // 1) current status is 'new' or 'bouncy', AND
+          // 2) no recent engagement (last message >7 days or never messaged)
+          const TERMINAL_OR_ACTIVE = ['contacted', 'replied', 'warm', 'booked', 'converted', 'qualified', 'not_interested'];
+          const daysSinceLastMsg = currentLead.lastMessageAt
+            ? (Date.now() - new Date(currentLead.lastMessageAt).getTime()) / 86400000
+            : 999;
+
+          let newStatus = currentLead.status;
+          if (scoringResult.score > 70) {
+            newStatus = 'qualified';
+          } else if (!TERMINAL_OR_ACTIVE.includes(currentLead.status) && daysSinceLastMsg >= 7) {
+            newStatus = 'cold';
+          }
+
           await db.update(leads)
             .set({ 
               score: scoringResult.score,
-              status: scoringResult.score > 70 ? 'qualified' : 'cold',
+              status: newStatus,
               lastEnrichedAt: new Date()
             })
             .where(eq(leads.id, leadId));

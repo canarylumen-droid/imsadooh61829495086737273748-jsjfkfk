@@ -125,6 +125,9 @@ export async function runDatabaseMigrations() {
                         created_at TIMESTAMP NOT NULL DEFAULT NOW()
                     );
                 END IF;
+                IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname='idx_domain_verifications_user_domain') THEN
+                    CREATE UNIQUE INDEX idx_domain_verifications_user_domain ON domain_verifications (user_id, domain);
+                END IF;
 
                 -- Users: config and filtered_leads_count
                 IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='config') THEN
@@ -637,6 +640,29 @@ export async function runDatabaseMigrations() {
                     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'msgs_kpi_outbound_idx') THEN
                         CREATE INDEX msgs_kpi_outbound_idx ON messages(user_id, created_at)
                         WHERE direction = 'outbound' AND is_warmup = false;
+                    END IF;
+                END IF;
+
+                -- Email Tracking: placement, integration_id, placement_updated_at
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='email_tracking') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='email_tracking' AND column_name='integration_id') THEN
+                        ALTER TABLE email_tracking ADD COLUMN integration_id UUID REFERENCES integrations(id) ON DELETE SET NULL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='email_tracking' AND column_name='placement') THEN
+                        ALTER TABLE email_tracking ADD COLUMN placement TEXT DEFAULT 'unknown';
+                    ELSE
+                        -- Ensure default is 'unknown' not NULL
+                        ALTER TABLE email_tracking ALTER COLUMN placement SET DEFAULT 'unknown';
+                        UPDATE email_tracking SET placement = 'unknown' WHERE placement IS NULL;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='email_tracking' AND column_name='placement_updated_at') THEN
+                        ALTER TABLE email_tracking ADD COLUMN placement_updated_at TIMESTAMP;
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_tracking_integration_id_idx') THEN
+                        CREATE INDEX email_tracking_integration_id_idx ON email_tracking(integration_id);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_tracking_placement_idx') THEN
+                        CREATE INDEX email_tracking_placement_idx ON email_tracking(placement);
                     END IF;
                 END IF;
 

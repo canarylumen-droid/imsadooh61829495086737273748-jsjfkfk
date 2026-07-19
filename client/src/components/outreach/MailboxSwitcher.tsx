@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
     Select,
@@ -7,7 +7,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/select";
-import { Mail, CheckCircle2, PlusCircle, Search } from "lucide-react";
+import { Mail, CheckCircle2, PlusCircle, Search, LayoutDashboard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -56,30 +56,23 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
     const visibleMailboxes = filteredMailboxes.slice(0, MAILBOX_DISPLAY_LIMIT);
     const hiddenCount = filteredMailboxes.length - visibleMailboxes.length;
 
-    // Auto-select first mailbox if none is selected and mailboxes exist
-    useEffect(() => {
-        if (!currentMailboxId && mailboxes.length > 0) {
-            handleMailboxChange(mailboxes[0].id);
-        }
-    }, [currentMailboxId, mailboxes]);
-
     if (isLoading) return <div className="h-10 w-[200px] animate-pulse bg-muted rounded-2xl" />;
 
     // Always show if user has at least one connected mailbox, so they can see "All" vs specific
     if (mailboxes.length === 0) return null;
 
-    const selectedMailbox = mailboxes.find(m => m.id === currentMailboxId) || mailboxes[0];
+    const selectedMailbox = mailboxes.find(m => m.id === currentMailboxId);
 
     return (
         <div className={cn("flex items-center gap-2", className)}>
             <Select
-                value={currentMailboxId || (mailboxes[0]?.id)}
+                value={currentMailboxId || "all"}
                 onValueChange={(val) => {
                     if (val === "add_new") {
                         setLocation("/dashboard/integrations");
                         return;
                     }
-                    handleMailboxChange(val);
+                    handleMailboxChange(val === "all" ? undefined : val);
                 }}
             >
                 <SelectTrigger className="w-[280px] h-11 rounded-2xl border-border/40 bg-card/40 backdrop-blur-md font-bold text-[11px] uppercase tracking-wider text-muted-foreground/80 hover:text-foreground transition-all group shadow-sm hover:shadow-primary/5">
@@ -88,11 +81,18 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
                             <Mail className="h-3.5 w-3.5 text-primary shrink-0" />
                         </div>
                         <SelectValue>
-                            {selectedMailbox?.accountType || selectedMailbox?.email || (selectedMailbox?.provider === 'custom_email' ? 'Custom Email' : selectedMailbox?.provider) || "Switch Mailbox"}
+                            {currentMailboxId && (selectedMailbox?.accountType || selectedMailbox?.email || (selectedMailbox?.provider === 'custom_email' ? 'Custom Email' : selectedMailbox?.provider)) || "All Mailboxes"}
                         </SelectValue>
                     </div>
                 </SelectTrigger>
                 <SelectContent className="rounded-2xl border-border/40 bg-card/95 backdrop-blur-xl shadow-2xl min-w-[280px] p-2">
+                    <SelectItem value="all" className="font-bold text-[10px] uppercase tracking-widest py-3.5 px-3 cursor-pointer rounded-xl hover:bg-primary/5 transition-all focus:bg-primary/10">
+                        <div className="flex items-center gap-3">
+                            <LayoutDashboard className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span className="text-muted-foreground">All Mailboxes</span>
+                        </div>
+                    </SelectItem>
+                    <div className="h-px bg-border/20 my-2 mx-2" />
                     {mailboxes.length > 5 && (
                         <div className="px-2 pb-2">
                             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-muted/30 border border-border/20">

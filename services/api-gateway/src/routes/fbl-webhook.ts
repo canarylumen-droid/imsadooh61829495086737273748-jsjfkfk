@@ -123,7 +123,7 @@ async function suppressEmailAddress(email: string, metadata: Record<string, any>
             SET placement = 'spam', placement_updated_at = NOW()
             WHERE recipient_email = ${email}
               AND sent_at > NOW() - INTERVAL '7 days'
-              AND placement = 'unknown'
+              AND (placement IS NULL OR placement IN ('unknown', 'delivered'))
           `);
         }
       } catch (err: any) {

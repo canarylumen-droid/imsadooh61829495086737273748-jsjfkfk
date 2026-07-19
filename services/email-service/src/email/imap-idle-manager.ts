@@ -1835,7 +1835,7 @@ class ImapIdleManager {
                     SET placement = ${placementDetected},
                         placement_updated_at = NOW()
                     WHERE token = ${trackingToken}
-                      AND placement = 'unknown'
+                      AND (placement IS NULL OR placement IN ('unknown', 'delivered'))
                 `);
                 const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
                 await Promise.all([

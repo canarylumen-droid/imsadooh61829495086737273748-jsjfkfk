@@ -1094,6 +1094,8 @@ router.get('/status', requireAuthOrApiKey, async (req: Request, res: Response): 
         lastSync: i.lastSync,
         reputationScore: (i as any).reputationScore ?? null,
         dailyLimit: (i as any).dailyLimit ?? 50,
+        warmupStatus: (i as any).warmupStatus || 'none',
+        warmupLimit: (i as any).warmupLimit ?? 5,
         sent,
         inbox,
         spam,

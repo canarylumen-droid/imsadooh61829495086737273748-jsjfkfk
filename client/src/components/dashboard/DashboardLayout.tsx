@@ -48,7 +48,8 @@ import {
   LifeBuoy,
   Menu,
   Code,
-  Key
+  Key,
+  CalendarDays
 } from "lucide-react";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useMailbox } from "@/hooks/use-mailbox";
@@ -257,10 +258,11 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
         { label: "Pipeline", icon: Briefcase, path: "/dashboard/deals" },
         { label: "Integrations", icon: Plug, path: "/dashboard/integrations" },
         { label: "Warmup", icon: Shield, path: "/dashboard/warmup" },
-      ],
-    },
-    {
-      label: "Developer",
+        { label: "Calendar", icon: CalendarDays, path: "/dashboard/calendar" },
+    ],
+  },
+  {
+    label: "Developer",
       items: [
         { label: "API Keys", icon: Key, path: "/dashboard/developer" },
         { label: "MCP Server", icon: Terminal, path: "/dashboard/mcp-server" },

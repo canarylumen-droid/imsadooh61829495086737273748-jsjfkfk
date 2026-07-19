@@ -142,6 +142,7 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
           threadId
         });
         externalMessageId = (sendResult as any)?.messageId || (sendResult as any)?.id;
+        const sendIntegrationId = (sendResult as any)?.integrationId;
 
         // metadata should include trackingId for consistency if storage doesn't auto-handle it
         // and we will update the message record created below
@@ -186,6 +187,7 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
       audioUrl: null,
       trackingId: selectedChannel === 'email' ? trackingId : undefined,
       externalId: externalMessageId,
+      integrationId: sendIntegrationId,
       metadata: {
         manual: true,
         sentAt: new Date(),

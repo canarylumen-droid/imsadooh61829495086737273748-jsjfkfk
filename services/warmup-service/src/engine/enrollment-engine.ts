@@ -213,25 +213,40 @@ export class EnrollmentEngine {
 
     const registeredDomain = domainClusterEngine.extractRegisteredDomain(mailboxEmail);
 
-    await db.insert(warmupMailboxes).values({
+    const [inserted] = await db.insert(warmupMailboxes).values({
       integrationId: candidate.integrationId,
       userId: candidate.userId,
       organizationId: candidate.organizationId,
       email: mailboxEmail,
       provider: candidate.provider as any,
-      status: 'paused',
-      pauseReason: poolType === 'enterprise' ? 'single_mailbox_enterprise' : 'empty_global_pool',
+      status: 'active',
       poolType,
       registeredDomain,
       anchorRole: 'member',
       dailySentCount: 0,
       dailyReceivedCount: 0,
       metadata,
-    });
+    }).returning();
+
+    // Also auto-set integrations.warmupStatus='active' so the dashboard shows it
+    try {
+      await db.update(integrations)
+        .set({ warmupStatus: 'active' } as any)
+        .where(eq(integrations.id, candidate.integrationId));
+    } catch (_) {}
 
     console.log(
       `[Warmup][Enrollment] Enrolled ${mailboxEmail} → domain=${registeredDomain}, pool=${poolType}`
     );
+
+    // Fire-and-forget sent folder scan to copy user's real email subjects
+    if (inserted) {
+      import('../lib/sent-folder-scanner.js').then(({ scanSentFolder }) => {
+        scanSentFolder(inserted.id).catch((err: any) =>
+          console.warn(`[Warmup][Enrollment] Sent scan failed for ${mailboxEmail}:`, err.message)
+        );
+      });
+    }
   }
 
   private async classifyPool(candidate: {

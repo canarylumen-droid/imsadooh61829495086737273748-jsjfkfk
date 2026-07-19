@@ -377,7 +377,7 @@ router.get('/outlook/status', async (req: Request, res: Response): Promise<void>
 
 // ==================== GOOGLE CALENDAR OAUTH ====================
 
-router.get('/connect/google-calendar', async (req: Request, res: Response): Promise<void> => {
+const handleGoogleCalendarConnect = async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getUserId(req as AuthenticatedRequest);
 
@@ -394,6 +394,10 @@ router.get('/connect/google-calendar', async (req: Request, res: Response): Prom
     res.status(500).json({ error: 'Failed to initiate OAuth flow' });
   }
 });
+
+// Serve both hyphen and underscore variants for robustness
+router.get('/connect/google-calendar', handleGoogleCalendarConnect);
+router.get('/connect/google_calendar', handleGoogleCalendarConnect);
 
 // Google Calendar callback logic moved to dedicated google-redirect.ts file
 

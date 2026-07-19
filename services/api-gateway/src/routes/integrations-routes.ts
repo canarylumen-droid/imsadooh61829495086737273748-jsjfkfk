@@ -231,9 +231,12 @@ router.post('/:provider/disconnect', requireAuthOrApiKey, async (req: Request, r
         } else if (provider === 'calendly') {
           const { calendlyOAuth } = await import('@services/api-gateway/src/oauth/calendly.js');
           await calendlyOAuth.revokeToken(userId);
-        } else if (provider === 'google_calendar') {
-          const { googleCalendarOAuth } = await import('@services/api-gateway/src/oauth/google-calendar.js');
-          await googleCalendarOAuth.revokeToken(userId);
+    } else if (provider === 'google_calendar') {
+      const { googleCalendarOAuth } = await import('@services/api-gateway/src/oauth/google-calendar.js');
+      await googleCalendarOAuth.revokeToken(userId);
+      await db.update(calendarSettings).set({
+        googleCalendarEnabled: false,
+      }).where(eq(calendarSettings.userId, userId)).catch(() => {});
         }
       } catch (e: any) {
         // Non-fatal: token may have already expired or been revoked on provider side

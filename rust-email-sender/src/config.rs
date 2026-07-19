@@ -2,6 +2,7 @@ use std::env;
 use anyhow::Result;
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct Config {
     pub redis_url: String,
     pub queue_name: String,

@@ -155,6 +155,18 @@ export function startEmailSyncWorker() {
                       }
                     } catch { /* non-critical */ }
                   }
+                  if (!lead && userId) {
+                    // Fallback: match by userId+email (legacy leads with null integrationId)
+                    try {
+                      const { db } = await import('@shared/lib/db/db.js');
+                      const { eq, and, sql } = await import('drizzle-orm');
+                      const { leads: leadsSchema } = await import('@audnix/shared');
+                      const [byEmail] = await db.select().from(leadsSchema)
+                        .where(and(eq(leadsSchema.userId, userId), sql`LOWER(${leadsSchema.email}) = LOWER(${senderAddr})`))
+                        .limit(1);
+                      lead = byEmail || null;
+                    } catch { /* non-critical */ }
+                  }
                   senderName = (msg.from || '').replace(/<[^>]+>/g, '').trim() || senderAddr.split('@')[0];
                 }
 

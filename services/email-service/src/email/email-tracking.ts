@@ -251,7 +251,7 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
         UPDATE email_tracking 
         SET first_opened_at = COALESCE(first_opened_at, ${event.timestamp.toISOString()}),
             open_count = COALESCE(open_count, 0) + 1,
-            placement = CASE WHEN placement = 'unknown' THEN 'inbox' ELSE placement END,
+            placement = CASE WHEN placement IN ('unknown', 'delivered') THEN 'inbox' ELSE placement END,
             placement_updated_at = COALESCE(placement_updated_at, ${event.timestamp.toISOString()})
         WHERE token = ${event.messageId}
       `);

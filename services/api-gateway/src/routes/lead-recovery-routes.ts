@@ -215,6 +215,13 @@ router.get("/leads", async (req, res) => {
   res.json({ leads });
 });
 
+router.get("/stats", async (req, res) => {
+  const tenantId = tenantIdFrom(req);
+  const { getRecoveryStats } = await import("@shared/lib/mysql.js");
+  const stats = await getRecoveryStats(tenantId);
+  res.json(stats);
+});
+
 router.get("/events", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const limit = Math.min(Number(req.query.limit || 50), 100);

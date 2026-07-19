@@ -777,7 +777,7 @@ export async function sendEmail(
   content: string,
   subject: string,
   options: EmailOptions = {}
-): Promise<{ messageId: string }> {
+): Promise<{ messageId: string; integrationId: string }> {
   // 1. Fetch Integration (Specific or Fallback)
   let integration: Integration | undefined;
   if (options.integrationId) {
@@ -996,7 +996,7 @@ export async function sendEmail(
         source: 'smtp_response'
       }).catch(e => console.warn('[Placement] Failed to update deliverability (custom SMTP):', e?.message));
     }
-    return result;
+    return { ...result, integrationId: integration.id };
   }
 
   // --- PART 2: OAuth (Gmail/Outlook) ---
@@ -1187,7 +1187,7 @@ export async function sendEmail(
 
     // Success: Reset health monitor
     await MailboxHealthMonitor.recordSuccess(integration.id);
-    return result;
+    return { ...result, integrationId: integration.id };
 
   } catch (error: any) {
     // Failure: Record in health monitor
@@ -1573,7 +1573,7 @@ async function updateSendPlacement(opts: {
       SET placement = ${opts.placement},
           placement_updated_at = NOW()
       WHERE token = ${opts.trackingId}
-        AND placement = 'unknown'
+        AND (placement IS NULL OR placement = 'unknown')
     `);
     const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
     await Promise.all([

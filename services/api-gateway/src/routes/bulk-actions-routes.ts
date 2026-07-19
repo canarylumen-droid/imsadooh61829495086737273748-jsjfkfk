@@ -40,14 +40,13 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
       return;
     }
 
-    // Load mailboxes for distribution
+    // Load mailboxes for distribution (smart MX routing)
     let mailboxPool: Array<{ id: string; email: string; provider: string }> = [];
-    let mailboxIndex = 0;
+    let mailboxIndex = { current: 0 };
     if (distribute || !integrationId) {
       const integrations = await storage.getIntegrations(userId);
-      mailboxPool = integrations.filter((i: any) =>
-        ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected
-      ).map((i: any) => ({ id: i.id, email: i.smtpUser || i.email || '', provider: i.provider }));
+      const { getMailboxPool } = await import('@shared/lib/imports/mailbox-router.js');
+      mailboxPool = getMailboxPool(integrations);
     }
 
     const results = {
@@ -102,13 +101,12 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
           // Full deterministic + MX check
           const spamCheck = email ? await SpamTrapDetector.verifyFull(email, leadData) : { isTrap: false, score: 0, hasMx: true };
 
-          // Evenly distribute across all connected mailboxes if distribute flag is set
-          let assignedIntegrationId = integrationId || null;
-          if (mailboxPool.length > 0) {
-            const mb = mailboxPool[mailboxIndex % mailboxPool.length];
-            assignedIntegrationId = mb.id;
-            mailboxIndex++;
-          }
+          // Smart MX routing: @gmail→gmail, @outlook→outlook, custom domain→custom_email, fallback round-robin
+          const assignedIntegrationId = integrationId
+            ? integrationId
+            : mailboxPool.length > 0
+              ? (await import('@shared/lib/imports/mailbox-router.js')).assignMailbox(email, mailboxPool, mailboxIndex)
+              : null;
           
           batchToInsert.push({
             userId,
@@ -196,6 +194,8 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
           playSound: true
         });
         wsSync.notifyLeadsUpdated(userId, { type: 'bulk_import', count: results.leadsImported });
+        const { invalidateStatsCache } = await import('./dashboard-routes.js');
+        invalidateStatsCache(userId);
         wsSync.notifyStatsUpdated(userId);
       } catch (notifErr) {
         console.warn('[Bulk Import] Failed to create aggregate notification:', notifErr);

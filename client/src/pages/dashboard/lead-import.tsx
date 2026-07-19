@@ -43,6 +43,7 @@ export default function LeadImportPage() {
   const [importResults, setImportResults] = useState<{ imported: number; skipped: number; filtered?: number; leads?: any[] } | null>(null);
   const [isOutreachModalOpen, setIsOutreachModalOpen] = useState(false);
   const [leadStats, setLeadStats] = useState<{ total: number; planLimit: number } | null>(null);
+  const [recoveryStats, setRecoveryStats] = useState<{ totalRecovered: number; recoveredToday: number; byIntent: Record<string, number> } | null>(null);
 
   const refreshLeadStats = async () => {
     try {
@@ -51,6 +52,8 @@ export default function LeadImportPage() {
         const data = await res.json();
         setLeadStats({ total: data.total || 0, planLimit: data.planLimit || 10000 });
       }
+      const recRes = await fetch('/api/lead-recovery/stats', { credentials: 'include' });
+      if (recRes.ok) setRecoveryStats(await recRes.json());
     } catch {}
   };
 
@@ -400,29 +403,48 @@ export default function LeadImportPage() {
       </div>
 
       {leadStats && (
-        <Card className="border-border/40 shadow-sm bg-card">
-          <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-            <div>
-              <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Pipeline</p>
-              <p className="text-base sm:text-lg font-bold tabular-nums">
-                <span className="text-primary">{leadStats.total.toLocaleString()}</span> <span className="text-muted-foreground text-xs sm:text-sm font-medium">/ {leadStats.planLimit.toLocaleString()}</span>
-              </p>
+      <Card className="border-border/40 shadow-sm bg-card">
+        <CardContent className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-muted-foreground">Pipeline</p>
+            <p className="text-base sm:text-lg font-bold tabular-nums">
+              <span className="text-primary">{leadStats.total.toLocaleString()}</span> <span className="text-muted-foreground text-xs sm:text-sm font-medium">/ {leadStats.planLimit.toLocaleString()}</span>
+            </p>
+          </div>
+          <div className="flex-1 w-full sm:max-w-xs">
+            <div className="h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden relative">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${Math.max(0.5, Math.min(100, (leadStats.total / leadStats.planLimit) * 100))}%` }}
+              />
             </div>
-            <div className="flex-1 w-full sm:max-w-xs">
-              <div className="h-1.5 sm:h-2 bg-muted rounded-full overflow-hidden relative">
-                <div
-                  className="h-full bg-primary rounded-full transition-all"
-                  style={{ width: `${Math.max(0.5, Math.min(100, (leadStats.total / leadStats.planLimit) * 100))}%` }}
-                />
-              </div>
-              <p className="text-[9px] sm:text-[10px] text-muted-foreground text-right mt-1">
-                {leadStats.total > 0 && (leadStats.total / leadStats.planLimit) * 100 < 1
-                  ? '<1% used'
-                  : `${Math.round((leadStats.total / leadStats.planLimit) * 100)}% used`}
-              </p>
+            <p className="text-[9px] sm:text-[10px] text-muted-foreground text-right mt-1">
+              {leadStats.total > 0 && (leadStats.total / leadStats.planLimit) * 100 < 1
+                ? '<1% used'
+                : `${Math.round((leadStats.total / leadStats.planLimit) * 100)}% used`}
+            </p>
+          </div>
+        </CardContent>
+        {recoveryStats && recoveryStats.totalRecovered > 0 && (
+          <div className="px-3 sm:px-4 pb-3 sm:pb-4 border-t border-border/30 pt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-[10px] sm:text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground font-medium">Lead Recovery</span>
+              <span className="font-bold text-emerald-500">{recoveryStats.totalRecovered} recovered</span>
+              {recoveryStats.recoveredToday > 0 && (
+                <span className="text-muted-foreground">(+{recoveryStats.recoveredToday} today)</span>
+              )}
             </div>
-          </CardContent>
-        </Card>
+            {Object.entries(recoveryStats.byIntent || {}).map(([intent, count]) => (
+              <span key={intent} className="text-muted-foreground/60">
+                {intent}: <span className="font-bold text-foreground/80">{count}</span>
+              </span>
+            ))}
+            <span className="text-muted-foreground/40 text-[8px]">
+              Recovered from junk/spam folders via Lead Recovery
+            </span>
+          </div>
+        )}
+      </Card>
       )}
 
       <Card className="border-border/40 shadow-2xl relative overflow-hidden group bg-card">

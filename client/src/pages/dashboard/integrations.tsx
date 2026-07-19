@@ -221,6 +221,16 @@ const integrationCards: Array<{
     color: "text-blue-600",
     bg: "bg-blue-600/10",
     freePlanNote: "OAuth & scheduling links work on the free plan. Real-time booking webhooks require Calendly Standard ($12/mo).",
+  },
+  {
+    do: "calendar",
+    id: "google_calendar",
+    name: "Google Calendar",
+    description: "Sync your Google Calendar for AI-led meeting booking and availability management.",
+    icon: CalendarDays,
+    color: "text-emerald-500",
+    bg: "bg-emerald-500/10",
+    freePlanNote: "Free with any Google account. Real-time updates via push notifications.",
   }
 ];
 
@@ -368,6 +378,11 @@ export default function IntegrationsPage() {
     staleTime: 5_000,
     refetchOnMount: true,
   });
+  const { data: googleCalendarStatus } = useQuery<{ connected: boolean }>({
+    queryKey: ["/api/channels/google-calendar"],
+    staleTime: 5_000,
+    refetchOnMount: true,
+  });
 
   const getDailyLimit = () => {
     const tier = (getActivePlanId(userData)).toLowerCase();
@@ -423,6 +438,7 @@ export default function IntegrationsPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
         queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/channels/google-calendar"] });
         queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
         queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
@@ -431,6 +447,7 @@ export default function IntegrationsPage() {
           queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
           queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
           queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/channels/google-calendar"] });
           queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
         }, 1500);
       }
@@ -527,9 +544,11 @@ export default function IntegrationsPage() {
         };
       });
       queryClient.setQueryData(["/api/channels/calendly"], { connected: false, accountName: null });
+      queryClient.setQueryData(["/api/channels/google-calendar"], { connected: false, accountName: null });
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/channels/google-calendar"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({ title: "Disconnected", description: "Integration removed successfully." });
     }
@@ -686,7 +705,8 @@ export default function IntegrationsPage() {
     }
 
     try {
-      const response = await fetch(`/api/oauth/connect/${provider}`);
+      const apiProvider = provider.replace(/_/g, '-');
+      const response = await fetch(`/api/oauth/connect/${apiProvider}`);
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText.substring(0, 50));
@@ -795,7 +815,7 @@ export default function IntegrationsPage() {
         isOpen={isDisconnectDialogOpen}
         onOpenChange={setIsDisconnectDialogOpen}
         onConfirm={() => {
-          if (disconnectProvider === 'instagram' || disconnectProvider === 'gmail' || disconnectProvider === 'outlook' || disconnectProvider === 'calendly') {
+          if (disconnectProvider === 'instagram' || disconnectProvider === 'gmail' || disconnectProvider === 'outlook' || disconnectProvider === 'calendly' || disconnectProvider === 'google_calendar') {
             disconnectProviderMutation.mutate({ provider: disconnectProvider, integrationId: disconnectIntegrationId || undefined });
           } else if (disconnectProvider) {
             // It's a custom email integration ID
@@ -806,6 +826,8 @@ export default function IntegrationsPage() {
           disconnectProvider === 'gmail' ? 
             (customEmailStatus?.integrations?.find(i => i.id === disconnectIntegrationId)?.email?.endsWith('@gmail.com') ? 'Personal Google Account' : 'Google Workspace') :
             disconnectProvider === 'outlook' ? 'Outlook' :
+            disconnectProvider === 'calendly' ? 'Calendly' :
+            disconnectProvider === 'google_calendar' ? 'Google Calendar' :
               customEmailStatus?.integrations?.find(i => i.id === disconnectProvider)?.email || 'Email Account'}
       />
 
@@ -1491,9 +1513,17 @@ export default function IntegrationsPage() {
                               ) : (
                                 <Badge variant="outline" className="text-muted-foreground border-muted text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Disconnected</Badge>
                               )}
+                              {mailbox.connected && mailbox.warmupStatus === 'active' && (
+                                <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Warmup</Badge>
+                              )}
+                              {mailbox.connected && mailbox.warmupStatus !== 'active' && mailbox.warmupStatus !== 'none' && (
+                                <Badge variant="secondary" className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">
+                                  Warmup {mailbox.warmupStatus === 'paused' ? 'Paused' : 'Off'}
+                                </Badge>
+                              )}
                               {/* DNS badges — hidden on mobile to save space */}
-                              {mailbox.connected && stats?.health?.dns && (
-                                <span className="hidden sm:inline-flex gap-1.5">
+{mailbox.connected && stats?.health?.dns && (
+  <span className="inline-flex gap-1.5">
                                   <Badge className={cn(
                                     "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
                                     stats.health.dns.spf ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
@@ -1522,7 +1552,7 @@ export default function IntegrationsPage() {
                                     "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
                                     !stats.health.dns.blacklist ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
                                   )}>
-                                    RBL
+                                    BL
                                   </Badge>
                                 </span>
                               )}
@@ -1537,51 +1567,66 @@ export default function IntegrationsPage() {
 
                         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mt-2 lg:mt-0">
                           {mailbox.connected && (
-                            <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 w-full sm:w-auto">
-                              <div className="flex flex-col justify-center">
-                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Delivery</span>
-                                <span className={cn(
-                                  "text-xs sm:text-sm font-black",
-                                  mailbox.deliveryRate === null || mailbox.deliveryRate === undefined ? "text-sky-500" :
-                                  mailbox.deliveryRate >= 95 ? "text-emerald-500" :
-                                  mailbox.deliveryRate >= 80 ? "text-amber-500" : "text-destructive"
-                                )}>
-                                  {mailbox.deliveryRate !== null && mailbox.deliveryRate !== undefined
-                                    ? `${mailbox.deliveryRate}%`
-                                    : "Init..."}
-                                </span>
-                              </div>
-                              <div className="flex flex-col justify-center border-l border-border/40 pl-2">
-                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bounce</span>
-                                <span className={cn(
-                                  "text-xs sm:text-sm font-black",
-                                  mailbox.bounceRate === null || mailbox.bounceRate === undefined ? "text-sky-500" :
-                                  mailbox.bounceRate < 2 ? "text-emerald-500" :
-                                  mailbox.bounceRate < 5 ? "text-amber-500" : "text-destructive"
-                                )}>
-                                  {mailbox.bounceRate !== null && mailbox.bounceRate !== undefined
-                                    ? `${mailbox.bounceRate}%`
-                                    : "Init..."}
-                                </span>
-                              </div>
-                              <div className="flex flex-col justify-center border-l border-border/40 pl-2">
-                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Inbox</span>
-                                <span className={cn(
-                                  "text-xs sm:text-sm font-black",
-                                  mailbox.placementRate === null || mailbox.placementRate === undefined ? "text-sky-500" :
-                                  mailbox.placementRate >= 90 ? "text-emerald-500" :
-                                  mailbox.placementRate >= 70 ? "text-amber-500" : "text-destructive"
-                                )}>
-                                  {mailbox.placementRate !== null && mailbox.placementRate !== undefined
-                                    ? `${mailbox.placementRate}%`
-                                    : "Init..."}
-                                </span>
-                              </div>
-                              <div className="flex flex-col justify-center border-l border-border/40 pl-2">
-                                <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status</span>
-                                <span className="text-xs font-black text-emerald-400 tabular-nums">
-                                  {mailbox.connected ? "Active" : "Inactive"}
-                                </span>
+                            <div className="flex overflow-x-auto -mx-3 px-3 w-auto sm:mx-0 sm:px-0">
+                              <div className="grid grid-cols-5 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 min-w-[320px] sm:min-w-0">
+                                <div className="flex flex-col justify-center">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Delivery</span>
+                                  <span className={cn(
+                                    "text-xs sm:text-sm font-black",
+                                    mailbox.deliveryRate === null || mailbox.deliveryRate === undefined ? "text-sky-500" :
+                                    mailbox.deliveryRate >= 95 ? "text-emerald-500" :
+                                    mailbox.deliveryRate >= 80 ? "text-amber-500" : "text-destructive"
+                                  )}>
+                                    {mailbox.deliveryRate !== null && mailbox.deliveryRate !== undefined
+                                      ? `${mailbox.deliveryRate}%`
+                                      : "Init..."}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bounce</span>
+                                  <span className={cn(
+                                    "text-xs sm:text-sm font-black",
+                                    mailbox.bounceRate === null || mailbox.bounceRate === undefined ? "text-sky-500" :
+                                    mailbox.bounceRate < 2 ? "text-emerald-500" :
+                                    mailbox.bounceRate < 5 ? "text-amber-500" : "text-destructive"
+                                  )}>
+                                    {mailbox.bounceRate !== null && mailbox.bounceRate !== undefined
+                                      ? `${mailbox.bounceRate}%`
+                                      : "Init..."}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Inbox</span>
+                                  <span className={cn(
+                                    "text-xs sm:text-sm font-black",
+                                    mailbox.placementRate === null || mailbox.placementRate === undefined ? "text-sky-500" :
+                                    mailbox.placementRate >= 90 ? "text-emerald-500" :
+                                    mailbox.placementRate >= 70 ? "text-amber-500" : "text-destructive"
+                                  )}>
+                                    {mailbox.placementRate !== null && mailbox.placementRate !== undefined
+                                      ? `${mailbox.placementRate}%`
+                                      : "Init..."}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Rep</span>
+                                  <span className={cn(
+                                    "text-xs sm:text-sm font-black",
+                                    mailbox.reputationScore === null || mailbox.reputationScore === undefined ? "text-sky-500" :
+                                    mailbox.reputationScore >= 80 ? "text-emerald-500" :
+                                    mailbox.reputationScore >= 50 ? "text-amber-500" : "text-destructive"
+                                  )}>
+                                    {mailbox.reputationScore !== null && mailbox.reputationScore !== undefined
+                                      ? `${mailbox.reputationScore}`
+                                      : "—"}
+                                  </span>
+                                </div>
+                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status</span>
+                                  <span className="text-xs font-black text-emerald-400 tabular-nums">
+                                    {mailbox.connected ? "Active" : "Inactive"}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           )}
@@ -1867,7 +1912,7 @@ export default function IntegrationsPage() {
               ) : (
                 integrationCards.map((card) => {
                   const connectedIntegrations = Array.isArray(integrations) ? integrations.filter(i => i.provider === card.id) : [];
-                  const isConnected = connectedIntegrations.length > 0 || (card.id === 'calendly' && calendlyStatus?.connected);
+                  const isConnected = connectedIntegrations.length > 0 || (card.id === 'calendly' && calendlyStatus?.connected) || (card.id === 'google_calendar' && googleCalendarStatus?.connected);
 
                   return (
                     <Card key={card.id} className={`group transition-all rounded-2xl border bg-muted/10 hover:bg-muted/20 ${isConnected ? 'border-primary/40 bg-primary/5' : 'border-border/50'} flex flex-col`}>
@@ -1880,7 +1925,7 @@ export default function IntegrationsPage() {
                             <Badge variant="secondary" className="bg-muted text-muted-foreground border-0 font-semibold text-[9px] uppercase tracking-wider py-1">{card.badge}</Badge>
                           ) : isConnected ? (
                             <Badge className="bg-emerald-500/10 text-emerald-600 border-0 font-bold text-[9px] uppercase tracking-wider py-1">
-                              {card.id === 'calendly' ? 'Connected' : `${connectedIntegrations.length} Active`}
+                              {card.id === 'calendly' || card.id === 'google_calendar' ? 'Connected' : `${connectedIntegrations.length} Active`}
                             </Badge>
                           ) : (
                             <div className="h-2 w-2 rounded-full bg-muted-foreground/20" />

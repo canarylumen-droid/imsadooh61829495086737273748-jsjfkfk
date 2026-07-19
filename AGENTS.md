@@ -66,7 +66,7 @@ Audnix - email outreach/campaign platform. React SPA client (Vite), Node.js Expr
 - KPI `calculateRate` returns `null` when denominator < minDen (instead of 0)
 - `globalBounceRate` computed from `totalSent` (not `outreachedLeads`) for accuracy
 - S3 storage configured for uploads (bucket: `audnix-app-uploads`, us-east-1). No Supabase on EC2. Avatar/S3 fallback to pre-signed URLs via `getPublicUrl()`
-- Rust email sender runs under PM2 alongside Node.js workers. `NEW_EMAIL_BACKEND=rust` flag activates email via Rust. Rust compiled on EC2 with `cargo build --release` (uses rustup stable)
+- Rust email sender runs under PM2 alongside Node.js workers. `NEW_EMAIL_BACKEND=rust` flag activates email via Rust. Rust compiled on EC2 with `cargo build --release` (uses rustup stable). Event-driven via `BRPOP 0.0` (infinite block, zero polling).
 
 ## AWS / Deployment
 
@@ -547,3 +547,115 @@ Built 4 interconnected components for real-time inbox placement detection withou
 - AWS credentials stored in `opencode.json` mcp.aws.env block (`AKIAZUAXW67WM4BNID4G` + secret key). Use Node.js AWS SDK v3 with `@aws-sdk/client-ec2-instance-connect` to push new SSH keys.
 - Build command on EC2: `cd /home/ubuntu/app/client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client`
 - Restart: `pm2 restart all`
+
+## This Session (Jul 18 2026) — Global Mailbox Switcher + Lead Distribution + Charts
+
+### Commits
+- `76f0236a` — 24h warmup activity chart (backend EXTRACT HOUR + frontend BarChart)
+- `5fdf4aa8` — Global mailbox switcher (all pages filter by selectedMailboxId) + lead distribution evenly across mailboxes on import + fix createLeadsBatch missing integrationId
+- `2c7ff792` — Warmup chart + deliverability chart time ranges (24h/7d/14d/30d/90d/365d), backend ?days param with hourly vs daily grouping
+
+### Changes
+1. **Backend: integrationId on all endpoints** — inbox-placement, domain-reputation, analytics/outreach, warmup-status all accept `?integrationId`
+2. **Frontend: all pages use selectedMailboxId** — warmup, deliverability, home, inbox, insights, analytics, deals pass it in query keys (home.tsx, warmup.tsx, deliverability.tsx, inbox.tsx, insights.tsx)
+3. **Lead distribution** — `createLeadsBatch()` now stores `integrationId` (was bug: missing from insert), bulk import round-robins across all connected mailboxes when no mailbox specified
+4. **Chart time ranges** — Warmup activity chart: 24H/7D/14D/30D/90D/1Y selector. Backend auto-switches hourly (≤2d) vs daily grouping. Deliverability inbox-placement pie: 24h/7d/30d/60d/90d
+5. **Files**: 10 files changed (warmup.tsx, deliverability.tsx, home.tsx, inbox.tsx, insights.tsx, lead-import.tsx, dashboard-routes.ts, email-stats-routes.ts, bulk-actions-routes.ts, drizzle-storage.ts)
+
+---
+
+## This Session (Jul 18 2026) — Seed Warmup: Auto-Start + Sent Folder Scanner + User Subjects + Campaign Gap
+
+### Changes
+1. **Auto-start warmup on mailbox connect** (`enrollment-engine.ts`): Changed default `warmupMailboxes.status` from `'paused'` → `'active'`. Also auto-sets `integrations.warmupStatus='active'`. Warmup runs immediately on connection, no manual toggle needed.
+2. **SENT folder scanner** (`sent-folder-scanner.ts`): New module that connects via IMAP, finds sent folder (`[Gmail]/Sent Mail`/`Sent Items`/`Sent`), reads 4 most recent real sent emails, extracts subjects + body. Stores as `metadata.userSubjects[]` and `metadata.userTemplates[]`. Runs fire-and-forget after enrollment, refreshes every 60 min via scheduler. Skips auto-replies/fwds/bounces.
+3. **User subjects in warmup threads** (`thread-manager.ts`): `pickSubject()` checks `sender.metadata.userSubjects` first, falls back to static `SUBJECT_TEMPLATES`. Warmup emails now look like user's real writing style.
+4. **10-min campaign gap** (`scheduler-worker.ts`): Before creating new warmup threads, checks `campaign_emails` for sends within last 10 min on same `integrationId`. Skips warmup while campaigns are active.
+5. **Auto-start + integration sync**: `enrollmentEngine.enroll()` now has `.returning()` to capture inserted ID for sent folder scan. Also updates `integrations.warmupStatus='active'` to sync dashboard state.
+
+### Deploy Required
+- `npm run build:client` and `pm2 restart audnix-worker-warmup` on EC2
+- No client changes — all server-side
+
+## Remaining Work (Documented Jul 18 2026)
+
+### 1. Rust MX Lookup Optimization (HIGH)
+- **50k leads in ~3 seconds**: Rust does MX lookup via parallel DNS queries (tokio DNS). Each lookup is <1ms async.
+- **Pair Gmail → Gmail**: If lead has @gmail.com, assign to Gmail mailbox. Same for Outlook, custom domains.
+- **Distribute evenly**: After provider-pairing, round-robin remaining leads across mailboxes of same provider family.
+- **Fallback**: If not enough Gmail mailboxes for Gmail leads, fall back to custom SMTP mailboxes.
+- **Scales**: Async, non-blocking, connection pooling for DNS. No per-lead Node.js overhead.
+
+### 2. IMAP Open Tracking via X-Audnix-Warmup Header (MEDIUM)
+- Track opens via IMAP `\\Seen` flag on warmup emails (hidden folder sweep already detects `X-Audnix-Warmup` header). Log `openedAt` per interaction.
+- Log reply detection via `In-Reply-To` / `References` matching our warmup message IDs.
+
+### 3. Reputation Boost on High Score (LOW)
+- If `reputationScore >= 85` for 7+ consecutive days, add 3 more warmup emails/day.
+
+### 4. Domain Reputation Auto-Fix (LOW)
+- **If spam → move to inbox**: When seed warmup detects placement=spam, move to inbox and report "not spam".
+- **Browser automation**: Optional — use Puppeteer/Playwright to mark "not spam" in Gmail web UI.
+- **IMAP fallback**: Move from [Gmail]/Spam to INBOX via IMAP.
+
+### 5. Charts Polish (LOW)
+- Animate chart lines/bars on page load (recharts animation property)
+
+### 6. Mobile UI (LOW)
+- MailboxSwitcher compact on mobile
+- Charts responsive
+- Tables horizontal scroll
+- `services/email-service/src/email/spam-monitor.ts` — Spam folder detection
+
+## This Session (Jul 19 2026) — MailboxSwitcher, Lead Scoring, AI Reply, Rust Sender Fixes
+
+### Summary
+12 bugs fixed across backend + frontend + Rust. All critical issues from earlier session resolved.
+
+### Changes
+
+1. **MailboxSwitcher auto-removed** (`MailboxSwitcher.tsx:59-64`): Deleted `useEffect` that forced first mailbox on mount. Added "All Mailboxes" `SelectItem` with `value="all"` — when selected, `handleMailboxChange(undefined)` shows aggregate data.
+
+2. **Lead scoring cold logic** (`lead-scoring.ts:52`): Replaced unconditional `status: score > 70 ? 'qualified' : 'cold'` with guard — only sets `'cold'` if status is `'new'`/`'bouncy'` AND `lastMessageAt` > 7 days ago. Never downgrades active statuses.
+
+3. **AI reply status overwrite** (`ai-routes.ts:879`): Added `ACTIVE_STATUSES` guard — preserves `contacted`/`replied`/`warm`/`booked`/`converted` when AI reply returns `'new'`.
+
+4. **BL always red** (`ReputationCard.tsx:158`): Added `|| (val === false && key === 'blacklist')` so clean RBL shows green.
+
+5. **DNS badges hidden on mobile** (`integrations.tsx:1503`): Changed `hidden sm:inline-flex` → `inline-flex`. Also "RBL" → "BL".
+
+6. **DNS unique constraint** (`migrator.ts:128`): Added `CREATE UNIQUE INDEX idx_domain_verifications_user_domain` so `ON CONFLICT (user_id, domain)` actually works.
+
+7. **`messages.integrationId` for manual inbox sends** (`email.ts:777,999,1192`): `sendEmail` returns `{ messageId, integrationId }`. `messages-routes.ts:181` passes to `createMessage()`.
+
+8. **`findLeadBySenderAndIntegration` fallback** (`drizzle-storage.ts:635`): Added `userId` param. When `integrationId` match fails, tries `userId + email` lookup. `email-sync-queue.ts:158` calls for legacy leads.
+
+9. **Open tracking race condition** (`inbox.tsx:382`): Wrapped `invalidateQueries` in `if (!isOpenEvent && !isClickEvent)` — prevents stale refetch overwriting `openedAt`.
+
+10. **`email_tracking` missing columns** (`migrator.ts:649-668`): Added `integration_id`, `placement` (default `'unknown'`), `placement_updated_at`, + indexes. All `updateSendPlacement` WHERE guards widened to `IS NULL OR IN ('unknown', 'delivered')`.
+
+11. **Smart MX lead routing** (`mailbox-router.ts`): New file — `assignMailbox()` routes `@gmail.com`→Gmail, `@outlook.com`→Outlook, custom→matching custom_email, fallback round-robin. `bulk-actions-routes.ts:105` uses it.
+
+12. **Rust sender event-driven** (`main.rs:48-56`): Changed from `tokio::time::interval(50ms)` + `BRPOP 0.1s` → infinite `BRPOP 0.0` (pure event-driven, zero polling). Removed `std::time::Duration` import, added `#[allow(dead_code)]` to Config.
+
+### Files Changed
+- `client/src/components/outreach/MailboxSwitcher.tsx`
+- `services/brain-worker/lead-scoring.ts`
+- `services/api-gateway/src/routes/ai-routes.ts`
+- `client/src/components/outreach/ReputationCard.tsx`
+- `client/src/pages/dashboard/integrations.tsx`
+- `shared/lib/db/migrator.ts`
+- `shared/lib/channels/email.ts`
+- `services/api-gateway/src/routes/messages-routes.ts`
+- `shared/lib/storage/drizzle-storage.ts`
+- `shared/lib/storage/queue/email-sync-queue.ts`
+- `client/src/pages/dashboard/inbox.tsx`
+- `shared/lib/imports/mailbox-router.ts` (new)
+- `services/api-gateway/src/routes/bulk-actions-routes.ts`
+- `rust-email-sender/src/main.rs`
+- `rust-email-sender/src/config.rs`
+
+### Deploy Required
+- `git push github main`
+- EC2: `cd /home/ubuntu/app && git pull && cd client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client && pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-imap audnix-worker-brain`
+- Rust: `cd rust-email-sender && cargo build --release && pm2 restart audnix-rust-email-sender`

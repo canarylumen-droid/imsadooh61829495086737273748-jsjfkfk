@@ -797,3 +797,38 @@ export async function recoverStaleBusyState(
     [stateId]
   );
 }
+
+export async function getRecoveryStats(tenantId: string): Promise<{
+  totalRecovered: number;
+  recoveredToday: number;
+  byIntent: Record<string, number>;
+}> {
+  const p = getMySqlPool();
+  if (!p) return { totalRecovered: 0, recoveredToday: 0, byIntent: {} };
+  try {
+    const [totalRow] = await p.query(
+      "SELECT COUNT(*) as cnt FROM recovered_leads WHERE tenant_id = ?",
+      [tenantId]
+    );
+    const totalRecovered = Number((totalRow as any[])[0]?.cnt) || 0;
+
+    const [todayRow] = await p.query(
+      "SELECT COUNT(*) as cnt FROM recovered_leads WHERE tenant_id = ? AND DATE(created_at) = CURDATE()",
+      [tenantId]
+    );
+    const recoveredToday = Number((todayRow as any[])[0]?.cnt) || 0;
+
+    const [intentRows] = await p.query(
+      "SELECT intent, COUNT(*) as cnt FROM recovered_leads WHERE tenant_id = ? GROUP BY intent",
+      [tenantId]
+    );
+    const byIntent: Record<string, number> = {};
+    for (const row of (intentRows as any[]) || []) {
+      byIntent[row.intent] = Number(row.cnt);
+    }
+
+    return { totalRecovered, recoveredToday, byIntent };
+  } catch {
+    return { totalRecovered: 0, recoveredToday: 0, byIntent: {} };
+  }
+}

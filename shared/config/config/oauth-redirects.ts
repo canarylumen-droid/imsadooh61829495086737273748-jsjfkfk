@@ -1,16 +1,23 @@
 export function getOAuthRedirectUrl(provider: 'gmail' | 'google-calendar' | 'outlook' | 'instagram' | 'calendly' | 'postmaster'): string {
-  const isProduction = process.env.NODE_ENV === 'production';
-  const domain = process.env.DOMAIN || 'audnixai.com';
+  const envKey = `${provider.toUpperCase().replace('-', '_')}_REDIRECT_URI`;
+  if (process.env[envKey]) return process.env[envKey]!;
 
-  // All providers now use /api/oauth/${provider}/callback for consistency
   const basePath = `/api/oauth/${provider}/callback`;
 
-  if (isProduction && domain) {
+  // Production: DOMAIN env or default to audnixai.com
+  if (process.env.NODE_ENV === 'production') {
+    const domain = process.env.DOMAIN || 'audnixai.com';
     return `https://${domain}${basePath}`;
   }
 
-  const envKey = `${provider.toUpperCase().replace('-', '_')}_REDIRECT_URI`;
-  return process.env[envKey] || `http://localhost:5000${basePath}`;
+  // Development: DOMAIN, BASE_URL, or fallback to localhost
+  const domain = process.env.DOMAIN || process.env.BASE_URL?.replace(/^https?:\/\//, '');
+  if (domain) {
+    const protocol = process.env.BASE_URL?.startsWith('http') ? '' : 'https://';
+    return `${protocol}${domain}${basePath}`;
+  }
+
+  return `http://localhost:5000${basePath}`;
 }
 
 export function getAllOAuthRedirectUrls() {

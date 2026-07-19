@@ -1236,81 +1236,68 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
         const fourteenDaysAgo = new Date();
         fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
 
-        const mailboxes = await Promise.all(emailInts.map(async (int: any) => {
-            const createdAt = int.createdAt ? new Date(int.createdAt) : new Date();
-            const daysSinceConnected = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / (86400000)));
-            const providerMax = PROVIDER_MAX[int.provider] || 80;
-
-            let warmupPercent = 100;
-            let isWarmingUp = false;
-            let dailyLimit = providerMax;
-            for (const stage of WARMUP_STAGES) {
-                if (daysSinceConnected <= stage.maxDays) {
-                    dailyLimit = Math.max(1, Math.round(providerMax * stage.pct));
-                    warmupPercent = Math.round(stage.pct * 100);
-                    isWarmingUp = true;
-                    break;
-                }
-            }
-
-            // Count sends in last 14 days
-            let totalSent = 0;
-            let totalBounced = 0;
-            let totalOpened = 0;
+        const results: any[] = [];
+        for (const int of emailInts) {
             try {
-                const [sentRow] = await db.select({ count: sqlFn`count(*)::int` })
-                    .from(emailTracking)
-                    .where(and(
-                        eq(emailTracking.integrationId, int.id),
-                        gte(emailTracking.createdAt, fourteenDaysAgo)
-                    ));
-                totalSent = Number(sentRow?.count) || 0;
-
-                const [bounceRow] = await db.select({ count: sqlFn`count(*)::int` })
-                    .from(bounceTrackerTable)
-                    .where(and(
-                        eq(bounceTrackerTable.integrationId, int.id),
-                        gte(bounceTrackerTable.createdAt, fourteenDaysAgo)
-                    ));
-                totalBounced = Number(bounceRow?.count) || 0;
-
-                const [openRow] = await db.select({ count: sqlFn`count(*)::int` })
-                    .from(emailTracking)
-                    .where(and(
-                        eq(emailTracking.integrationId, int.id),
-                        sqlFn`${emailTracking.openCount} > 0`,
-                        gte(emailTracking.createdAt, fourteenDaysAgo)
-                    ));
-                totalOpened = Number(openRow?.count) || 0;
-            } catch (_) {}
-
-            // Reputation from provider_limits
-            const providerLimits = (int.providerLimits || {}) as any;
-            let reputationScore = 100;
-            for (const key of Object.keys(providerLimits)) {
-                if (providerLimits[key]?.reputationScore !== undefined) {
-                    reputationScore = providerLimits[key].reputationScore;
-                    break;
+                const createdAt = int.createdAt ? new Date(int.createdAt) : new Date();
+                const daysSinceConnected = Math.max(0, Math.floor((Date.now() - createdAt.getTime()) / (86400000)));
+                const providerMax = PROVIDER_MAX[int.provider] || 80;
+                let warmupPercent = 100;
+                let isWarmingUp = false;
+                let dailyLimit = providerMax;
+                for (const stage of WARMUP_STAGES) {
+                    if (daysSinceConnected <= stage.maxDays) {
+                        dailyLimit = Math.max(1, Math.round(providerMax * stage.pct));
+                        warmupPercent = Math.round(stage.pct * 100);
+                        isWarmingUp = true;
+                        break;
+                    }
                 }
+                let totalSent = 0, totalBounced = 0, totalOpened = 0;
+                try {
+                    const [sentRow] = await db.select({ count: sqlFn`count(*)::int` }).from(emailTracking)
+                        .where(and(eq(emailTracking.integrationId, int.id), gte(emailTracking.createdAt, fourteenDaysAgo)));
+                    totalSent = Number(sentRow?.count) || 0;
+                    const [bounceRow] = await db.select({ count: sqlFn`count(*)::int` }).from(bounceTrackerTable)
+                        .where(and(eq(bounceTrackerTable.integrationId, int.id), gte(bounceTrackerTable.createdAt, fourteenDaysAgo)));
+                    totalBounced = Number(bounceRow?.count) || 0;
+                    const [openRow] = await db.select({ count: sqlFn`count(*)::int` }).from(emailTracking)
+                        .where(and(eq(emailTracking.integrationId, int.id), sqlFn`${emailTracking.openCount} > 0`, gte(emailTracking.createdAt, fourteenDaysAgo)));
+                    totalOpened = Number(openRow?.count) || 0;
+                } catch (_) {}
+                let reputationScore = 100;
+                try {
+                    const raw = int.providerLimits;
+                    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+                        for (const key of Object.keys(raw)) {
+                            if ((raw as any)[key]?.reputationScore !== undefined) {
+                                reputationScore = (raw as any)[key].reputationScore;
+                                break;
+                            }
+                        }
+                    }
+                } catch (_) {}
+                results.push({
+                    mailboxId: int.id,
+                    email: int.smtpUser || int.email || 'Unknown',
+                    provider: int.provider,
+                    isWarmingUp,
+                    dailyLimit,
+                    providerMax,
+                    daysSinceConnected,
+                    warmupPercent: isWarmingUp ? warmupPercent : 100,
+                    reputationScore,
+                    totalSent,
+                    totalBounced,
+                    totalOpened,
+                    warmupStatus: int.warmupStatus || 'none',
+                    warmupLimit: int.warmupLimit ?? 5,
+                });
+            } catch (e: any) {
+                console.warn(`[Dashboard] Skipping mailbox ${int.id}: ${e.message}`);
             }
-
-            return {
-                mailboxId: int.id,
-                email: int.smtpUser || int.email || 'Unknown',
-                provider: int.provider,
-                isWarmingUp,
-                dailyLimit,
-                providerMax,
-                daysSinceConnected,
-                warmupPercent: isWarmingUp ? warmupPercent : 100,
-                reputationScore,
-                totalSent,
-                totalBounced,
-                totalOpened,
-                warmupStatus: int.warmupStatus || 'none',
-                warmupLimit: int.warmupLimit ?? 5,
-            };
-        }));
+        }
+        const mailboxes = results;
 
         res.json({ mailboxes });
     } catch (error: any) {

@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::time::Duration;
 use anyhow::Result;
 use redis::AsyncCommands;
 use tokio::sync::Semaphore;
@@ -45,15 +44,10 @@ async fn main() -> Result<()> {
     log::info!("Listening on email queue: {}", email_queue);
     log::info!("Listening on DNS queue: {}", dns_queue);
 
-    // Main loop: poll Redis for both email and DNS jobs
-    let mut interval = tokio::time::interval(Duration::from_millis(config.poll_interval_ms));
-
+    // Main loop: event-driven — blocks on BRPOP with infinite timeout (zero polling)
     loop {
-        interval.tick().await;
-
-        // Check both queues with a single BRPOP call
         let job_opt: Option<Vec<String>> = redis_conn.clone()
-            .brpop(&[&email_queue, &dns_queue], 0.1).await.ok();
+            .brpop(&[&email_queue, &dns_queue], 0.0).await.ok();
 
         if let Some(mut parts) = job_opt {
             if parts.len() < 2 { continue; }

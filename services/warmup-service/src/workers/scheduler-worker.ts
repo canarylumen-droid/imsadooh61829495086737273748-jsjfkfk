@@ -16,6 +16,7 @@ import { pairingEngine } from '../lib/pairing-engine.js';
 import { threadManager } from '../lib/thread-manager.js';
 import { warmupInboundQueue } from '../queues/warmup-queues.js';
 import { reputationRecovery } from '../engine/reputation-recovery.js';
+import { scanAllActiveSentFolders } from '../lib/sent-folder-scanner.js';
 
 export class WarmupScheduler {
   private intervals: NodeJS.Timeout[] = [];
@@ -79,6 +80,15 @@ export class WarmupScheduler {
     // Every 2 min: inbox sweep for all active mailboxes
     this.intervals.push(
       setInterval(() => this.scheduleInboxSweeps(), WARMUP_CONFIG.INBOX_SWEEP_INTERVAL_MS)
+    );
+
+    // Every 60 min: sent folder scan to refresh user subjects/templates
+    this.intervals.push(
+      setInterval(() => {
+        scanAllActiveSentFolders().catch((err: any) =>
+          console.warn('[Warmup][Scheduler] Sent folder scan failed:', err.message)
+        );
+      }, 60 * 60 * 1000)
     );
 
     // Daily at 00:00 UTC: reset counters
@@ -246,6 +256,18 @@ export class WarmupScheduler {
       );
 
       if (hoursSinceLastThread < requiredInterval) continue;
+
+      // 10-min gap from campaign sends
+      if (mb.integrationId) {
+        const recentCampaign = await db.execute(sql`
+          SELECT 1 FROM campaign_emails
+          WHERE integration_id = ${mb.integrationId}::uuid
+            AND status IN ('sent','delivered')
+            AND sent_at > NOW() - INTERVAL '10 minutes'
+          LIMIT 1
+        `);
+        if ((recentCampaign.rows as any[]).length > 0) continue;
+      }
 
       // Find partner
       const partner = await pairingEngine.findPartner(mb);

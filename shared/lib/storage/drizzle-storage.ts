@@ -632,13 +632,21 @@ export class DrizzleStorage implements IStorage {
     return result;
   }
 
-  async findLeadBySenderAndIntegration(email: string, integrationId: string): Promise<Lead | undefined> {
+  async findLeadBySenderAndIntegration(email: string, integrationId: string, userId?: string): Promise<Lead | undefined> {
     checkDatabase();
     const [result] = await db
       .select()
       .from(leads)
       .where(and(sql`LOWER(${leads.email}) = LOWER(${email})`, eq(leads.integrationId, integrationId)))
       .limit(1);
+    if (!result && userId) {
+      const [fallback] = await db
+        .select()
+        .from(leads)
+        .where(and(sql`LOWER(${leads.email}) = LOWER(${email})`, eq(leads.userId, userId)))
+        .limit(1);
+      return fallback;
+    }
     return result;
   }
 
@@ -1354,6 +1362,7 @@ export class DrizzleStorage implements IStorage {
                 niche: lead.niche || null,
                 industry: lead.industry || null,
                 revenue: lead.revenue || null,
+                integrationId: lead.integrationId || null,
                 status: lead.status || "new",
                 score: lead.score || 0,
                 warm: lead.warm || false,
@@ -1537,6 +1546,7 @@ export class DrizzleStorage implements IStorage {
     }
 
     console.log(`[Storage] Creating new integration for ${integration.provider}`);
+    const isEmailProvider = ['gmail', 'outlook', 'custom_email'].includes(integration.provider);
     const result = await db
       .insert(integrations)
       .values({
@@ -1546,6 +1556,7 @@ export class DrizzleStorage implements IStorage {
         connected: integration.connected ?? true,
         accountType: integration.accountType || null,
         lastSync: integration.lastSync || null,
+        warmupStatus: integration.warmupStatus || (isEmailProvider ? 'active' : 'none'),
         createdAt: new Date(),
         updatedAt: new Date(),
       })

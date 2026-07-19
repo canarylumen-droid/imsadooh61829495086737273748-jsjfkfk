@@ -63,10 +63,18 @@ const SUBJECT_TEMPLATES = [
   'A thought on our last chat',
 ];
 
+function pickSubject(sender: WarmupMailbox): string {
+  const meta = (sender as any).metadata || {};
+  const userSubjects: string[] = meta.userSubjects || [];
+  if (userSubjects.length > 0) {
+    return userSubjects[Math.floor(Math.random() * userSubjects.length)];
+  }
+  return SUBJECT_TEMPLATES[Math.floor(Math.random() * SUBJECT_TEMPLATES.length)];
+}
+
 export class ThreadManager {
   async createThread(sender: WarmupMailbox, recipient: WarmupMailbox) {
-    const subject =
-      SUBJECT_TEMPLATES[Math.floor(Math.random() * SUBJECT_TEMPLATES.length)];
+    const subject = pickSubject(sender);
     const maxMessages = this.randomBetween(
       WARMUP_CONFIG.MIN_MESSAGES_PER_THREAD,
       WARMUP_CONFIG.MAX_MESSAGES_PER_THREAD

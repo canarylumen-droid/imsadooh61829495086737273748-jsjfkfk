@@ -539,7 +539,7 @@ export default function CalendarPage() {
                       {day}
                     </div>
                   ))}
-                  {monthDays.map(({ date, isCurrentMonth }, idx) => {
+                    {monthDays.map(({ date, isCurrentMonth }, idx) => {
                     const dayEvents = eventsForDate(date);
                     const isToday = date.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
                     const isSelected = date.toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0];
@@ -548,18 +548,23 @@ export default function CalendarPage() {
                         key={idx}
                         onClick={() => setSelectedDate(date)}
                         className={cn(
-                          "relative h-20 md:h-24 p-1 rounded-lg text-left transition-colors border border-transparent",
+                          "relative h-20 md:h-24 p-1 text-left transition-colors border border-transparent",
                           isCurrentMonth ? 'hover:bg-white/5' : 'opacity-30',
                           isSelected && 'bg-white/5 border-white/10',
-                          isToday && 'ring-1 ring-primary/50'
+                          isToday && 'ring-1 ring-primary/30'
                         )}
                       >
-                        <span className={cn(
-                          "text-xs font-medium inline-flex items-center justify-center w-6 h-6 rounded-full",
-                          isToday ? 'bg-primary text-primary-foreground' : 'text-white/60'
-                        )}>
-                          {date.getDate()}
-                        </span>
+                        <div className="flex justify-center mb-0.5">
+                          <span className={cn(
+                            "inline-flex items-center justify-center w-8 h-8 text-xs font-semibold transition-all",
+                            isSelected && !isToday ? 'bg-white/10 text-white rounded-full' : 'rounded-full',
+                            isToday ? 'bg-primary text-primary-foreground rounded-full shadow-lg shadow-primary/30' : '',
+                            isSelected && isToday ? 'ring-2 ring-white/50' : '',
+                            !isToday && !isSelected ? 'text-white/60' : ''
+                          )}>
+                            {date.getDate()}
+                          </span>
+                        </div>
                         <div className="space-y-0.5 mt-1">
                           {dayEvents.slice(0, 3).map(event => (
                             <div

@@ -379,8 +379,10 @@ export default function InboxPage() {
         );
       }
 
-      queryClient.invalidateQueries({ queryKey: ["/api/messages", targetLeadId] });
-      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      if (!isOpenEvent && !isClickEvent) {
+        queryClient.invalidateQueries({ queryKey: ["/api/messages", targetLeadId] });
+        queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      }
 
       // Auto-scroll if we are currently viewing the thread
       if (targetLeadId === leadId) {
@@ -1318,6 +1320,7 @@ export default function InboxPage() {
                       filterStatus === 'unread' ? "All caught up — no unread messages" :
                       filterStatus === 'opened' ? "No opened conversations yet" :
                       filterStatus === 'archived' ? "No archived conversations" :
+                      filterStatus === 'unsubscribed' ? "No leads have unsubscribed" :
                       filterStatus !== 'all' ? "Try a different filter or check back later" :
                         "Start a campaign to see conversations here"}
                   </p>
@@ -1372,12 +1375,11 @@ export default function InboxPage() {
                         filterStatus === 'unread' ? "All caught up — no unread messages" :
                         filterStatus === 'opened' ? "No opened conversations yet" :
                         filterStatus === 'archived' ? "No archived conversations" :
-                        filterStatus !== 'all' ? "Try a different filter or check back later" :
-                          allLeads.length > 0 ? "Start a campaign to see conversations here" :
-                            "Connect a mailbox to start receiving messages"}
-                    </p>
-                  </div>
-                )}
+                      filterStatus !== 'all' ? "Try a different filter or check back later" :
+                        hasAnyChannel ? "Start a campaign to see conversations here" :
+                          "Connect a mailbox to start receiving messages"}
+                  </p>
+                </div>
               </div>
             ) : filteredLeads.length === 0 && hasLoadedLeadsRef.current && leadsFetching ? (
               <div className="p-4 space-y-4">
@@ -1402,7 +1404,7 @@ export default function InboxPage() {
                       filterStatus === 'opened' ? "No opened conversations yet" :
                       filterStatus === 'archived' ? "No archived conversations" :
                       filterStatus !== 'all' ? "Try a different filter or check back later" :
-                        allLeads.length > 0 ? "Start a campaign to see conversations here" :
+                        hasAnyChannel ? "Start a campaign to see conversations here" :
                           "Connect a mailbox to start receiving messages"}
                   </p>
                 </div>
@@ -1474,7 +1476,7 @@ export default function InboxPage() {
                                   {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{lead.snippet ? stripHtml(lead.snippet).substring(0, 120) : "No messages"}</span>
+                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{lead.snippet ? stripHtml(lead.snippet).substring(0, 80) : "No messages"}</span>
                                 </span>
                               )}
                             </p>

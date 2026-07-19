@@ -155,7 +155,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
           {['SPF', 'DKIM', 'DMARC', 'MX', 'BL'].map((type) => {
             const key = type === 'BL' ? 'blacklist' : type.toLowerCase();
             const val = dns ? (dns as any)[key] : undefined;
-            const isGood = val === true && key !== 'blacklist';
+            const isGood = val === true && key !== 'blacklist' || val === false && key === 'blacklist';
             const isBad = key === 'blacklist' ? val === true : val === false;
             const isUnknown = val === undefined;
             return (

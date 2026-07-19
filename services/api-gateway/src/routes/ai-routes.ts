@@ -876,8 +876,13 @@ router.post("/reply/:leadId", requireAuthOrApiKey, async (req: Request, res: Res
     const oldStatus = lead.status;
     const newStatus = statusDetection.status;
 
+    // Never downgrade an engaged lead: preserve 'contacted', 'replied', 'warm', etc.
+    // Only allow forward progression (e.g., 'new'→'contacted', 'replied'→'booked')
+    const ACTIVE_STATUSES = new Set(['contacted', 'replied', 'warm', 'booked', 'converted', 'qualified', 'not_interested']);
+    const finalStatus = (ACTIVE_STATUSES.has(oldStatus) && newStatus === 'new') ? oldStatus : newStatus;
+
     const updatedLead = await storage.updateLead(leadId as string, {
-      status: newStatus as any,
+      status: finalStatus as any,
       lastMessageAt: new Date()
     });
 

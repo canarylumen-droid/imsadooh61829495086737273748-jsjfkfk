@@ -16,6 +16,7 @@ interface AllChannelsResponse {
   email: ChannelStatus;
   instagram: ChannelStatus;
   calendly: ChannelStatus;
+  googleCalendar: ChannelStatus;
 }
 
 router.get('/all', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
@@ -33,6 +34,9 @@ router.get('/all', requireAuthOrApiKey, async (req: Request, res: Response): Pro
     const calendlyIntegration = integrations.find(
       i => i.provider === 'calendly' && i.connected
     );
+    const googleCalendarIntegration = integrations.find(
+      i => i.provider === 'google_calendar' && i.connected
+    );
 
     const response: AllChannelsResponse = {
       email: {
@@ -49,6 +53,11 @@ router.get('/all', requireAuthOrApiKey, async (req: Request, res: Response): Pro
         provider: 'calendly',
         connected: !!calendlyIntegration,
         accountName: calendlyIntegration?.accountType || undefined,
+      },
+      googleCalendar: {
+        provider: 'google_calendar',
+        connected: !!googleCalendarIntegration,
+        accountName: googleCalendarIntegration?.accountType || undefined,
       }
     };
 
@@ -93,6 +102,23 @@ router.get('/instagram', requireAuthOrApiKey, async (req: Request, res: Response
   } catch (error: unknown) {
     console.error('Error fetching instagram status:', error);
     res.status(500).json({ error: 'Failed to fetch instagram status' });
+  }
+});
+
+router.get('/google-calendar', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req)!;
+    const integration = await storage.getIntegration(userId, 'google_calendar');
+
+    res.json({
+      success: true,
+      provider: 'google_calendar',
+      connected: !!integration?.connected,
+      accountName: integration?.accountType || null,
+    });
+  } catch (error: unknown) {
+    console.error('Error fetching google calendar status:', error);
+    res.status(500).json({ error: 'Failed to fetch google calendar status' });
   }
 });
 
