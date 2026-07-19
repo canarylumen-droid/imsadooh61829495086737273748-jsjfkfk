@@ -193,6 +193,7 @@ export function getPool(): pgPkg.Pool {
 const db = new Proxy({} as NodePgDatabase<typeof schema>, {
   get(_target, prop) {
     const conn = getDb();
+    if (!conn) return undefined;
     const value = Reflect.get(conn, prop);
     return typeof value === 'function' ? value.bind(conn) : value;
   }
@@ -201,6 +202,7 @@ const db = new Proxy({} as NodePgDatabase<typeof schema>, {
 const pool = new Proxy({} as pgPkg.Pool, {
   get(_target, prop) {
     const conn = getPool();
+    if (!conn) return undefined;
     const value = Reflect.get(conn, prop);
     return typeof value === 'function' ? value.bind(conn) : value;
   }

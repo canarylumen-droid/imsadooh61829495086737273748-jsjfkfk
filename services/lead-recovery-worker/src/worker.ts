@@ -158,11 +158,17 @@ export class LeadRecoveryWorker {
     const maxMessages = Number(process.env.LEAD_RECOVERY_MAX_MESSAGES_PER_MAILBOX || 500);
     const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
 
-    const claimedState = await claimMailboxForSync(tenantId, mailboxId);
+    let claimedState: any;
+    try {
+      claimedState = await claimMailboxForSync(tenantId, mailboxId);
+    } catch {
+      console.warn(`[LeadRecovery] MySQL unavailable for claimMailboxForSync (${mailboxId}), skipping`);
+      return;
+    }
 
     if (!claimedState) return;
 
-    await logRecoveryEvent(tenantId, "SyncStarted", { mailboxId, syncWindowDays: 90, readOnlySync: true });
+    try { await logRecoveryEvent(tenantId, "SyncStarted", { mailboxId, syncWindowDays: 90, readOnlySync: true }); } catch {}
 
     try {
       const emails = await fetchRecoveryEmails(integration, since, maxMessages);
@@ -173,7 +179,7 @@ export class LeadRecoveryWorker {
         const filter = shouldFilterEmail(email);
         if (filter.filtered) {
           filtered += 1;
-          await logRecoveryEvent(tenantId, "EmailFiltered", { mailboxId, uid: email.uid, reason: filter.reason });
+          try { await logRecoveryEvent(tenantId, "EmailFiltered", { mailboxId, uid: email.uid, reason: filter.reason }); } catch {}
           continue;
         }
 
@@ -181,11 +187,11 @@ export class LeadRecoveryWorker {
         analyzed += 1;
       }
 
-      await completeMailboxSync(tenantId, mailboxId);
-      await logRecoveryEvent(tenantId, "SyncCompleted", { mailboxId, fetched: emails.length, analyzed, filtered });
+      try { await completeMailboxSync(tenantId, mailboxId); } catch {}
+      try { await logRecoveryEvent(tenantId, "SyncCompleted", { mailboxId, fetched: emails.length, analyzed, filtered }); } catch {}
     } catch (error: any) {
-      await failMailboxSync(tenantId, mailboxId);
-      await logRecoveryEvent(tenantId, "SyncFailed", { mailboxId, error: error.message });
+      try { await failMailboxSync(tenantId, mailboxId); } catch {}
+      try { await logRecoveryEvent(tenantId, "SyncFailed", { mailboxId, error: error.message }); } catch {}
     }
   }
 
