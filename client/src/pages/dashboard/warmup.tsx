@@ -41,7 +41,7 @@ interface MailboxWarmup {
 const ITEMS_PER_PAGE = 20;
 
 export default function WarmupPage() {
-  const { socket } = useRealtime();
+  const { socket, isConnected } = useRealtime();
   const { mailboxes, selectedMailboxId, setSelectedMailboxId } = useMailbox();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -49,6 +49,7 @@ export default function WarmupPage() {
   const [page, setPage] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const [warmupDays, setWarmupDays] = useState(1);
+  const pollingMs = isConnected ? false : 15000;
 
   useEffect(() => {
     if (!socket) return;
@@ -74,6 +75,7 @@ export default function WarmupPage() {
       return res.json();
     },
     refetchOnWindowFocus: true,
+    refetchInterval: pollingMs,
     staleTime: 10_000,
     retry: 3,
     retryDelay: 1000,
@@ -89,8 +91,8 @@ export default function WarmupPage() {
       if (!res.ok) throw new Error("Failed to fetch warmup activity");
       return res.json();
     },
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: pollingMs,
+    staleTime: 10_000,
   });
 
   const warmupStatuses: MailboxWarmup[] = warmupData?.mailboxes || [];
