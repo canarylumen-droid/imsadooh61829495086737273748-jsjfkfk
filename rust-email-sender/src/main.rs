@@ -10,10 +10,12 @@ mod queue;
 mod dns;
 mod config;
 mod telemetry;
+mod scheduler;
 
 use config::Config;
 use queue::{EmailJob, MailboxVerifyJob, MailboxVerifyResult};
 use dns::{DnsResolver, DnsJob, DnsJobResult};
+use scheduler::{SchedulingJob, SchedulingJobType};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, Tokio1Executor};
 
@@ -82,12 +84,15 @@ async fn main() -> Result<()> {
     let dns_result_queue = config.dns_result_queue_name.clone();
     let mailbox_verify_queue = config.mailbox_verify_queue.clone();
     let mailbox_verify_result_queue = config.mailbox_verify_result_queue.clone();
+    let scheduling_queue = config.scheduling_queue.clone();
+    let scheduling_result_queue = config.scheduling_result_queue.clone();
     let verify_timeout = Duration::from_secs(config.smtp_timeout_secs);
     let verify_semaphore = Arc::new(Semaphore::new(config.max_concurrent_verifies));
 
     log::info!("Listening on email queue: {}", email_queue);
     log::info!("Listening on DNS queue: {}", dns_queue);
     log::info!("Listening on mailbox verify queue: {}", mailbox_verify_queue);
+    log::info!("Listening on scheduling queue: {}", scheduling_queue);
 
     // Spawn dedicated handler for bulk mailbox verification
     {
@@ -141,6 +146,38 @@ async fn main() -> Result<()> {
                         }
                         drop(permit);
                     });
+                }
+            }
+        });
+    }
+
+    // Spawn dedicated handler for scheduling math jobs
+    {
+        let rq = redis_conn.clone();
+        let sq = scheduling_queue.clone();
+        let srq = scheduling_result_queue.clone();
+        tokio::spawn(async move {
+            let mut redis = rq;
+            loop {
+                let job_opt: Option<Vec<String>> = redis.clone()
+                    .brpop(&[&sq], 0.0).await.unwrap_or(None);
+                if let Some(mut parts) = job_opt {
+                    if parts.len() < 2 { continue; }
+                    let _queue_name = parts.remove(0);
+                    let job_json = parts.remove(0);
+                    let job: SchedulingJob = match serde_json::from_str(&job_json) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            log::error!("Failed to deserialize scheduling job: {}", e);
+                            continue;
+                        }
+                    };
+                    let result = scheduler::dispatch(&job);
+                    let result_json = serde_json::to_string(&result)
+                        .unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e));
+                    let mut r = redis.clone();
+                    let _: () = r.lpush(&srq, &result_json).await.unwrap_or_default();
+                    log::info!("[Scheduler] {} done", result.job_type);
                 }
             }
         });

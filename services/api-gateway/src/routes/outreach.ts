@@ -841,13 +841,12 @@ router.get('/campaigns/:id/progress', requireAuthOrApiKey, async (req, res) => {
       if (stats[s.status] !== undefined) stats[s.status] += Number(s.count);
     });
 
-    // ETA calculation
+    // ETA calculation — based on actual send rate (not configured limit)
     const remaining = Math.max(0, stats.total - stats.sent);
     const daysRunning = campaign.createdAt ? Math.max(0.5, (Date.now() - new Date(campaign.createdAt).getTime()) / 86400000) : 1;
     const avgDailyRate = daysRunning > 0 ? Math.ceil(stats.sent / daysRunning) : 0;
-    const etaDays = avgDailyRate > 0 && remaining > 0
-      ? Math.ceil(remaining / totalDailyLimit)
-      : (remaining > 0 ? Math.ceil(remaining / Math.max(1, totalDailyLimit)) : 0);
+    const sendRate = avgDailyRate > 0 ? avgDailyRate : totalDailyLimit;
+    const etaDays = remaining > 0 ? Math.max(1, Math.ceil(remaining / sendRate)) : 0;
 
     res.json({
       campaignId: id,

@@ -17,6 +17,8 @@ pub struct Config {
     pub dns_result_queue_name: String,
     pub mailbox_verify_queue: String,
     pub mailbox_verify_result_queue: String,
+    pub scheduling_queue: String,
+    pub scheduling_result_queue: String,
     pub max_concurrent_verifies: usize,
 }
 
@@ -37,6 +39,10 @@ impl Config {
                 .unwrap_or_else(|_| "bulk-mailbox-verify".to_string()),
             mailbox_verify_result_queue: env::var("MAILBOX_VERIFY_RESULT_QUEUE")
                 .unwrap_or_else(|_| "bulk-mailbox-verify-results".to_string()),
+            scheduling_queue: env::var("SCHEDULING_QUEUE")
+                .unwrap_or_else(|_| "scheduling-queue".to_string()),
+            scheduling_result_queue: env::var("SCHEDULING_RESULT_QUEUE")
+                .unwrap_or_else(|_| "scheduling-results".to_string()),
             worker_count: env::var("WORKER_COUNT")
                 .unwrap_or_else(|_| "4".to_string())
                 .parse()?,

@@ -791,6 +791,35 @@ async function getMailboxInitialSendCount(integrationId: string): Promise<number
 }
 
 /**
+ * Get warmup sends today for this mailbox (campaign_emails with is_warmup=true).
+ */
+async function getMailboxWarmupSendCount(integrationId: string): Promise<number> {
+  const cacheKey = `warmup:${integrationId}`;
+  const cached = sentCountCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.count;
+  }
+  const result = await db.execute(sql`
+    SELECT COUNT(*) as count FROM campaign_emails
+    WHERE integration_id = ${integrationId}::uuid
+    AND is_warmup = true
+    AND sent_at >= (NOW() AT TIME ZONE 'UTC')::date::timestamptz
+  `);
+  const count = Number(result.rows[0].count);
+  sentCountCache.set(cacheKey, { count, expiresAt: Date.now() + SENT_COUNT_TTL_MS });
+  return count;
+}
+
+/**
+ * Calculate milliseconds until start of next UTC day.
+ */
+function deferToTomorrow(): number {
+  const now = new Date();
+  const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1, 0, 0, 0, 0));
+  return tomorrow.getTime() - now.getTime() + 5000;
+}
+
+/**
  * Check if a pending auto-reply job exists for this specific mailbox.
  * Uses a Redis SET for O(1) lookup instead of scanning all delayed jobs.
  */
@@ -1051,26 +1080,39 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     console.log(`[CampaignWorker] ⚠️ Mailbox ${integrationId.slice(-8)} is soft paused. Throttling down to follow-ups ONLY.`);
   }
 
-  // 4. Check TOTAL daily budget (initials + follow-ups combined)
-  // Follow-ups consume from the same daily cap — this ensures mailbox limits are never exceeded
+  // 4. Check TOTAL daily budget with warmup coexistence
+  // Warmup gets 20-25% reserved budget, campaign uses the rest
+  const campaignSentToday = await getMailboxInitialSendCount(integrationId);
   const totalSentToday = await getMailboxSentCount(userId, integrationId);
-  const initialSentToday = await getMailboxInitialSendCount(integrationId);
-  const followUpSentToday = totalSentToday - initialSentToday;
+  const warmupSentToday = await getMailboxWarmupSendCount(integrationId);
+  const followUpSentToday = Math.max(0, totalSentToday - campaignSentToday - warmupSentToday);
 
   // Refetch current integration to get latest reputation-adjusted limits
   const currentIntegration = await storage.getIntegrationById(integrationId);
-  let effectiveLimit = dailyLimit;
+  const rawDailyCap = (currentIntegration as any)?.dailyLimit || dailyLimit || 50;
+  const reputationLimit = (currentIntegration as any)?.initialOutreachLimit ?? rawDailyCap;
+  let effectiveDailyCap = Math.min(rawDailyCap, reputationLimit);
 
-  if (currentIntegration) {
-    // Phase 2: OUTREACH PROTECT — use initialOutreachLimit for cold sends
-    const reputationLimit = (currentIntegration as any).initialOutreachLimit ?? dailyLimit;
-    effectiveLimit = Math.min(effectiveLimit, reputationLimit);
+  // Compute warmup vs campaign budget split
+  const { calcDailyPlan } = await import('@shared/lib/queues/scheduler-bridge.js');
+  const plan = await calcDailyPlan({
+    dailyCap: effectiveDailyCap,
+    warmupPct: 25,
+    campaignSentToday,
+    warmupSentToday,
+  });
 
-    // Warmup cap still applies during ramp phase
-    const warmup = warmupService.getWarmupStatus(currentIntegration as any, effectiveLimit);
-    if (warmup.isWarmingUp && warmup.dailyLimit < effectiveLimit) {
-      effectiveLimit = warmup.dailyLimit;
-    }
+  let effectiveLimit = plan.campaignBudget;
+
+  if (plan.warmupReduced) {
+    console.log(`[CampaignWorker] ⏸️ Warmup reduced for ${integrationId.slice(-8)} — warmup hit its ${plan.warmupBudget}-send budget, campaign gets ${plan.campaignRemaining} remaining`);
+  }
+
+  if (plan.campaignRemaining <= 0) {
+    console.log(`[CampaignWorker] ⏸️ Campaign budget exhausted for ${integrationId.slice(-8)}: ${campaignSentToday} sent / ${plan.campaignBudget} budget. Warmup used ${warmupSentToday} of its ${plan.warmupBudget} budget.`);
+    const redistributed = await redistributeOverflow(userId, data.campaignId, integrationId);
+    await rescheduleSendBatch(data, redistributed ? 30_000 : deferToTomorrow());
+    return;
   }
 
   // ── REDISTRIBUTION LOGIC ─────────────────────────────────────────────
@@ -1155,37 +1197,48 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     }
   }
 
-  // Hard cap: total sends (initials + follow-ups) must not exceed daily limit
+  // Hard cap: total sends must not exceed daily limit
   if (totalSentToday >= effectiveLimit) {
-    console.log(`[CampaignWorker] ⏸️ Daily cap hit: ${totalSentToday}/${effectiveLimit} (${initialSentToday} initial, ${followUpSentToday} follow-up). Trying redistribution...`);
+    console.log(`[CampaignWorker] ⏸️ Daily cap hit: ${totalSentToday}/${effectiveLimit} (${campaignSentToday} campaign, ${followUpSentToday} follow-up, ${warmupSentToday} warmup). Trying redistribution...`);
     const redistributed = await redistributeOverflow(userId, data.campaignId, integrationId);
     if (redistributed) {
-      // Retry this batch immediately — leads may have been moved away
       await rescheduleSendBatch(data, 30_000);
     } else {
-      await rescheduleSendBatch(data, 60 * 60 * 1000);
+      await rescheduleSendBatch(data, deferToTomorrow());
     }
     return;
   }
 
   // Smart throttle: follow-ups reserve their share of the daily budget
-  // If follow-ups consume slots, initials get proportionally less
-  // This ensures: (a) follow-ups aren't pushed >1 day late, (b) initials don't starve, (c) cap is respected
   const followUpReserve = Math.min(followUpSentToday, Math.round(effectiveLimit * 0.3));
   let initialLimit = effectiveLimit - followUpReserve;
-  // Never throttle initials below 50% of the daily limit — ensures campaign progress
   if (initialLimit < Math.round(effectiveLimit * 0.5)) {
     initialLimit = Math.round(effectiveLimit * 0.5);
   }
 
-  if (initialSentToday >= initialLimit) {
-    console.log(`[CampaignWorker] ⏸️ Initials throttled: ${initialSentToday}/${initialLimit} (${followUpSentToday} follow-ups using ${followUpReserve} reserved slots). Trying redistribution...`);
+  if (campaignSentToday >= initialLimit) {
+    console.log(`[CampaignWorker] ⏸️ Campaign sends throttled: ${campaignSentToday}/${initialLimit} (${followUpSentToday} follow-ups using ${followUpReserve} reserved slots). Trying redistribution...`);
     const redistributed = await redistributeOverflow(userId, data.campaignId, integrationId);
     if (redistributed) {
       await rescheduleSendBatch(data, 30_000);
     } else {
-      await rescheduleSendBatch(data, 60 * 60 * 1000);
+      await rescheduleSendBatch(data, deferToTomorrow());
     }
+    return;
+  }
+
+  // Check warmup gap: if warmup sent within last 10min, wait
+  const recentWarmup = await db.execute(sql`
+    SELECT sent_at FROM campaign_emails
+    WHERE integration_id = ${integrationId}::uuid
+    AND is_warmup = true
+    AND sent_at > (NOW() - INTERVAL '10 minutes')
+    ORDER BY sent_at DESC LIMIT 1
+  `);
+  if (recentWarmup.rows.length > 0) {
+    const warmupSentAt = new Date((recentWarmup.rows[0] as any).sent_at);
+    console.log(`[CampaignWorker] ⏳ Warmup sent ${Math.round((Date.now() - warmupSentAt.getTime()) / 60000)}min ago — deferring campaign for 10min gap`);
+    await rescheduleSendBatch(data, 10 * 60 * 1000);
     return;
   }
 
@@ -1389,7 +1442,7 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
   let batchSentCount = 0;
 
   // Calculate inter-send pacing using same formula as calcMailboxInterval
-  const interSendDelayMs = calcMailboxInterval(initialSentToday, effectiveLimit, currentIntegration);
+  const interSendDelayMs = calcMailboxInterval(campaignSentToday, effectiveLimit, currentIntegration);
 
   for (const row of nextLeadResult) {
     // Inter-send pacing: wait between emails to spread across the day
