@@ -644,7 +644,19 @@ Built 4 interconnected components for real-time inbox placement detection withou
 4. **Message bubble breaks words** (`RecentConversations.tsx:239`): Added `break-words` and `max-h-[200px] overflow-y-auto` for long messages in home page Recent Activity.
 
 ### Deploy
-- Pushed to GitHub (`d5c88145`). EC2 deploy pending.
+- Pushed to GitHub (`d5c88145`, `f64ca82d`). EC2 deploy pending.
+
+## This Session (Jul 20 2026) — Tick Fix: openedAt-based ✓✓/✓, Real-Time Update on Open
+
+### Changes
+1. **Tick uses `openedAt` not `isRead`** (`drizzle-storage.ts`): Subquery now reads `opened_at`. `lastMessageIsRead` set to `true` only when `openedAt` exists, `false` for outbound (✓), `null` for inbound (no tick). Default `isRead` for ALL messages changed to `false` (was `true` for outbound).
+
+2. **Real-time tick update** (`inbox.tsx`): Socket open/click event handler now sets `lastMessageIsRead = true` in `allLeads` state. ✓ changes to ✓✓ instantly when tracking pixel fires.
+
+3. **Tick display**: ✓✓ (opened) / ✓ (delivered, not opened) / nothing (inbound last). Only shown for our sent messages, not for inbound leads.
+
+### Commit
+- `f64ca82d` — fix: tick uses openedAt for ✓✓/✓, real-time update on open
 
 ## This Session (Jul 19 2026) — MailboxSwitcher, Lead Scoring, AI Reply, Rust Sender Fixes
 

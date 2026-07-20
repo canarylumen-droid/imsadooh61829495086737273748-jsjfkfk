@@ -2896,12 +2896,18 @@ export class DrizzleStorage implements IStorage {
     checkDatabase();
 
     // 1. Basic Metrics
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - (days - 1));
+    startDate.setHours(0, 0, 0, 0);
+
     const leadWhere = and(
       eq(leads.userId, userId), 
+      gte(leads.createdAt, startDate),
       integrationId ? eq(leads.integrationId, integrationId) : undefined
     );
     const msgWhere = and(
       eq(messages.userId, userId), 
+      gte(messages.createdAt, startDate),
       integrationId ? eq(messages.integrationId, integrationId) : undefined
     );
 
@@ -2916,16 +2922,19 @@ export class DrizzleStorage implements IStorage {
       opened: sql<number>`count(*) filter (where direction = 'outbound' and opened_at is not null)`,
     }).from(messages).where(msgWhere);
 
-    const dealWhere = integrationId 
-      ? and(
-          eq(deals.userId, userId), 
-          sql`exists (
-            select 1 from leads 
-            where leads.id = deals.lead_id 
-            and leads.integration_id = ${integrationId}
-          )`
-        )
-      : eq(deals.userId, userId);
+    const dealWhere = and(
+      gte(deals.createdAt, startDate),
+      integrationId 
+        ? and(
+            eq(deals.userId, userId), 
+            sql`exists (
+              select 1 from leads 
+              where leads.id = deals.lead_id 
+              and leads.integration_id = ${integrationId}
+            )`
+          )
+        : eq(deals.userId, userId)
+    );
 
     const [dealsStats] = await db.select({
       pipelineValue: sql<number>`coalesce(sum(coalesce(cast(ai_analysis->>'offerPrice' as numeric), cast(ai_analysis->>'offer_price' as numeric), value)), 0)`,
@@ -2954,10 +2963,6 @@ export class DrizzleStorage implements IStorage {
     const averageResponseTime = await this.calculateAverageResponseTime(userId, integrationId);
 
     // 2. Optimized Time Series (Single Query per Table)
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - (days - 1));
-    startDate.setHours(0, 0, 0, 0);
-
     const messageSeries = await db.select({
       day: sql<string>`date_trunc('day', ${messages.createdAt})`,
       sent_email: sql<number>`count(*) filter (where direction = 'outbound' and provider = 'email')`,

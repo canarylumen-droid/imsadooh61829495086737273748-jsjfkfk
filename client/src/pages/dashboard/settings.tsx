@@ -520,6 +520,26 @@ export default function SettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Avg Deal Value ($)</Label>
+                    <Input
+                      type="number"
+                      value={formData.offerValue}
+                      onChange={e => handleFieldChange('offerValue', Number(e.target.value))}
+                      className="rounded-xl h-11 bg-background border-border/40"
+                      placeholder="e.g. 5000"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Deal Value 2 ($)</Label>
+                    <Input
+                      type="number"
+                      value={formData.offerValue2}
+                      onChange={e => handleFieldChange('offerValue2', Number(e.target.value))}
+                      className="rounded-xl h-11 bg-background border-border/40"
+                      placeholder="e.g. 2500"
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Calendar Link</Label>
                       {(user as any).calendlyAccessToken ? (
