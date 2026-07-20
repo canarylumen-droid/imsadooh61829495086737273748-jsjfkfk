@@ -472,9 +472,11 @@ export default function CalendarPage() {
   });
 
   const copyBookingLink = useCallback(() => {
-    const link = (settings as any)?.calendarLink
-      || (settings?.googleCalendarEnabled ? `/api/oauth/google-calendar/events` : null)
-      || '';
+    const link = settings?.calendarLink || '';
+    if (!link) {
+      toast({ title: "No booking link configured", description: "Set your Calendly or calendar link in Settings", variant: "destructive" });
+      return;
+    }
     navigator.clipboard.writeText(link);
     setCopiedLink(true);
     toast({ title: "Booking link copied" });
