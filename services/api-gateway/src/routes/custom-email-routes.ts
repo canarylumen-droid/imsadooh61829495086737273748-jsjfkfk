@@ -807,13 +807,13 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
     }
 
     // Parse header
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["']/g, ''));
-    const emailIdx = headers.findIndex(h => h === 'email' || h === 'smtp_user' || h === 'imap_user' || h === 'username');
-    const hostIdx = headers.findIndex(h => h === 'smtp_host' || h === 'host' || h === 'smtp_server');
-    const portIdx = headers.findIndex(h => h === 'smtp_port' || h === 'port');
-    const imapHostIdx = headers.findIndex(h => h === 'imap_host' || h === 'imap_server');
-    const imapPortIdx = headers.findIndex(h => h === 'imap_port');
-    const passIdx = headers.findIndex(h => h === 'password' || h === 'pass' || h === 'smtp_pass');
+    const headers = lines[0].split(',').map((h: string) => h.trim().toLowerCase().replace(/["']/g, ''));
+    const emailIdx = headers.findIndex((h: string) => h === 'email' || h === 'smtp_user' || h === 'imap_user' || h === 'username');
+    const hostIdx = headers.findIndex((h: string) => h === 'smtp_host' || h === 'host' || h === 'smtp_server');
+    const portIdx = headers.findIndex((h: string) => h === 'smtp_port' || h === 'port');
+    const imapHostIdx = headers.findIndex((h: string) => h === 'imap_host' || h === 'imap_server');
+    const imapPortIdx = headers.findIndex((h: string) => h === 'imap_port');
+    const passIdx = headers.findIndex((h: string) => h === 'password' || h === 'pass' || h === 'smtp_pass');
     const fromNameIdx = headers.findIndex((h: string) => h === 'from_name' || h === 'name');
     const passTypeIdx = headers.findIndex((h: string) => h === 'password_type' || h === 'type');
     const domainPasswordIdx = headers.findIndex((h: string) => h === 'domain_password' || h === 'domain_pass');
