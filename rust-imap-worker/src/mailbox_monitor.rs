@@ -562,8 +562,8 @@ fn extract_body_text(raw: &str) -> String {
             if line.trim().starts_with('*') || line.trim().starts_with('A') {
                 continue;
             }
-            if line.contains("FLAGS") || line.contains("UID ") {
-                continue;
+            if line.contains("FLAGS") || line.contains("UID ") || line.trim().starts_with(')') || line.contains("OK FETCH") || line.contains("OK UID") {
+                break;
             }
             if line.trim().is_empty() {
                 past_headers = true;

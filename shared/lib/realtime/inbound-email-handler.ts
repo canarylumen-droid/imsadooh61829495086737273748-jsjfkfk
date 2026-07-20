@@ -57,13 +57,22 @@ async function handleInboundEmail(payload: any) {
   let parsedHtml: string | undefined;
   if (raw_email && raw_email.length > 0) {
     try {
+      // Strip IMAP protocol framing if present (e.g., "* 58 FETCH (BODY[] {size}\n...")
+      let rfc822 = raw_email;
+      const bodyMatch = raw_email.match(/BODY\[\]\s*\{[^}]+\}\s*\n?([\s\S]*)/);
+      if (bodyMatch) {
+        rfc822 = bodyMatch[1].replace(/\n\)\s*$/, '').trim();
+      }
       const { simpleParser } = await import('mailparser');
-      const parsed = await simpleParser(raw_email);
+      const parsed = await simpleParser(rfc822);
       if (parsed.text) {
         parsedBody = parsed.text.substring(0, 10000);
       }
       if (parsed.html) {
         parsedHtml = parsed.html.substring(0, 10000);
+        if (!parsed.text) {
+          parsedBody = parsed.html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 10000);
+        }
       }
     } catch (parseErr: any) {
       console.warn('[InboundEmailHandler] Failed to parse raw_email:', parseErr.message);
