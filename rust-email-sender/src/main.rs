@@ -15,7 +15,7 @@ use config::Config;
 use queue::{EmailJob, MailboxVerifyJob, MailboxVerifyResult};
 use dns::{DnsResolver, DnsJob, DnsJobResult};
 use lettre::transport::smtp::authentication::Credentials;
-use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use lettre::{AsyncSmtpTransport, Tokio1Executor};
 
 async fn verify_smtp(job: &MailboxVerifyJob, timeout: Duration) -> Result<()> {
     let creds = Credentials::new(job.email.clone(), job.password.clone());

@@ -5,7 +5,6 @@ use anyhow::Result;
 use dashmap::DashMap;
 use hickory_resolver::TokioAsyncResolver;
 use hickory_resolver::config::*;
-use hickory_resolver::proto::rr::RecordType;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,12 +90,12 @@ impl DnsResolver {
     pub async fn new() -> Result<Arc<Self>> {
         let mut resolver_opts = ResolverOpts::default();
         resolver_opts.use_hosts_file = false;
-        resolver_opts.ip_strategy = IpStrategy::Ipv4Only;
+        resolver_opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4Only;
 
         let resolver = TokioAsyncResolver::tokio(
             ResolverConfig::default(),
             resolver_opts,
-        ).await?;
+        )?;
 
         Ok(Arc::new(Self {
             resolver,
@@ -145,7 +144,7 @@ impl DnsResolver {
     async fn resolve_txt(&self, name: &str) -> Result<Vec<String>> {
         let response = self.resolver.txt_lookup(name).await?;
         Ok(response.iter()
-            .flat_map(|rr| rr.txt_data().iter().map(|s| s.to_string()))
+            .flat_map(|rr| rr.txt_data().iter().map(|s| String::from_utf8_lossy(s)))
             .collect())
     }
 
@@ -356,7 +355,7 @@ impl DnsResolver {
         let result = DnsVerificationResult {
             domain: domain.to_string(),
             spf, dkim, dmarc,
-            mx: mx.unwrap_or_default(),
+            mx,
             mx_found,
             blacklist,
             overall_score: score.min(100),
