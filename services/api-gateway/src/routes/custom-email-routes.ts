@@ -814,9 +814,9 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
     const imapHostIdx = headers.findIndex(h => h === 'imap_host' || h === 'imap_server');
     const imapPortIdx = headers.findIndex(h => h === 'imap_port');
     const passIdx = headers.findIndex(h => h === 'password' || h === 'pass' || h === 'smtp_pass');
-    const fromNameIdx = headers.findIndex(h => h === 'from_name' || h === 'name');
-    const passTypeIdx = headers.findIndex(h => h === 'password_type' || h === 'type');
-    const domainPasswordIdx = headers.findIndex(h => h === 'domain_password' || h === 'domain_pass');
+    const fromNameIdx = headers.findIndex((h: string) => h === 'from_name' || h === 'name');
+    const passTypeIdx = headers.findIndex((h: string) => h === 'password_type' || h === 'type');
+    const domainPasswordIdx = headers.findIndex((h: string) => h === 'domain_password' || h === 'domain_pass');
 
     if (emailIdx === -1 || (hostIdx === -1 && emailIdx === -1)) {
       res.status(400).json({ error: 'CSV must have at least "email" and "smtp_host" columns' });
