@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
-import { requireAdmin } from '../middleware/auth.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -9,7 +9,7 @@ const stripe = stripeApiKey ? new Stripe(stripeApiKey, {
   apiVersion: '2024-06-20' as Stripe.LatestApiVersion,
 }) : null;
 
-router.post('/confirm-payment', async (req: Request, res: Response): Promise<void> => {
+router.post('/confirm-payment', requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
     if (!stripe) {
       res.status(503).json({ error: 'Stripe not configured' });

@@ -237,7 +237,7 @@ export async function requireApiKey(req: Request, res: Response, next: NextFunct
     return res.status(401).json({ error: 'Invalid API key format. Key must start with audnix_' });
   }
 
-  const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+  const hashedKey = crypto.createHash('sha512').update(rawKey).digest('hex');
 
   try {
     const { db } = await import('@shared/lib/db/db.js');

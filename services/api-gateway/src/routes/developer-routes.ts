@@ -117,7 +117,7 @@ router.post('/api-keys', requireAuth, async (req: Request, res: Response): Promi
     const keyScope = scope === 'read_only' ? 'read_only' : 'read_write';
 
     const rawKey = `audnix_${crypto.randomBytes(32).toString('hex')}`;
-    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const hashedKey = crypto.createHash('sha512').update(rawKey).digest('hex');
 
     await db.execute(sql`
       INSERT INTO api_keys (user_id, name, key, scope)

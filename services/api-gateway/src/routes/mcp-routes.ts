@@ -206,8 +206,8 @@ router.post('/api/mcp/key/create', requireAuth, async (req: Request, res: Respon
     }
 
     const level = permission_level === 'read' ? 'read_only' : (permission_level === 'read_only' || permission_level === 'read_write' ? permission_level : 'read_write');
-    const rawKey = `audnix_${crypto.randomBytes(15).toString('hex')}`;
-    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const rawKey = `audnix_${crypto.randomBytes(32).toString('hex')}`;
+    const hashedKey = crypto.createHash('sha512').update(rawKey).digest('hex');
 
     await db.execute(sql`
       INSERT INTO api_keys (user_id, name, key, scope)
@@ -244,8 +244,8 @@ router.post('/api/mcp/key/regenerate', requireAuth, async (req: Request, res: Re
     const { id } = req.body;
     if (!id) { res.status(400).json({ error: 'Key ID is required' }); return; }
 
-    const rawKey = `audnix_${crypto.randomBytes(15).toString('hex')}`;
-    const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+    const rawKey = `audnix_${crypto.randomBytes(32).toString('hex')}`;
+    const hashedKey = crypto.createHash('sha512').update(rawKey).digest('hex');
 
     await db.execute(sql`
       UPDATE api_keys SET key = ${hashedKey}, last_used_at = NULL WHERE id = ${id} AND user_id = ${userId}

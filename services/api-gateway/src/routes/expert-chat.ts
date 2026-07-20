@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { generateReply } from '@services/brain-worker/src/ai-lib/core/ai-service.js';
 import { MODELS } from "@services/brain-worker/src/ai-lib/utils/model-config.js";
+import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
 
@@ -23,15 +24,13 @@ Your goal is to ensure the user gets their questions answered clearly and effici
 `;
 
 // Alias for v2 endpoint to prevent 404s
-router.post(['/chat', '/chat-v2'], async (req: Request, res: Response) => {
-    let isAuthenticated = false;
+router.post(['/chat', '/chat-v2'], requireAuth, async (req: Request, res: Response) => {
     try {
         if (!req.body) {
             return res.json({ content: "Protocol error: Empty communication packet. Please retry." });
         }
 
         const { message, history = [] } = req.body;
-        isAuthenticated = req.body.isAuthenticated === true;
 
         if (!message) {
             return res.status(400).json({ error: 'Message payload required' });

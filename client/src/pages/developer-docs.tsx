@@ -77,22 +77,22 @@ const API_ENDPOINTS: EndpointSection[] = [
         errorExample: `HTTP 401: { "error": "Unauthorized" }`,
       },
       {
-        method: "POST", path: "/api/mcp/key/create", desc: "Create an API key for programmatic access. Keys are 16 chars with 'audnix_' prefix. Shown ONCE on creation then masked.", auth: "Session Cookie",
+        method: "POST", path: "/api/mcp/key/create", desc: "Create an API key. Keys are 70 chars (audnix_ + 64 hex) using SHA-512 hashing. Shown ONCE on creation then masked forever.", auth: "Session Cookie",
         bodyExample: `{ "name": "My API Key", "permission_level": "read_write" }`,
         curl: `curl -X POST ${BASE}/api/mcp/key/create \\
   -b /tmp/cookies.txt \\
   -H "Content-Type: application/json" \\
   -d '{"name":"My API Key","permission_level":"read_write"}'`,
         response: `{
-  "key": "audnix_a1b2c3d4e5f6g7h8",
   "id": "uuid-...",
   "name": "My API Key",
   "permissionLevel": "read_write",
-  "prefix": "audnix_a1b2",
-  "createdAt": "2025-06-20T12:00:00.000Z"
+  "key": "audnix_a1b2...70chars...",
+  "createdAt": "2025-06-20T12:00:00.000Z",
+  "message": "Copy your API key now — it will not be shown again."
 }`,
         errorExample: `HTTP 400: { "error": "Name already in use" }`,
-        notes: "Save the full key immediately — it won't be shown again. Permission levels: 'read' (GET only) or 'read_write' (all operations except account deletion).",
+        notes: "Save the full key immediately — it won't be shown again. Keys store SHA-512 hash only, never the raw key. Permission levels: 'read' (GET only) or 'read_write' (all operations except account deletion). Key is encrypted at rest via AES-256-GCM.",
         scopes: "read | read_write",
       },
     ],
@@ -138,7 +138,7 @@ const API_ENDPOINTS: EndpointSection[] = [
         method: "POST", path: "/mcp", desc: "MCP JSON-RPC endpoint. Execute tools using an API key in the Authorization header. Also accepts simple {tool, args} format.", auth: "API Key (Bearer)",
         bodyExample: `{ "jsonrpc": "2.0", "method": "tools/list", "id": 1 }`,
         curl: `curl -X POST ${BASE}/mcp \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8" \\
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0" \\
   -H "Content-Type: application/json" \\
   -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'`,
         response: `{
@@ -164,10 +164,10 @@ const API_ENDPOINTS: EndpointSection[] = [
     section: "Leads", icon: Users,
     items: [
       {
-        method: "GET", path: "/api/leads", desc: "List leads with filters. Supports pagination, search, status/channel filtering, and per-mailbox scoping.", auth: "Session Cookie | API Key",
+        method: "GET", path: "/api/leads", desc: "List leads with filters. Supports pagination, search, status/channel filtering, and per-mailbox scoping.",     auth: "Session Cookie | API Key",
         params: "status=(new|contacted|replied|converted|unsubscribed|cold|booked|warm) & channel=(email|instagram|linkedin) & search=<string> & limit=<number>& offset=<number>& includeArchived=<bool>& integrationId=<mailbox_id>& excludeActiveCampaignLeads=<bool>",
         curl: `curl "${BASE}/api/leads?status=new&limit=5&search=john" \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "success": true,
   "leads": [
@@ -198,7 +198,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "GET", path: "/api/leads/:id", desc: "Get a single lead by ID with full details.", auth: "Session Cookie | API Key",
         curl: `curl ${BASE}/api/leads/<lead_id> \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "id": "uuid-...",
   "name": "John Smith",
@@ -226,7 +226,7 @@ const API_ENDPOINTS: EndpointSection[] = [
         method: "PATCH", path: "/api/leads/:leadId", desc: "Update a lead. You can change status, name, email, phone, metadata, or toggle AI pause.", auth: "Session Cookie | API Key",
         bodyExample: `{ "status": "contacted", "metadata": { "custom_field": "value" } }`,
         curl: `curl -X PATCH ${BASE}/api/leads/<lead_id> \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8" \\
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0" \\
   -H "Content-Type: application/json" \\
   -d '{"status":"contacted","aiPaused":false}'`,
         response: `{
@@ -266,7 +266,7 @@ const API_ENDPOINTS: EndpointSection[] = [
         method: "GET", path: "/api/messages/:leadId", desc: "Get the full conversation thread for a lead. Paginated with newest first.", auth: "Session Cookie | API Key",
         params: "limit=<number>& offset=<number>",
         curl: `curl ${BASE}/api/messages/<lead_id>?limit=20 \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "messages": [
     {
@@ -300,7 +300,7 @@ const API_ENDPOINTS: EndpointSection[] = [
         method: "POST", path: "/api/messages/:leadId", desc: "Send a message to a lead. The lead's assigned mailbox is used automatically. Updates lead status and KPI stats in real-time.", auth: "Session Cookie | API Key",
         bodyExample: `{ "content": "Hi John, just following up on my previous email...", "subject": "Re: Follow-up" }`,
         curl: `curl -X POST ${BASE}/api/messages/<lead_id> \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8" \\
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0" \\
   -H "Content-Type: application/json" \\
   -d '{"content":"Hi John, following up on my previous email. Would love to connect!","subject":"Re: Follow-up"}'`,
         response: `{
@@ -326,7 +326,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "GET", path: "/api/outreach/campaigns", desc: "List all campaigns for your account. Includes current stats and status.", auth: "Session Cookie | API Key",
         curl: `curl ${BASE}/api/outreach/campaigns \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `[
   {
     "id": "uuid-...",
@@ -408,7 +408,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "GET", path: "/api/outreach/campaigns/:id/progress", desc: "Get campaign progress with real-time ETA. Calculated from actual send rate, not configured rate.", auth: "Session Cookie | API Key",
         curl: `curl ${BASE}/api/outreach/campaigns/<campaign_id>/progress \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "campaignId": "uuid-...",
   "total": 500,
@@ -439,7 +439,7 @@ const API_ENDPOINTS: EndpointSection[] = [
         method: "GET", path: "/api/dashboard/stats", desc: "Full KPI summary with per-mailbox breakdown, DNS health, reputation, benchmarks, and AI activity logs.", auth: "Session Cookie | API Key",
         params: "integrationId=<mailbox_id> (optional, filters to one mailbox)",
         curl: `curl ${BASE}/api/dashboard/stats \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "totalLeads": 1500,
   "totalSent": 3200,
@@ -478,7 +478,7 @@ const API_ENDPOINTS: EndpointSection[] = [
         method: "GET", path: "/api/stats/inbox-placement", desc: "Inbox vs spam vs bounce placement rates per mailbox. Shows real delivery data from tracking pixels, IMAP spam folder scans, and bounce handlers.", auth: "Session Cookie | API Key",
         params: "days=<number>& integrationId=<mailbox_id>",
         curl: `curl "${BASE}/api/stats/inbox-placement?days=30" \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "success": true,
   "mailboxes": [
@@ -505,7 +505,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "GET", path: "/api/stats/domain-reputation", desc: "Domain reputation scores per mailbox. Includes warmup stage, blacklist status, and DNS health.", auth: "Session Cookie | API Key",
         curl: `curl ${BASE}/api/stats/domain-reputation \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "success": true,
   "reputations": [
@@ -525,7 +525,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "GET", path: "/api/dashboard/activity", desc: "Recent 50 activity events — sends, opens, replies, bounces, imports.", auth: "Session Cookie | API Key",
         curl: `curl ${BASE}/api/dashboard/activity \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "events": [
     { "type": "email_sent", "leadName": "John Smith", "description": "Initial email sent to John", "createdAt": "2025-06-20T12:00:00.000Z" },
@@ -544,7 +544,7 @@ const API_ENDPOINTS: EndpointSection[] = [
         method: "GET", path: "/api/integrations", desc: "List all connected integrations — email mailboxes, Calendly, Instagram, etc. Filterable by provider and connection status.", auth: "Session Cookie | API Key",
         params: "provider=(custom_email|gmail|outlook|calendly|instagram)& connected=<bool>& limit=<number>& search=<string>",
         curl: `curl "${BASE}/api/integrations?provider=custom_email&connected=true" \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "integrations": [
     {
@@ -570,7 +570,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "GET", path: "/api/custom-email/status", desc: "Detailed mailbox connection status with delivery stats, reputation, and warmup info. Used by the integration page.", auth: "Session Cookie | API Key",
         curl: `curl ${BASE}/api/custom-email/status \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "success": true,
   "integrations": [
@@ -613,7 +613,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "GET", path: "/api/warmup/status", desc: "Warmup status for all mailboxes including stage, daily limit, and sent count.", auth: "Session Cookie | API Key",
         curl: `curl ${BASE}/api/warmup/status \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `{
   "mailboxes": [
     {
@@ -640,7 +640,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "--", path: "HTTP 400 — Bad Request", desc: "Invalid input — missing required fields, bad data types, or validation failures.", auth: "--",
         curl: `curl -X POST ${BASE}/api/leads/<lead_id>/messages \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8" \\
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0" \\
   -H "Content-Type: application/json" \\
   -d '{}'`,
         response: `HTTP 400
@@ -666,7 +666,7 @@ const API_ENDPOINTS: EndpointSection[] = [
       {
         method: "--", path: "HTTP 404 — Not Found", desc: "Resource doesn't exist or was deleted.", auth: "--",
         curl: `curl ${BASE}/api/leads/nonexistent-id \\
-  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8"`,
+  -H "Authorization: Bearer audnix_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t6u7v8w9x0y1z2a3b4c5d6e7f8g9h0i1j2k3l4m5n6o7p8q9r0s1t2u3v4w5x6y7z8a9b0c1d2e3f4g5h6i7j8k9l0m1n2o3p4q5r6s7t8u9v0w1x2y3z4a5b6c7d8e9f0"`,
         response: `HTTP 404
 { "error": "Lead not found" }`,
       },

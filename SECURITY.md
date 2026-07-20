@@ -9,16 +9,20 @@ Please do NOT report security vulnerabilities through public GitHub issues.
 ## Security Practices
 
 ### Authentication & Authorization
-- All API routes requiring user context use `requireAuth` middleware
+- All API routes use `requireAuth` or `requireAuthOrApiKey` middleware
 - Admin-only routes use `requireAdmin` middleware
 - SSE/WebSocket connections require authentication
 - Internal service-to-service communication uses `x-api-key` headers
-- Cron job endpoints gated behind `CRON_SECRET`
+- Cron job endpoints gated behind `CRON_SECRET` or `WORKER_SECRET`
+- API key auth: `Authorization: Bearer audnix_<key>` header
+- Session auth: httpOnly `audnix.sid` cookie (30-day rolling expiry)
 
 ### Data Protection
 - All user passwords are bcrypt-hashed (10 rounds)
 - PII (emails, names) encrypted at rest via AES-256-GCM
-- API keys and secrets stored in environment variables, never in code
+- API keys: 70 chars (`audnix_` + 64 hex), SHA-512 hashed in DB (irreversible), encrypted at rest
+- Raw API key shown ONCE on creation, then masked forever — only hash stored
+- Keys and secrets stored in environment variables, never in code
 - `.gitignore` blocks `.env`, `opencode.json`, and credential files
 
 ### Input Validation

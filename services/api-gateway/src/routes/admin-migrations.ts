@@ -3,24 +3,17 @@ import fs from "fs";
 import path from "path";
 import { db } from "@shared/lib/db/db.js";
 import { pool } from "@shared/lib/db/db.js";
+import { requireAdmin } from "../middleware/auth.js";
 
 const router = Router();
 
 /**
  * POST /api/admin/run-migrations
- * Manually trigger database migrations (for production database sync)
- * Requires admin authentication in production
+ * Manually trigger database migrations
  */
-router.post("/run-migrations", async (req: Request, res: Response): Promise<void> => {
+router.post("/run-migrations", requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         console.log("📦 [Admin] Manual migration trigger requested");
-
-        // In production, require admin key
-        const adminKey = req.headers["x-admin-key"];
-        if (process.env.NODE_ENV === "production" && adminKey !== process.env.ADMIN_SECRET_KEY) {
-            res.status(401).json({ error: "Unauthorized" });
-            return;
-        }
 
         const migrationsDir = path.join(process.cwd(), "migrations");
 
@@ -77,7 +70,7 @@ router.post("/run-migrations", async (req: Request, res: Response): Promise<void
  * GET /api/admin/db-status
  * Check database table counts
  */
-router.get("/db-status", async (req: Request, res: Response): Promise<void> => {
+router.get("/db-status", requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
         const tableCountQuery = `
       SELECT table_name, 
