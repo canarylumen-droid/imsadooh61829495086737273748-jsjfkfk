@@ -1087,12 +1087,28 @@ export class DrizzleStorage implements IStorage {
         }
       }
 
-      // Update lead's lastMessageAt
+      // Clean snippet: strip RFC headers and IMAP framing
+      const cleanSnippet = message.body
+        .replace(/^References:.*$/m, '')
+        .replace(/^In-Reply-To:.*$/m, '')
+        .replace(/^Message-ID:.*$/m, '')
+        .replace(/^Content-Type:.*$/m, '')
+        .replace(/^MIME-Version:.*$/m, '')
+        .replace(/^Date:.*$/m, '')
+        .replace(/^From:.*$/m, '')
+        .replace(/^To:.*$/m, '')
+        .replace(/^Subject:.*$/m, '')
+        .replace(/^DKIM-Signature:.*$/m, '')
+        .replace(/^Authentication-Results:.*$/m, '')
+        .replace(/^Received:.*$/m, '')
+        .replace(/^X-.*:.*$/m, '')
+        .replace(/^ARC-.*:.*$/m, '')
+        .trim();
       await db.update(leads)
         .set({
           lastMessageAt: new Date(),
           updatedAt: new Date(),
-          snippet: message.body.substring(0, 150).replace(/\n/g, ' '),
+          snippet: (cleanSnippet || message.body).substring(0, 150).replace(/\n/g, ' '),
           status: message.direction === 'inbound' ? 'replied' : undefined,
           metadata: newMetadata
         })

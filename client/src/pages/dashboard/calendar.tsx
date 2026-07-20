@@ -660,8 +660,8 @@ export default function CalendarPage() {
                   ))}
                     {monthDays.map(({ date, isCurrentMonth }, idx) => {
                     const dayEvents = eventsForDate(date);
-                    const isToday = date.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
-                    const isSelected = date.toISOString().split('T')[0] === selectedDate.toISOString().split('T')[0];
+                    const isToday = dateToTzStr(date) === todayInTz;
+                    const isSelected = dateToTzStr(date) === dateToTzStr(selectedDate);
                     return (
                       <button
                         key={idx}

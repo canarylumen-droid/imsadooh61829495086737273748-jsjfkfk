@@ -511,6 +511,7 @@ ${ck.faqs && ck.faqs.length > 0 ? `Frequently Asked Questions:\n${ck.faqs.map((f
     await evaluateAndLogDecision({
       userId: lead.userId,
       leadId: lead.id,
+      lead,
       actionType: intent.wantsToSchedule ? 'calendar_booking' : 'dm_sent',
       intentScore: (intent.confidence || 0) * 100,
       timingScore: calculateTimingScore(lead),

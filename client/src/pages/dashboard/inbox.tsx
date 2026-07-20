@@ -1486,7 +1486,7 @@ export default function InboxPage() {
                                   {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{lead.snippet ? stripHtml(lead.snippet).substring(0, 52) : "No messages"}</span>
+                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{(lead.snippet ? stripHtml(lead.snippet).replace(/^(References|In-Reply-To|Message-ID|Content-Type|MIME-Version|Date|From|To|Subject|DKIM-Signature|Authentication-Results|Received|X-|ARC-).*$/gm, '').trim().substring(0, 60) : "No messages") || "No messages"}</span>
                                 </span>
                               )}
                             </p>

@@ -84,7 +84,7 @@ export async function evaluateCalendarBookingDecision(
   if (intentScore >= minIntent && timingScore >= minTiming) {
     return {
       decision: 'act',
-      reasoning: `Intent (${intentScore}%) and timing (${timingScore}%) exceed thresholds (${minIntent}%, ${minTiming}%)`,
+      reasoning: `${context.lead?.name || 'Lead'} is ready — intent ${intentScore}% with timing ${timingScore}%`,
       intentScore,
       timingScore,
       confidence,
@@ -95,7 +95,7 @@ export async function evaluateCalendarBookingDecision(
   if (intentScore >= minIntent && timingScore < minTiming) {
     return {
       decision: 'wait',
-      reasoning: `Intent high (${intentScore}%) but timing low (${timingScore}%). Waiting for better moment.`,
+      reasoning: `${context.lead?.name || 'Lead'} wants to book (intent ${intentScore}%) but timing too early (${timingScore}%) — holding for better moment`,
       intentScore,
       timingScore,
       confidence,
@@ -106,7 +106,7 @@ export async function evaluateCalendarBookingDecision(
   if (intentScore < 40) {
     return {
       decision: 'skip',
-      reasoning: `Intent too low (${intentScore}%). Not ready for booking. Threshold is ${minIntent}%.`,
+      reasoning: `${context.lead?.name || 'Lead'} shows low interest (${intentScore}%) — not ready for booking yet`,
       intentScore,
       timingScore,
       confidence,
@@ -117,7 +117,7 @@ export async function evaluateCalendarBookingDecision(
   if (confidence < 0.6) {
     return {
       decision: 'escalate',
-      reasoning: `Low confidence (${Math.round(confidence * 100)}%). Recommend human review.`,
+      reasoning: `Uncertain about ${context.lead?.name || 'lead'} (${Math.round(confidence * 100)}% confidence) — needs human review`,
       intentScore,
       timingScore,
       confidence,
@@ -127,7 +127,7 @@ export async function evaluateCalendarBookingDecision(
   
   return {
     decision: 'wait',
-    reasoning: `Intent (${intentScore}%) below threshold (${minIntent}%). Continuing to nurture.`,
+    reasoning: `${context.lead?.name || 'Lead'}'s intent (${intentScore}%) below ${minIntent}% threshold — continuing to nurture`,
     intentScore,
     timingScore,
     confidence,
@@ -143,7 +143,7 @@ export async function evaluateVideoDeliveryDecision(
   if (intentScore >= 50 && timingScore >= 40) {
     return {
       decision: 'act',
-      reasoning: `Intent (${intentScore}%) and timing (${timingScore}%) suitable for video delivery`,
+      reasoning: `Good moment to send ${context.lead?.name || 'lead'} a video — intent ${intentScore}%, timing ${timingScore}%`,
       intentScore,
       timingScore,
       confidence,
@@ -154,7 +154,7 @@ export async function evaluateVideoDeliveryDecision(
   if (intentScore >= 30 && timingScore >= 60) {
     return {
       decision: 'act',
-      reasoning: `Moderate intent (${intentScore}%) but good timing (${timingScore}%) - optimal moment for video`,
+      reasoning: `${context.lead?.name || 'Lead'} is engaged (timing ${timingScore}%) — video would land well despite moderate intent (${intentScore}%)`,
       intentScore,
       timingScore,
       confidence,
@@ -165,7 +165,7 @@ export async function evaluateVideoDeliveryDecision(
   if (intentScore < 30) {
     return {
       decision: 'skip',
-      reasoning: `Intent too low (${intentScore}%). Video may not resonate.`,
+      reasoning: `${context.lead?.name || 'Lead'} too cold (${intentScore}%) — video may feel intrusive`,
       intentScore,
       timingScore,
       confidence,
@@ -175,7 +175,7 @@ export async function evaluateVideoDeliveryDecision(
   
   return {
     decision: 'wait',
-    reasoning: `Timing not optimal (${timingScore}%). Waiting for better engagement moment.`,
+    reasoning: `Timing not right for ${context.lead?.name || 'lead'} (${timingScore}%) — waiting for stronger engagement signal`,
     intentScore,
     timingScore,
     confidence,
@@ -191,7 +191,7 @@ export async function evaluateDMDecision(
   if (intentScore >= 60 && timingScore >= 50) {
     return {
       decision: 'act',
-      reasoning: `Intent (${intentScore}%) and timing (${timingScore}%) suitable for DM outreach`,
+      reasoning: `${context.lead?.name || 'Lead'} is warm — sending DM now (intent ${intentScore}%, timing ${timingScore}%)`,
       intentScore,
       timingScore,
       confidence,
@@ -202,7 +202,7 @@ export async function evaluateDMDecision(
   if (intentScore >= 40 && timingScore >= 70) {
     return {
       decision: 'act',
-      reasoning: `Good timing (${timingScore}%) with moderate intent (${intentScore}%) - opportune moment for DM`,
+      reasoning: `${context.lead?.name || 'Lead'} is active (timing ${timingScore}%) — good moment for DM despite moderate intent (${intentScore}%)`,
       intentScore,
       timingScore,
       confidence,
@@ -213,7 +213,7 @@ export async function evaluateDMDecision(
   if (intentScore < 30) {
     return {
       decision: 'skip',
-      reasoning: `Intent too low (${intentScore}%). DM may feel intrusive.`,
+      reasoning: `${context.lead?.name || 'Lead'} too cold (${intentScore}%) — DM would feel intrusive`,
       intentScore,
       timingScore,
       confidence,
@@ -224,7 +224,7 @@ export async function evaluateDMDecision(
   if (timingScore < 30) {
     return {
       decision: 'wait',
-      reasoning: `Poor timing (${timingScore}%). Wait for lead to be more active.`,
+      reasoning: `${context.lead?.name || 'Lead'} not active (timing ${timingScore}%) — waiting for engagement`,
       intentScore,
       timingScore,
       confidence,
@@ -234,7 +234,7 @@ export async function evaluateDMDecision(
   
   return {
     decision: 'wait',
-    reasoning: `Intent (${intentScore}%) and timing (${timingScore}%) below thresholds. Continuing to monitor.`,
+    reasoning: `${context.lead?.name || 'Lead'}'s intent (${intentScore}%) and timing (${timingScore}%) both below threshold — monitoring`,
     intentScore,
     timingScore,
     confidence,
@@ -250,7 +250,7 @@ export async function evaluateEmailDecision(
   if (intentScore >= 55 && timingScore >= 45) {
     return {
       decision: 'act',
-      reasoning: `Intent (${intentScore}%) and timing (${timingScore}%) suitable for email follow-up`,
+      reasoning: `${context.lead?.name || 'Lead'} ready for follow-up — intent ${intentScore}%, timing ${timingScore}%`,
       intentScore,
       timingScore,
       confidence,
@@ -261,7 +261,7 @@ export async function evaluateEmailDecision(
   if (intentScore >= 35 && timingScore >= 65) {
     return {
       decision: 'act',
-      reasoning: `Good timing (${timingScore}%) with moderate intent (${intentScore}%) - optimal for email`,
+      reasoning: `${context.lead?.name || 'Lead'} is engaged (timing ${timingScore}%) — email will land despite moderate intent (${intentScore}%)`,
       intentScore,
       timingScore,
       confidence,
@@ -272,7 +272,7 @@ export async function evaluateEmailDecision(
   if (intentScore < 25) {
     return {
       decision: 'skip',
-      reasoning: `Intent too low (${intentScore}%). Email likely to be ignored.`,
+      reasoning: `${context.lead?.name || 'Lead'} too cold (${intentScore}%) — email would be ignored`,
       intentScore,
       timingScore,
       confidence,
@@ -282,7 +282,7 @@ export async function evaluateEmailDecision(
   
   return {
     decision: 'wait',
-    reasoning: `Timing (${timingScore}%) not optimal. Waiting for better engagement signals.`,
+    reasoning: `${context.lead?.name || 'Lead'} timing too low (${timingScore}%) — waiting for engagement signal`,
     intentScore,
     timingScore,
     confidence,
@@ -302,7 +302,7 @@ export async function evaluateFollowUpDecision(
   if (daysSinceLastContact < 1) {
     return {
       decision: 'wait',
-      reasoning: `Last contact less than 24h ago. Following up too soon may seem pushy.`,
+      reasoning: `Just contacted ${context.lead?.name || 'lead'} <24h ago — too soon to follow up`,
       intentScore,
       timingScore,
       confidence,
@@ -313,7 +313,7 @@ export async function evaluateFollowUpDecision(
   if (intentScore >= 50 && daysSinceLastContact >= 2 && daysSinceLastContact <= 7) {
     return {
       decision: 'act',
-      reasoning: `Good intent (${intentScore}%) and ${daysSinceLastContact} days since last contact - optimal for follow-up`,
+      reasoning: `${context.lead?.name || 'Lead'} showed intent (${intentScore}%) ${daysSinceLastContact}d ago — time to follow up`,
       intentScore,
       timingScore,
       confidence,
@@ -324,7 +324,7 @@ export async function evaluateFollowUpDecision(
   if (daysSinceLastContact > 14) {
     return {
       decision: 'act',
-      reasoning: `${daysSinceLastContact} days since last contact - re-engagement follow-up recommended`,
+      reasoning: `${context.lead?.name || 'Lead'} hasn't responded in ${daysSinceLastContact}d — sending re-engagement`,
       intentScore,
       timingScore,
       confidence: confidence * 0.8,
@@ -334,7 +334,7 @@ export async function evaluateFollowUpDecision(
   
   return {
     decision: 'wait',
-    reasoning: `Waiting for better timing. Last contact: ${daysSinceLastContact} days ago.`,
+    reasoning: `${context.lead?.name || 'Lead'}: intent ${intentScore}%, ${daysSinceLastContact}d since last contact — waiting for better timing`,
     intentScore,
     timingScore,
     confidence,
