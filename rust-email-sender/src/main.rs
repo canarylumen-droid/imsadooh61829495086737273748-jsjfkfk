@@ -19,7 +19,7 @@ use lettre::{AsyncSmtpTransport, Tokio1Executor};
 
 async fn verify_smtp(job: &MailboxVerifyJob, timeout: Duration) -> Result<()> {
     let creds = Credentials::new(job.email.clone(), job.password.clone());
-    let transport = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&job.smtp_host)?
+    let transport: AsyncSmtpTransport<Tokio1Executor> = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&job.smtp_host)?
         .credentials(creds)
         .port(job.smtp_port)
         .timeout(Some(timeout))

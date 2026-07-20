@@ -939,6 +939,7 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
           // Poll Rust results
           const resultQueue = process.env.MAILBOX_VERIFY_RESULT_QUEUE || 'bulk-mailbox-verify-results';
           const redis = await getRedisClient();
+          if (!redis) { log.error('[BulkImport] Redis unavailable'); return; }
           const pollStart = Date.now();
           const pollTimeout = 5 * 60 * 1000; // 5 min max
 
