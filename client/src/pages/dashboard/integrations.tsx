@@ -1485,25 +1485,23 @@ export default function IntegrationsPage() {
                   )}
                 </div>
               ) : hasMailboxesConnected ? (
-                <div className="p-4 sm:p-8 space-y-6 sm:space-y-8">
-                  <div className="flex items-center justify-between pb-4 border-b border-border/50">
-                    <div className="space-y-3 flex-1">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-lg font-bold text-foreground">Active Business Mailboxes</h3>
-                          <Badge variant="outline" className={cn(
-                            "rounded-full text-[10px] font-black tracking-widest px-2",
-                            getActivePlanId(userData) === 'enterprise' 
-                              ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5 shadow-inner" 
-                              : isAtMailboxLimit 
-                                ? "text-amber-500 border-amber-500/20 bg-amber-500/5"
-                                : "text-primary border-primary/20 bg-primary/5"
-                          )}>
-                            {getActivePlanId(userData) === 'enterprise' ? `${connectedMailboxesCount} Connected` : `${connectedMailboxesCount} / ${limit}`}
-                          </Badge>
-                        </div>
+                <div className="p-4 sm:p-8 space-y-4 sm:space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-border/50">
+                    <div className="space-y-3 flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="text-base sm:text-lg font-bold text-foreground truncate">Mailboxes</h3>
+                        <Badge variant="outline" className={cn(
+                          "rounded-full text-[9px] sm:text-[10px] font-black tracking-widest px-2 shrink-0",
+                          getActivePlanId(userData) === 'enterprise' 
+                            ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5 shadow-inner" 
+                            : isAtMailboxLimit 
+                              ? "text-amber-500 border-amber-500/20 bg-amber-500/5"
+                              : "text-primary border-primary/20 bg-primary/5"
+                        )}>
+                          {getActivePlanId(userData) === 'enterprise' ? `${connectedMailboxesCount} Connected` : `${connectedMailboxesCount} / ${limit}`}
+                        </Badge>
                         {limit !== -1 && (
-                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                          <span className="text-[9px] sm:text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-auto">
                             {Math.round((connectedMailboxesCount / limit) * 100)}% Capacity
                           </span>
                         )}
@@ -1540,11 +1538,11 @@ export default function IntegrationsPage() {
                             : `You have ${limit - connectedMailboxesCount} mailbox slots remaining on your ${getActivePlanId(userData)} plan.`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       {getActivePlanId(userData) !== 'enterprise' && isAtMailboxLimit && getNextPlan() && (
                         <Link href="/dashboard/pricing">
-                          <Button size="sm" variant="outline" className="rounded-full gap-2 border-primary/20 text-primary hover:bg-primary/5">
-                            <Zap className="h-3.5 w-3.5 fill-primary" /> Upgrade for More
+                          <Button size="sm" variant="outline" className="rounded-full gap-1.5 border-primary/20 text-primary hover:bg-primary/5 h-8 text-[10px] px-3">
+                            <Zap className="h-3 w-3 fill-primary" /> Upgrade
                           </Button>
                         </Link>
                       )}
@@ -1552,23 +1550,23 @@ export default function IntegrationsPage() {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="rounded-full gap-2 border-border/30 bg-muted/20"
+                        className="rounded-full gap-1.5 border-border/30 bg-muted/20 h-8 text-[10px] px-3"
                         onClick={() => setShowMailboxModal(true)}
                       >
-                        <span className="h-3.5 w-3.5">≡</span> View All
+                        <span className="h-3 w-3">≡</span> View
                       </Button>
                       <Button
                         size="sm"
-                        className="rounded-full gap-2 shadow-lg shadow-primary/20"
+                        className="rounded-full gap-1.5 shadow-lg shadow-primary/20 h-8 text-[10px] px-3"
                         onClick={() => { setIsEditingCustomEmail(true); setTestConnectionResult(null); }}
                         variant={isAtMailboxLimit ? "outline" : "default"}
                       >
-                        <Plus className="h-4 w-4" /> Add Mailbox
+                        <Plus className="h-3.5 w-3.5" /> Add
                       </Button>
 
-                      {getActivePlanId(userData) === 'enterprise' && (
-                        <Badge variant="outline" className="rounded-full px-4 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500 border-emerald-500/30 bg-emerald-500/10 shadow-lg shadow-emerald-500/10">
-                          Enterprise Elite
+                      {(getActivePlanId(userData) === 'enterprise') && (
+                        <Badge variant="outline" className="rounded-full px-3 py-1 text-[8px] font-black uppercase tracking-[0.15em] text-emerald-500 border-emerald-500/30 bg-emerald-500/10 shadow-sm">
+                          Elite
                         </Badge>
                       )}
                     </div>
@@ -1669,7 +1667,7 @@ export default function IntegrationsPage() {
                         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mt-2 lg:mt-0">
                           {mailbox.connected && (
                             <div className="flex overflow-x-auto -mx-3 px-3 w-auto sm:mx-0 sm:px-0">
-                              <div className="grid grid-cols-5 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 min-w-[320px] sm:min-w-0">
+                              <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 min-w-0">
                                 <div className="flex flex-col justify-center">
                                   <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Delivery</span>
                                   <span className={cn(
@@ -1720,12 +1718,6 @@ export default function IntegrationsPage() {
                                     {mailbox.reputationScore !== null && mailbox.reputationScore !== undefined
                                       ? `${mailbox.reputationScore}`
                                       : "—"}
-                                  </span>
-                                </div>
-                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
-                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Status</span>
-                                  <span className="text-xs font-black text-emerald-400 tabular-nums">
-                                    {mailbox.connected ? "Active" : "Inactive"}
                                   </span>
                                 </div>
                               </div>
