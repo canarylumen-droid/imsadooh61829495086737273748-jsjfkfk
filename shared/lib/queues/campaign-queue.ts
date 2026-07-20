@@ -1073,10 +1073,98 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
     }
   }
 
+  // ── REDISTRIBUTION LOGIC ─────────────────────────────────────────────
+  // When a mailbox hits its daily cap for initials, we check if other
+  // mailboxes in the same campaign have spare capacity and move initial
+  // leads to them. Follow-ups NEVER get redistributed.
+  async function redistributeOverflow(
+    userId: string,
+    campaignId: string,
+    overloadedMailboxId: string,
+  ): Promise<boolean> {
+    try {
+      // Find all mailboxes in this campaign that still have capacity
+      const campaignRows = await db.select({
+        campaignLeadId: campaignLeads.id,
+        integrationId: campaignLeads.integrationId,
+        leadId: campaignLeads.leadId,
+      })
+        .from(campaignLeads)
+        .where(and(
+          eq(campaignLeads.campaignId, campaignId),
+          eq(campaignLeads.status, 'queued'),
+          isNull(campaignLeads.integrationId),
+        ))
+        .limit(50);
+
+      if (campaignRows.length === 0) return false;
+
+      // Find mailboxes with remaining capacity
+      const allMailboxIds = [...new Set(campaignRows
+        .filter(r => r.integrationId)
+        .map(r => r.integrationId!))];
+      allMailboxIds.push(overloadedMailboxId);
+
+      const capacityMap = new Map<string, number>();
+      for (const mbId of allMailboxIds) {
+        const sent = await getMailboxSentCount(userId, mbId);
+        const mb = await storage.getIntegrationById(mbId);
+        const limit = (mb as any)?.dailyLimit || 40;
+        const remaining = Math.max(0, limit - sent);
+        if (remaining > 0) capacityMap.set(mbId, remaining);
+      }
+
+      // Assign unassigned leads to mailboxes with capacity
+      let assigned = 0;
+      for (const row of campaignRows) {
+        if (capacityMap.size === 0) break;
+        const targetId = capacityMap.entries().next().value?.[0];
+        if (!targetId) break;
+        await db.update(campaignLeads)
+          .set({ integrationId: targetId })
+          .where(eq(campaignLeads.id, row.campaignLeadId));
+        const remaining = capacityMap.get(targetId)! - 1;
+        if (remaining <= 0) capacityMap.delete(targetId);
+        else capacityMap.set(targetId, remaining);
+        assigned++;
+      }
+
+      if (assigned > 0) {
+        console.log(`[CampaignWorker] 🔄 Redistributed ${assigned} leads from ${overloadedMailboxId.slice(-8)} to other mailboxes`);
+        // Trigger the other mailbox workers
+        for (const [mbId] of capacityMap) {
+          if (mbId !== overloadedMailboxId) {
+            try {
+              if (campaignQueue) {
+                await campaignQueue.add(`campaign:send-batch:${campaignId}:${mbId}`, {
+                  type: 'campaign:send-batch',
+                  campaignId,
+                  userId,
+                  integrationId: mbId,
+                  dailyLimit: 0,
+                } as SendBatchJobData, { delay: 5000, removeOnComplete: 100, removeOnFail: 500 });
+              }
+            } catch (_) { /* best-effort */ }
+          }
+        }
+      }
+      return assigned > 0;
+    } catch (e) {
+      console.error('[CampaignWorker] Redistribution error:', e);
+      return false;
+    }
+  }
+
   // Hard cap: total sends (initials + follow-ups) must not exceed daily limit
   if (totalSentToday >= effectiveLimit) {
-    console.log(`[CampaignWorker] ⏸️ Daily cap hit: ${totalSentToday}/${effectiveLimit} (${initialSentToday} initial, ${followUpSentToday} follow-up). Rescheduling.`);
-    await rescheduleSendBatch(data, 60 * 60 * 1000);
+    console.log(`[CampaignWorker] ⏸️ Daily cap hit: ${totalSentToday}/${effectiveLimit} (${initialSentToday} initial, ${followUpSentToday} follow-up). Trying redistribution...`);
+    const redistributed = await redistributeOverflow(userId, data.campaignId, integrationId);
+    if (redistributed) {
+      // Retry this batch immediately — leads may have been moved away
+      await rescheduleSendBatch(data, 30_000);
+    } else {
+      await rescheduleSendBatch(data, 60 * 60 * 1000);
+    }
     return;
   }
 
@@ -1091,8 +1179,13 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
   }
 
   if (initialSentToday >= initialLimit) {
-    console.log(`[CampaignWorker] ⏸️ Initials throttled: ${initialSentToday}/${initialLimit} (${followUpSentToday} follow-ups using ${followUpReserve} reserved slots). Rescheduling.`);
-    await rescheduleSendBatch(data, 60 * 60 * 1000);
+    console.log(`[CampaignWorker] ⏸️ Initials throttled: ${initialSentToday}/${initialLimit} (${followUpSentToday} follow-ups using ${followUpReserve} reserved slots). Trying redistribution...`);
+    const redistributed = await redistributeOverflow(userId, data.campaignId, integrationId);
+    if (redistributed) {
+      await rescheduleSendBatch(data, 30_000);
+    } else {
+      await rescheduleSendBatch(data, 60 * 60 * 1000);
+    }
     return;
   }
 

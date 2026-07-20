@@ -880,3 +880,20 @@ pm2 restart all
 - `audnix-rust-email-sender` (26) — online, 4.2MB, handles SMTP sending
 - `audnix-worker-imap` (32) — deleted; Gmail/Outlook OAuth handled by `mailbox-worker.ts` BullMQ worker
 - 14 other Node.js workers unchanged
+
+## This Session (Jul 20 2026) — Integrations Layout Fix + Rust/TS Build Cleanup
+
+### Changes
+1. **Removed duplicate Status column** (`integrations.tsx`): Changed stats grid `grid-cols-5` → `grid-cols-4`, removed "Status Active/Inactive" column (duplicate of connection banner). Removed `min-w-[320px]` to prevent mobile overflow.
+2. **Mobile header fix** (`integrations.tsx`): Changed "Active Business Mailboxes" → "Mailboxes" with `truncate`, `flex-wrap` on button group, compact button sizes (h-8, text-[10px]), stacked layout on small screens.
+3. **Rust build fixes** (`dns.rs`, `main.rs`):
+   - `TokioAsyncResolver::tokio()` in hickory-resolver 0.24 returns `Self` not `Result` — removed `?`
+   - `String::from_utf8_lossy()` returns `Cow<str>` → added `.into_owned()`
+   - `resolve_mx()` returns `Result<Vec<MxRecord>>` → unwrapped in `verify_domain()`
+   - `transport.verify()` renamed to `test_connection()` in lettre 0.11.22
+   - Added explicit `AsyncSmtpTransport<Tokio1Executor>` type annotation on transport builder
+   - Fixed moved-value error in bulk verify handler (`result.is_ok()` before `result.err()`)
+   - Added `let mut r = r;` for mutable redis access
+4. **TS build fixes** (`custom-email-routes.ts`): Added explicit types to all `map()`/`findIndex()` callbacks (7 params), adopted strict `noImplicitAny` style. Added null guard for `getRedisClient()`. Changed `log.error` → `console.error`.
+5. **MessageType union** (`websocket-sync.ts`): Added `'bulk_import_progress'` to fix TS2345.
+6. **Deployed to EC2**: Rust build succeeds, client build succeeds (`npm run build:server` 0 errors), API gateway + Rust sender restarted.
