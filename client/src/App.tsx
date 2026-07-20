@@ -46,7 +46,6 @@ const AdminLeads = lazy(() => import("./pages/admin/leads"));
 const AdminSettings = lazy(() => import("./pages/admin/settings"));
 
 import { ThemeProvider } from "next-themes";
-import { LenisScroll } from "@/components/LenisScroll";
 
 // Loading fallback component for Suspense boundaries
 const LoadingFallback = () => (
@@ -209,13 +208,11 @@ function App() {
           <MailboxProvider>
             <TooltipProvider>
               <HelmetProvider>
-                <LenisScroll>
                   <InternetConnectionBanner />
                   <Toaster />
                   <Router />
                   <NotificationSound />
                   <PrivacyModal />
-                </LenisScroll>
               </HelmetProvider>
             </TooltipProvider>
           </MailboxProvider>
