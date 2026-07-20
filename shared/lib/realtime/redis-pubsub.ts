@@ -134,7 +134,7 @@ class RedisPubSub {
       case 'WARMUP_UPDATE': wsSync.notifyWarmupUpdated(userId, payload); break;
       case 'CALENDAR_UPDATE': wsSync.notifyCalendarUpdated(userId, payload); break;
       default:
-        wsSync.broadcastToUser(userId, { type: type.toLowerCase(), payload });
+        wsSync.broadcastToUser(userId, { type: (type || 'unknown').toLowerCase(), payload });
     }
   }
 
