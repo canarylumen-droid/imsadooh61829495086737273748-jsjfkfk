@@ -562,7 +562,7 @@ fn extract_body_text(raw: &str) -> String {
             if line.trim().starts_with('*') || line.trim().starts_with('A') {
                 continue;
             }
-            if line.contains("FLAGS") || line.contains("UID ") || line.trim().starts_with(')') || line.contains("OK FETCH") || line.contains("OK UID") {
+            if line.trim().starts_with(')') || line.trim().starts_with("FLAGS") || line.trim().starts_with("UID") || line.contains("OK FETCH") || line.contains("OK UID") {
                 break;
             }
             if line.trim().is_empty() {
@@ -643,7 +643,7 @@ fn extract_raw_rfc822(raw: &str) -> String {
             if line.trim().starts_with('*') || line.trim().starts_with('A') {
                 continue;
             }
-            if line.contains("FLAGS") || line.contains("UID ") {
+            if line.trim().starts_with("FLAGS") || line.trim().starts_with("UID") {
                 continue;
             }
             lines.push(line.to_string());

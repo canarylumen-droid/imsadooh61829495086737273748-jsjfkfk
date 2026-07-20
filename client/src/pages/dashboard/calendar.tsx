@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { motion, AnimatePresence } from "framer-motion";
@@ -211,50 +212,86 @@ export default function CalendarPage() {
     attendeeEmail: "",
   });
 
-  const pollingMs = isConnected ? false : 15000;
+  const socketPollingMs = isConnected ? false : 15000;
 
   const { data: settingsData, isLoading: settingsLoading } = useQuery<{ settings: CalendarSettings }>({
     queryKey: ["/api/calendar/settings"],
     retry: 3,
-    refetchInterval: pollingMs,
+    refetchInterval: socketPollingMs,
   });
 
   const { data: bookingsData, isLoading: bookingsLoading } = useQuery<{ bookings: CalendarBooking[] }>({
     queryKey: ["/api/calendar/bookings"],
     retry: 3,
-    refetchInterval: pollingMs,
+    refetchInterval: socketPollingMs,
   });
 
   const { data: aiLogsData } = useQuery<{ logs: AIActionLog[] }>({
     queryKey: ["/api/calendar/ai-logs"],
     retry: 3,
-    refetchInterval: pollingMs,
+    refetchInterval: socketPollingMs,
   });
+
+  const calendarPollMs = isConnected ? 300000 : 15000;
 
   const { data: eventsData } = useQuery<{ events: Array<{ id: string; title?: string; summary?: string; startTime?: string; start?: { dateTime?: string }; endTime?: string; end?: { dateTime?: string }; meetingUrl?: string; hangoutLink?: string; isAiBooked?: boolean; leadName?: string | null }> }>({
     queryKey: ["/api/oauth/google-calendar/events"],
     retry: 3,
-    refetchInterval: pollingMs,
+    refetchInterval: calendarPollMs,
   });
 
   const { data: calendarEventsData } = useQuery<{ events: Array<{ id: string; title: string; startTime: string; endTime: string; meetingUrl: string | null; isAiBooked: boolean; leadName?: string | null; provider: string; status: string; attendeeEmail: string | null; leadId: string | null }> }>({
     queryKey: ["/api/calendar/events"],
     retry: 3,
-    refetchInterval: pollingMs,
+    refetchInterval: calendarPollMs,
   });
 
   const { data: slotsData } = useQuery<{ slots: Array<{ start: string; end: string; available: boolean }> }>({
     queryKey: ["/api/calendar/slots", { daysAhead: 14 }],
     retry: 3,
-    refetchInterval: pollingMs,
+    refetchInterval: calendarPollMs,
   });
 
   const settings = settingsData?.settings;
+  const userTimezone = settings?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const bookings = bookingsData?.bookings || [];
   const aiLogs = aiLogsData?.logs || [];
   const googleEvents = eventsData?.events || [];
   const syncedEvents = calendarEventsData?.events || [];
   const availableSlots = slotsData?.slots || [];
+
+  const todayInTz = useMemo(() => {
+    const d = new Date();
+    const tz = userTimezone;
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+    const get = (t: string) => parts.find(p => p.type === t)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }, [userTimezone]);
+
+  const dateToTzStr = useCallback((date: Date, tz?: string) => {
+    const parts = new Intl.DateTimeFormat('en-US', { timeZone: tz || userTimezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+    const get = (t: string) => parts.find(p => p.type === t)?.value || '';
+    return `${get('year')}-${get('month')}-${get('day')}`;
+  }, [userTimezone]);
+
+  const getRelativeDateLabel = useCallback((date: Date) => {
+    const tz = userTimezone;
+    const dateStr = dateToTzStr(date, tz);
+    if (dateStr === todayInTz) return 'Today';
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (dateToTzStr(yesterday, tz) === dateStr) return 'Yesterday';
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    if (dateToTzStr(tomorrow, tz) === dateStr) return 'Tomorrow';
+    const now = new Date();
+    const diffDays = Math.round((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays > 0 && diffDays <= 7) return 'Next week';
+    if (diffDays < 0 && diffDays >= -7) return 'Last week';
+    if (diffDays > 7 && diffDays <= 30) return 'Next month';
+    if (diffDays < -7 && diffDays >= -30) return 'Last month';
+    return format(date, 'MMM d, yyyy');
+  }, [userTimezone, todayInTz, dateToTzStr]);
 
   const allEvents: CalendarEvent[] = useMemo(() => [
     ...bookings.map(b => ({
@@ -307,16 +344,14 @@ export default function CalendarPage() {
     new Date(e.startTime) > new Date() && e.status === 'scheduled'
   ).length;
 
-  const toLocalDateStr = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
   const eventsForDate = useCallback((date: Date) => {
-    const dateStr = toLocalDateStr(date);
+    const tz = userTimezone;
+    const dateStr = dateToTzStr(date, tz);
     return allEvents.filter(e => {
-      const eventDate = toLocalDateStr(new Date(e.startTime));
+      const eventDate = dateToTzStr(new Date(e.startTime), tz);
       return eventDate === dateStr;
     });
-  }, [allEvents]);
+  }, [allEvents, userTimezone, dateToTzStr]);
 
   const weekDays = useMemo(() => {
     const start = new Date(selectedDate);
@@ -738,7 +773,10 @@ export default function CalendarPage() {
           <Card className="bg-[#050505] border-white/5 rounded-2xl">
             <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between">
               <CardTitle className="text-sm font-bold text-white flex items-center gap-2">
-                <CalendarDays className="h-4 w-4 text-primary" /> {selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                <CalendarDays className="h-4 w-4 text-primary" />
+                {getRelativeDateLabel(selectedDate) === 'Today' ? format(selectedDate, 'EEEE, MMMM d, yyyy') : (
+                  <><span className="text-white/40 text-xs mr-1">{format(selectedDate, 'EEEE')}</span>{getRelativeDateLabel(selectedDate)}</>
+                )}
               </CardTitle>
               <Button variant="ghost" size="sm" className="text-xs text-white/40 h-7" onClick={() => setSelectedDate(new Date())}>Today</Button>
             </CardHeader>

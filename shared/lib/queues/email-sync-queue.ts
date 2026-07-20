@@ -102,7 +102,7 @@ export function startEmailSyncWorker() {
                     const { getRedisClient } = await import('@shared/lib/redis/redis.js');
                     const redis = await getRedisClient();
                     if (redis) {
-                      const key = `mailbox-monitor:active:${integrationId}`;
+                      const key = `imap:active:${integrationId}`;
                       const rustActive = await redis.exists(key);
                       if (rustActive) {
                         // Rust is handling IDLE for this mailbox — skip Node.js processing

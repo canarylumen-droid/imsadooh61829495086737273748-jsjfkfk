@@ -110,7 +110,9 @@ async function handleInboundEmail(payload: any) {
     const genericPatterns = [
       /^mailer-daemon@/i, /^postmaster@/i, /^noreply@/i, /^no-reply@/i,
       /^notifications?@/i, /^bounce@/i, /^dmarc@/i, /^report@/i,
+      /^(team|hello|info|support|help|admin|mail|noreply|no-reply|donotreply)@/i,
       /easydmarc/i, /dmarc/i, /mailer-daemon/i,
+      /(easydmarc|mailer-daemon|mailerdaemon|postmaster|noreply)\./i,
     ];
     const isGeneric = genericPatterns.some(p => p.test(senderAddr) || p.test(from || ''));
     if (isGeneric) {

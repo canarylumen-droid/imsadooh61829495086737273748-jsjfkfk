@@ -13,7 +13,7 @@ import { analyzeLeadIntent, type IntentAnalysis } from '../analyzers/intent-anal
 import { generateAutonomousObjectionResponse } from '../analyzers/autonomous-objection-responder.js';
 import { universalSalesAI } from "@services/brain-worker/src/orchestrator/agents/universal-sales-agent.js";
 import { billingAgent } from "@services/brain-worker/src/orchestrator/agents/billing-agent.js";
-import { evaluateAndLogDecision } from '../engines/decision-engine.js';
+import { evaluateAndLogDecision, calculateTimingScore } from '../engines/decision-engine.js';
 import { formatReplyForChannel } from '../formatters/channel-reply-formatter.js';
 import { workerHealthMonitor } from '@shared/lib/monitoring/worker-health.js';
 import { quotaService } from '@shared/lib/monitoring/quota-service.js';
@@ -513,7 +513,7 @@ ${ck.faqs && ck.faqs.length > 0 ? `Frequently Asked Questions:\n${ck.faqs.map((f
       leadId: lead.id,
       actionType: intent.wantsToSchedule ? 'calendar_booking' : 'dm_sent',
       intentScore: (intent.confidence || 0) * 100,
-      timingScore: 80, // Default for active conversation
+      timingScore: calculateTimingScore(lead),
       confidence: intent.confidence || 0,
       metadata: { intent }
     });
