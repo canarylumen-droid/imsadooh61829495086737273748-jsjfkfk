@@ -800,7 +800,7 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
       return;
     }
 
-    const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean);
+    const lines = csvText.split('\n').map((l: string) => l.trim()).filter(Boolean);
     if (lines.length < 2) {
       res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
       return;
