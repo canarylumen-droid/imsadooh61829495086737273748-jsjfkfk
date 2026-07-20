@@ -405,8 +405,9 @@ async fn run_idle_session(
                 }
             };
 
-            // Extract body content from full fetch
+            // Extract body text and raw RFC822 content from full fetch
             let body = extract_body_text(&full_raw);
+            let raw_rfc822 = extract_raw_rfc822(&full_raw);
 
             // Publish to Redis for Node.js processing
             // Format: { event, payload: { type, user_id, ... } } — matches inbound-email-handler.ts
@@ -423,7 +424,7 @@ async fn run_idle_session(
                 "in_reply_to": headers.get("in-reply-to").cloned().unwrap_or_default(),
                 "references": headers.get("references").cloned().unwrap_or_default(),
                 "snippet": body.chars().take(500).collect::<String>(),
-                "raw_email": full_raw.chars().take(100000).collect::<String>(),
+                "raw_email": raw_rfc822.chars().take(100000).collect::<String>(),
                 "timestamp": chrono::Utc::now().to_rfc3339()
             });
 
@@ -620,4 +621,33 @@ fn extract_body_text(raw: &str) -> String {
     }
 
     String::new()
+}
+
+/// Extract the raw RFC822 email content (headers + body) from the IMAP FETCH response.
+/// Strips IMAP protocol framing like "* 58 FETCH (BODY[] {size}" and trailing ")" / "A0001 OK".
+fn extract_raw_rfc822(raw: &str) -> String {
+    // Find BODY[ marker with literal size
+    let mut in_body = false;
+    let mut lines: Vec<String> = Vec::new();
+    for line in raw.lines() {
+        if line.contains("BODY[") && line.contains('{') {
+            in_body = true;
+            continue;
+        }
+        if in_body {
+            // Stop at IMAP response trailer
+            if line.trim().starts_with(')') || line.contains("OK FETCH") || line.contains("OK UID") {
+                break;
+            }
+            // Skip IMAP response metadata
+            if line.trim().starts_with('*') || line.trim().starts_with('A') {
+                continue;
+            }
+            if line.contains("FLAGS") || line.contains("UID ") {
+                continue;
+            }
+            lines.push(line.to_string());
+        }
+    }
+    lines.join("\n")
 }
