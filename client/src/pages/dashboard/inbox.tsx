@@ -301,10 +301,15 @@ export default function InboxPage() {
           ...(isClickEvent ? { clickedAt: new Date().toISOString(), clicked: true } : {}),
         };
 
-        // Only update direction/read from actual new messages, not from open/click tracking events
+        // Update direction/read from new messages
         if (msgData.direction) {
           newMeta.lastMessageDirection = msgData.direction;
-          newMeta.lastMessageIsRead = msgData.direction === 'inbound' ? null : msgData.isRead ?? false;
+          newMeta.lastMessageIsRead = msgData.direction === 'inbound' ? null : false;
+        }
+
+        // On open/click, mark last outbound as read (✓✓)
+        if ((isOpenEvent || isClickEvent) && existing.metadata?.lastMessageDirection === 'outbound') {
+          newMeta.lastMessageIsRead = true;
         }
 
         const updatedLead: any = {

@@ -567,7 +567,7 @@ export class DrizzleStorage implements IStorage {
         provider: integrations.provider,
         lastMessageData: sql<any>`(
           SELECT row_to_json(sq) FROM (
-            SELECT direction, is_read
+            SELECT direction, is_read, opened_at
             FROM ${messages}
             WHERE lead_id = ${leads.id}
             ORDER BY created_at DESC LIMIT 1
@@ -591,10 +591,12 @@ export class DrizzleStorage implements IStorage {
     return rows.map((r: { lead: Lead; provider: string | null; lastMessageData?: any }) => {
       let msgDirection: string | null = null;
       let msgIsRead: boolean | null = null;
+      let msgOpenedAt: string | null = null;
       if (r.lastMessageData) {
         const parsed = typeof r.lastMessageData === 'string' ? JSON.parse(r.lastMessageData) : r.lastMessageData;
         msgDirection = parsed?.direction || null;
         msgIsRead = parsed?.is_read ?? null;
+        msgOpenedAt = parsed?.opened_at || null;
       }
       return {
         ...r.lead,
@@ -602,7 +604,7 @@ export class DrizzleStorage implements IStorage {
           ...(r.lead.metadata as any || {}),
           provider: r.provider || r.lead.channel,
           lastMessageDirection: msgDirection,
-          lastMessageIsRead: msgIsRead,
+          lastMessageIsRead: msgOpenedAt ? true : (msgDirection === 'outbound' ? false : null),
         }
       };
     });
@@ -1041,7 +1043,7 @@ export class DrizzleStorage implements IStorage {
         openedAt: message.openedAt || null,
         clickedAt: message.clickedAt || null,
         repliedAt: message.repliedAt || null,
-        isRead: message.isRead ?? (message.direction === 'outbound'),
+        isRead: message.isRead ?? false,
         isWarmup: message.isWarmup ?? false,
         createdAt: new Date(),
         metadata: message.metadata || {},

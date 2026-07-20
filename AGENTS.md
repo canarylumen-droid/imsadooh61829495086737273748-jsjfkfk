@@ -627,6 +627,24 @@ Built 4 interconnected components for real-time inbox placement detection withou
 - KPI counts not updating in real-time
 - Calendar "create event" on date click should show UI
 - Push to AWS EC2
+- Lead recovery UI needs better banners, pagination, accurate status
+
+## This Session (Jul 20 2026) — Dedup Fix + Score Update + Layout Cleanup
+
+### Commits
+- `d5c88145` — fix: inbox dedup onSuccess+handler, score on message, snippet 120ch, date ml-auto, message break-words
+
+### Changes
+1. **AI reply deduplication** (`inbox.tsx`): `onSuccess` handler now deduplicates by removing extra copies after mapping temp→real. Socket `messages_updated` handler now replaces temp messages instead of always appending. Fixes 4x duplication from race condition between socket events and HTTP response.
+
+2. **Lead score on every message** (`drizzle-storage.ts:1113`, `messages-routes.ts:214`): Inbound reply bumps score +10, outbound send bumps +2 (capped at 100). Previously score only updated during lead enrichment, leaving it stale.
+
+3. **Snippet truncation 60→120 chars** (`inbox.tsx:1516`): More readable preview. Date now uses `ml-auto` for consistent right-edge positioning regardless of name length.
+
+4. **Message bubble breaks words** (`RecentConversations.tsx:239`): Added `break-words` and `max-h-[200px] overflow-y-auto` for long messages in home page Recent Activity.
+
+### Deploy
+- Pushed to GitHub (`d5c88145`). EC2 deploy pending.
 
 ## This Session (Jul 19 2026) — MailboxSwitcher, Lead Scoring, AI Reply, Rust Sender Fixes
 
