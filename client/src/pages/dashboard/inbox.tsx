@@ -1112,7 +1112,7 @@ export default function InboxPage() {
     scrollToBottom();
   }, [messagesData?.messages, isGenerating, typedText]);
 
-  const ChannelIcon = activeLead ? (channelIcons[activeLead.channel as keyof typeof channelIcons] || Instagram) : Instagram;
+  const ChannelIcon = activeLead ? (channelIcons[activeLead.channel as keyof typeof channelIcons] || Mail) : Mail;
 
   return (
     <PageWrapper className="flex h-[100dvh] w-full overflow-hidden bg-background relative p-0 m-0 max-w-none space-y-0 duration-700">

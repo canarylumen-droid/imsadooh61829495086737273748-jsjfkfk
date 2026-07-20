@@ -419,6 +419,16 @@ class WebSocketSyncServer {
     });
   }
 
+  notifyBulkImportProgress(userId: string, data: {
+    batchId: string; total: number; completed: number;
+    connected: number; failed: number; done?: boolean;
+  }) {
+    this.emitToUser(userId, 'bulk_import_progress', {
+      ...data,
+      timestamp: new Date().toISOString()
+    });
+  }
+
   // Generic broadcast
   broadcastToUser(userId: string, message: { type: string, payload: any }) {
     this.emitToUser(userId, message.type as MessageType, message.payload);

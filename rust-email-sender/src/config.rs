@@ -15,6 +15,9 @@ pub struct Config {
     pub smtp_port: u16,
     pub dns_queue_name: String,
     pub dns_result_queue_name: String,
+    pub mailbox_verify_queue: String,
+    pub mailbox_verify_result_queue: String,
+    pub max_concurrent_verifies: usize,
 }
 
 impl Config {
@@ -30,6 +33,10 @@ impl Config {
                 .unwrap_or_else(|_| "dns-verify-queue".to_string()),
             dns_result_queue_name: env::var("DNS_RESULT_QUEUE_NAME")
                 .unwrap_or_else(|_| "dns-verify-results".to_string()),
+            mailbox_verify_queue: env::var("MAILBOX_VERIFY_QUEUE")
+                .unwrap_or_else(|_| "bulk-mailbox-verify".to_string()),
+            mailbox_verify_result_queue: env::var("MAILBOX_VERIFY_RESULT_QUEUE")
+                .unwrap_or_else(|_| "bulk-mailbox-verify-results".to_string()),
             worker_count: env::var("WORKER_COUNT")
                 .unwrap_or_else(|_| "4".to_string())
                 .parse()?,
@@ -38,6 +45,9 @@ impl Config {
                 .parse()?,
             max_connections_per_domain: env::var("MAX_CONNECTIONS_PER_DOMAIN")
                 .unwrap_or_else(|_| "5".to_string())
+                .parse()?,
+            max_concurrent_verifies: env::var("MAX_CONCURRENT_VERIFIES")
+                .unwrap_or_else(|_| "200".to_string())
                 .parse()?,
             poll_interval_ms: env::var("POLL_INTERVAL_MS")
                 .unwrap_or_else(|_| "50".to_string())

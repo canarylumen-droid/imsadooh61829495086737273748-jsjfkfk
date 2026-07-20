@@ -37,3 +37,26 @@ pub enum SendStatus {
     Bounced,
     Failed,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MailboxVerifyJob {
+    pub batch_id: String,
+    pub row: u32,
+    pub email: String,
+    pub smtp_host: String,
+    pub smtp_port: u16,
+    pub password: String,
+    pub imap_host: String,
+    pub imap_port: u16,
+    pub user_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MailboxVerifyResult {
+    pub batch_id: String,
+    pub row: u32,
+    pub email: String,
+    pub ok: bool,
+    pub error: Option<String>,
+    pub latency_ms: u64,
+}

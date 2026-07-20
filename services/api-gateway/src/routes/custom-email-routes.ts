@@ -8,13 +8,17 @@ import { bounceHandler } from '@services/email-service/src/email/bounce-handler.
 import { EmailDiscoveryService } from '@services/email-service/src/email/email-discovery.js';
 import { checkDomainHealth } from '@shared/lib/deliverability/dns-health-checker.js';
 import { verifyDomainDns } from '@services/email-service/src/email/dns-verification.js';
+import { getRedisClient } from '@shared/lib/redis/redis.js';
 import validator from 'validator';
+import multer from 'multer';
 import { db } from '@shared/lib/db/db.js';
 import { outreachCampaigns } from '@audnix/shared';
 import { eq, and } from 'drizzle-orm';
 import { sendError } from '@shared/lib/api/error-response.js';
+import { randomUUID } from 'crypto';
 
 const router = Router();
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max
 
 /**
  * Auto-discover SMTP/IMAP settings
@@ -776,6 +780,286 @@ router.post('/bulk-import', requireAuthOrApiKey, async (req: Request, res: Respo
 /**
  * Import emails from custom domain (paged + abuse protection)
  */
+/**
+ * Bulk import mailboxes from CSV upload (async with socket progress)
+ * CSV columns: email, smtp_host, smtp_port, imap_host, imap_port, password, from_name, password_type
+ * If smtp_host is empty, auto-generates from email domain (smtp.{domain})
+ */
+router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req)!;
+    const user = await storage.getUserById(userId);
+    if (!isEnterpriseUser(user)) {
+      sendError(res, 403, 'Enterprise plan required', 'Bulk mailbox import is only available for enterprise accounts.');
+      return;
+    }
+
+    const csvText = req.file?.buffer?.toString('utf-8') || req.body?.csv || '';
+    if (!csvText.trim()) {
+      res.status(400).json({ error: 'No CSV data provided' });
+      return;
+    }
+
+    const lines = csvText.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) {
+      res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+      return;
+    }
+
+    // Parse header
+    const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/["']/g, ''));
+    const emailIdx = headers.findIndex(h => h === 'email' || h === 'smtp_user' || h === 'imap_user' || h === 'username');
+    const hostIdx = headers.findIndex(h => h === 'smtp_host' || h === 'host' || h === 'smtp_server');
+    const portIdx = headers.findIndex(h => h === 'smtp_port' || h === 'port');
+    const imapHostIdx = headers.findIndex(h => h === 'imap_host' || h === 'imap_server');
+    const imapPortIdx = headers.findIndex(h => h === 'imap_port');
+    const passIdx = headers.findIndex(h => h === 'password' || h === 'pass' || h === 'smtp_pass');
+    const fromNameIdx = headers.findIndex(h => h === 'from_name' || h === 'name');
+    const passTypeIdx = headers.findIndex(h => h === 'password_type' || h === 'type');
+    const domainPasswordIdx = headers.findIndex(h => h === 'domain_password' || h === 'domain_pass');
+
+    if (emailIdx === -1 || (hostIdx === -1 && emailIdx === -1)) {
+      res.status(400).json({ error: 'CSV must have at least "email" and "smtp_host" columns' });
+      return;
+    }
+
+    const existingIntegrations = await storage.getIntegrations(userId);
+    const existingEmails = new Set(
+      existingIntegrations
+        .filter((i: any) => ['custom_email', 'gmail', 'outlook'].includes(i.provider))
+        .map((i: any) => String(i.accountType || '').trim().toLowerCase())
+        .filter(Boolean)
+    );
+
+    const rows: Array<{
+      email: string; smtpHost: string; smtpPort: number;
+      imapHost: string; imapPort: number; password: string;
+      fromName: string; passwordType: string; domain: string;
+    }> = [];
+    const errors: Array<{ row: number; email: string; error: string }> = [];
+    const seenEmails = new Set<string>();
+    let domainPassword = '';
+
+    // Check if all rows share one password (from domain_password column or first row's password when no password column)
+    if (domainPasswordIdx !== -1 && lines.length >= 2) {
+      const firstData = lines[1].split(',').map(s => s.trim().replace(/["']/g, ''));
+      domainPassword = firstData[domainPasswordIdx] || '';
+    }
+
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(',').map(s => s.trim().replace(/["']/g, ''));
+      if (cols.length < Math.max(emailIdx + 1, hostIdx + 1, passIdx + 1) || cols.every(c => !c)) continue;
+
+      const email = (cols[emailIdx] || '').toLowerCase();
+      const smtpHost = hostIdx >= 0 ? cols[hostIdx] || '' : '';
+      const smtpPort = portIdx >= 0 ? parseInt(cols[portIdx], 10) || 587 : 587;
+      const imapHost = imapHostIdx >= 0 ? cols[imapHostIdx] || '' : smtpHost.replace(/^smtp\./i, 'imap.');
+      const imapPort = imapPortIdx >= 0 ? parseInt(cols[imapPortIdx], 10) || 993 : 993;
+      const perRowPass = passIdx >= 0 ? cols[passIdx] || '' : '';
+      const password = perRowPass || domainPassword || '';
+      const fromName = fromNameIdx >= 0 ? cols[fromNameIdx] || '' : '';
+      const passwordType = passTypeIdx >= 0 ? cols[passTypeIdx] || 'mailbox_password' : 'mailbox_password';
+      const domain = email.split('@')[1] || '';
+
+      if (!email || !validator.isEmail(email)) {
+        errors.push({ row: i, email, error: 'Invalid or missing email' });
+        continue;
+      }
+      if (seenEmails.has(email)) {
+        errors.push({ row: i, email, error: 'Duplicate email in upload' });
+        continue;
+      }
+      seenEmails.add(email);
+      if (existingEmails.has(email)) {
+        errors.push({ row: i, email, error: 'Already connected' });
+        continue;
+      }
+      if (!password) {
+        errors.push({ row: i, email, error: 'Missing password (set a column "password" or "domain_password")' });
+        continue;
+      }
+
+      const effectiveSmtpHost = smtpHost || `smtp.${domain}`;
+      if (!HOST_REGEX.test(effectiveSmtpHost)) {
+        errors.push({ row: i, email, error: `Invalid SMTP host: ${effectiveSmtpHost}` });
+        continue;
+      }
+
+      rows.push({ email, smtpHost: effectiveSmtpHost, smtpPort, imapHost, imapPort, password, fromName, passwordType, domain });
+    }
+
+    if (rows.length === 0) {
+      res.json({ success: false, total: 0, imported: 0, failed: errors.length, errors });
+      return;
+    }
+
+    const batchId = randomUUID();
+    const useRust = process.env.NEW_EMAIL_BACKEND !== 'node';
+
+    if (useRust) {
+      const redis = await getRedisClient();
+      const verifyQueue = process.env.MAILBOX_VERIFY_QUEUE || 'bulk-mailbox-verify';
+      for (let idx = 0; idx < rows.length; idx++) {
+        const row = rows[idx];
+        await redis.lPush(verifyQueue, JSON.stringify({
+          batch_id: batchId,
+          row: idx + 1,
+          email: row.email,
+          smtp_host: row.smtpHost,
+          smtp_port: row.smtpPort,
+          password: row.password,
+          imap_host: row.imapHost,
+          imap_port: row.imapPort,
+          user_id: userId,
+        }));
+      }
+    }
+
+    res.json({
+      success: true,
+      batchId,
+      total: rows.length,
+      skipped: errors.length,
+      useRust,
+      message: useRust
+        ? `Queued ${rows.length} mailboxes for parallel verification via Rust. Results will appear as they connect.`
+        : `Processing ${rows.length} mailboxes...`,
+    });
+
+    // Background processing
+    (async () => {
+      try {
+        const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+        let completed = 0;
+        let connected = 0;
+        let failed = 0;
+        const BATCH_SIZE = 50;
+
+        if (useRust) {
+          // Poll Rust results
+          const resultQueue = process.env.MAILBOX_VERIFY_RESULT_QUEUE || 'bulk-mailbox-verify-results';
+          const redis = await getRedisClient();
+          const pollStart = Date.now();
+          const pollTimeout = 5 * 60 * 1000; // 5 min max
+
+          while (completed < rows.length && Date.now() - pollStart < pollTimeout) {
+            const resultJson: string | null = await redis.rPop(resultQueue);
+            if (!resultJson) {
+              await new Promise(r => setTimeout(r, 500));
+              continue;
+            }
+            try {
+              const result = JSON.parse(resultJson);
+              if (result.batch_id !== batchId) {
+                await redis.lPush(resultQueue, resultJson); // Put back for another consumer
+                continue;
+              }
+              completed++;
+              if (result.ok) {
+                const row = rows[result.row - 1];
+                if (row) {
+                  try {
+                    const credentials: any = {
+                      smtp_host: row.smtpHost, smtp_port: row.smtpPort,
+                      imap_host: row.imapHost, imap_port: row.imapPort,
+                      smtp_user: row.email, smtp_pass: row.password,
+                      imap_user: row.email, password: row.password,
+                      passwordType: row.passwordType, from_name: row.fromName,
+                      provider: 'custom', enterpriseBulkImport: true,
+                    };
+                    const encryptedMeta = await encrypt(JSON.stringify(credentials));
+                    await storage.createIntegration({
+                      userId, provider: 'custom_email', encryptedMeta,
+                      connected: true, accountType: row.email, dailyLimit: 50,
+                    });
+                    connected++;
+                  } catch (e: any) {
+                    failed++;
+                  }
+                }
+              } else {
+                failed++;
+              }
+            } catch { failed++; }
+
+            // Emit progress every 10 mailboxes
+            if ((completed % 10 === 0) || completed === rows.length) {
+              wsSync.notifyBulkImportProgress(userId, {
+                batchId, total: rows.length, completed, connected, failed,
+              });
+            }
+          }
+
+          // Show remaining as failed if timeout
+          failed += rows.length - completed;
+
+        } else {
+          // Node.js batch processing with concurrency
+          for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            const results = await Promise.allSettled(batch.map(async (row) => {
+              try {
+                const nodemailer = await import('nodemailer');
+                const transporter = nodemailer.createTransport({
+                  host: row.smtpHost, port: row.smtpPort,
+                  secure: row.smtpPort === 465,
+                  auth: { user: row.email, pass: row.password },
+                  family: 4, tls: { rejectUnauthorized: false },
+                  connectionTimeout: 8000, greetingTimeout: 8000,
+                } as any);
+                await transporter.verify();
+                transporter.close();
+
+                const credentials: any = {
+                  smtp_host: row.smtpHost, smtp_port: row.smtpPort,
+                  imap_host: row.imapHost, imap_port: row.imapPort,
+                  smtp_user: row.email, smtp_pass: row.password,
+                  imap_user: row.email, password: row.password,
+                  passwordType: row.passwordType, from_name: row.fromName,
+                  provider: 'custom', enterpriseBulkImport: true,
+                };
+                const encryptedMeta = await encrypt(JSON.stringify(credentials));
+                await storage.createIntegration({
+                  userId, provider: 'custom_email', encryptedMeta,
+                  connected: true, accountType: row.email, dailyLimit: 50,
+                });
+                return true;
+              } catch { return false; }
+            }));
+
+            for (const r of results) {
+              completed++;
+              if (r.status === 'fulfilled' && r.value) connected++;
+              else failed++;
+            }
+
+            wsSync.notifyBulkImportProgress(userId, {
+              batchId, total: rows.length, completed, connected, failed,
+            });
+          }
+        }
+
+        // Final syncing
+        try {
+          const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
+          imapIdleManager.syncConnections();
+        } catch {}
+
+        wsSync.notifyBulkImportProgress(userId, {
+          batchId, total: rows.length, completed: rows.length, connected, failed,
+          done: true,
+        });
+        wsSync.notifySettingsUpdated(userId);
+      } catch (bgErr) {
+        console.error('[Bulk CSV Import] Background processing error:', bgErr);
+      }
+    })();
+  } catch (error: any) {
+    console.error('[Bulk CSV Import] Error:', error);
+    sendError(res, 500, 'Failed to process CSV import', error?.message || String(error));
+  }
+});
+
 router.post('/import', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
     const userId = getCurrentUserId(req)!;

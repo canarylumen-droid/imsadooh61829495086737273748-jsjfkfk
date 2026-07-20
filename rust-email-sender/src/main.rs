@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 use anyhow::Result;
 use redis::AsyncCommands;
 use tokio::sync::Semaphore;
@@ -11,8 +12,21 @@ mod config;
 mod telemetry;
 
 use config::Config;
-use queue::EmailJob;
+use queue::{EmailJob, MailboxVerifyJob, MailboxVerifyResult};
 use dns::{DnsResolver, DnsJob, DnsJobResult};
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+
+async fn verify_smtp(job: &MailboxVerifyJob, timeout: Duration) -> Result<()> {
+    let creds = Credentials::new(job.email.clone(), job.password.clone());
+    let transport = AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(&job.smtp_host)?
+        .credentials(creds)
+        .port(job.smtp_port)
+        .timeout(Some(timeout))
+        .build();
+    transport.verify().await?;
+    Ok(())
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -63,11 +77,71 @@ async fn main() -> Result<()> {
     }
 
     let email_queue = config.queue_name.clone();
+    let email_result_queue = config.result_queue_name.clone();
     let dns_queue = config.dns_queue_name.clone();
     let dns_result_queue = config.dns_result_queue_name.clone();
+    let mailbox_verify_queue = config.mailbox_verify_queue.clone();
+    let mailbox_verify_result_queue = config.mailbox_verify_result_queue.clone();
+    let verify_timeout = Duration::from_secs(config.smtp_timeout_secs);
+    let verify_semaphore = Arc::new(Semaphore::new(config.max_concurrent_verifies));
 
     log::info!("Listening on email queue: {}", email_queue);
     log::info!("Listening on DNS queue: {}", dns_queue);
+    log::info!("Listening on mailbox verify queue: {}", mailbox_verify_queue);
+
+    // Spawn dedicated handler for bulk mailbox verification
+    {
+        let rq = redis_conn.clone();
+        let mvq = mailbox_verify_queue.clone();
+        let mvrq = mailbox_verify_result_queue.clone();
+        let sem = verify_semaphore.clone();
+        let to = verify_timeout;
+        tokio::spawn(async move {
+            let mut redis = rq;
+            loop {
+                let job_opt: Option<Vec<String>> = redis.clone()
+                    .brpop(&[&mvq], 0.0).await.unwrap_or(None);
+                if let Some(mut parts) = job_opt {
+                    if parts.len() < 2 { continue; }
+                    let _queue_name = parts.remove(0);
+                    let job_json = parts.remove(0);
+                    let job: MailboxVerifyJob = match serde_json::from_str(&job_json) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            log::error!("Failed to deserialize mailbox verify job: {}", e);
+                            continue;
+                        }
+                    };
+                    let permit = sem.clone().acquire_owned().await;
+                    let r = redis.clone();
+                    let mvrq = mvrq.clone();
+                    let to = to;
+                    tokio::spawn(async move {
+                        let start = std::time::Instant::now();
+                        let result = verify_smtp(&job, to).await;
+                        let elapsed = start.elapsed().as_millis() as u64;
+                        let result_obj = MailboxVerifyResult {
+                            batch_id: job.batch_id.clone(),
+                            row: job.row,
+                            email: job.email.clone(),
+                            ok: result.is_ok(),
+                            error: result.err().map(|e| e.to_string()),
+                            latency_ms: elapsed,
+                        };
+                        let json = serde_json::to_string(&result_obj)
+                            .unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e));
+                        let _: () = r.lpush(&mvrq, &json).await.unwrap_or_default();
+                        if let Ok(()) = result {
+                            log::info!("[BulkVerify] {} OK ({}ms)", job.email, elapsed);
+                        } else {
+                            log::warn!("[BulkVerify] {} FAIL ({}ms)", job.email, elapsed);
+                        }
+                        drop(permit);
+                    });
+                }
+            }
+        });
+    }
 
     // Main loop: event-driven — blocks on BRPOP with infinite timeout (zero polling)
     loop {

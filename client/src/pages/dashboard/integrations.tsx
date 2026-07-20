@@ -397,6 +397,26 @@ export default function IntegrationsPage() {
   const reputationStr = stats?.domainHealth !== undefined && stats.domainHealth !== null ? stats.domainHealth.toFixed(2) : null;
   const reputationNum = reputationStr !== null ? parseFloat(reputationStr) : null;
 
+  const getDnsBadge = (record: 'spf' | 'dkim' | 'dmarc' | 'mx' | 'blacklist', mailboxEmail: string) => {
+    if (!stats?.health?.dns) return null;
+    const isPresent = record === 'blacklist' ? !stats.health.dns.blacklist : !!stats.health.dns[record];
+    const label = record === 'blacklist' ? 'BL' : record.toUpperCase();
+    const domain = mailboxEmail?.split('@')[1] || '';
+    const verification = stats?.domainVerifications?.find((v: any) => v.domain === domain);
+    const result = verification?.result?.[record === 'blacklist' ? 'blacklist' : record];
+    let tooltip = '';
+    if (record === 'blacklist') {
+      tooltip = isPresent ? 'Not blacklisted' : `Blacklisted on: ${result?.listedOn?.join(', ') || 'unknown RBL'}`;
+    } else if (record === 'mx') {
+      tooltip = isPresent ? `MX: ${result?.records?.map((r: any) => `${r.exchange} (priority ${r.priority})`).join(', ') || 'found'}` : 'No MX records found';
+    } else {
+      tooltip = isPresent
+        ? `${label}: ${result?.record?.substring(0, 80) || 'valid'}`
+        : `${label}: ${result?.issues?.join('; ') || 'not configured'}`;
+    }
+    return { isPresent, label, tooltip };
+  };
+
   // Handle OAuth success/error redirect params
   useEffect(() => {
     const searchParams = new URLSearchParams(window.location.search);
@@ -477,6 +497,19 @@ export default function IntegrationsPage() {
       socket.on('deliverability_updated', handleStatsUpdated);
       socket.on('settings_updated', handleSettingsUpdated);
       socket.on('integration_reputation_updated', handleStatsUpdated);
+      socket.on('dns_verified', handleSettingsUpdated);
+      socket.on('bulk_import_progress', (data: any) => {
+        setBulkImportProgress({ total: data.total, completed: data.completed, connected: data.connected, failed: data.failed, done: data.done });
+        if (data.done) {
+          queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+          setBulkMailboxRows([]);
+          setBulkMailboxErrors([]);
+          setBulkMailboxFileName("");
+          if (bulkMailboxInputRef.current) bulkMailboxInputRef.current.value = "";
+          setTimeout(() => setBulkImportProgress(null), 8000);
+        }
+      });
     }
 
     return () => {
@@ -486,6 +519,8 @@ export default function IntegrationsPage() {
         socket.off('deliverability_updated', handleStatsUpdated);
         socket.off('settings_updated', handleSettingsUpdated);
         socket.off('integration_reputation_updated', handleStatsUpdated);
+        socket.off('dns_verified', handleSettingsUpdated);
+        socket.off('bulk_import_progress');
       }
     };
   }, [queryClient, socket]);
@@ -617,24 +652,43 @@ export default function IntegrationsPage() {
     }
   });
 
+  const [bulkImportProgress, setBulkImportProgress] = useState<{
+    total: number; completed: number; connected: number; failed: number; done?: boolean;
+  } | null>(null);
+
   const bulkMailboxImportMutation = useMutation({
     mutationFn: async (mailboxes: BulkMailboxImportRow[]) => {
-      const response = await apiRequest("POST", "/api/custom-email/bulk-import", { mailboxes });
+      const formData = new FormData();
+      const csvRows = [['email', 'smtp_host', 'smtp_port', 'imap_host', 'imap_port', 'password', 'from_name']];
+      for (const m of mailboxes) {
+        csvRows.push([m.email, m.smtpHost || '', String(m.smtpPort || 587), m.imapHost || '', String(m.imapPort || 993), m.password, m.fromName || '']);
+      }
+      const csvText = csvRows.map(r => r.map(c => c.includes(',') ? `"${c}"` : c).join(',')).join('\n');
+      formData.append('file', new Blob([csvText], { type: 'text/csv' }), 'mailboxes.csv');
+      formData.append('csv', csvText);
+      const response = await fetch('/api/custom-email/bulk-import-csv', {
+        method: 'POST', credentials: 'include',
+        headers: { 'x-api-key': localStorage.getItem('api_key') || '' },
+        body: formData,
+      });
       return response.json();
     },
     onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-      setBulkMailboxRows([]);
-      setBulkMailboxErrors([]);
-      setBulkMailboxFileName("");
-      if (bulkMailboxInputRef.current) bulkMailboxInputRef.current.value = "";
-      toast({
-        title: "Bulk Import Complete",
-        description: `${result.imported || 0} imported, ${result.skipped || 0} skipped, ${result.failed || 0} failed.`
-      });
+      if (!result.batchId) {
+        toast({ title: 'Bulk Import', description: result.message || `Imported: ${result.imported || 0}` });
+        setBulkMailboxRows([]);
+        setBulkMailboxErrors([]);
+        setBulkMailboxFileName("");
+        if (bulkMailboxInputRef.current) bulkMailboxInputRef.current.value = "";
+        queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+        return;
+      }
+      setBulkImportProgress({ total: result.total, completed: 0, connected: 0, failed: 0 });
+      toast({ title: "Bulk Import Started", description: `Processing ${result.total} mailboxes...` });
     },
     onError: (error: Error) => {
+      setBulkImportProgress(null);
       let errorMsg = error.message;
       try {
         const jsonStr = error.message.replace(/^\d+:\s*/, '');
@@ -1094,7 +1148,47 @@ export default function IntegrationsPage() {
                       </p>
                     )}
 
-                    {(bulkMailboxFileName || bulkMailboxErrors.length > 0) && (
+                    {bulkImportProgress && (
+                      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {bulkImportProgress.done ? (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            ) : (
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            )}
+                            <span className="text-xs font-bold">
+                              {bulkImportProgress.done ? 'Import Complete' : 'Importing...'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-muted-foreground">
+                            {bulkImportProgress.completed}/{bulkImportProgress.total}
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-muted/50 rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full transition-all duration-500",
+                              bulkImportProgress.done ? "bg-emerald-500" : "bg-primary"
+                            )}
+                            style={{ width: `${Math.max(2, (bulkImportProgress.completed / Math.max(1, bulkImportProgress.total)) * 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex gap-4 text-[10px] font-bold">
+                          <span className="text-emerald-500">✓ {bulkImportProgress.connected} connected</span>
+                          {bulkImportProgress.failed > 0 && (
+                            <span className="text-destructive">✗ {bulkImportProgress.failed} failed</span>
+                          )}
+                          {!bulkImportProgress.done && (
+                            <span className="text-muted-foreground">
+                              {bulkImportProgress.total - bulkImportProgress.completed} remaining
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {(bulkMailboxFileName || bulkMailboxErrors.length > 0) && !bulkImportProgress && (
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
                         <div className="rounded-xl border border-border/40 bg-background/60 p-3">
                           <p className="font-bold text-foreground">File</p>
@@ -1538,39 +1632,29 @@ export default function IntegrationsPage() {
                                   Warmup {mailbox.warmupStatus === 'paused' ? 'Paused' : 'Off'}
                                 </Badge>
                               )}
-                              {/* DNS badges — hidden on mobile to save space */}
-{mailbox.connected && stats?.health?.dns && (
-  <span className="inline-flex gap-1.5">
-                                  <Badge className={cn(
-                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
-                                    stats.health.dns.spf ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
-                                  )}>
-                                    SPF
-                                  </Badge>
-                                  <Badge className={cn(
-                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
-                                    stats.health.dns.dkim ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
-                                  )}>
-                                    DKIM
-                                  </Badge>
-                                  <Badge className={cn(
-                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
-                                    stats.health.dns.dmarc ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
-                                  )}>
-                                    DMARC
-                                  </Badge>
-                                  <Badge className={cn(
-                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
-                                    stats.health.dns.mx ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20"
-                                  )}>
-                                    MX
-                                  </Badge>
-                                  <Badge className={cn(
-                                    "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border",
-                                    !stats.health.dns.blacklist ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
-                                  )}>
-                                    BL
-                                  </Badge>
+                              {/* DNS badges with tooltips */}
+                              {mailbox.connected && stats?.health?.dns && (
+                                <span className="inline-flex gap-1.5">
+                                  {(['spf', 'dkim', 'dmarc', 'mx', 'blacklist'] as const).map((record) => {
+                                    const badge = getDnsBadge(record, mailbox.email || '');
+                                    if (!badge) return null;
+                                    return (
+                                      <Tooltip key={record}>
+                                        <TooltipTrigger asChild>
+                                          <Badge className={cn(
+                                            "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border cursor-help",
+                                            badge.isPresent ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                                          )}>
+                                            {badge.label}
+                                          </Badge>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-[250px] text-[10px] leading-tight">
+                                          <p className="font-bold mb-1">{badge.label}</p>
+                                          <p className="text-muted-foreground">{badge.tooltip}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    );
+                                  })}
                                 </span>
                               )}
                             </div>

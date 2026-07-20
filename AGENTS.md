@@ -657,6 +657,17 @@ Built 4 interconnected components for real-time inbox placement detection withou
 
 ### Commit
 - `f64ca82d` — fix: tick uses openedAt for ✓✓/✓, real-time update on open
+- `c3c92e8f` — fix: deal value field in settings, analytics metrics respect date range
+
+## This Session (Jul 20 2026) — Deal Value in Settings + Analytics Date Range Fix
+
+### Changes
+1. **Deal Value in Settings** (`settings.tsx`): Added "Avg Deal Value ($)" and "Deal Value 2 ($)" input fields in Profile tab. These save to `user.offerValue` / `user.offerValue2` and are used by Fathom autonomous agent for deal-aware decisions.
+
+2. **Analytics date range fix** (`drizzle-storage.ts`): All metrics queries (sent, opened, replied, converted, pipeline value) now respect the `days` parameter with `gte(createdAt, startDate)`. Previously only the time series respected the date range. Pie chart and KPI numbers now update when switching between 24h/7d/30d/60d/90d.
+
+### Deploy
+- Pushed `c3c92e8f` to GitHub. EC2 deploy pending.
 
 ## This Session (Jul 19 2026) — MailboxSwitcher, Lead Scoring, AI Reply, Rust Sender Fixes
 
