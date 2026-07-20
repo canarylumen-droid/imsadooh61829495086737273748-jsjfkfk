@@ -842,12 +842,12 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
 
     // Check if all rows share one password (from domain_password column or first row's password when no password column)
     if (domainPasswordIdx !== -1 && lines.length >= 2) {
-      const firstData = lines[1].split(',').map(s => s.trim().replace(/["']/g, ''));
+      const firstData = lines[1].split(',').map((s: string) => s.trim().replace(/["']/g, ''));
       domainPassword = firstData[domainPasswordIdx] || '';
     }
 
     for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(',').map(s => s.trim().replace(/["']/g, ''));
+      const cols = lines[i].split(',').map((s: string) => s.trim().replace(/["']/g, ''));
       if (cols.length < Math.max(emailIdx + 1, hostIdx + 1, passIdx + 1) || cols.every((c: string) => !c)) continue;
 
       const email = (cols[emailIdx] || '').toLowerCase();
@@ -898,21 +898,23 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
 
     if (useRust) {
       const redis = await getRedisClient();
-      if (!redis) { console.error('[BulkImport] Redis unavailable for push'); return res.status(500).json({ error: 'Redis unavailable' }); }
-      const verifyQueue = process.env.MAILBOX_VERIFY_QUEUE || 'bulk-mailbox-verify';
-      for (let idx = 0; idx < rows.length; idx++) {
-        const row = rows[idx];
-        await redis.lPush(verifyQueue, JSON.stringify({
-          batch_id: batchId,
-          row: idx + 1,
-          email: row.email,
-          smtp_host: row.smtpHost,
-          smtp_port: row.smtpPort,
-          password: row.password,
-          imap_host: row.imapHost,
-          imap_port: row.imapPort,
-          user_id: userId,
-        }));
+      if (!redis) { console.error('[BulkImport] Redis unavailable, falling back to Node.js'); }
+      if (redis) {
+        const verifyQueue = process.env.MAILBOX_VERIFY_QUEUE || 'bulk-mailbox-verify';
+        for (let idx = 0; idx < rows.length; idx++) {
+          const row = rows[idx];
+          await redis.lPush(verifyQueue, JSON.stringify({
+            batch_id: batchId,
+            row: idx + 1,
+            email: row.email,
+            smtp_host: row.smtpHost,
+            smtp_port: row.smtpPort,
+            password: row.password,
+            imap_host: row.imapHost,
+            imap_port: row.imapPort,
+            user_id: userId,
+          }));
+        }
       }
     }
 
