@@ -79,6 +79,13 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
     let externalMessageId: string | undefined = undefined;
     let integrationId: string | undefined = undefined;
 
+    // ── ENFORCE LEAD'S ASSIGNED MAILBOX ──────────────────────────────
+    // If lead already has an integrationId, require sending from THAT mailbox
+    let effectiveIntegrationId: string | undefined = undefined;
+    if (lead.integrationId && selectedChannel === 'email') {
+      effectiveIntegrationId = lead.integrationId;
+    }
+
     // Actual sending logic
     try {
       if (selectedChannel === 'email') {
@@ -138,6 +145,7 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
           isHtml: true, // Force HTML for tracking pixel
           trackingId,
           leadId: lead.id,
+          integrationId: effectiveIntegrationId,
           inReplyTo,
           references,
           threadId

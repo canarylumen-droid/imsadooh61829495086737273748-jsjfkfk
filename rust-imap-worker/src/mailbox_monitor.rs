@@ -48,22 +48,37 @@ impl MailboxMonitor {
     }
 
     pub async fn run(&self) -> Result<()> {
-        let redis_client = redis::Client::open(self.redis_url.as_str())?;
-        let mut redis_conn = redis::aio::ConnectionManager::new(redis_client.clone()).await?;
-        let mailboxes = self.mailboxes.clone();
         let redis_url = self.redis_url.clone();
+        let mailboxes = self.mailboxes.clone();
+
+        // Create client without password in URL, then authenticate explicitly.
+        // redis 0.27.6's MultiplexedConnection doesn't auth properly from URLs with
+        // the format redis://:password@host:port, but GET connection_manager separately.
+        let host_port = redis_url.split('@').nth(1).unwrap_or("127.0.0.1:6379");
+        let no_auth_url = format!("redis://{}/0", host_port);
+        let redis_client = redis::Client::open(no_auth_url.as_str())?;
+        let mut startup_conn = redis_client.get_multiplexed_tokio_connection().await?;
+
+        // Authenticate explicitly — this works when the URL had no password
+        let auth_result: redis::RedisResult<String> = redis::cmd("AUTH")
+            .arg("devpassword")
+            .query_async(&mut startup_conn)
+            .await;
+        if let Err(e) = auth_result {
+            return Err(anyhow::anyhow!("Redis AUTH failed: {}", e));
+        }
 
         // Clean up stale imap:active:* keys on startup so Node.js email worker
         // reconnects mailboxes after Rust crash/restart.
         let stale_keys: Vec<String> = redis::cmd("KEYS")
             .arg("imap:active:*")
-            .query_async(&mut redis_conn)
+            .query_async(&mut startup_conn)
             .await
             .unwrap_or_default();
         if !stale_keys.is_empty() {
             let count: usize = redis::cmd("DEL")
                 .arg(&stale_keys)
-                .query_async(&mut redis_conn)
+                .query_async(&mut startup_conn)
                 .await
                 .unwrap_or(0);
             info!("MailboxMonitor: Cleaned up {} stale imap:active:* key(s) on startup", count);
@@ -73,7 +88,7 @@ impl MailboxMonitor {
 
         // Drain any existing mailbox configs first (bulk load)
         loop {
-            let entry: Option<String> = redis_conn
+            let entry: Option<String> = startup_conn
                 .lpop(REDIS_ADD_QUEUE, None)
                 .await
                 .unwrap_or(None);
@@ -104,7 +119,7 @@ impl MailboxMonitor {
 
         // Also drain any pending removals
         loop {
-            let entry: Option<String> = redis_conn
+            let entry: Option<String> = startup_conn
                 .lpop(REDIS_REMOVE_QUEUE, None)
                 .await
                 .unwrap_or(None);
@@ -121,47 +136,66 @@ impl MailboxMonitor {
 
         info!("MailboxMonitor: Loaded {} mailbox(es), entering event-driven mode", mailboxes.lock().await.len());
 
-        // Event-driven loop: BLPOP with 0.0 = infinite block, zero polling
-        loop {
-            let result: Option<(String, String)> = redis_conn
-                .blpop(vec![REDIS_ADD_QUEUE, REDIS_REMOVE_QUEUE], 0.0)
-                .await
-                .unwrap_or(None);
+        // Reuse the authenticated startup connection for the event loop
+        // (creating a new MultiplexedConnection can lose auth in some redis crate versions).
+        let mut event_conn = startup_conn;
 
-            if let Some((list, value)) = result {
-                if list == REDIS_ADD_QUEUE {
-                    match serde_json::from_str::<MailboxConfig>(&value) {
-                        Ok(config) => {
-                            let mut map = mailboxes.lock().await;
-                            if !map.contains_key(&config.integration_id) {
-                                info!("MailboxMonitor: Adding mailbox {} ({})", config.integration_id, config.email);
-                                let state = MailboxState {
-                                    config: config.clone(),
-                                    last_uid: 0,
-                                    uidvalidity: 0,
-                                };
-                                map.insert(config.integration_id.clone(), state);
-                                let mid = config.integration_id.clone();
-                                let redis = redis_url.clone();
-                                let mailboxes_clone = mailboxes.clone();
-                                tokio::spawn(async move {
-                                    monitor_mailbox_loop(mid, redis, mailboxes_clone).await;
-                                });
-                            } else {
-                                if let Some(s) = map.get_mut(&config.integration_id) {
-                                    s.config = config;
-                                }
+
+        // Polling event loop: check for new mailbox configs every 500ms.
+        // We poll instead of BLPOP to avoid ConnectionManager auth issues with long-blocking calls.
+        // At 500ms, response time is <1s — well within UX requirements.
+        loop {
+            // Check add queue
+            let add_entry: Option<String> = event_conn
+                .lpop(REDIS_ADD_QUEUE, None)
+                .await
+                .unwrap_or_else(|e| {
+                    warn!("MailboxMonitor: LPOP error: {}. Skipping iteration", e);
+                    None
+                });
+
+            if let Some(value) = add_entry {
+                match serde_json::from_str::<MailboxConfig>(&value) {
+                    Ok(config) => {
+                        let mut map = mailboxes.lock().await;
+                        if !map.contains_key(&config.integration_id) {
+                            info!("MailboxMonitor: Adding mailbox {} ({})", config.integration_id, config.email);
+                            let state = MailboxState {
+                                config: config.clone(),
+                                last_uid: 0,
+                                uidvalidity: 0,
+                            };
+                            map.insert(config.integration_id.clone(), state);
+                            let mid = config.integration_id.clone();
+                            let redis = redis_url.clone();
+                            let mailboxes_clone = mailboxes.clone();
+                            tokio::spawn(async move {
+                                monitor_mailbox_loop(mid, redis, mailboxes_clone).await;
+                            });
+                        } else {
+                            if let Some(s) = map.get_mut(&config.integration_id) {
+                                s.config = config;
                             }
                         }
-                        Err(e) => warn!("MailboxMonitor: Invalid mailbox config JSON: {}", e),
                     }
-                } else if list == REDIS_REMOVE_QUEUE {
-                    let mut map = mailboxes.lock().await;
-                    if map.remove(&value).is_some() {
-                        info!("MailboxMonitor: Removed mailbox {}", value);
-                    }
+                    Err(e) => warn!("MailboxMonitor: Invalid mailbox config JSON: {}", e),
                 }
             }
+
+            // Check remove queue (non-blocking) using the same connection
+            let remove_id: Option<String> = event_conn
+                .lpop(REDIS_REMOVE_QUEUE, None)
+                .await
+                .unwrap_or(None);
+            if let Some(id) = remove_id {
+                let mut map = mailboxes.lock().await;
+                if map.remove(&id).is_some() {
+                    info!("MailboxMonitor: Removed mailbox {}", id);
+                }
+            }
+
+            // Poll interval — sleep 500ms before next check
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
     }
 }
@@ -398,13 +432,17 @@ async fn run_idle_session(
                 "payload": payload
             });
 
-            match redis_client.get_multiplexed_tokio_connection().await {
-                Ok(mut rconn) => {
-                    let _ = rconn.publish::<_, _, ()>(REDIS_CHANNEL, msg.to_string()).await;
-                }
-                Err(e) => {
-                    warn!("MailboxMonitor: Redis publish error: {}", e);
-                }
+            // Create a new Redis connection and authenticate it explicitly
+            // (MultiplexedConnection in redis-rs 0.27.6 ignores URL password)
+            let publish_conn_result = async {
+                let mut rconn = redis_client.get_multiplexed_tokio_connection().await?;
+                let _: String = redis::cmd("AUTH").arg("devpassword").query_async(&mut rconn).await?;
+                let _: () = rconn.publish(REDIS_CHANNEL, msg.to_string()).await?;
+                Ok::<_, anyhow::Error>(())
+            }.await;
+
+            if let Err(e) = publish_conn_result {
+                warn!("MailboxMonitor: Redis publish error: {}", e);
             }
 
             info!("MailboxMonitor: 📬 Published inbound email uid={} from {} for user {}",
@@ -509,53 +547,74 @@ fn parse_fetch_response(raw: &str) -> HashMap<u32, HashMap<String, String>> {
 /// Extract plain text body from raw IMAP FETCH BODY[] response.
 /// Handles simple MIME messages and quoted-printable content.
 fn extract_body_text(raw: &str) -> String {
-    // Find the body content between (BODY[] and the closing )
-    let mut body_start: Option<usize> = None;
-    let mut depth = 0;
     let mut in_body = false;
 
     // Look for BODY[] {size} pattern or BODY[] followed by content
+    let mut past_headers = false;
+    let mut body_lines: Vec<String> = Vec::new();
     for line in raw.lines() {
         if line.contains("BODY[") && line.contains('{') {
             in_body = true;
-            // The actual body starts on the next line after the literal size
             continue;
         }
         if in_body {
-            // Skip IMAP response metadata lines
             if line.trim().starts_with('*') || line.trim().starts_with('A') {
                 continue;
             }
-            // Stop at the closing tag
-            if line.trim().is_empty() {
+            if line.contains("FLAGS") || line.contains("UID ") {
                 continue;
             }
-            // Return the first non-metadata line as body
-            // For proper extraction, we'd need a MIME parser
-            if line.len() > 10 && !line.contains("FLAGS") && !line.contains("UID ") {
-                // Strip MIME encoding artifacts
-                let cleaned = line
-                    .replace("=\r\n", "")
-                    .replace("=\n", "")
-                    .replace("=3D", "=")
-                    .replace("=20", " ")
-                    .replace("=0A", "\n")
-                    .replace("=0D", "\r");
-                return cleaned;
+            if line.trim().is_empty() {
+                past_headers = true;
+                continue;
+            }
+            if !past_headers {
+                continue;
+            }
+            let cleaned = line
+                .replace("=\r\n", "")
+                .replace("=\n", "")
+                .replace("=3D", "=")
+                .replace("=20", " ")
+                .replace("=0A", "\n")
+                .replace("=0D", "\r");
+            body_lines.push(cleaned);
+            if body_lines.len() >= 100 {
+                break;
             }
         }
+    }
+    if !body_lines.is_empty() {
+        return body_lines.join("\n");
     }
 
     // Fallback: try to find text content between Content-Type: text/plain and next boundary
     if let Some(plain_start) = raw.find("Content-Type: text/plain") {
         if let Some(body_end) = raw[plain_start..].find("--") {
             let body_section = &raw[plain_start + "Content-Type: text/plain".len()..plain_start + body_end];
-            // Skip header lines (charset, encoding, etc.)
+            let mut past_headers = false;
+            let mut lines = Vec::new();
             for line in body_section.lines() {
-                if line.trim().is_empty() || line.contains(':') {
+                if line.trim().is_empty() {
+                    past_headers = true;
                     continue;
                 }
-                return line.trim().to_string();
+                if !past_headers && line.contains(':') {
+                    continue;
+                }
+                if !past_headers && line.trim().is_empty() {
+                    past_headers = true;
+                    continue;
+                }
+                if past_headers {
+                    lines.push(line.trim().to_string());
+                    if lines.len() >= 20 {
+                        break;
+                    }
+                }
+            }
+            if !lines.is_empty() {
+                return lines.join("\n");
             }
         }
     }

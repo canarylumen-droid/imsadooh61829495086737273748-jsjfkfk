@@ -51,6 +51,24 @@ export async function initInboundEmailHandler() {
 
 async function handleInboundEmail(payload: any) {
   const { integration_id, user_id, uid, message_id, from, to, subject, date, snippet, in_reply_to, raw_email } = payload;
+
+  // Parse email body — prefer raw_email with proper MIME parsing
+  let parsedBody = (snippet || '').substring(0, 10000);
+  let parsedHtml: string | undefined;
+  if (raw_email && raw_email.length > 0) {
+    try {
+      const { simpleParser } = await import('mailparser');
+      const parsed = await simpleParser(raw_email);
+      if (parsed.text) {
+        parsedBody = parsed.text.substring(0, 10000);
+      }
+      if (parsed.html) {
+        parsedHtml = parsed.html.substring(0, 10000);
+      }
+    } catch (parseErr: any) {
+      console.warn('[InboundEmailHandler] Failed to parse raw_email:', parseErr.message);
+    }
+  }
   if (!integration_id || !user_id) return;
 
   console.log(`[InboundEmailHandler] 📬 Processing inbound email (uid=${uid}, from=${from?.substring(0, 50)}, user=${user_id})`);
@@ -114,7 +132,7 @@ async function handleInboundEmail(payload: any) {
         messageId: message_id || `imap-${integration_id}-${uid}`,
         subject: subject || '(no subject)',
         from,
-        snippet: snippet || 'New message arriving...',
+        snippet: parsedBody.substring(0, 200) || 'New message arriving...',
         date: date || new Date().toISOString(),
         isNew: !!lead,
       }),
@@ -164,7 +182,7 @@ async function handleInboundEmail(payload: any) {
       subject: subject || '(no subject)',
       from: from || '',
       to: to || '',
-      body: snippet || '',
+      body: parsedBody,
       direction: 'inbound',
       provider: integration.provider as any,
       sentAt: date ? new Date(date) : new Date(),
@@ -174,6 +192,7 @@ async function handleInboundEmail(payload: any) {
         uid,
         integrationId: integration_id,
         source: 'rust_imap_idle',
+        htmlBody: parsedHtml?.substring(0, 10000),
         rawEmail: raw_email?.substring(0, 5000),
       },
     }).catch((err: any) => {
@@ -188,7 +207,7 @@ async function handleInboundEmail(payload: any) {
           userId: user_id,
           leadId: lead.id,
           direction: 'inbound',
-          body: snippet || '',
+          body: parsedBody,
         });
 
         // Update lead + campaign status
@@ -255,7 +274,7 @@ async function handleInboundEmail(payload: any) {
             userId: user_id,
             leadId: newLead.id,
             direction: 'inbound',
-            body: snippet || '',
+            body: parsedBody,
           });
 
           lead = newLead;
@@ -269,7 +288,7 @@ async function handleInboundEmail(payload: any) {
               email: senderAddr,
               name: senderName,
               status: 'new',
-              snippet: snippet?.substring(0, 120),
+              snippet: parsedBody?.substring(0, 120),
               lastMessageAt: new Date().toISOString(),
             },
           });

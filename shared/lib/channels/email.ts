@@ -778,6 +778,22 @@ export async function sendEmail(
   subject: string,
   options: EmailOptions = {}
 ): Promise<{ messageId: string; integrationId: string }> {
+  // ── CROSS-MAILBOX GUARD ────────────────────────────────────────────
+  // If the lead exists under a different mailbox, refuse to send from another
+  if (options.leadId && options.integrationId) {
+    try {
+      const leadData = await storage.getLeadById(options.leadId);
+      if (leadData && leadData.integrationId && leadData.integrationId !== options.integrationId) {
+        throw new Error(
+          `This lead is assigned to mailbox ${leadData.integrationId.slice(-8)}. ` +
+          `Switch to that mailbox to send messages to this lead.`
+        );
+      }
+    } catch (e: any) {
+      if (e.message?.includes('assigned to mailbox')) throw e;
+    }
+  }
+
   // 1. Fetch Integration (Specific or Fallback)
   let integration: Integration | undefined;
   if (options.integrationId) {

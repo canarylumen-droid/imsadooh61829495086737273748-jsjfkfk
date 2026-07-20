@@ -789,7 +789,32 @@ pm2 restart all
 - `shared/lib/storage/drizzle-storage.ts` — (pre-existing changes)
 - `client/src/hooks/use-realtime.tsx` — (pre-existing debounce changes)
 
-### Known Remaining Issues
-- 2 moderate npm vulns (`google-it` → `request`, no fix)
-- 12 CodeQL alerts (to review on GitHub after push)
-- `aws-deploy.yml`, `deploy.yml`, `vercel-deploy.yml` are stale — only `deploy-ec2.yml` matches actual deployment
+## This Session (Jul 19 2026) — Calendar Fixes + AI Logs Real-Time + Deploy
+
+### Changes
+1. **Calendar events endpoint** (`calendar-routes.ts:140-155`): Added `GET /api/calendar/events` returning `calendar_events` table data (synced via Calendly sync worker).
+2. **Calendar page merges 3 sources** (`calendar.tsx`): `allEvents` now merges `bookings` (Calendly), `googleEvents` (Google Calendar), and `syncedEvents` (calendar_events table).
+3. **Socket event name fixed** (×3 files): `calendly-sync-worker.ts` — replaced `broadcastToUser({ type: 'CALENDAR_UPDATED' })` with `wsSync.notifyCalendarUpdated()`. `calendly-integration.ts` — replaced broken broadcast with `notifyCalendarUpdated()` on create/cancel/no-show.
+4. **Copy booking link uses `calendarLink`** (`calendar.tsx:473,1234-1245`): Changed from hardcoded `calendly.com/username` or `window.location.origin` to `settings.calendarLink` from DB. Added `calendarLink` to `CalendarSettings` interface.
+5. **Settings API returns `calendarLink`** (`calendar-routes.ts`): Queries `users.calendarLink`, falls back to `calendlySchedulingUrl` from encrypted meta.
+6. **AI Logs real-time** (`redis-pubsub.ts:236-238`): Added `notifyCalendarUpdated` method to `RedisPubSub` + `CALENDAR_UPDATE` case in `relayEvent`. `follow-up-worker.ts:204-206`: Fires `clusterSync.notifyCalendarUpdated(userId)` after `processProactiveRules()`.
+7. **Inbox `refetchOnMount: true`** (`inbox.tsx`): Forces messages refetch on navigation so stale data not displayed.
+8. **IMAP inbox scan on connect** (`imap-connection-manager.ts`): Added `_scanExistingInbox()` — searches for unseen messages immediately after mailboxes connect.
+9. **Build + deploy**: Client builds cleanly. All changes pushed (`d8dac56f`), deployed to EC2, 5 services restarted (imap, email, ai, socket-server, api-gateway).
+10. **Calendly revoke fix** (`calendly.ts`): Changed revoke body from `application/json` → `application/x-www-form-urlencoded` (Auth0 requirement). Also revokes old token before deleting on OAuth reconnect (`calendly-redirect.ts`). Pushed `7cb58b7f`.
+
+## This Session (Jul 19 2026) — Rust IMAP Worker Migration (500+ mailboxes on 4GB RAM)
+
+### Changes
+1. **Node.js delegates custom_email to Rust** (`imap-connection-manager.ts:180-185`): `connectMailbox()` now pushes config to `mailbox-monitor:add` and returns early for `custom_email` — no Node.js IMAP connection opened.
+2. **Node.js IMAP worker deleted** (`pm2 delete audnix-worker-imap`): Only handles Gmail/Outlook OAuth; `custom_email` handled entirely by Rust.
+3. **Rust mailbox monitor event-driven** (`mailbox_monitor.rs`): Replaced LPOP polling (5s sleep loop) with BLPOP 0.0 (infinite block, instant wake on config change). Also bulk-drains existing configs on startup.
+4. **Removed dead BRPOP main loop** (`main.rs`): Deleted 60-line ad-hoc job processor (nobody pushed to `imap-queue`). Mailbox monitor is the only loop.
+5. **Fixed `select()` return type** (`imap_client.rs`): Returns `Result<String>` so callers can parse UIDVALIDITY/UIDNEXT.
+6. **Ecosystem config tuned** (`ecosystem.config.cjs`): Removed unused `WORKER_COUNT`, `IMAP_QUEUE_NAME`, `IMAP_RESULT_QUEUE_NAME`, `IDLE_TIMEOUT_SECS`. Set `RUST_LOG=warn`.
+
+### PM2 Status (17 total)
+- `audnix-rust-imap-worker` (34) — **online**, 7.7MB, handles all custom_email IMAP IDLE
+- `audnix-rust-email-sender` (26) — online, 4.2MB, handles SMTP sending
+- `audnix-worker-imap` (32) — deleted; Gmail/Outlook OAuth handled by `mailbox-worker.ts` BullMQ worker
+- 14 other Node.js workers unchanged
