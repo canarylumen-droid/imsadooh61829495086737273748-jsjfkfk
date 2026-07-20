@@ -144,7 +144,7 @@ pub fn calc_daily_plan(req: &DailyPlanRequest) -> DailyPlanResult {
         warmup_budget,
         campaign_budget,
         warmup_remaining,
-        campaign_remaining: if warmup_remaining == 0 && warmup_sent_today < warmup_budget {
+        campaign_remaining: if warmup_remaining == 0 && req.warmup_sent_today < warmup_budget {
             let freed = warmup_budget - req.warmup_sent_today;
             if freed > 0 {
                 let overflow = campaign_budget.saturating_sub(req.campaign_sent_today);
