@@ -3,9 +3,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use anyhow::Result;
 use dashmap::DashMap;
-use trust_dns_resolver::TokioAsyncResolver;
-use trust_dns_resolver::config::*;
-use trust_dns_resolver::proto::rr::RecordType;
+use hickory_resolver::TokioAsyncResolver;
+use hickory_resolver::config::*;
+use hickory_resolver::proto::rr::RecordType;
 use serde::{Serialize, Deserialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

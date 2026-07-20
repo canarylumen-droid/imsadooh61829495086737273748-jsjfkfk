@@ -19,7 +19,7 @@ anyhow = "1"
 thiserror = "1"
 dashmap = "6"
 flume = "0.11"
-trust-dns-resolver = { version = "0.24", features = ["tokio-runtime"] }
+hickory-resolver = { version = "0.24", features = ["tokio-runtime"] }
 
 [profile.release]
 opt-level = 3
