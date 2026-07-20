@@ -1,7 +1,7 @@
 import { Server, Socket } from 'socket.io';
 import http from 'http';
 
-type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error' | 'new_mail' | 'mailbox_status' | 'integration_reputation_updated' | 'deliverability_updated' | 'dns_verified' | 'warmup_update';
+type MessageType = 'leads_updated' | 'messages_updated' | 'deals_updated' | 'settings_updated' | 'ping' | 'pong' | 'PROSPECTING_LOG' | 'PROSPECT_FOUND' | 'PROSPECT_UPDATED' | 'notification' | 'calendar_updated' | 'TERMINATE_SESSION' | 'insights_updated' | 'activity_updated' | 'stats_updated' | 'campaigns_updated' | 'campaign_stats_updated' | 'desktop_notification' | 'SECURITY_ALERT' | 'sync_status' | 'integration_error' | 'new_mail' | 'mailbox_status' | 'integration_reputation_updated' | 'deliverability_updated' | 'dns_verified' | 'warmup_update' | 'keys_updated';
 
 interface SyncMessage {
   type: MessageType;
@@ -402,6 +402,12 @@ class WebSocketSyncServer {
   notifyWarmupUpdated(userId: string, data: { mailboxIds: string[]; status: string }) {
     this.emitToUser(userId, 'warmup_update', {
       ...data,
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  notifyKeysUpdated(userId: string) {
+    this.emitToUser(userId, 'keys_updated', {
       timestamp: new Date().toISOString()
     });
   }

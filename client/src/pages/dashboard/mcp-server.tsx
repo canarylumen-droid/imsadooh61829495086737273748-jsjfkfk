@@ -168,18 +168,23 @@ function McpServerPage() {
               onClick={async () => {
                 setTestRes(null);
                 try {
-                  const r = await fetch("/mcp", {
+                  const r = await fetch("/api/mcp/test", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }),
+                    body: JSON.stringify({ tool: "list_tools", args: {} }),
                   });
                   if (r.ok) {
                     const j = await r.json();
-                    setTestRes(`Connected (${j.result?.tools?.length || 0} tools)`);
-                    toast({ title: "Connected" });
+                    setTestRes(j.success ? "Connected" : "Failed");
+                    if (j.success) toast({ title: "MCP connection OK" });
+                    else toast({ title: "Test returned error", variant: "destructive" });
+                  } else if (r.status === 400) {
+                    const err = await r.json();
+                    setTestRes(err.error || "No API key");
+                    toast({ title: "Create an API key first", variant: "destructive" });
                   } else {
                     setTestRes("Failed");
-                    toast({ title: "Failed", variant: "destructive" });
+                    toast({ title: "Test failed", variant: "destructive" });
                   }
                 } catch {
                   setTestRes("Error");

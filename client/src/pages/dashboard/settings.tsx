@@ -915,12 +915,12 @@ curl -H "Authorization: Bearer audnix_..." \\
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Server URL</Label>
                   <div className="flex gap-2">
                     <code className="flex-1 p-3 bg-muted/20 rounded-xl border border-border/40 text-xs font-mono select-all">
-                      {typeof window !== 'undefined' ? `${window.location.origin}/api/mcp` : 'https://audnixai.com/api/mcp'}
+                      {typeof window !== 'undefined' ? `${window.location.origin}/mcp` : 'https://audnixai.com/mcp'}
                     </code>
                     <Button
                       variant="outline"
                       size="icon"
-                      onClick={() => handleCopyToClipboard(`${window.location.origin}/api/mcp`, 'MCP URL')}
+                      onClick={() => handleCopyToClipboard(`${window.location.origin}/mcp`, 'MCP URL')}
                       className="rounded-xl shrink-0 h-11 w-11"
                     >
                       {copiedField === 'MCP URL' ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
@@ -936,7 +936,7 @@ curl -H "Authorization: Bearer audnix_..." \\
                       code: `{
   "mcpServers": {
     "audnix": {
-      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_API_KEY"
       }
@@ -951,7 +951,7 @@ curl -H "Authorization: Bearer audnix_..." \\
   "mcp": {
     "servers": {
       "audnix": {
-        "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+        "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
         "headers": {
           "Authorization": "Bearer YOUR_API_KEY"
         }
@@ -965,7 +965,7 @@ curl -H "Authorization: Bearer audnix_..." \\
                       title: "OpenAI GPT (Custom GPT)",
                       code: `{
   "actions": [{
-    "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+    "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
     "headers": {
       "Authorization": "Bearer YOUR_API_KEY"
     }
@@ -979,7 +979,7 @@ curl -H "Authorization: Bearer audnix_..." \\
   "mcpServers": {
     "audnix": {
       "type": "url",
-      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/mcp",
+      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_API_KEY"
       }

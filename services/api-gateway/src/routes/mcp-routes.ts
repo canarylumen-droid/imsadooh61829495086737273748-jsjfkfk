@@ -3,6 +3,8 @@ import { requireAuth, getCurrentUserId } from '../middleware/auth.js';
 import { db } from '@shared/lib/db/db.js';
 import { sql } from 'drizzle-orm';
 import crypto from 'crypto';
+import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
+import { apiKeyRateLimiter } from '../middleware/rate-limit.js';
 
 const router = Router();
 
@@ -114,7 +116,7 @@ async function logMcpCall(userId: string, apiKeyId: string | null, toolName: str
 }
 
 // POST /mcp — Main MCP endpoint
-router.post('/mcp', async (req: Request, res: Response): Promise<void> => {
+router.post('/mcp', apiKeyRateLimiter, async (req: Request, res: Response): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -225,6 +227,8 @@ router.post('/api/mcp/key/create', requireAuth, async (req: Request, res: Respon
       createdAt: created.created_at || null,
       message: 'Copy your API key now.',
     });
+
+    try { wsSync.notifyKeysUpdated(userId); } catch {} 
   } catch (error) {
     console.error('[MCP] Error creating key:', error);
     res.status(500).json({ error: 'Failed to create API key' });
@@ -248,6 +252,7 @@ router.post('/api/mcp/key/regenerate', requireAuth, async (req: Request, res: Re
     `);
 
     res.json({ key: rawKey, message: 'Key rotated. Update any services using the old key.' });
+    try { wsSync.notifyKeysUpdated(userId); } catch {} 
   } catch (error) {
     console.error('[MCP] Error regenerating key:', error);
     res.status(500).json({ error: 'Failed to regenerate key' });
@@ -272,6 +277,7 @@ router.post('/api/mcp/scopes', requireAuth, async (req: Request, res: Response):
     `);
 
     res.json({ success: true, message: 'Permissions updated.' });
+    try { wsSync.notifyKeysUpdated(userId); } catch {} 
   } catch (error) {
     console.error('[MCP] Error updating scopes:', error);
     res.status(500).json({ error: 'Failed to update permissions' });
@@ -321,6 +327,7 @@ router.patch('/api/mcp/key/:id', requireAuth, async (req: Request, res: Response
 
     await db.execute(sql`UPDATE api_keys SET name = ${name.trim()} WHERE id = ${id} AND user_id = ${userId}`);
     res.json({ success: true, message: 'API key name updated.' });
+    try { wsSync.notifyKeysUpdated(userId); } catch {} 
   } catch (error) {
     console.error('[MCP] Error updating key:', error);
     res.status(500).json({ error: 'Failed to update key name' });
@@ -337,6 +344,7 @@ router.delete('/api/mcp/key/:id', requireAuth, async (req: Request, res: Respons
     await db.execute(sql`DELETE FROM api_keys WHERE id = ${id} AND user_id = ${userId}`);
 
     res.json({ success: true });
+    try { wsSync.notifyKeysUpdated(userId); } catch {} 
   } catch (error) {
     console.error('[MCP] Error deleting key:', error);
     res.status(500).json({ error: 'Failed to delete key' });
@@ -371,8 +379,8 @@ router.get('/api/mcp/key/current', requireAuth, async (req: Request, res: Respon
         permissionLevel: row.scope || 'read_write',
         scopes: [],
         isActive: true,
-        createdAt: row.created_at?.toISOString() || null,
-        lastUsedAt: row.last_used_at?.toISOString() || null,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+        lastUsedAt: row.last_used_at ? new Date(row.last_used_at).toISOString() : null,
       }
     });
   } catch (error) {

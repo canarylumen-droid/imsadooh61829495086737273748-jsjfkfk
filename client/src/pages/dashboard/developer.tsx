@@ -31,7 +31,7 @@ type ApiKey = {
 };
 
 function DeveloperPage() {
-  const { socket } = useRealtime();
+  const { socket, isConnected } = useRealtime();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createName, setCreateName] = useState("");
@@ -51,6 +51,7 @@ function DeveloperPage() {
 
   const { data: keysData, isLoading } = useQuery<{ keys: ApiKey[] }>({
     queryKey: ["/api/mcp/keys"],
+    refetchInterval: isConnected ? false : 15000,
   });
 
   const keys = keysData?.keys || [];
