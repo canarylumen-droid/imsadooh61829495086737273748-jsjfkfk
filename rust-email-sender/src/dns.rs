@@ -95,7 +95,7 @@ impl DnsResolver {
         let resolver = TokioAsyncResolver::tokio(
             ResolverConfig::default(),
             resolver_opts,
-        )?;
+        );
 
         Ok(Arc::new(Self {
             resolver,
@@ -144,7 +144,7 @@ impl DnsResolver {
     async fn resolve_txt(&self, name: &str) -> Result<Vec<String>> {
         let response = self.resolver.txt_lookup(name).await?;
         Ok(response.iter()
-            .flat_map(|rr| rr.txt_data().iter().map(|s| String::from_utf8_lossy(s)))
+            .flat_map(|rr| rr.txt_data().iter().map(|s| String::from_utf8_lossy(s).into_owned()))
             .collect())
     }
 
@@ -326,7 +326,8 @@ impl DnsResolver {
             self.check_blacklist(domain),
         );
 
-        let mx_found = !mx.is_empty();
+        let mx_records = mx.unwrap_or_default();
+        let mx_found = !mx_records.is_empty();
         let mut score = 0u32;
 
         if spf.found && spf.valid { score += 28; }
@@ -355,7 +356,7 @@ impl DnsResolver {
         let result = DnsVerificationResult {
             domain: domain.to_string(),
             spf, dkim, dmarc,
-            mx,
+            mx: mx_records,
             mx_found,
             blacklist,
             overall_score: score.min(100),

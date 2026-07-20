@@ -24,7 +24,7 @@ async fn verify_smtp(job: &MailboxVerifyJob, timeout: Duration) -> Result<()> {
         .port(job.smtp_port)
         .timeout(Some(timeout))
         .build();
-    transport.verify().await?;
+    transport.test_connection().await?;
     Ok(())
 }
 
@@ -120,18 +120,21 @@ async fn main() -> Result<()> {
                         let start = std::time::Instant::now();
                         let result = verify_smtp(&job, to).await;
                         let elapsed = start.elapsed().as_millis() as u64;
+                        let is_ok = result.is_ok();
+                        let err_msg = result.as_ref().err().map(|e| e.to_string());
                         let result_obj = MailboxVerifyResult {
                             batch_id: job.batch_id.clone(),
                             row: job.row,
                             email: job.email.clone(),
-                            ok: result.is_ok(),
-                            error: result.err().map(|e| e.to_string()),
+                            ok: is_ok,
+                            error: err_msg,
                             latency_ms: elapsed,
                         };
                         let json = serde_json::to_string(&result_obj)
                             .unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e));
+                        let mut r = r;
                         let _: () = r.lpush(&mvrq, &json).await.unwrap_or_default();
-                        if let Ok(()) = result {
+                        if is_ok {
                             log::info!("[BulkVerify] {} OK ({}ms)", job.email, elapsed);
                         } else {
                             log::warn!("[BulkVerify] {} FAIL ({}ms)", job.email, elapsed);
