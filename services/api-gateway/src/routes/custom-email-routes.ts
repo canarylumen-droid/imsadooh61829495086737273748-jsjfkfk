@@ -848,7 +848,7 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
 
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(',').map(s => s.trim().replace(/["']/g, ''));
-      if (cols.length < Math.max(emailIdx + 1, hostIdx + 1, passIdx + 1) || cols.every(c => !c)) continue;
+      if (cols.length < Math.max(emailIdx + 1, hostIdx + 1, passIdx + 1) || cols.every((c: string) => !c)) continue;
 
       const email = (cols[emailIdx] || '').toLowerCase();
       const smtpHost = hostIdx >= 0 ? cols[hostIdx] || '' : '';
@@ -898,6 +898,7 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
 
     if (useRust) {
       const redis = await getRedisClient();
+      if (!redis) { console.error('[BulkImport] Redis unavailable for push'); return res.status(500).json({ error: 'Redis unavailable' }); }
       const verifyQueue = process.env.MAILBOX_VERIFY_QUEUE || 'bulk-mailbox-verify';
       for (let idx = 0; idx < rows.length; idx++) {
         const row = rows[idx];
@@ -939,7 +940,7 @@ router.post('/bulk-import-csv', requireAuthOrApiKey, csvUpload.single('file'), a
           // Poll Rust results
           const resultQueue = process.env.MAILBOX_VERIFY_RESULT_QUEUE || 'bulk-mailbox-verify-results';
           const redis = await getRedisClient();
-          if (!redis) { log.error('[BulkImport] Redis unavailable'); return; }
+          if (!redis) { console.error('[BulkImport] Redis unavailable'); return; }
           const pollStart = Date.now();
           const pollTimeout = 5 * 60 * 1000; // 5 min max
 
