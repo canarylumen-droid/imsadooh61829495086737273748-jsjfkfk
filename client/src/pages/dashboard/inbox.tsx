@@ -1473,7 +1473,7 @@ export default function InboxPage() {
                                 </span>
                               </div>
                             </div>
-                            <p className={cn("text-xs line-clamp-1 overflow-hidden transition-colors", lead.metadata?.isUnread ? "text-foreground font-semibold" : "text-muted-foreground")}>
+                            <p className={cn("text-xs line-clamp-1 overflow-hidden transition-colors", lead.metadata?.isUnread ? "text-foreground font-semibold" : "text-foreground/60")}>
                               {typingLeadId === lead.id ? (
                                 <span className="flex items-center gap-1 text-primary font-bold animate-pulse">Typinng...</span>
                               ) : localDrafts[lead.id] ? (

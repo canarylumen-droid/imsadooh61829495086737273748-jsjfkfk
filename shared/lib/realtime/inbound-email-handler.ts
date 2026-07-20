@@ -106,6 +106,18 @@ async function handleInboundEmail(payload: any) {
       return;
     }
 
+    // ── GENERIC/TRANSACTIONAL FILTER ───────────────────────────────────
+    const genericPatterns = [
+      /^mailer-daemon@/i, /^postmaster@/i, /^noreply@/i, /^no-reply@/i,
+      /^notifications?@/i, /^bounce@/i, /^dmarc@/i, /^report@/i,
+      /easydmarc/i, /dmarc/i, /mailer-daemon/i,
+    ];
+    const isGeneric = genericPatterns.some(p => p.test(senderAddr) || p.test(from || ''));
+    if (isGeneric) {
+      console.log(`[InboundEmailHandler] Skipping generic/transactional email from ${senderAddr}`);
+      return;
+    }
+
     // ── LEAD MATCHING ─────────────────────────────────────────────────
     const { storage } = await import('@shared/lib/storage/storage.js');
     let lead = await storage.findLeadBySenderAndIntegration(senderAddr, integration_id);
