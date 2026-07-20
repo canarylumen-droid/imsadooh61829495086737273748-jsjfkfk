@@ -212,6 +212,7 @@ router.post("/:leadId", requireAuthOrApiKey, async (req: Request, res: Response)
     const updatedLead = await storage.updateLead(leadId as string, {
       lastMessageAt: new Date(),
       status: lead.status === "new" ? "contacted" : lead.status,
+      score: Math.min(100, (lead.score || 0) + 2),
     });
 
     if (!updatedLead) {

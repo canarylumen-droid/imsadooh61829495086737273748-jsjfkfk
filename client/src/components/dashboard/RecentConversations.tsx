@@ -236,7 +236,7 @@ export function RecentConversations() {
                       : "bg-muted"
                       }`}
                   >
-                    <p className="text-sm whitespace-pre-wrap">{message.body}</p>
+                    <p className="text-sm whitespace-pre-wrap break-words max-h-[200px] overflow-y-auto">{message.body}</p>
                     {message.audioUrl && (
                       <div className="mt-2 pt-2 border-t border-border/30">
                         <audio controls className="w-full max-w-xs">

@@ -325,11 +325,16 @@ export default function InboxPage() {
           { queryKey: ["/api/messages", targetLeadId] },
           (oldData: any) => {
             if (!oldData || !oldData.messages) return oldData;
-            const exists = oldData.messages.some((m: any) => m.id === msgData.id);
-            if (exists) return oldData;
+
+            const exact = oldData.messages.some((m: any) => m.id === msgData.id);
+            if (exact) return oldData;
+
+            const tempIdx = oldData.messages.findIndex((m: any) =>
+              m.id?.startsWith?.('temp-') && !m.id?.startsWith?.('temp-msg')
+            );
 
             const newMsg = {
-              id: msgData.id || `temp-${Date.now()}`,
+              id: msgData.id,
               body: msgData.body || msgData.content || '',
               content: msgData.content || msgData.body || '',
               direction: msgData.direction || 'inbound',
@@ -338,6 +343,13 @@ export default function InboxPage() {
               leadId: targetLeadId,
               metadata: msgData.metadata || {}
             };
+
+            if (tempIdx !== -1) {
+              const updated = [...oldData.messages];
+              updated[tempIdx] = newMsg;
+              return { ...oldData, messages: updated };
+            }
+
             return {
               ...oldData,
               messages: [...oldData.messages, newMsg]
@@ -807,14 +819,29 @@ export default function InboxPage() {
     onSuccess: async (res, _newContent, context) => {
       const data = await res.json().catch(() => null);
       if (!data?.message || !context?.tempId) return;
+      const realId = data.message.id;
       queryClient.setQueriesData(
         { queryKey: ["/api/messages", leadId] },
-        (oldData: any) => ({
-          ...(oldData || { messages: [], total: 0, hasMore: false }),
-          messages: (oldData?.messages || []).map((msg: any) =>
-            msg.id === context.tempId ? { ...data.message, subject: msg.subject } : msg
-          ),
-        })
+        (oldData: any) => {
+          if (!oldData || !oldData.messages) return oldData;
+          const msgs = oldData.messages;
+          const tempIdx = msgs.findIndex((m: any) => m.id === context.tempId);
+          if (tempIdx === -1) {
+            const exists = msgs.some((m: any) => m.id === realId);
+            if (!exists) return { ...oldData, messages: [...msgs, { ...data.message }] };
+            return oldData;
+          }
+          const updated = [...msgs];
+          updated[tempIdx] = { ...data.message };
+          const seen = new Set<string>();
+          const deduped = updated.filter((m: any) => {
+            if (m.id === context.tempId) return false;
+            if (seen.has(m.id)) return false;
+            seen.add(m.id);
+            return true;
+          });
+          return { ...oldData, messages: deduped };
+        }
       );
     },
     onSettled: () => {
@@ -1460,18 +1487,16 @@ export default function InboxPage() {
                             <AvatarFallback className={cn("font-semibold text-xs rounded-full", lead.id === leadId ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>{lead.name?.[0]}</AvatarFallback>
                           </Avatar>
                           <div className="flex-1 min-w-0 space-y-0.5">
-                            <div className="flex justify-between items-start gap-1">
+                            <div className="flex items-center gap-1">
                               <span className="text-sm font-semibold truncate text-foreground flex-1 min-w-0" title={lead.name}>
                                 {lead.name}
                               </span>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full hidden md:inline-flex md:opacity-0 md:group-hover:opacity-100 transition-opacity text-primary -mr-0.5" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
-                                  <Brain className="h-3 w-3" />
-                                </Button>
-                                <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 mt-0.5">
-                                  {(() => { const d = lead.lastMessageAt || lead.createdAt; return d ? formatDateShort(d) : ''; })()}
-                                </span>
-                              </div>
+                              <Button variant="ghost" size="icon" className="h-5 w-5 rounded-full hidden md:inline-flex md:opacity-0 md:group-hover:opacity-100 transition-opacity text-primary shrink-0" onClick={(e) => { e.stopPropagation(); setProcessLead(lead); }}>
+                                <Brain className="h-3 w-3" />
+                              </Button>
+                              <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 ml-auto">
+                                {(() => { const d = lead.lastMessageAt || lead.createdAt; return d ? formatDateShort(d) : ''; })()}
+                              </span>
                             </div>
                             <p className={cn("text-xs line-clamp-1 overflow-hidden transition-colors", lead.metadata?.isUnread ? "text-foreground font-semibold" : "text-foreground/60")}>
                               {typingLeadId === lead.id ? (
@@ -1486,7 +1511,7 @@ export default function InboxPage() {
                                   {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{(lead.snippet ? stripHtml(lead.snippet).replace(/^(References|In-Reply-To|Message-ID|Content-Type|MIME-Version|Date|From|To|Subject|DKIM-Signature|Authentication-Results|Received|X-|ARC-).*$/gm, '').trim().substring(0, 60) : "No messages") || "No messages"}</span>
+                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{(lead.snippet ? stripHtml(lead.snippet).replace(/^(References|In-Reply-To|Message-ID|Content-Type|MIME-Version|Date|From|To|Subject|DKIM-Signature|Authentication-Results|Received|X-|ARC-).*$/gm, '').trim().substring(0, 120) : "No messages") || "No messages"}</span>
                                 </span>
                               )}
                             </p>

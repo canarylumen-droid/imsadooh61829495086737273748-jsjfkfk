@@ -607,6 +607,27 @@ Built 4 interconnected components for real-time inbox placement detection withou
 - Tables horizontal scroll
 - `services/email-service/src/email/spam-monitor.ts` — Spam folder detection
 
+## This Session (Jul 20 2026) — Calendar Timezone + AI Reasoning Text + Inbox Snippet Cleanup
+
+### Commits
+- `b9f75354` — fix: calendar timezone isToday/isSelected, AI reasoning uses lead name, snippet strips RFC headers
+
+### Changes
+1. **Calendar timezone fix** (`calendar.tsx:663-664`): Changed `isToday` and `isSelected` from `toISOString().split('T')[0]` (UTC-based, off by 1 day for negative UTC offsets) to `dateToTzStr(date) === todayInTz` (timezone-aware via `Intl.DateTimeFormat`). Fixes "Calendar shows July 21 instead of July 20".
+
+2. **AI Activity reasoning text** (`decision-engine.ts`): All reasoning strings now include `context.lead?.name` (e.g. "John is ready — intent 80% with timing 70%" instead of "Intent (80%) and timing (70%) exceed thresholds"). Passed `lead` object from `conversation-ai.ts:511` into `DecisionContext`.
+
+3. **Snippet strips RFC headers** (`drizzle-storage.ts:1095`): Added regex cleanup that strips `References:`, `In-Reply-To:`, `Message-ID:`, `Content-Type:`, `MIME-Version:`, `Date:`, `From:`, `To:`, `Subject:`, `DKIM-Signature:`, `Authentication-Results:`, `Received:`, `X-*:`, `ARC-*:` from snippet text before storing. Also added frontend cleanup (`inbox.tsx:1489`) to strip same headers from `lead.snippet` at display time.
+
+### Deploy
+- Pushed to GitHub (`b9f75354`). EC2 deploy pending (`cd client && npm run build:client && pm2 restart audnix-api-gateway audnix-worker-ai`).
+
+### Remaining Issues
+- Calendly disconnect redirect (integrations page vs stay on calendar)
+- KPI counts not updating in real-time
+- Calendar "create event" on date click should show UI
+- Push to AWS EC2
+
 ## This Session (Jul 19 2026) — MailboxSwitcher, Lead Scoring, AI Reply, Rust Sender Fixes
 
 ### Summary

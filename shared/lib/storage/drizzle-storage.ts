@@ -1104,12 +1104,15 @@ export class DrizzleStorage implements IStorage {
         .replace(/^X-.*:.*$/m, '')
         .replace(/^ARC-.*:.*$/m, '')
         .trim();
+      const scoreIncrement = message.direction === 'inbound' ? 10 : 2;
+      const currentScore = lead?.score || 0;
       await db.update(leads)
         .set({
           lastMessageAt: new Date(),
           updatedAt: new Date(),
           snippet: (cleanSnippet || message.body).substring(0, 150).replace(/\n/g, ' '),
           status: message.direction === 'inbound' ? 'replied' : undefined,
+          score: Math.min(100, currentScore + scoreIncrement),
           metadata: newMetadata
         })
         .where(eq(leads.id, message.leadId));
