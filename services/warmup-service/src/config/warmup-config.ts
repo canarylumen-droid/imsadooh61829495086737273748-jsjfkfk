@@ -48,18 +48,16 @@ export const WARMUP_CONFIG = {
   MAX_SEND_ATTEMPTS: 3,
   MAX_IMAP_ATTEMPTS: 3,
 
-  // Ramp schedule — percentage of final DAILY_SENT_LIMIT
+  // Ramp schedule — percentage of final daily warmup target
   // Gradually increase warmup volume to avoid ISP rate limiting and flagging.
-  // Day 1-2:  10%   (e.g. 2/day if limit=20)
-  // Day 3-5:  25%   (e.g. 5/day)
-  // Day 6-10: 50%   (e.g. 10/day)
-  // Day 11-14: 75%  (e.g. 15/day)
-  // Day 15+:  100%  (full limit)
+  // Day 1:     30%   (e.g. ~4/day if target=12)
+  // Day 2-4:   50%   (e.g. ~6/day)
+  // Day 5-9:   75%   (e.g. ~9/day)
+  // Day 10+:   100%  (full target)
   RAMP_DAILY_PERCENTS: [
-    { maxDays: 2, percent: 0.10 },
-    { maxDays: 5, percent: 0.25 },
-    { maxDays: 10, percent: 0.50 },
-    { maxDays: 14, percent: 0.75 },
+    { maxDays: 1, percent: 0.30 },
+    { maxDays: 4, percent: 0.50 },
+    { maxDays: 9, percent: 0.75 },
   ] as const,
 
   // Domain clustering

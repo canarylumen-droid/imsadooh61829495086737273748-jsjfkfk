@@ -272,9 +272,9 @@ export class ReputationRecovery {
     const meta = mb.metadata as any;
     const recoveryMeta = meta?.recovery as ReputationState | undefined;
     if (!recoveryMeta || recoveryMeta.recoveryLevel === 'healthy') {
-      return 3;
+      return 6;
     }
-    return recoveryMeta.maxThreads ?? 3;
+    return recoveryMeta.maxThreads ?? 6;
   }
 
   // ── Fix #12: Utility method to check if a mailbox is in recovery mode ──

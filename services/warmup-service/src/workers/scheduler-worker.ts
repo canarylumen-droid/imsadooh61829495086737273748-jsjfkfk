@@ -188,16 +188,17 @@ export class WarmupScheduler {
       }
 
       // Campaign-aware warmup volume:
-      // - If user has NO active campaigns: baseline 2/day (1 send + 1 reply)
-      // - If user HAS active campaigns: 10% of campaign daily send volume
+      // - If user has NO active campaigns: baseline 10-15 warmup emails/day
+      // - If user HAS active campaigns: warmup = 20-25% of mailbox warmup cap
+      //   This gives warmup its own allocation without competing with campaign volume.
       // - Reputation recovery then scales this up if reputation is poor
       if (!isSeed && mb.integrationId) {
         const info = integrationMap.get(mb.integrationId);
         const campaignDaily = campaignVolumeMap.get(info?.userId ?? '') ?? 0;
         if (campaignDaily <= 0) {
-          dynamicLimit = 1; // Baseline: 1 send + 1 reply = 2 total/day
+          dynamicLimit = 12; // Baseline: ~12 warmup emails/day (10-15 range)
         } else {
-          dynamicLimit = Math.max(1, Math.round(campaignDaily * 0.10 / 2)); // 10% of campaign volume total (send + reply combined)
+          dynamicLimit = Math.max(1, Math.round(dynamicLimit * 0.20)); // 20% of mailbox warmup cap
         }
       }
 

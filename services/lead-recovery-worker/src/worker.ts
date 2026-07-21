@@ -29,7 +29,9 @@ export class LeadRecoveryWorker {
   private lastDbWarningAt = 0;
   private dbRetryCount = 0;
   private mysqlSkipped = false;
+  private mysqlSkippedAt = 0;
   private readonly dbWarningIntervalMs = readInt("LEAD_RECOVERY_MONGO_WARNING_INTERVAL_MS", 300_000);
+  private readonly mysqlRetryIntervalMs = 5 * 60 * 1000; // Retry MySQL every 5 min after permanent skip
 
   async start() {
     this.running = true;
@@ -67,7 +69,13 @@ export class LeadRecoveryWorker {
 
   async runOnce() {
     if (!this.running || this.processing) return;
-    if (this.mysqlSkipped) return;
+    if (this.mysqlSkipped) {
+      // Retry MySQL every 5 min — it might have come back
+      if (this.mysqlSkippedAt > 0 && Date.now() - this.mysqlSkippedAt < this.mysqlRetryIntervalMs) return;
+      this.mysqlSkipped = false;
+      this.dbRetryCount = 0;
+      this.mysqlSkippedAt = 0;
+    }
     this.processing = true;
     try {
       const ready = await this.ensureDbReady();
@@ -110,7 +118,8 @@ export class LeadRecoveryWorker {
     this.dbRetryCount++;
     if (this.dbRetryCount >= 3) {
       this.mysqlSkipped = true;
-      console.error("[LeadRecoveryWorker] MySQL unavailable after 3 retries — permanently skipping DB work. Update MYSQL_HOST and related env vars to re-enable.");
+      this.mysqlSkippedAt = Date.now();
+      console.error("[LeadRecoveryWorker] MySQL unavailable after 3 retries — will retry every 5 minutes.");
       return;
     }
 

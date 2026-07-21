@@ -4,6 +4,9 @@ import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { getAIStatus } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
 import { learnUserStyle } from "@services/brain-worker/src/ai-lib/context/personality-learner.js";
 import type { Lead, Message } from '@audnix/shared';
+import { warmupMailboxes } from '@audnix/shared';
+import { db } from '@shared/lib/db/db.js';
+import { eq } from 'drizzle-orm';
 import { InstagramOAuth } from '@services/api-gateway/src/oauth/instagram.js';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
 import dns from 'dns';
@@ -1288,7 +1291,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                 const isEnrolled = !!wm;
                 const warmupStatus = wm?.status || int.warmupStatus || 'none';
                 const isWarmingUp = wm?.status === 'active';
-                const dailyLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 5;
+                const dailyLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 10;
                 const dailySentCount = wm?.dailySentCount || 0;
                 const dailyReceivedCount = wm?.dailyReceivedCount || 0;
                 const daysSinceConnected = int.createdAt
@@ -1363,6 +1366,11 @@ router.post('/warmup/toggle', requireAuthOrApiKey, async (req: Request, res: Res
         for (const id of mailboxIds) {
             try {
                 await storage.updateIntegrationById(id, { warmupStatus: newStatus } as any);
+            } catch { }
+            try {
+                await db.update(warmupMailboxes)
+                    .set({ status: newStatus, pauseReason: enabled ? null : 'user_paused' })
+                    .where(eq(warmupMailboxes.integrationId, id));
             } catch { }
         }
 
