@@ -42,3 +42,4 @@ Thumbs.db
 rust-email-sender/target/
 rust-imap-worker/target/
 opencode.json
+push_key*.mjs

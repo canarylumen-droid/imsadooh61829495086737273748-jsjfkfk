@@ -102,6 +102,11 @@ export class WarmupScheduler {
     // (handles server restarts, crashes, or deploys that miss the midnight window)
     await this.resetDailyCountersIfStale();
 
+    // [CRITICAL] On startup, unpause all mailboxes that were auto-paused (not user-paused).
+    // Post-restart evaluation scans will re-pause any that should still be paused.
+    // This prevents warmup from staying stuck in 'paused' after a deploy/crash.
+    await this.startupUnpause();
+
     // Run one-off initial scans
     enrollmentEngine.scan();
     domainClusterEngine.scanAndCluster();
@@ -410,6 +415,37 @@ export class WarmupScheduler {
 
     if (stalled.length > 0) {
       console.log(`[Warmup][Scheduler] Marked ${stalled.length} old threads as stalled`);
+    }
+  }
+
+  /**
+   * On startup, unpause all mailboxes except those explicitly paused by the user
+   * or disconnected. The one-off evaluation scans will re-pause any that should
+   * remain paused (recovery_mode, domain_lacks_anchor, etc.).
+   */
+  private async startupUnpause() {
+    const resumed = await db
+      .update(warmupMailboxes)
+      .set({ status: 'active', pauseReason: null })
+      .where(
+        and(
+          eq(warmupMailboxes.status, 'paused'),
+          sql`${warmupMailboxes.pauseReason} IS DISTINCT FROM 'user_paused'`,
+          sql`${warmupMailboxes.pauseReason} IS DISTINCT FROM 'integration_disconnected'`
+        )
+      )
+      .returning();
+
+    if (resumed.length > 0) {
+      console.log(`[Warmup][Scheduler] Startup: resumed ${resumed.length} mailbox(es) from paused state`);
+      // Sync integrations.warmupStatus for the resumed mailboxes
+      const ids = resumed.map(r => r.integrationId).filter(Boolean);
+      if (ids.length > 0) {
+        await db.update(integrations)
+          .set({ warmupStatus: 'active' } as any)
+          .where(inArray(integrations.id, ids as string[]))
+          .catch(() => {});
+      }
     }
   }
 
