@@ -104,7 +104,7 @@
     "@google-cloud/pubsub": "^5.0.0",
     "@google/generative-ai": "^0.21.0",
     "@gsap/react": "^2.1.2",
-    "@hookform/resolvers": "^3.10.0",
+    "@hookform/resolvers": "^5.4.0",
     "@jridgewell/trace-mapping": "^0.3.25",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/canvas": "^0.1.89",
