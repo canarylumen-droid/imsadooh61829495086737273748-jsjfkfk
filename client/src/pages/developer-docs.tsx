@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Search, Key, Server, BookOpen, Copy, Check, Terminal, Globe, ChevronRight, Shield, AlertTriangle, Clock, Lock, Users, Mail, BarChart3, Plug, Code, ArrowRight } from "lucide-react";
+import { Logo } from "@/components/ui/Logo";
 
 const BASE = "https://audnixai.com";
 
@@ -747,9 +748,7 @@ export default function DeveloperDocsPage() {
           <div className="max-w-[1400px] mx-auto px-4 h-14 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <a href="/" className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded bg-primary/20 flex items-center justify-center">
-                  <div className="w-3.5 h-3.5 bg-primary rounded-sm rotate-45" />
-                </div>
+                <Logo className="h-7 w-7" textClassName="hidden" />
                 <span className="font-bold text-sm">Audnix</span>
               </a>
               <div className="h-4 w-px bg-border" />

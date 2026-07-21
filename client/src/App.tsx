@@ -192,9 +192,10 @@ function Router() {
   );
 }
 
-// Auto-reload on chunk load failures (deployment cache mismatch)
+// Auto-reload on chunk load failures (deployment cache mismatch) — silent, enterprise-level
 window.addEventListener("unhandledrejection", (e) => {
-  if (e.reason?.message?.includes("dynamic") || e.reason?.message?.includes("Loading chunk") || e.type === "import") {
+  const msg = e.reason?.message || "";
+  if (msg.includes("dynamically imported module") || msg.includes("Loading chunk") || msg.includes("import(")) {
     e.preventDefault();
     window.location.reload();
   }

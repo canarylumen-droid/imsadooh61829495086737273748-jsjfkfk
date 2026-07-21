@@ -3,33 +3,50 @@ import { RefreshCw, Home } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 
+const CHUNK_ERROR_KEY = "opencode_chunk_reload_count";
+
 interface Props {
   children: React.ReactNode;
 }
 
 interface State {
   hasError: boolean;
+  isChunkError: boolean;
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false };
+    this.state = { hasError: false, isChunkError: false };
   }
 
-  static getDerivedStateFromError(): State {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): State {
+    const isChunk = error?.message?.includes("dynamically imported module") || error?.message?.includes("Loading chunk");
+    return { hasError: true, isChunkError: isChunk };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error("ErrorBoundary caught an error", error, errorInfo);
-    if (error?.message?.includes("dynamically imported module") || error?.message?.includes("Loading chunk")) {
+    const isChunk = error?.message?.includes("dynamically imported module") || error?.message?.includes("Loading chunk");
+
+    if (isChunk) {
+      // Enterprise-level silence: no console, no dialog. Just reload silently.
+      const count = parseInt(sessionStorage.getItem(CHUNK_ERROR_KEY) || "0", 10);
+      if (count > 1) {
+        // Max 2 silent reloads, then show fallback
+        sessionStorage.removeItem(CHUNK_ERROR_KEY);
+        return;
+      }
+      sessionStorage.setItem(CHUNK_ERROR_KEY, String(count + 1));
       window.location.reload();
+      return;
     }
+
+    console.error(error, errorInfo);
   }
 
   public render() {
     if (this.state.hasError) {
+      // Chunk errors are already handled in componentDidCatch — if state persists past reload limit, show fallback
       return (
         <div className="min-h-screen w-full flex items-center justify-center bg-background p-6">
           <motion.div

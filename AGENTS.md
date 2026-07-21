@@ -1072,3 +1072,71 @@ Manual inbox send → email.ts updateSendPlacement() → placement='delivered'
 - `client/src/hooks/use-realtime.tsx` — warmup_update also invalidates all stats queries
 - `client/src/pages/dashboard/calendar.tsx` — getRelativeDateLabel timezone-aware diff (not UTC Math.round), today text white
 
+## This Session (Jul 21 2026) — Rust MX Batch Queue + Logo + Chunk Silence + AI Insights
+
+### Commits
+- `65c72b9c` — feat: Rust MX batch queue for 50k lead import (parallel DNS via tokio::join_all)
+- `70035571` — fix: use futures::future::join_all (tokio::join_all doesn't exist)
+
+### Fixes
+1. **Rust MX batch queue** (`main.rs:157-226`): Dedicated `tokio::spawn` handler — BRPOP on `mx-batch-queue`, resolves ALL domains in parallel via `futures::future::join_all` + `hickory-resolver`, LPUSH results to `mx-batch-results`. `config.rs`: `mx_batch_queue` / `mx_batch_result_queue` fields. `queue.rs`: `MxBatchJob`, `MxBatchResult`, `MxBatchEntry` structs.
+2. **Node.js bridge** (`shared/lib/queues/mx-batch-queue.ts`): `enqueueMxBatch()` + `waitForMxBatchResult()` — LPUSH job, BRPOP result with 15s timeout, fallback to Node.js `Promise.allSettled` DNS.
+3. **Bulk import MX resolution** (`bulk-actions-routes.ts`): Tries Rust queue first, falls back to Node.js parallel DNS.
+4. **Calendly OAuth fix** (`calendly.ts`): Added `prompt=consent` so Calendly always shows authorization screen on reconnect.
+5. **Warmup worker DB fix** (`ecosystem.config.cjs`): Added `DATABASE_URL_POOL` + `IS_WORKER` to warmup worker env (was missing, causing `db.select is not a function`).
+6. **Warmup scheduler SQL fix** (`scheduler-worker.ts`): Fixed PostgreSQL type cast `ANY(${userIds}::uuid[])` → `ANY(ARRAY[...::uuid])`.
+7. **Brand KB history** (`BrandKnowledgeBase.tsx`, `admin-pdf-routes.ts`): Added "Clear All" button + per-PDF delete button, new `DELETE /api/brand-pdf/cache/:id` endpoint.
+8. **Lead import progress bar** (`lead-import.tsx`): Real-time status text during import: "Parsing text with AI..." → "Identifying leads..." → "Checking MX records & spam filters..." → "Import complete!".
+9. **E2E test script** (`e2e-test.sh`): Tests auth, lead import, brand KB, warmup, dashboard, deliverability, socket.
+10. **Logo in developer docs** (`developer-docs.tsx`): Replaced CSS cube (`rotated square`) with actual `Logo` component (`/logo.svg` equivalent).
+11. **AI Insights empty state** (`insights.tsx`): Socket-driven via `insights_updated` event (use-realtime.tsx:471-472). **No polling, no manual refresh needed.** Threshold: data shows when any of these are non-zero — `trends.leadGrowth`, `trends.conversionGrowth`, `predictions.expectedConversions`, `recommendations array`, or `summary` is non-null.
+12. **Chunk load errors silent (enterprise-level)** (`ErrorBoundary.tsx`, `App.tsx:196-201`):
+    - ErrorBoundary: chunk errors trigger silent `window.location.reload()` with max 2 attempts via `sessionStorage` counter — **no console.error, no dialog shown to user**
+    - App.tsx `unhandledrejection`: removed wrong `e.type === "import"` check, added `"import("` pattern match, calls `preventDefault()` to suppress browser console output
+    - Non-chunk errors still show the error dialog + console.error as before
+
+### AI Insights Threshold (for AGENTS.md)
+`insights.tsx:82-88` — `hasRealData` check:
+```
+!!insightsData && (
+  !!insights ||                                    // summary text exists
+  insightsData.trends.leadGrowth !== 0 ||           // any lead growth
+  insightsData.trends.conversionGrowth !== 0 ||     // any conversion growth
+  insightsData.predictions.expectedConversions > 0 ||// any predicted conversions
+  insightsData.recommendations.length > 0           // any AI recommendations
+)
+```
+Empty states (3 tiers):
+1. No mailbox + no campaign → "Connect Mailbox" / "Create Campaign"
+2. Mailbox connected, no campaign → "Awaiting Campaign Activity" with "Start a Campaign" link
+3. Campaign exists, no data yet → "No Insights Yet" with Refresh button
+
+All resolve automatically via socket `insights_updated` event. No polling.
+
+### Files Changed
+- `rust-email-sender/src/main.rs` — MX batch handler
+- `rust-email-sender/src/config.rs` — queue config fields
+- `rust-email-sender/src/queue.rs` — MxBatchJob/Result/Entry structs
+- `rust-email-sender/Cargo.toml` — added `futures = "0.3"`
+- `shared/lib/queues/mx-batch-queue.ts` — Node.js bridge (new file)
+- `services/api-gateway/src/routes/bulk-actions-routes.ts` — Rust queue with Node.js fallback
+- `services/api-gateway/src/oauth/calendly.ts` — prompt=consent
+- `ecosystem.config.cjs` — warmup worker env fix
+- `services/warmup-service/src/workers/scheduler-worker.ts` — SQL type cast fix
+- `client/src/components/admin/BrandKnowledgeBase.tsx` — Clear All + per-PDF delete
+- `services/api-gateway/src/routes/admin-pdf-routes.ts` — DELETE /api/brand-pdf/cache/:id
+- `client/src/pages/dashboard/lead-import.tsx` — progress bar status text
+- `client/src/pages/developer-docs.tsx` — Logo component
+- `client/src/components/ErrorBoundary.tsx` — silent chunk reload, no console, max 2 attempts
+- `client/src/App.tsx` — fixed unhandledrejection handler
+- `e2e-test.sh` — end-to-end test script (new file)
+
+### Deploy Required
+- `git push github main` then EC2:
+  ```bash
+  cd /home/ubuntu/app && git pull
+  cd rust-email-sender && cargo build --release
+  cd /home/ubuntu/app/client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client
+  pm2 restart audnix-rust-email-sender audnix-api-gateway audnix-socket-server
+  ```
+
