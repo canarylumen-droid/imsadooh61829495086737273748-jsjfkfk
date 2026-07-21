@@ -3,6 +3,7 @@ use std::time::Duration;
 use anyhow::Result;
 use redis::AsyncCommands;
 use tokio::sync::Semaphore;
+use futures::future::join_all;
 use serde_json;
 
 mod mailer;
@@ -215,11 +216,11 @@ async fn main() -> Result<()> {
                     let start = std::time::Instant::now();
                     let resolver = resolver.clone();
 
-                    // Resolve all domains IN PARALLEL via join_all
+                    // Resolve all domains IN PARALLEL via futures::future::join_all
                     let futures: Vec<_> = job.domains.iter()
                         .map(|domain| resolver.resolve_mx(domain))
                         .collect();
-                    let mx_results = tokio::join_all(futures).await;
+                    let mx_results = join_all(futures).await;
 
                     let mut results = std::collections::HashMap::new();
                     for (domain, mx_result) in job.domains.iter().zip(mx_results.into_iter()) {
