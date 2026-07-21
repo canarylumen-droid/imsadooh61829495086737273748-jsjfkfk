@@ -147,10 +147,11 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      await Promise.all([loadStatus(), loadLeads(), loadEvents()]);
-    } catch (e) {
-      console.warn('[LeadRecovery] loadAll failed:', e);
-      toast({ title: 'Failed to load recovery data', variant: 'destructive' });
+      const [statusRes, leadsRes, eventsRes] = await Promise.allSettled([loadStatus(), loadLeads(), loadEvents()]);
+      const failures = [statusRes, leadsRes, eventsRes].filter(r => r.status === 'rejected');
+      if (failures.length > 0) {
+        console.warn(`[LeadRecovery] ${failures.length}/3 calls failed`);
+      }
     } finally {
       setLoading(false);
     }

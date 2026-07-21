@@ -22,8 +22,10 @@ function LeadRecoveryContent() {
   useEffect(() => {
     store.loadAll().catch(() => undefined);
     const retryTimer = setTimeout(() => {
-      if (store.error) store.loadAll().catch(() => undefined);
-    }, 3000);
+      if (store.error && !store.error.includes('Request Timeout') && !store.error.includes('Pro plan')) {
+        store.loadAll().catch(() => undefined);
+      }
+    }, 5000);
     return () => clearTimeout(retryTimer);
   }, []);
 
@@ -85,7 +87,7 @@ function LeadRecoveryContent() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/30 p-4 gap-3">
             <div>
               <h2 className="font-semibold text-sm sm:text-base">Recoverable Leads</h2>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Stored in MongoDB per tenant, mailbox, and lead conversation.</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Cold leads &amp; missed replies found across your mailboxes.</p>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
               <Button variant="outline" size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => store.loadAll()} disabled={store.loading}>

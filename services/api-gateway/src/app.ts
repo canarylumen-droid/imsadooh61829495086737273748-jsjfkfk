@@ -156,8 +156,10 @@ export function createApp() {
   app.use((req, res, next) => {
     // Auth/signup routes get a longer timeout — bcrypt + session save under DB load
     // can legitimately take >30s on cold-start Railway deployments.
+    // Lead-recovery routes also get longer — MySQL pool contention can exceed 30s.
     const isAuthRoute = req.path.startsWith('/api/user/auth') || req.path.startsWith('/api/auth');
-    const timeoutMs = isAuthRoute ? 60000 : 30000;
+    const isLeadRecovery = req.path.startsWith('/api/lead-recovery');
+    const timeoutMs = isAuthRoute || isLeadRecovery ? 60000 : 30000;
 
     res.setTimeout(timeoutMs, () => {
       if (!res.headersSent) {

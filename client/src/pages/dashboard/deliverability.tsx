@@ -40,18 +40,22 @@ export default function DeliverabilityPage() {
 
   useEffect(() => {
     if (!socket) return;
-    const handler = () => queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
-    socket.on("leads_updated", handler);
-    socket.on("warmup_update", handler);
-    socket.on("stats_updated", handler);
-    socket.on("deliverability_updated", handler);
-    socket.on("integration_reputation_updated", handler);
+    const inboxHandler = () => queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
+    const warmupHandler = () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/warmup-status"] });
+    };
+    socket.on("leads_updated", inboxHandler);
+    socket.on("warmup_update", warmupHandler);
+    socket.on("stats_updated", inboxHandler);
+    socket.on("deliverability_updated", inboxHandler);
+    socket.on("integration_reputation_updated", inboxHandler);
     return () => {
-      socket.off("leads_updated", handler);
-      socket.off("warmup_update", handler);
-      socket.off("stats_updated", handler);
-      socket.off("deliverability_updated", handler);
-      socket.off("integration_reputation_updated", handler);
+      socket.off("leads_updated", inboxHandler);
+      socket.off("warmup_update", warmupHandler);
+      socket.off("stats_updated", inboxHandler);
+      socket.off("deliverability_updated", inboxHandler);
+      socket.off("integration_reputation_updated", inboxHandler);
     };
   }, [socket, queryClient]);
 

@@ -5,7 +5,7 @@ import { smtpAbuseProtection } from '@services/email-service/src/email/smtp-abus
 import { db } from '@shared/lib/db/db.js';
 import { emailTracking, integrations, bounceTracker } from '@audnix/shared';
 import { warmupMailboxes } from '@audnix/shared';
-import { eq, and, sql, gte, desc } from 'drizzle-orm';
+import { eq, and, sql, gte, desc, inArray } from 'drizzle-orm';
 
 const router = Router();
 
@@ -135,7 +135,7 @@ router.get('/inbox-placement', requireAuthOrApiKey, async (req: Request, res: Re
       .from(emailTracking)
       .where(
         and(
-          sql`${emailTracking.integrationId} IN ${integrationIds}`,
+          inArray(emailTracking.integrationId, integrationIds),
           gte(emailTracking.sentAt, since)
         )
       )
@@ -151,7 +151,7 @@ router.get('/inbox-placement', requireAuthOrApiKey, async (req: Request, res: Re
       .from(bounceTracker)
       .where(
         and(
-          sql`${bounceTracker.integrationId} IN ${integrationIds}`,
+          inArray(bounceTracker.integrationId, integrationIds),
           gte(bounceTracker.timestamp, since)
         )
       )
@@ -247,7 +247,7 @@ router.get('/domain-reputation', requireAuthOrApiKey, async (req: Request, res: 
       .from(emailTracking)
       .where(
         and(
-          sql`${emailTracking.integrationId} IN ${integrationIds}`,
+          inArray(emailTracking.integrationId, integrationIds),
           gte(emailTracking.sentAt, since)
         )
       )

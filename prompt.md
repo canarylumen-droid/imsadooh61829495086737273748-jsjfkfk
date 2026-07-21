@@ -1,27 +1,243 @@
-# Campaign + Warmup Scheduling — Full Architecture
+AI Activity
+Acted
+09:07 PM
+Good timing (80%) with moderate intent (50%) - opportune moment for DM
 
-## 1. Daily Budget Split (Warmup vs Campaign)
+Acted
+09:51 PM
+Autonomous outreach dispatch triggered
 
-Every mailbox has:
-- `dailyLimit` — hard cap per day (user-set, e.g. 50)
-- `initialOutreachLimit` — starting throttle (user-set in campaign wizard). Reputation system auto-ramps it up toward `dailyLimit`
-- `warmupLimit` — warmup volume on the `integrations` table (default 5, **separate from daily cap**)
+Acted
+09:46 PM
+Autonomous outreach dispatch triggered
 
-**Warmup has its OWN limit** — the `warmupLimit` column on the `integrations` table (default 5). This is completely independent from `dailyLimit` (default 50). The warmup scheduler (`scheduler-worker.ts`) reads `integrations.warmupLimit` and sets it as `warmupMailboxes.dailyLimit` on enrollment. The warmup progress page displays progress against this warmup-specific limit, not the mailbox daily cap.
+Acted
+09:45 PM
+Autonomous outreach dispatch triggered
 
-At send time, the campaign budget is split:
+This is it anywhere in calendar page 
 
-```
-warmupBudget   = round(dailyCap × 0.25)        // 25% reserved for warmup
-warmupBudget   = max(1, min(warmupBudget, dailyCap))
-campaignBudget = dailyCap - warmupBudget
-```
 
-If warmup doesn't use its full budget, the freed capacity goes to campaign (half of the surplus).
+Warmup
+0 warming
 
-**Without active campaigns**: warmup drops to `1 send + 1 reply = 2/day` minimum.
+ruben@network.replyflow.pro
 
-**Warmup has its own limit** — `warmupLimit` column (default 5). It's NOT the same as `dailyLimit`. The campaign budget cam-queue reads `warmupLimit` separately.
+4 warmup/day • 100 rep
+
+Off
+
+treasure@network.replyflow.pro
+
+4 warmup/day • 100 rep
+
+Off
+
+fortune@network.replyflow.pro
+
+4 warmup/day • 100 rep
+
+Off
+
+treasure@advisory.replyflow.pro
+
+4 warmup/day • 100 rep
+
+
+This section in deliverability page doesn't check if warm-up running to update real time
+
+
+Toggle theme
+
+
+Deliverability & Reputation
+Per-mailbox spam score, blacklist status, DNS health, and bounce monitoring. Updates every 2 minutes.
+
+Refresh
+Average Reputation
+
+87.50/100
+
+Healthy
+
+3 mailboxes
+
+At Risk
+
+1 mailboxes
+
+Critical
+
+0 mailboxes
+
+Warmup
+0 warming
+
+ruben@network.replyflow.pro
+
+4 warmup/day • 100 rep
+
+Off
+
+treasure@network.replyflow.pro
+
+4 warmup/day • 100 rep
+
+Off
+
+fortune@network.replyflow.pro
+
+4 warmup/day • 100 rep
+
+Off
+
+treasure@advisory.replyflow.pro
+
+4 warmup/day • 100 rep
+
+Off
+Inbox Placement (90d)
+24h
+7d
+30d
+60d
+90d
+No emails tracked this period.
+
+Send emails to see placement breakdown.
+
+treasure@network.replyflow.pro
+
+SMTP
+
+100.00/100
+Healthy
+47/day
+Sent
+
+0
+
+Inbox Rate
+
+—
+
+Bounce Rate
+
+—
+
+Spam Rate
+
+—
+
+DNS
+
+Issues
+
+Pacing
+
+1/31min
+
+ruben@network.replyflow.pro
+
+SMTP
+
+100.00/100
+Healthy
+47/day
+Sent
+
+0
+
+Inbox Rate
+
+—
+
+Bounce Rate
+
+—
+
+Spam Rate
+
+—
+
+DNS
+
+Issues
+
+Pacing
+
+1/31min
+
+fortune@network.replyflow.pro
+
+SMTP
+
+100.00/100
+Healthy
+47/day
+Sent
+
+0
+
+Inbox Rate
+
+—
+
+Bounce Rate
+
+—
+
+Spam Rate
+
+—
+
+DNS
+
+Issues
+
+Pacing
+
+1/31min
+
+treasure@advisory.replyflow.pro
+
+SMTP
+
+50.00/100
+At Risk
+50/day
+Sent
+
+0
+
+Inbox Rate
+
+—
+
+Bounce Rate
+
+—
+
+Spam Rate
+
+—
+
+DNS
+
+Issues
+
+Pacing
+
+1/29min
+And this place in deliverability page mustn't wait for campaign even manual sending should check cuz I've used the mailbox even if once or 10 billion times should still show naa
+
+
+And lastly lead recovery page still not working
+
+Lead Recovery Unavailable
+
+503: {"error":"Request Timeout","message":"The request took too long to complete. Please try again.","code":"REQUEST_TIMEOUT"}
+And the UI there shouldn't mention mongodb technical stuff tells them what it does when they recover leads etc
 
 ## 2. Interval Between Sends
 

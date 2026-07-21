@@ -10,7 +10,7 @@ import { validateCalendlyToken } from '@shared/lib/calendar/calendly.js';
 import { storage } from '@shared/lib/storage/storage.js';
 import { db } from '@shared/lib/db/db.js';
 import { users, calendarSettings, calendarBookings, calendarEvents, aiActionLogs } from '@audnix/shared';
-import { eq, desc } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
 import type { ChannelType } from '@shared/types.js';
 import { calendlyOAuth } from '@services/api-gateway/src/oauth/calendly.js';
 import { wsSync } from '@shared/lib/realtime/websocket-sync.js';
@@ -178,7 +178,7 @@ router.get('/ai-logs', requireAuthOrApiKey, async (req: Request, res: Response):
     const logs = await db
       .select()
       .from(aiActionLogs)
-      .where(eq(aiActionLogs.userId, userId))
+      .where(and(eq(aiActionLogs.userId, userId), eq(aiActionLogs.actionType, 'calendar_booking')))
       .orderBy(desc(aiActionLogs.createdAt))
       .limit(20);
 
