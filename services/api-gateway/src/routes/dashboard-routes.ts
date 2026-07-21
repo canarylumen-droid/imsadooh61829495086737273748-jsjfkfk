@@ -1305,7 +1305,22 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                 const isEnrolled = !!wm;
                 const warmupStatus = wm?.status || int.warmupStatus || 'none';
                 const isWarmingUp = wm?.status === 'active';
-                const dailyLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 10;
+                const baseLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 12;
+                // Same logic as scheduler-worker.ts — show what scheduler actually uses
+                let dailyLimit = baseLimit;
+                if (!hasActiveCampaigns) {
+                    dailyLimit = 12; // Baseline: ~12 warmup emails/day (10-15 range)
+                } else {
+                    dailyLimit = Math.max(1, Math.round(baseLimit * 0.20)); // 20% of cap when campaign active
+                }
+                // Apply ramp schedule matching warmup-config.ts
+                if (int.createdAt) {
+                    const ageDays = (Date.now() - new Date(int.createdAt).getTime()) / 86400000;
+                    if (ageDays <= 1) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.30));
+                    else if (ageDays <= 4) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.50));
+                    else if (ageDays <= 9) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.75));
+                    // day 10+: 100% of computed limit
+                }
                 const dailySentCount = wm?.dailySentCount || 0;
                 const dailyReceivedCount = wm?.dailyReceivedCount || 0;
                 const daysSinceConnected = int.createdAt
@@ -1323,9 +1338,9 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                     }
                 }
 
-                const warmupPercent = isWarmingUp && dailyLimit > 0
+                const warmupPercent = isEnrolled && dailyLimit > 0
                     ? Math.min(100, Math.round((dailySentCount / dailyLimit) * 100))
-                    : isEnrolled ? 100 : 0;
+                    : 0;
 
                 let reputationScore = 100;
                 if (totalSent > 0) {
@@ -1378,25 +1393,6 @@ router.post('/warmup/toggle', requireAuthOrApiKey, async (req: Request, res: Res
         }
 
         const newStatus = enabled ? 'active' : 'paused';
-
-        // Block enabling warmup if user has active campaigns
-        if (enabled) {
-            const activeCampaigns = await db
-                .select({ id: outreachCampaigns.id })
-                .from(outreachCampaigns)
-                .where(and(
-                    eq(outreachCampaigns.userId, userId),
-                    eq(outreachCampaigns.status, 'active')
-                ))
-                .limit(1);
-            if (activeCampaigns.length > 0) {
-                res.status(409).json({
-                    error: 'Active campaign running',
-                    message: 'Finish or pause your active campaign before enabling warmup. Warmup and campaigns share mailbox capacity.'
-                });
-                return;
-            }
-        }
 
         for (const id of mailboxIds) {
             try {

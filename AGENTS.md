@@ -1140,3 +1140,23 @@ All resolve automatically via socket `insights_updated` event. No polling.
   pm2 restart audnix-rust-email-sender audnix-api-gateway audnix-socket-server
   ```
 
+## This Session (Jul 21 2026) — Warmup Page Rewrite: Real Data, No Hardcode, Toggle Works, Daily Limit Matches Scheduler
+
+### Changes
+1. **Remove campaign block from warmup toggle** (`dashboard-routes.ts`): Deleted the `if (enabled)` check that returned 409 when campaigns were active. The scheduler already handles coexistence (20-25% of cap). Users can freely toggle warmup on/off regardless of campaign state.
+2. **Fix `warmupPercent` calculation** (`dashboard-routes.ts:1326-1328`): Changed from `isWarmingUp ? ... : isEnrolled ? 100 : 0` to `isEnrolled && dailyLimit > 0 ? Math.min(100, round(sent/limit)) : 0`. Paused-but-enrolled mailboxes no longer show 100% progress.
+3. **Daily limit matches scheduler** (`dashboard-routes.ts:1308-1324`): Replaced static `wm?.dailyLimit` read with dynamic calculation matching scheduler-worker.ts logic — 12 baseline (no campaign), 20% of cap (campaign active), ramp schedule applied (30% day1, 50% day2-4, 75% day5-9, 100% day10+).
+4. **"Fully Warmed" section requires `totalSent > 0`** (`warmup.tsx:660-670`): Filter changed from `warmupPercent >= 100` to `warmupPercent >= 100 && totalSent > 0`. Enrolled-but-paused mailboxes with 0 sends no longer appear as "Fully Warmed".
+5. **"Start All" → "Pause All" toggle** (`warmup.tsx:215-245`): Button now shows `Pause All` icon+text when any mailbox is active, `Start All` when all are paused. Removed the campaign-blocking tooltip/disabled button.
+6. **Per-mailbox Switch always clickable** (`warmup.tsx:528-552`): Removed the campaign-blocking conditional (TooltipProvider/disabled Switch). Switch is always active and toggles warmup directly.
+7. **`getStageLabel` handles 0%** (`warmup.tsx:127-133`): Added `pct <= 0` → "Not Started" so mailboxes with no sends show correct label instead of "Day 1-2: Warming Up".
+8. **Daily limit label** (`warmup.tsx:530`): Changed `{mb.dailyLimit} limit` → `/day`.
+
+### Files Changed
+- `services/api-gateway/src/routes/dashboard-routes.ts` — warmupPercent calc, dailyLimit calc matches scheduler, removed campaign block from toggle
+- `client/src/pages/dashboard/warmup.tsx` — Start All→Pause All, removed campaign UI checks, getStageLabel for 0%, Fully Warmed filter, daily limit label
+- `AGENTS.md` — this session entry
+
+### Deploy
+- Push to GitHub, pull on EC2, build client, restart API gateway
+
