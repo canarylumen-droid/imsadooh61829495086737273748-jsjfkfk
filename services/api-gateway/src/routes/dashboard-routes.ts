@@ -4,9 +4,9 @@ import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { getAIStatus } from "@services/brain-worker/src/ai-lib/core/ai-service.js";
 import { learnUserStyle } from "@services/brain-worker/src/ai-lib/context/personality-learner.js";
 import type { Lead, Message } from '@audnix/shared';
-import { warmupMailboxes } from '@audnix/shared';
+import { warmupMailboxes, outreachCampaigns } from '@audnix/shared';
 import { db } from '@shared/lib/db/db.js';
-import { eq } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { InstagramOAuth } from '@services/api-gateway/src/oauth/instagram.js';
 import { decrypt } from '@shared/lib/crypto/encryption.js';
 import dns from 'dns';
@@ -1285,6 +1285,20 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
             } catch (_) {}
         }
 
+        // Check if user has active campaigns (blocks warmup toggle)
+        let hasActiveCampaigns = false;
+        try {
+            const activeCampaigns = await db
+                .select({ id: outreachCampaigns.id })
+                .from(outreachCampaigns)
+                .where(and(
+                    eq(outreachCampaigns.userId, userId),
+                    eq(outreachCampaigns.status, 'active')
+                ))
+                .limit(1);
+            hasActiveCampaigns = activeCampaigns.length > 0;
+        } catch (_) {}
+
         for (const int of emailInts) {
             try {
                 const wm = wmByIntegration.get(int.id);
@@ -1336,6 +1350,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                     totalOpened,
                     totalSpam,
                     warmupStatus,
+                    hasActiveCampaigns,
                 });
             } catch (e: any) {
                 console.warn(`[Dashboard] Skipping mailbox ${int.id}: ${e.message}`);
@@ -1363,6 +1378,26 @@ router.post('/warmup/toggle', requireAuthOrApiKey, async (req: Request, res: Res
         }
 
         const newStatus = enabled ? 'active' : 'paused';
+
+        // Block enabling warmup if user has active campaigns
+        if (enabled) {
+            const activeCampaigns = await db
+                .select({ id: outreachCampaigns.id })
+                .from(outreachCampaigns)
+                .where(and(
+                    eq(outreachCampaigns.userId, userId),
+                    eq(outreachCampaigns.status, 'active')
+                ))
+                .limit(1);
+            if (activeCampaigns.length > 0) {
+                res.status(409).json({
+                    error: 'Active campaign running',
+                    message: 'Finish or pause your active campaign before enabling warmup. Warmup and campaigns share mailbox capacity.'
+                });
+                return;
+            }
+        }
+
         for (const id of mailboxIds) {
             try {
                 await storage.updateIntegrationById(id, { warmupStatus: newStatus } as any);

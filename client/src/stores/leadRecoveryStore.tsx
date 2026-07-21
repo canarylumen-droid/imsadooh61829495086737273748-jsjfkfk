@@ -96,7 +96,15 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       const res = await apiRequest("GET", "/api/lead-recovery/status");
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        throw new Error(err.error || err.message || `HTTP ${res.status}`);
+        const msg = err.error || err.message || `HTTP ${res.status}`;
+        if (res.status === 403 && msg === 'Pro plan required') {
+          setError('Lead Recovery is available on Pro and Enterprise plans. Upgrade to unlock.');
+        } else if (res.status === 403) {
+          setError(msg);
+        } else {
+          throw new Error(msg);
+        }
+        return;
       }
       const data = await res.json();
       setError(null);

@@ -21,6 +21,10 @@ function LeadRecoveryContent() {
 
   useEffect(() => {
     store.loadAll().catch(() => undefined);
+    const retryTimer = setTimeout(() => {
+      if (store.error) store.loadAll().catch(() => undefined);
+    }, 3000);
+    return () => clearTimeout(retryTimer);
   }, []);
 
   const syncingMailboxes = store.mailboxDetails.filter((mailbox) => mailbox.syncStatus === "queued" || mailbox.syncStatus === "syncing").length;

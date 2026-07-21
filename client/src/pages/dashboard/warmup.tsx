@@ -13,11 +13,14 @@ import { useMailbox } from "@/hooks/use-mailbox";
 import { MailboxSwitcher } from "@/components/outreach/MailboxSwitcher";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import {
+  Tooltip as UITooltip, TooltipContent, TooltipProvider, TooltipTrigger
+} from "@/components/ui/tooltip";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from "recharts";
 import {
   Shield, Mail, Clock, AlertTriangle, CheckCircle2, Thermometer,
   Loader2, Play, Plus, Search, ChevronDown, Activity,
-  TrendingUp, BarChart3, Sparkles
+  TrendingUp, BarChart3, Sparkles, Info
 } from "lucide-react";
 
 interface MailboxWarmup {
@@ -37,6 +40,7 @@ interface MailboxWarmup {
   totalOpened: number;
   totalSpam: number;
   warmupStatus: string;
+  hasActiveCampaigns?: boolean;
 }
 
 const ITEMS_PER_PAGE = 20;
@@ -144,7 +148,14 @@ export default function WarmupPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/warmup-status"] });
       toast({ title: "Warmup Updated", description: "Mailbox warmup settings saved." });
     },
-    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" })
+    onError: (err: any) => {
+      const msg = err?.message || '';
+      if (msg.includes('Active campaign running') || msg.includes('409')) {
+        toast({ title: "Active Campaign Running", description: "Finish or pause your active campaign before enabling warmup.", variant: "destructive" });
+      } else {
+        toast({ title: "Failed", description: msg, variant: "destructive" });
+      }
+    }
   });
 
   const handleToggleAll = (enabled: boolean) => {
@@ -201,15 +212,37 @@ export default function WarmupPage() {
               : warmupStatuses.length > 0 ? "Warmup paused" : "—"}
           </Badge>
           {warmupStatuses.length > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="rounded-xl gap-2"
-              onClick={() => handleToggleAll(true)}
-              disabled={toggleWarmupMutation.isPending}
-            >
-              <Play className="h-3.5 w-3.5" /> Start All
-            </Button>
+            warmupStatuses.some(m => m.hasActiveCampaigns) ? (
+              <TooltipProvider>
+                <UITooltip>
+                  <TooltipTrigger asChild>
+                    <span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="rounded-xl gap-2 opacity-50 cursor-not-allowed"
+                        disabled={true}
+                      >
+                        <Play className="h-3.5 w-3.5" /> Start All
+                      </Button>
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[220px] text-xs">
+                    <p>Finish active campaigns first. Warmup and campaigns share mailbox capacity.</p>
+                  </TooltipContent>
+                </UITooltip>
+              </TooltipProvider>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="rounded-xl gap-2"
+                onClick={() => handleToggleAll(true)}
+                disabled={toggleWarmupMutation.isPending}
+              >
+                <Play className="h-3.5 w-3.5" /> Start All
+              </Button>
+            )
           )}
         </div>
       </div>
@@ -320,7 +353,7 @@ export default function WarmupPage() {
                     axisLine={false}
                     width={30}
                   />
-                  <Tooltip
+                  <RechartsTooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--card))',
                       borderColor: 'hsl(var(--border))',
@@ -492,12 +525,32 @@ export default function WarmupPage() {
                     {/* Mailbox Info */}
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Switch
-                          checked={warmupEnabled}
-                          onCheckedChange={() => handleToggleMailbox(mb.mailboxId, mb.warmupStatus)}
-                          disabled={toggleWarmupMutation.isPending}
-                          className="scale-75 origin-left shrink-0"
-                        />
+                        {mb.hasActiveCampaigns && !warmupEnabled ? (
+                          <TooltipProvider>
+                            <UITooltip>
+                              <TooltipTrigger asChild>
+                                <div className="relative">
+                                  <Switch
+                                    checked={warmupEnabled}
+                                    disabled={true}
+                                    className="scale-75 origin-left shrink-0 opacity-50"
+                                  />
+                                  <Info className="absolute -top-1 -right-1 h-2.5 w-2.5 text-amber-500" />
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[220px] text-xs">
+                                <p>Finish your active campaign first. Warmup and campaigns share mailbox capacity.</p>
+                              </TooltipContent>
+                            </UITooltip>
+                          </TooltipProvider>
+                        ) : (
+                          <Switch
+                            checked={warmupEnabled}
+                            onCheckedChange={() => handleToggleMailbox(mb.mailboxId, mb.warmupStatus)}
+                            disabled={toggleWarmupMutation.isPending}
+                            className="scale-75 origin-left shrink-0"
+                          />
+                        )}
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{mb.email}</p>
                           <p className="text-[10px] text-muted-foreground truncate">
