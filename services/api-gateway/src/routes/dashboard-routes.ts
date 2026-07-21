@@ -1261,7 +1261,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
 
         // Single grouped query for warmup interactions — replaces N+1 per mailbox
         const enrolledIds = allWarmup.filter(w => w.id).map(w => w.id);
-        let interactionStats = new Map<string, { sent: number; bounced: number; opened: number }>();
+        let interactionStats = new Map<string, { sent: number; bounced: number; opened: number; spam: number }>();
         if (enrolledIds.length > 0) {
             try {
                 const agg = await db.select({

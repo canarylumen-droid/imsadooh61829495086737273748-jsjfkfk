@@ -1833,6 +1833,7 @@ export const warmupInteractions = pgTable("warmup_interactions", {
   xAudnixWarmup: boolean("x_audnix_warmup").notNull().default(true),
   expungedFromSent: boolean("expunged_from_sent").notNull().default(false),
   movedToHiddenFolder: boolean("moved_to_hidden_folder").notNull().default(false),
+  placement: text("placement", { enum: ["unknown", "inbox", "spam", "promotions"] }).notNull().default("unknown"),
   status: text("status", { enum: ["pending", "sent", "delivered", "failed", "bounced", "expunged"] }).notNull().default("pending"),
   errorMessage: text("error_message"),
   sentAt: timestamp("sent_at"),

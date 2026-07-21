@@ -37,9 +37,9 @@ export async function waitForMxBatchResult(
 
   while (Date.now() < deadline) {
     const result = await redis.brPop(MX_BATCH_RESULT_QUEUE, 1);
-    if (result) {
+    if (result && result.element) {
       try {
-        const data: MxBatchResult = JSON.parse(result[1]);
+        const data: MxBatchResult = JSON.parse(result.element);
         if (data.batch_id === batchId) {
           return data.results;
         }
