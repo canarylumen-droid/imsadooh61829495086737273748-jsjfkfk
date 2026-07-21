@@ -265,7 +265,7 @@ export default function CalendarPage() {
 
   const calendarPollMs = isConnected ? 300000 : 15000;
 
-  const { data: eventsData } = useQuery<{ events: Array<{ id: string; title?: string; summary?: string; startTime?: string; start?: { dateTime?: string }; endTime?: string; end?: { dateTime?: string }; meetingUrl?: string; hangoutLink?: string; isAiBooked?: boolean; leadName?: string | null }> }>({
+  const { data: eventsData, isError: eventsError } = useQuery<{ events: Array<{ id: string; title?: string; summary?: string; startTime?: string; start?: { dateTime?: string }; endTime?: string; end?: { dateTime?: string }; meetingUrl?: string; hangoutLink?: string; isAiBooked?: boolean; leadName?: string | null }> }>({
     queryKey: ["/api/oauth/google-calendar/events"],
     retry: 3,
     refetchInterval: calendarPollMs,
@@ -974,7 +974,15 @@ export default function CalendarPage() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-white">Google Calendar</p>
-                    <p className="text-[10px] text-emerald-400">{settings?.googleCalendarEnabled ? 'Connected' : 'Not connected'}</p>
+                    {settings?.googleCalendarEnabled ? (
+                      eventsError ? (
+                        <p className="text-[10px] text-amber-400">Reconnect needed — token expired</p>
+                      ) : (
+                        <p className="text-[10px] text-emerald-400">Connected</p>
+                      )
+                    ) : (
+                      <p className="text-[10px] text-white/40">Not connected</p>
+                    )}
                   </div>
                 </div>
                 {settings?.googleCalendarEnabled ? (
@@ -1165,7 +1173,15 @@ export default function CalendarPage() {
                     </div>
                     <div>
                       <p className="text-sm font-medium text-white">Google Calendar</p>
-                      <p className="text-[10px] text-white/40">{settings?.googleCalendarEnabled ? 'Connected' : 'Not connected'}</p>
+                      {settings?.googleCalendarEnabled ? (
+                        eventsError ? (
+                          <p className="text-[10px] text-amber-400">Reconnect needed</p>
+                        ) : (
+                          <p className="text-[10px] text-emerald-400">Connected</p>
+                        )
+                      ) : (
+                        <p className="text-[10px] text-white/40">Not connected</p>
+                      )}
                     </div>
                   </div>
                   {settings?.googleCalendarEnabled ? (

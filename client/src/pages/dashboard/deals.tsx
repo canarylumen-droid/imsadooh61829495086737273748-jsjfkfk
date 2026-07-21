@@ -141,7 +141,11 @@ export default function DealsPage() {
     return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric" });
   };
 
+  const [isSyncing, setIsSyncing] = useState(false);
+
   const syncDeals = async () => {
+    if (isSyncing) return;
+    setIsSyncing(true);
     try {
       const res = await apiRequest('POST', '/api/deals/sync');
       const data = await res.json();
@@ -157,6 +161,8 @@ export default function DealsPage() {
         description: "Could not refine deals with AI.",
         variant: "destructive"
       });
+    } finally {
+      setIsSyncing(false);
     }
   };
 
@@ -234,8 +240,8 @@ export default function DealsPage() {
           <Button variant="outline" onClick={exportDeals}>
             <Download className="mr-2 h-4 w-4" /> Export
           </Button>
-          <Button onClick={syncDeals} className="bg-primary/20 text-primary border-primary/30 hover:bg-primary/30">
-            <Sparkles className="mr-2 h-4 w-4" /> Refine with AI
+          <Button onClick={syncDeals} disabled={isSyncing} className="bg-primary/20 text-primary border-primary/30 hover:bg-primary/30">
+            <Sparkles className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} /> {isSyncing ? 'Analyzing...' : 'Refine with AI'}
           </Button>
           <Button onClick={() => {}}>
             <Plus className="mr-2 h-4 w-4" /> Add Deal

@@ -130,6 +130,30 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [activeVarField, setActiveVarField] = useState("body");
   const [launchProgress, setLaunchProgress] = useState<{ id: string; name: string; sent: number; total: number; status: string } | null>(null);
 
+  // Unsubscribe config
+  const [unsubscribeMethods, setUnsubscribeMethods] = useState<string[]>(["link", "header"]);
+  const [unsubscribeApplyTo, setUnsubscribeApplyTo] = useState<string>("both");
+
+  const unsubscribeOptions = [
+    { value: "link", label: "Link in email", desc: "Appends {{unsubscribe_link}} footer" },
+    { value: "header", label: "List-Unsubscribe header", desc: "Gmail/Outlook native button" },
+    { value: "reply", label: "Reply opt-out", desc: "AI marks as unsubscribed on reply" },
+    { value: "none", label: "No unsubscribe", desc: "Skip all unsubscribe (risk of spam complaints)" },
+  ];
+
+  const toggleUnsubscribeMethod = (val: string) => {
+    if (val === "none") {
+      setUnsubscribeMethods(["none"]);
+      return;
+    }
+    const next = unsubscribeMethods.filter(m => m !== "none");
+    if (next.includes(val)) {
+      setUnsubscribeMethods(next.filter(m => m !== val));
+    } else {
+      setUnsubscribeMethods([...next, val]);
+    }
+  };
+
   // Fetch only email mailboxes (not calendar/instagram) — reduces payload from 500-item full list
   const { data: integrations = [] } = useQuery<any[]>({
     queryKey: ['/api/integrations', { provider: 'custom_email,gmail,outlook', connected: 'true' }],
@@ -422,7 +446,11 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
             isBreakup: f.isBreakup
           })) : [],
           autoReply: { body: aiAutonomousMode ? '' : autoReplyBody },
-          autoReplyBody: aiAutonomousMode ? '' : autoReplyBody
+          autoReplyBody: aiAutonomousMode ? '' : autoReplyBody,
+          unsubscribe: unsubscribeMethods.includes("none") ? { method: "none" } : {
+            method: unsubscribeMethods,
+            applyTo: unsubscribeApplyTo
+          }
         }
       });
 
@@ -1346,10 +1374,52 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                               </div>
                          </TabsContent>
                           )}
-                       </Tabs>
-                     </motion.div>
-                   )}
-                   {step === 3 && launchProgress && (
+                        </Tabs>
+
+                        {/* Unsubscribe Settings */}
+                        <div className="p-5 rounded-xl border border-border/20 bg-card/50">
+                          <div className="flex items-center gap-2 mb-4">
+                            <Mail className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Unsubscribe</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+                            {unsubscribeOptions.map(opt => (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => toggleUnsubscribeMethod(opt.value)}
+                                className={`p-3 rounded-xl text-left border text-[10px] font-semibold transition-all ${
+                                  unsubscribeMethods.includes(opt.value) || (opt.value === "none" && unsubscribeMethods.includes("none"))
+                                    ? "bg-primary/10 border-primary/30 text-primary"
+                                    : "bg-muted/5 border-border/20 text-muted-foreground hover:border-border/40"
+                                }`}
+                              >
+                                <div className="text-xs font-bold mb-0.5">
+                                  {opt.value === "link" ? "Link" : opt.value === "header" ? "Header" : opt.value === "reply" ? "Reply" : "None"}
+                                </div>
+                                <div className="opacity-60 leading-tight">{opt.desc}</div>
+                              </button>
+                            ))}
+                          </div>
+                          {!unsubscribeMethods.includes("none") && unsubscribeMethods.length > 0 && (
+                            <div className="flex items-center gap-3">
+                              <span className="text-[9px] font-bold uppercase tracking-widest opacity-40">Apply to</span>
+                              <Select value={unsubscribeApplyTo} onValueChange={setUnsubscribeApplyTo}>
+                                <SelectTrigger className="h-8 w-[180px] text-[11px]">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="initial">Initial email only</SelectItem>
+                                  <SelectItem value="followups">Follow-ups only</SelectItem>
+                                  <SelectItem value="both">All emails</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                    {step === 3 && launchProgress && (
                      <motion.div key="step3" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6 py-4">
                        <div className="p-6 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-center space-y-3">
                          <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto">

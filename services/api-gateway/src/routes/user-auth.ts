@@ -1218,5 +1218,103 @@ router.patch('/config', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+/**
+ * Google Sign-In: accepts a Google ID token (JWT), verifies it,
+ * and creates/logs in the user.
+ */
+router.post('/google', authLimiter, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { credential } = req.body as { credential?: string };
+    if (!credential) {
+      res.status(400).json({ error: 'Google credential required' });
+      return;
+    }
+
+    const { OAuth2Client } = await import('google-auth-library');
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId) {
+      res.status(500).json({ error: 'Google auth not configured' });
+      return;
+    }
+
+    const client = new OAuth2Client(clientId);
+    const ticket = await client.verifyIdToken({
+      idToken: credential,
+      audience: clientId,
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload || !payload.email) {
+      res.status(400).json({ error: 'Invalid Google token' });
+      return;
+    }
+
+    const googleEmail = payload.email;
+    const googleName = payload.name || payload.email.split('@')[0];
+    const googleAvatar = payload.picture || undefined;
+
+    // Find existing user or create new one
+    let user = await storage.getUserByEmail(googleEmail);
+
+    if (!user) {
+      // Create user with Google sign-in (no password needed)
+      const tempUsername = googleEmail.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '_') + '_' + Date.now();
+      user = await storage.createUser({
+        email: googleEmail,
+        name: googleName,
+        avatar: googleAvatar,
+        username: tempUsername,
+        password: '',  // No password — Google sign-in only
+        plan: 'free',
+        metadata: {
+          googleSignIn: true,
+          googleSignInAt: new Date().toISOString()
+        }
+      });
+    }
+
+    // Set session
+    try {
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((err) => {
+          if (err) { reject(err); return; }
+          resolve();
+        });
+      });
+    } catch { /* best-effort */ }
+
+    req.session.userId = user.id;
+    req.session.email = googleEmail;
+    req.session.isAdmin = false;
+    if (req.session.cookie) {
+      req.session.cookie.maxAge = 30 * 24 * 60 * 60 * 1000;
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) { reject(err); return; }
+        resolve();
+      });
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    res.json({
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        username: user.username,
+        avatar: user.avatar,
+        plan: user.plan,
+      }
+    });
+  } catch (error: any) {
+    console.error('Google sign-in error:', error);
+    res.status(500).json({ error: error.message || 'Google sign-in failed' });
+  }
+});
+
 export default router;
 

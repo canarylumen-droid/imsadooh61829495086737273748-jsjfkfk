@@ -6,7 +6,7 @@ import {
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 import { domainClusterEngine } from './domain-cluster.js';
 import { seedFleetManager } from './seed-fleet-manager.js';
-import { detectProvider } from '../lib/provider-utils.js';
+import { detectProvider, ProviderCategory } from '../lib/provider-utils.js';
 import type { DomainAnchorMode, AnchorRole } from '../types/warmup-types.js';
 
 export class AnchorEngine {
@@ -67,6 +67,35 @@ export class AnchorEngine {
       await this.assignMembersToAnchors(domain, orgId, allAnchorIds);
 
       await this.unpauseMembers(domain, orgId);
+      return;
+    }
+
+    // Check if domain has only custom_email mailboxes — they don't need same-domain anchors.
+    // Custom SMTP mailboxes can warm up independently by pairing with platform seeds or
+    // cross-domain Gmail/Outlook partners. No need to pause them.
+    const allDomainMailboxes = await db
+      .select({ provider: warmupMailboxes.provider })
+      .from(warmupMailboxes)
+      .where(
+        and(
+          eq(warmupMailboxes.registeredDomain, domain),
+          orgId ? eq(warmupMailboxes.organizationId, orgId) : isNull(warmupMailboxes.organizationId)
+        )
+      );
+    const allCustom = allDomainMailboxes.length > 0 && allDomainMailboxes.every(m => m.provider === 'custom_email');
+    if (allCustom) {
+      await db
+        .update(warmupDomainClusters)
+        .set({
+          isHealthy: true,
+          mode: 'internal_only',
+        })
+        .where(
+          and(
+            eq(warmupDomainClusters.registeredDomain, domain),
+            orgId ? eq(warmupDomainClusters.organizationId, orgId) : isNull(warmupDomainClusters.organizationId)
+          )
+        );
       return;
     }
 

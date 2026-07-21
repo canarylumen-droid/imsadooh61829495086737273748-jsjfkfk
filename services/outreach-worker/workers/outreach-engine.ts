@@ -1090,28 +1090,41 @@ export class OutreachEngine {
         console.warn(`[OutreachEngine] Failed to fetch threading headers for lead ${lead.id}:`, threadErr);
       }
 
-      // Unsubscribe handling — replace variables and ensure opt-out footer
-      const unsubscribeLink = `${senderEmail ? `https://${senderEmail.split('@')[1]}` : (process.env.PUBLIC_URL || 'https://audnixai.com')}/api/unsubscribe/${lead.id}`;
-      body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
-      body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
-      const lowerBody = body.toLowerCase();
-      if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
-        body += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
+      // Unsubscribe handling — respect campaign config
+      const unsubConfig = template?.unsubscribe;
+      const isUnsubDisabled = unsubConfig?.method === "none";
+      const isUnsubStep = !unsubConfig || !unsubConfig.applyTo || unsubConfig.applyTo === "both" ||
+        (leadEntry.currentStep === 0 && (unsubConfig.applyTo === "initial" || unsubConfig.applyTo === "both")) ||
+        (leadEntry.currentStep > 0 && (unsubConfig.applyTo === "followups" || unsubConfig.applyTo === "both"));
+      const skipUnsubLink = isUnsubDisabled || !isUnsubStep || !(unsubConfig?.method?.includes?.("link") ?? true);
+      const skipUnsubHeader = isUnsubDisabled || !isUnsubStep || !(unsubConfig?.method?.includes?.("header") ?? true);
+
+      if (!isUnsubDisabled) {
+        const unsubscribeLink = `${senderEmail ? `https://${senderEmail.split('@')[1]}` : (process.env.PUBLIC_URL || 'https://audnixai.com')}/api/unsubscribe/${lead.id}`;
+        body = body.replace(/\{\{unsubscribe_link\}\}/g, unsubscribeLink);
+        body = body.replace(/\{\{unsubscribe\}\}/g, unsubscribeLink);
+        if (!skipUnsubLink) {
+          const lowerBody = body.toLowerCase();
+          if (!lowerBody.includes('unsubscribe') && !lowerBody.includes('opt out') && !lowerBody.includes('stop receiving')) {
+            body += `\n\n---\n<p style="color: #666; font-size: 11px;">Don't want to hear from me again? <a href="${unsubscribeLink}">Unsubscribe here</a></p>`;
+          }
+        }
       }
 
       await sendEmail(userId, lead.email, body, subject, {
         isRaw: true,
-        isHtml: true, // Force HTML for tracking pixel/links
+        isHtml: true,
         trackingId: campaign.config?.isManual ? undefined : trackingId,
         campaignId: campaign.id,
         leadId: lead.id,
-        integrationId, // Use the rotated mailbox
+        integrationId,
         allowedIntegrationIds: campaign.config?.mailboxIds,
         isPriorityReply,
         inReplyTo,
         references,
         threadId,
-        replyTo: campaign.config?.replyTo
+        replyTo: campaign.config?.replyTo,
+        skipListUnsubscribeHeader: skipUnsubHeader
       });
       // Track send + recalculate reputation so dashboard stays accurate
       import('@services/email-service/src/email/provider-reputation.js').then(({ recordProviderOutcome, recalculateProviderReputation }) => {

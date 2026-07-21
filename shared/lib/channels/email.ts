@@ -299,7 +299,8 @@ async function sendCustomSMTP(
   inReplyTo?: string,
   references?: string,
   replyTo?: string,
-  leadId?: string
+  leadId?: string,
+  skipListUnsubscribeHeader?: boolean
 ): Promise<{ messageId: string }> {
   const nodemailer = await import('nodemailer');
   const dns = await import('dns');
@@ -396,7 +397,9 @@ async function sendCustomSMTP(
         smtpPools.set(cacheKey, transporter);
       }
 
-      const info = await transporter.sendMail({
+      const senderDomain = config.smtp_user?.includes('@') ? config.smtp_user.split('@')[1] : null;
+
+      const mailOptions: any = {
         from: fromAddress,
         to,
         subject,
@@ -405,7 +408,20 @@ async function sendCustomSMTP(
         ...(inReplyTo && { inReplyTo }),
         ...(references && { references }),
         ...(replyTo && { replyTo })
-      });
+      };
+
+      // List-Unsubscribe header for MUA native unsubscribe button
+      if (leadId && senderDomain && !skipListUnsubscribeHeader) {
+        const appUrl = `https://${senderDomain}`;
+        const unsubscribeUrl = `${appUrl}/api/unsubscribe/${leadId}`;
+        const unsubscribeEmail = `unsubscribe@${senderDomain}`;
+        mailOptions.headers = {
+          'List-Unsubscribe': `<${unsubscribeUrl}>, <mailto:${unsubscribeEmail}?subject=unsubscribe>`,
+          'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+        };
+      }
+
+      const info = await transporter.sendMail(mailOptions);
 
       // If we reach here, it worked!
       smtpLog.info('SMTP send succeeded', { to, attempt: attempt + 1, messageId: info.messageId, provider: providerName });
@@ -414,7 +430,7 @@ async function sendCustomSMTP(
       // Attempt to save to "Sent" folder via background IMAP connection
       // We DO NOT await this because it can be slow and shouldn't block the actual email delivery
       try {
-        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId, inReplyTo, references, replyTo, leadId);
+        const rawMessage = createMimeMessage(fromAddress || '', to, subject, emailBody, isHtml, messageId, inReplyTo, references, replyTo, leadId, undefined, skipListUnsubscribeHeader);
         
         const backgroundAppend = async () => {
           try {
@@ -765,6 +781,8 @@ export interface EmailOptions {
   replyTo?: string;
   /** When true, this is a test/verification send — never processed as a lead reply */
   isTest?: boolean;
+  /** When true, omits List-Unsubscribe header from MIME message */
+  skipListUnsubscribeHeader?: boolean;
 }
 
 /**
@@ -965,7 +983,8 @@ export async function sendEmail(
         options.inReplyTo,
         options.references,
         options.replyTo,
-        options.leadId
+        options.leadId,
+        options.skipListUnsubscribeHeader
       )
     );
 
@@ -1103,7 +1122,8 @@ export async function sendEmail(
         options.references,
         options.threadId,
         options.replyTo,
-        options.leadId
+        options.leadId,
+        options.skipListUnsubscribeHeader
       );
       if (result && result.messageId && !options.isTest) {
         // Create tracking record AFTER successful send (not before)
@@ -1154,7 +1174,8 @@ export async function sendEmail(
         trackingId,
         options.inReplyTo,
         options.references,
-        options.replyTo
+        options.replyTo,
+        options.skipListUnsubscribeHeader
       );
       // Outlook/Microsoft Graph returns HTTP 202 with no messageId — generate one
       const outlookMessageId = result?.messageId || `outlook-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -1227,11 +1248,12 @@ async function sendGmailMessage(
   references?: string,
   threadId?: string,
   replyTo?: string,
-  leadId?: string
+  leadId?: string,
+  skipListUnsubscribeHeader?: boolean
 ): Promise<{ messageId: string }> {
   const emailBody = body;
 
-  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml, undefined, inReplyTo, references, replyTo, leadId);
+  const message = createMimeMessage(credentials.email, to, subject, emailBody, isHtml, undefined, inReplyTo, references, replyTo, leadId, undefined, skipListUnsubscribeHeader);
   const encodedMessage = Buffer.from(message).toString('base64url');
 
   const bodyData: any = {
@@ -1271,7 +1293,8 @@ async function sendOutlookMessage(
   trackingId?: string,
   inReplyTo?: string,
   references?: string,
-  replyTo?: string
+  replyTo?: string,
+  skipListUnsubscribeHeader?: boolean
 ): Promise<{ messageId: string }> {
   const emailBody = body;
 
@@ -1314,6 +1337,17 @@ async function sendOutlookMessage(
       value: replyTo
     });
   }
+  // List-Unsubscribe header for MUA native unsubscribe button
+  if (credentials.email && !skipListUnsubscribeHeader) {
+    const senderDomain = credentials.email.includes('@') ? credentials.email.split('@')[1] : null;
+    if (senderDomain) {
+      const appUrl = `https://${senderDomain}`;
+      internetMessageHeaders.push(
+        { name: "List-Unsubscribe", value: `<mailto:unsubscribe@${senderDomain}?subject=unsubscribe>` },
+        { name: "List-Unsubscribe-Post", value: "List-Unsubscribe=One-Click" }
+      );
+    }
+  }
   if (internetMessageHeaders.length > 0) {
     bodyData.message.internetMessageHeaders = internetMessageHeaders;
   }
@@ -1351,7 +1385,8 @@ function createMimeMessage(
   references?: string,
   replyTo?: string,
   leadId?: string,
-  trackingId?: string
+  trackingId?: string,
+  skipListUnsubscribeHeader?: boolean
 ): string {
   const boundary = '----=_Part_' + Date.now();
 
@@ -1387,12 +1422,16 @@ function createMimeMessage(
     `Content-Type: multipart/alternative; boundary="${boundary}"`,
     `Date: ${new Date().toUTCString()}`,
     messageId ? `Message-ID: ${messageId}` : `Message-ID: <${Date.now()}@${senderDomain}>`,
-    // List-Unsubscribe: web URL (Gmail/Outlook native button) + mailto fallback (RFC compliance)
-    leadId
-      ? `List-Unsubscribe: <${unsubscribeUrl}>, <mailto:${unsubscribeEmail}?subject=unsubscribe>`
-      : `List-Unsubscribe: <mailto:${unsubscribeEmail}?subject=unsubscribe>`,
-    `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
   ];
+
+  if (!skipListUnsubscribeHeader) {
+    headers.push(
+      leadId
+        ? `List-Unsubscribe: <${unsubscribeUrl}>, <mailto:${unsubscribeEmail}?subject=unsubscribe>`
+        : `List-Unsubscribe: <mailto:${unsubscribeEmail}?subject=unsubscribe>`,
+      `List-Unsubscribe-Post: List-Unsubscribe=One-Click`,
+    );
+  }
 
   if (inReplyTo) {
     headers.push(`In-Reply-To: ${inReplyTo}`);

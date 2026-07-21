@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Check, Shield, Lock, Eye, EyeOff, Mail, Loader2, ArrowRight, User as UserIcon } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useUser } from "@/hooks/use-user";
 import { queryClient } from "@/lib/queryClient";
@@ -68,9 +68,6 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [resendCountdown, setResendCountdown] = useState(0);
   const [showRedirectPopup, setShowRedirectPopup] = useState(false);
-  const [showResetOption, setShowResetOption] = useState(false);
-  const [resetUsed, setResetUsed] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
   const [otpEnabled, setOtpEnabled] = useState(false); // Default false until server confirms
 
   // Forgot password state
@@ -80,6 +77,78 @@ export default function AuthPage() {
   const [forgotOtp, setForgotOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
+
+  // Google Sign-In state
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+
+  // Load Google Identity Services script
+  const gsiInitializedRef = useRef(false);
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || (window as any).google?.accounts || !googleClientId) return;
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+    return () => { document.body.removeChild(script); };
+  }, []);
+
+  // Render Google Sign-In button when GSI loads
+  useEffect(() => {
+    if (!googleClientId) return;
+    const checkGsi = () => {
+      if ((window as any).google?.accounts?.id && googleButtonRef.current) {
+        if (!gsiInitializedRef.current) {
+          (window as any).google.accounts.id.initialize({
+            client_id: googleClientId,
+          callback: handleGoogleCredential,
+          cancel_on_tap_outside: false,
+        });
+        (window as any).google.accounts.id.renderButton(googleButtonRef.current, {
+          theme: 'outline',
+          size: 'large',
+          width: '100%',
+          text: 'signin_with',
+          shape: 'rectangular',
+          logo_alignment: 'left',
+        });
+        gsiInitializedRef.current = true;
+      }
+    }
+    };
+    // Retry a few times in case GSI loads late
+    const interval = setInterval(checkGsi, 300);
+    const timeout = setTimeout(() => clearInterval(interval), 10000);
+    return () => { clearInterval(interval); clearTimeout(timeout); };
+  }, [isLogin]);
+
+  const handleGoogleCredential = async (response: any) => {
+    if (!response?.credential) return;
+    setGoogleLoading(true);
+    try {
+      const res = await fetch('/api/user/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ credential: response.credential }),
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.success) {
+        queryClient.invalidateQueries({ queryKey: ['user'] });
+        toast({ title: 'Welcome!', description: 'Signed in with Google' });
+        setTimeout(() => setLocation('/dashboard'), 500);
+      } else {
+        toast({ title: 'Sign-in Failed', description: data.error || 'Could not sign in with Google', variant: 'destructive' });
+      }
+    } catch (err: any) {
+      toast({ title: 'Error', description: err?.message || 'Google sign-in failed', variant: 'destructive' });
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleForgotRequest = async () => {
     if (!forgotEmail) {
@@ -186,76 +255,6 @@ export default function AuthPage() {
       });
     } finally {
       setForgotLoading(false);
-    }
-  };
-
-  // Check if reset was already used for this email
-  useEffect(() => {
-    if (email && email.includes('@')) {
-      const resetKey = `audnix_reset_used_${email.toLowerCase()}`;
-      const wasReset = localStorage.getItem(resetKey);
-      setResetUsed(!!wasReset);
-      setShowResetOption(!wasReset && isLogin);
-    } else {
-      setShowResetOption(false);
-    }
-  }, [email, isLogin]);
-
-  // Self-service account reset handler
-  const handleSelfReset = async () => {
-    if (!email || !email.includes('@')) {
-      toast({
-        title: "Email Required",
-        description: "Enter your email first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setResetLoading(true);
-    try {
-      const response = await fetch('/api/user/auth/reset-account', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-        credentials: 'include',
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
-        // Mark as used in localStorage (one-time use)
-        const resetKey = `audnix_reset_used_${email.toLowerCase()}`;
-        localStorage.setItem(resetKey, new Date().toISOString());
-        setResetUsed(true);
-        setShowResetOption(false);
-
-        toast({
-          title: "Account Reset",
-          description: data.action === 'signup'
-            ? "You can now sign up fresh"
-            : "Login with your password to start fresh",
-        });
-
-        // Switch to signup mode
-        setIsLogin(false);
-        setSignupStep(1);
-        setPassword("");
-      } else {
-        toast({
-          title: "Reset Failed",
-          description: data.error || "Could not reset account",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to reset account",
-        variant: "destructive",
-      });
-    } finally {
-      setResetLoading(false);
     }
   };
 
@@ -945,6 +944,26 @@ export default function AuthPage() {
                     </div>
                   </div>
 
+                  {googleClientId && googleLoading ? (
+                    <Button disabled className="w-full h-11 bg-white/5 border border-white/10 text-white/60">
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                      Signing in...
+                    </Button>
+                  ) : googleClientId ? (
+                    <div ref={googleButtonRef} className="w-full [&>div]:!w-full [&>div>div]:!w-full [&>div>div>iframe]:!w-full [&>div>div>iframe]:!h-11" />
+                  ) : null}
+
+                  {googleClientId && (
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-white/10" />
+                      </div>
+                      <div className="relative flex justify-center text-xs">
+                        <span className="bg-card/50 px-2 text-white/40">or sign in with email</span>
+                      </div>
+                    </div>
+                  )}
+
                   <Button
                     onClick={handleLogin}
                     disabled={loading}
@@ -953,22 +972,6 @@ export default function AuthPage() {
                     {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
                     Sign In
                   </Button>
-
-                  {showResetOption && (
-                    <div className="pt-4 border-t border-white/10 text-center">
-                      <p className="text-xs text-muted-foreground mb-2">Trouble logging in?</p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={handleSelfReset}
-                        disabled={resetLoading}
-                        className="text-xs text-primary hover:text-primary/80 hover:bg-primary/10"
-                      >
-                        {resetLoading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-                        Reset this account (Clear previous data)
-                      </Button>
-                    </div>
-                  )}
 
                   {isDedicatedPage && (
                     <div className="text-center pt-2">

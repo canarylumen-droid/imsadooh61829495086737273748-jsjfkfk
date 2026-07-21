@@ -41,7 +41,33 @@ router.get('/settings', requireAuthOrApiKey, async (req: Request, res: Response)
 
     const integrations = await storage.getIntegrations(userId);
     const calendlyIntegration = integrations.find(i => i.provider === 'calendly' && i.connected);
-    const googleIntegration = integrations.find(i => i.provider === 'google_calendar' && i.connected);
+    let googleIntegration = integrations.find(i => i.provider === 'google_calendar' && i.connected);
+
+    // Validate Google Calendar token health — if token refresh fails, auto-disconnect
+    if (googleIntegration) {
+      try {
+        const { decrypt } = await import('@shared/lib/crypto/encryption.js');
+        const decrypted = await decrypt(googleIntegration.encryptedMeta || '');
+        const tokens = JSON.parse(decrypted);
+        if (tokens.expiresAt && new Date(tokens.expiresAt) < new Date() && tokens.refreshToken) {
+          const { googleCalendarOAuth } = await import('@services/api-gateway/src/oauth/google-calendar.js');
+          const refreshed = await googleCalendarOAuth.refreshAccessToken(tokens.refreshToken);
+          if (refreshed?.accessToken) {
+            tokens.accessToken = refreshed.accessToken;
+            tokens.expiresAt = refreshed.expiresAt;
+            const { encrypt } = await import('@shared/lib/crypto/encryption.js');
+            await storage.updateIntegration(userId, 'google_calendar', {
+              encryptedMeta: await encrypt(JSON.stringify(tokens)),
+            });
+          }
+        }
+      } catch (tokenError: any) {
+        console.warn(`[Calendar] Google Calendar token invalid for user ${userId}, auto-disconnecting:`, tokenError.message);
+        await storage.disconnectIntegration(userId, 'google_calendar');
+        googleIntegration = undefined;
+        wsSync.notifySettingsUpdated(userId);
+      }
+    }
 
     let calendlyUsername = null;
     let calendlySchedulingUrl = null;

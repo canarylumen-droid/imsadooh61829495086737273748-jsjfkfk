@@ -172,8 +172,11 @@ router.post('/sync', requireAuthOrApiKey, async (req: Request, res: Response): P
       return;
     }
 
+    // Limit to most recent 500 leads to prevent runaway AI evaluation
+    const leadsBatch = leads.slice(0, 500);
+
     // Single query to find which leads have messages (eliminates N+1)
-    const leadIds = leads.map(l => l.id);
+    const leadIds = leadsBatch.map(l => l.id);
     const leadsWithMsgs = await db
       .selectDistinct({ leadId: messagesTable.leadId })
       .from(messagesTable)
@@ -184,7 +187,7 @@ router.post('/sync', requireAuthOrApiKey, async (req: Request, res: Response): P
     const limit = pLimit(5);
     let analyzedCount = 0;
     await Promise.all(
-      leads
+      leadsBatch
         .filter(lead => hasMessages.has(lead.id))
         .map(lead => limit(async () => {
           await evaluateLeadDealValue(userId, lead.id.toString());

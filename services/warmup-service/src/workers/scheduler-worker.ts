@@ -318,7 +318,7 @@ export class WarmupScheduler {
         { threadId: thread.id },
         {
           delay: threadStagger + sendDelay * 1000,
-          jobId: `warmup-send-first:${thread.id}`,
+          jobId: `warmup-send-first-${thread.id}`,
           removeOnComplete: true,
           removeOnFail: 100,
         }
@@ -338,7 +338,7 @@ export class WarmupScheduler {
         { mailboxId: mb.id },
         {
           delay: 0,
-          jobId: `warmup-inbox-sweep:${mb.id}`,
+          jobId: `warmup-inbox-sweep-${mb.id}`,
           removeOnComplete: true,
           removeOnFail: 100,
         }
