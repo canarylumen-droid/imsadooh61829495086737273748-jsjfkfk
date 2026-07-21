@@ -32,6 +32,7 @@ export class CalendlyOAuth {
       client_id: this.config.clientId,
       response_type: 'code',
       redirect_uri: this.config.redirectUri,
+      prompt: 'consent',
       ...(state && { state })
     });
 

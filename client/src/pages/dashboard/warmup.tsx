@@ -597,13 +597,7 @@ export default function WarmupPage() {
                 </div>
               )}
 
-              {/* Footer info */}
-              <div className="pt-4 border-t border-border/40 mt-4">
-                <p className="text-[10px] text-muted-foreground/60 leading-relaxed">
-                  Warmup sends {activeMailboxes.length > 0 ? 'active' : 'no'} — warmup emails build reputation without counting toward your daily sending limit.
-                  {activeMailboxes.length > 0 && ` ${activeMailboxes.length} mailbox(es) warming up with a total of ${activeMailboxes.reduce((s, m) => s + m.dailySentCount, 0)} warmup emails sent today.`}
-                </p>
-              </div>
+
             </>
           )}
         </CardContent>

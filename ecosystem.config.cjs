@@ -330,7 +330,9 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'warmup',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        IS_WORKER: 'true',
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify'
       },
       error_file: './logs/warmup-error.log',
       out_file: './logs/warmup-out.log',
