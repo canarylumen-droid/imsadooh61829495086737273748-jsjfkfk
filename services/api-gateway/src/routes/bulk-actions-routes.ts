@@ -43,10 +43,12 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
     // Load mailboxes for distribution (smart MX routing)
     let mailboxPool: Array<{ id: string; email: string; provider: string }> = [];
     let mailboxIndex = { current: 0 };
+    let assignMailbox: ((email: string, pool: Array<{ id: string; email: string; provider: string }>, index: { current: number }) => string | null) | null = null;
     if (distribute || !integrationId) {
       const integrations = await storage.getIntegrations(userId);
-      const { getMailboxPool, assignMailbox } = await import('@shared/lib/imports/mailbox-router.js');
-      mailboxPool = getMailboxPool(integrations);
+      const router = await import('@shared/lib/imports/mailbox-router.js');
+      mailboxPool = router.getMailboxPool(integrations);
+      assignMailbox = router.assignMailbox;
     }
 
     const results = {
@@ -158,7 +160,7 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
           // Smart MX routing: @gmail→gmail, @outlook→outlook, custom domain→custom_email, fallback round-robin
           const assignedIntegrationId = integrationId
             ? integrationId
-            : mailboxPool.length > 0
+            : mailboxPool.length > 0 && assignMailbox
               ? assignMailbox(email, mailboxPool, mailboxIndex)
               : null;
           
