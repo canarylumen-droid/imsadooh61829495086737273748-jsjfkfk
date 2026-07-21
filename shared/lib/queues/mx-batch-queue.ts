@@ -23,7 +23,7 @@ export async function enqueueMxBatch(
   const redis = await getRedisClient();
   if (!redis) throw new Error("Redis not available");
   const job = JSON.stringify({ batch_id: batchId, domains });
-  await redis.lpush(MX_BATCH_QUEUE, job);
+  await redis.lPush(MX_BATCH_QUEUE, job);
 }
 
 export async function waitForMxBatchResult(
@@ -36,7 +36,7 @@ export async function waitForMxBatchResult(
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    const result = await redis.brpop(MX_BATCH_RESULT_QUEUE, 1);
+    const result = await redis.brPop(MX_BATCH_RESULT_QUEUE, 1);
     if (result) {
       try {
         const data: MxBatchResult = JSON.parse(result[1]);
