@@ -44,7 +44,7 @@ async function handleDmarcReport(payload: any) {
   try {
     const { db } = await import('@shared/lib/db/db.js');
     const { sql } = await import('drizzle-orm');
-    const result: any = await db.execute(sql`SELECT id, user_id FROM email_tracking WHERE recipient_email = ${recipient} ORDER BY created_at DESC LIMIT 1`);
+    const result: any = await db.execute(sql`SELECT id, user_id, integration_id FROM email_tracking WHERE recipient_email = ${recipient} ORDER BY created_at DESC LIMIT 1`);
     const row = result?.rows?.[0];
     if (!row) return;
 
@@ -56,6 +56,7 @@ async function handleDmarcReport(payload: any) {
       source: 'dmarc_ruf',
       email: recipient,
       emailTrackingId: row.id,
+      integrationId: row.integration_id,
     });
     await clusterSync.notifyStatsUpdated(row.user_id);
   } catch (e: any) {
@@ -70,7 +71,7 @@ async function handleSeedPlacement(payload: any) {
   try {
     const { db } = await import('@shared/lib/db/db.js');
     const { sql } = await import('drizzle-orm');
-    const result: any = await db.execute(sql`SELECT id, user_id FROM email_tracking WHERE token = ${messageId} OR message_id = ${messageId} ORDER BY created_at DESC LIMIT 1`);
+    const result: any = await db.execute(sql`SELECT id, user_id, integration_id FROM email_tracking WHERE token = ${messageId} OR message_id = ${messageId} ORDER BY created_at DESC LIMIT 1`);
     const row = result?.rows?.[0];
     if (!row) return;
 
@@ -85,6 +86,7 @@ async function handleSeedPlacement(payload: any) {
       email: payload.seed_email,
       emailTrackingId: row.id,
       seedFolder: payload.folder,
+      integrationId: row.integration_id,
     });
     await clusterSync.notifyStatsUpdated(row.user_id);
   } catch (e: any) {

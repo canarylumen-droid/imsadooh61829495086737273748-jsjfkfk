@@ -497,18 +497,30 @@ export default function IntegrationsPage() {
       socket.on('stats_updated', handleStatsUpdated);
       socket.on('integration_health_updated', handleStatsUpdated);
       socket.on('deliverability_updated', (data: any) => {
-        queryClient.setQueryData(["/api/custom-email/status"], (old: any) => {
-          if (!old?.integrations) return old;
-          return {
-            ...old,
-            integrations: old.integrations.map((i: any) =>
-              i.id === data?.integrationId
-                ? { ...i, lastPlacement: data?.placement || i.lastPlacement, placementUpdatedAt: Date.now() }
-                : i
-            )
-          };
-        });
-        handleStatsUpdated();
+        if (data?.integrationId) {
+          queryClient.setQueryData(["/api/custom-email/status"], (old: any) => {
+            if (!old?.integrations) return old;
+            return {
+              ...old,
+              integrations: old.integrations.map((i: any) =>
+                i.id === data.integrationId
+                  ? {
+                      ...i,
+                      lastPlacement: data.placement || i.lastPlacement,
+                      placementUpdatedAt: Date.now(),
+                      deliveryRate: data.deliveryRate ?? i.deliveryRate,
+                      placementRate: data.inboxRate ?? i.placementRate,
+                      bounceRate: data.bounceRate ?? i.bounceRate,
+                      reputationScore: data.reputationScore ?? i.reputationScore,
+                    }
+                  : i
+              )
+            };
+          });
+        }
+        queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       });
       socket.on('settings_updated', handleSettingsUpdated);
       socket.on('integration_reputation_updated', handleStatsUpdated);
@@ -1744,11 +1756,11 @@ export default function IntegrationsPage() {
                                   <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-normal sm:tracking-widest text-muted-foreground">Rep</span>
                                   <span className={cn(
                                     "text-xs sm:text-sm font-black",
-                                    mailbox.reputationScore === null || mailbox.reputationScore === undefined ? "text-sky-500" :
+                                    mailbox.reputationScore === null || mailbox.reputationScore === undefined || mailbox.deliveryRate === null ? "text-sky-500" :
                                     mailbox.reputationScore >= 80 ? "text-emerald-500" :
                                     mailbox.reputationScore >= 50 ? "text-amber-500" : "text-destructive"
                                   )}>
-                                    {mailbox.reputationScore !== null && mailbox.reputationScore !== undefined
+                                    {mailbox.reputationScore !== null && mailbox.reputationScore !== undefined && mailbox.deliveryRate !== null
                                       ? `${mailbox.reputationScore}`
                                       : "—"}
                                   </span>
