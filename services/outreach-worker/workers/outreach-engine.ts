@@ -365,7 +365,8 @@ export class OutreachEngine {
               ne(leads.status, 'replied'),
               ne(leads.status, 'booked'),
               ne(leads.status, 'converted'),
-              ne(leads.status, 'not_interested')
+              ne(leads.status, 'not_interested'),
+              ne(leads.status, 'bouncy')
             ),
             // Logic for Auto-Reply Trigger
             and(

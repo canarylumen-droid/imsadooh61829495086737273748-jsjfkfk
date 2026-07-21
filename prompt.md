@@ -1,3 +1,6 @@
+and pipeline page if they clkck refine with ai hardcoded leads and resyarts nof syable dtc fix that page
+
+
 so unsubscribe link if anybody clicks it it works or can it be only that lead alone lr what how does instantly AI do it    +5                    In Instantly AI, an unsubscribe link automatically updates that specific lead's status to "Unsubscribed" within your campaign. It does not remove the entire list; it only opts out the individual lead who clicked it.Instantly handles this seamlessly:How it works: When you include the {{unsubscribe_link}} merge tag, Instantly converts it into a unique, signed URL for every recipient. When clicked, the system instantly logs that specific lead as "Unsubscribed" so no future emails in that sequence reach them.Headers: You can also enable One-Click Unsubscribe in Campaign Options under Advanced Settings, which adds an opt-out to the email header to satisfy spam compliance (like Google's rules).Alternative "Soft" Opt-out: Because traditional unsubscribe links can hurt deliverability, many cold emailers just write: "Not interested? Just reply and I'll remove you". If they reply with those words, you can use Instantly's AI Blocklist Triggers to automatically flag them as unsubscribed. ours is good already rught chrck kf this header will work jncase and ui t
 
 
