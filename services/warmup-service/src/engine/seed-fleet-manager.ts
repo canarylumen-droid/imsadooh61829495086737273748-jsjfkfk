@@ -235,7 +235,7 @@ export class SeedFleetManager {
       .update(warmupSeedAccounts)
       .set({
         partnerCount: sql`${warmupSeedAccounts.partnerCount} + 1`,
-        assignedDomainClusterIds: sql`${warmupSeedAccounts.assignedDomainClusterIds} || to_jsonb(${domain})`,
+        assignedDomainClusterIds: sql`${warmupSeedAccounts.assignedDomainClusterIds} || to_jsonb(${domain}::text)`,
       })
       .where(eq(warmupSeedAccounts.id, availableSeed.id));
 
