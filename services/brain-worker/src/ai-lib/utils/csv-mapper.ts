@@ -102,16 +102,21 @@ Return ONLY a JSON object:
 IMPORTANT: The "mapping" keys must be exactly from our TARGET SCHEMA. Values must be EXACT headers from the USER CSV.`;
 
     try {
-        const response = await generateReply(
-            "You are a data mapping expert.",
-            prompt,
-            {
-                model: MODELS.intent_classification,
-                jsonMode: true,
-                temperature: 0.2,
-                maxTokens: 500
-            }
-        );
+        const response = await Promise.race([
+            generateReply(
+                "You are a data mapping expert.",
+                prompt,
+                {
+                    model: MODELS.intent_classification,
+                    jsonMode: true,
+                    temperature: 0.2,
+                    maxTokens: 500
+                }
+            ),
+            new Promise<any>((_, reject) =>
+                setTimeout(() => reject(new Error('AI mapping timeout')), 12000)
+            )
+        ]);
 
         if (response.text) {
             const parsed = JSON.parse(response.text);
