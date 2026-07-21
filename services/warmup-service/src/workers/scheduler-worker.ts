@@ -174,7 +174,7 @@ export class WarmupScheduler {
           SELECT u.id AS user_id, COALESCE(SUM((c.config->>'dailyLimit')::int), 0) AS total_daily
           FROM users u
           JOIN outreach_campaigns c ON c.user_id = u.id AND c.status = 'active'
-          WHERE u.id = ANY(${userIds}::uuid[])
+          WHERE u.id = ANY(ARRAY[${sql.join(userIds.map(id => sql`${id}::uuid`), sql`, `)}])
           GROUP BY u.id
         `)
       : { rows: [] };
