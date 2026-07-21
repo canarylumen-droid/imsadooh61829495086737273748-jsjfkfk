@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import {
   Brain, Upload, History, FileText, Edit3, Save, X,
-  Loader2, CheckCircle2, AlertCircle, RefreshCw, Sparkles,
-  DatabaseZap, Layers, Target, ShieldAlert, Zap, Quote
+  Loader2, CheckCircle2, RefreshCw, Sparkles,
+  DatabaseZap, Target, ShieldAlert, Zap, Quote, Layers
 } from "lucide-react";
 
 interface PdfContent {
@@ -230,9 +230,9 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
               </div>
               <div className="flex items-center gap-2">
                 {content?.exists && (
-                  <Badge className="bg-cyan-500/20 text-cyan-300 border-cyan-500/30 text-xs gap-1">
+                  <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs gap-1">
                     <DatabaseZap className="w-3 h-3" />
-                    {content.chunkCount} chunks indexed
+                    Active
                   </Badge>
                 )}
                 {onClose && (
@@ -328,13 +328,17 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                              </div>
                              <h4 className="text-white text-sm font-bold uppercase tracking-wider">Competitor Gaps</h4>
                            </div>
-                           <ul className="space-y-3">
-                             {((content as any)?.intelligenceMetadata?.marketGaps || ["No gaps identified yet."]).map((gap: string, i: number) => (
-                               <li key={i} className="text-slate-300 text-xs flex gap-2 items-start leading-relaxed">
-                                 <span className="text-rose-500 mt-1 shrink-0">•</span> {gap}
-                               </li>
-                             ))}
-                           </ul>
+                            <ul className="space-y-3">
+                              {((content as any)?.intelligenceMetadata?.marketGaps || []).length > 0 ? (
+                                ((content as any)?.intelligenceMetadata?.marketGaps || []).map((gap: string, i: number) => (
+                                  <li key={i} className="text-slate-300 text-xs flex gap-2 items-start leading-relaxed">
+                                    <span className="text-rose-500 mt-1 shrink-0">•</span> {gap}
+                                  </li>
+                                ))
+                              ) : (
+                                <p className="text-slate-600 text-xs italic">Upload a brand PDF to identify market gaps.</p>
+                              )}
+                            </ul>
                         </div>
 
                         {/* UVP & Differentiators */}
@@ -362,13 +366,14 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                            <div className="space-y-2">
                               <p className="text-slate-500 text-[10px] uppercase font-black tracking-widest pl-1">Differentiators</p>
                               <div className="flex flex-wrap gap-1.5">
-                                {((content as any)?.intelligenceMetadata?.differentiators || []).map((d: string, i: number) => (
-                                  <Badge key={i} variant="outline" className="border-cyan-500/20 bg-cyan-500/5 text-cyan-300 hover:bg-cyan-500/10 text-[10px] transition-colors">
-                                    {d}
-                                  </Badge>
-                                ))}
-                                {((content as any)?.intelligenceMetadata?.differentiators || []).length === 0 && (
-                                  <span className="text-slate-600 text-[10px] italic pl-1">Awaiting deep research...</span>
+                                {((content as any)?.intelligenceMetadata?.differentiators || []).length > 0 ? (
+                                  ((content as any)?.intelligenceMetadata?.differentiators || []).map((d: string, i: number) => (
+                                    <Badge key={i} variant="outline" className="border-cyan-500/20 bg-cyan-500/5 text-cyan-300 hover:bg-cyan-500/10 text-[10px] transition-colors">
+                                      {d}
+                                    </Badge>
+                                  ))
+                                ) : (
+                                  <span className="text-slate-600 text-xs italic">Upload a brand PDF to surface differentiators.</span>
                                 )}
                               </div>
                            </div>
@@ -381,13 +386,16 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                           <Target className="w-20 h-20" />
                         </div>
                         <div className="relative z-10">
-                          <h4 className="text-purple-300 text-xs font-black uppercase mb-3 flex items-center gap-2 tracking-widest">
-                            <Sparkles className="w-3 h-3 animate-pulse" />
-                            Elite Winning Framework
+                          <h4 className="text-purple-300 text-xs font-semibold uppercase mb-3 flex items-center gap-2 tracking-widest">
+                            <Sparkles className="w-3 h-3" />
+                            Competitive Edge
                           </h4>
                           <p className="text-slate-200 text-[13px] leading-relaxed max-w-2xl font-light">
-                            {(content as any)?.intelligenceMetadata?.whyYouWin || "Your brand intelligence is currently under analysis by the Level 10 engine. This strategy will allow the AI to reach beyond generic features and hit the emotional triggers that drive high-ticket sales."}
+                            {(content as any)?.intelligenceMetadata?.whyYouWin || ""}
                           </p>
+                          {!((content as any)?.intelligenceMetadata?.whyYouWin) && (
+                            <p className="text-slate-600 text-xs italic">Upload a brand PDF to generate your strategic position.</p>
+                          )}
                         </div>
                       </div>
 
@@ -400,13 +408,14 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                           )}
                         </div>
                         <div className="flex flex-wrap gap-2">
-                          {((content as any)?.intelligenceMetadata?.competitors || []).map((c: string, i: number) => (
-                            <div key={i} className="px-4 py-2 rounded-xl bg-slate-900/40 border border-slate-800 text-slate-400 text-[11px] hover:border-slate-600 transition-colors cursor-default">
-                              {c}
-                            </div>
-                          ))}
-                          {((content as any)?.intelligenceMetadata?.competitors || []).length === 0 && (
-                            <p className="text-slate-600 text-[10px] italic pl-1">No major rivals identified yet.</p>
+                          {((content as any)?.intelligenceMetadata?.competitors || []).length > 0 ? (
+                            ((content as any)?.intelligenceMetadata?.competitors || []).map((c: string, i: number) => (
+                              <div key={i} className="px-4 py-2 rounded-xl bg-slate-900/40 border border-slate-800 text-slate-400 text-[11px] hover:border-slate-600 transition-colors cursor-default">
+                                {c}
+                              </div>
+                            ))
+                          ) : (
+                            <p className="text-slate-600 text-xs italic">Upload a brand PDF to analyze the competitive landscape.</p>
                           )}
                         </div>
                       </div>
@@ -454,9 +463,6 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                         <div className="flex items-center gap-3">
                           <FileText className="w-4 h-4 text-slate-400" />
                           <span className="text-sm text-slate-300 font-medium">{content.fileName}</span>
-                          <Badge variant="outline" className="text-xs border-slate-600 text-slate-400">
-                            Score: {content.analysisScore}%
-                          </Badge>
                         </div>
                         <div className="flex gap-2">
                           {isEditing ? (
@@ -708,20 +714,6 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <div className={`flex items-center gap-1 text-xs px-2 py-1 rounded-full ${
-                              pdf.analysisScore >= 70
-                                ? "bg-green-500/20 text-green-300"
-                                : pdf.analysisScore >= 40
-                                ? "bg-yellow-500/20 text-yellow-300"
-                                : "bg-red-500/20 text-red-300"
-                            }`}>
-                              {pdf.analysisScore >= 70 ? (
-                                <CheckCircle2 className="w-3 h-3" />
-                              ) : (
-                                <AlertCircle className="w-3 h-3" />
-                              )}
-                              {pdf.analysisScore}%
-                            </div>
                             <Button
                               variant="ghost"
                               size="sm"

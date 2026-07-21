@@ -13,6 +13,7 @@ import { blobStorage } from "@shared/lib/storage/blob-storage.js";
 import { acquireLock, releaseLock } from "@shared/lib/redis/redis.js";
 import { refreshPdfTtl } from "@shared/lib/redis/brand-pdf-storage.js";
 import { isValidURL } from "@shared/lib/utils/validation.js";
+import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdf = require('pdf-parse');
@@ -598,6 +599,9 @@ router.post(
           hasObjections: Object.keys(brandContext.objections || {}).length > 0,
         },
       });
+
+      // Push real-time update to UI
+      try { wsSync.notifySettingsUpdated(userId); } catch (_) {}
     } catch (error: unknown) {
       console.error("Error uploading brand PDF:", error);
       res.status(500).json({ error: getErrorMessage(error) });
@@ -711,6 +715,8 @@ router.patch(
         success: true,
         message: "Brand context and intelligence steered successfully",
       });
+
+      try { wsSync.notifySettingsUpdated(userId); } catch (_) {}
     } catch (error: unknown) {
       console.error("Error updating brand context:", error);
       res.status(500).json({ error: getErrorMessage(error) });
@@ -921,6 +927,8 @@ router.patch(
       }
 
       res.json({ success: true, chunksIndexed });
+
+      try { wsSync.notifySettingsUpdated(userId); } catch (_) {}
     } catch (error: unknown) {
       console.error("Error saving edited text:", error);
       res.status(500).json({ error: getErrorMessage(error) });
