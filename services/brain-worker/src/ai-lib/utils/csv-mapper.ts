@@ -115,7 +115,13 @@ IMPORTANT: The "mapping" keys must be exactly from our TARGET SCHEMA. Values mus
 
         if (response.text) {
             const parsed = JSON.parse(response.text);
-            return normalizeMapping(parsed, headers);
+            const result = normalizeMapping(parsed, headers);
+            // If AI didn't identify email or name, fall back to regex
+            if (!result.mapping.email && !result.mapping.name) {
+                console.warn('[CSV] AI mapping missing email/name, falling back to regex');
+                return fallbackMapping(headers);
+            }
+            return result;
         }
     } catch (error) {
         console.warn(`[CSV] AI mapping failed (${error instanceof Error ? error.message : 'Unknown error'}), using robust fallback`);

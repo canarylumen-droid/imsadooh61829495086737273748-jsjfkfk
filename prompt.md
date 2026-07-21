@@ -2,4 +2,4 @@ so unsubscribe link if anybody clicks it it works or can it be only that lead al
 
 
 
-and make a ui where ghey can choose bts adding link there lr header based and ai go dead if they anna option out and reply they make add ui in campaign ui and also they can select between no jnsjbscribe lr add in initial wmail or follow to smakl input select dropdthryselect all or any one it adds it in UI so they do
+and make a ui where ghey can choose bts adding link there lr header based and ai go dead if they anna option out and reply they make add ui in campaign ui and also they can select between no unsubscribe lr add in initial wmail or follow to smakl input select dropdthryselect all or any one it adds it in UI so they do set it thenselves kn campaign ji make it clean bsckend wire it well etc
