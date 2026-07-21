@@ -64,7 +64,7 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
 
     // ── Batch MX Resolution ──────────────────────────────────────────────
-    // Gather unique domains from ALL leads and resolve MX in parallel via Rust-speed Promise.all.
+    // Gather unique domains from ALL leads and resolve MX via Rust (Redis queue) or Node.js fallback.
     // Eliminates the per-lead DNS bottleneck — 50k leads with 5k unique domains
     // resolve in ~200ms instead of 5+ minutes of sequential lookups.
     const uniqueDomains = new Set<string>();
@@ -77,17 +77,38 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
     }
     const domainMxMap = new Map<string, boolean>();
     if (uniqueDomains.size > 0) {
-      const entries = await Promise.allSettled(
-        [...uniqueDomains].map(async (domain) => {
-          const records = await dns.resolveMx(domain);
-          return [domain, records && records.length > 0] as const;
-        })
-      );
-      for (const entry of entries) {
-        if (entry.status === 'fulfilled') {
-          domainMxMap.set(entry.value[0], entry.value[1]);
-        } else {
-          console.warn(`[BulkImport] MX lookup failed for domain: ${entry.reason?.message || 'unknown'}`);
+      const domainList = [...uniqueDomains];
+      let resolvedViaRust = false;
+
+      // Try Rust MX batch queue first (Redis BRPOP/LPUSH pub/sub)
+      try {
+        const { enqueueMxBatch, waitForMxBatchResult } = await import('@shared/lib/queues/mx-batch-queue.js');
+        const batchId = `mx_${userId}_${Date.now()}`;
+        await enqueueMxBatch(batchId, domainList);
+        const results = await waitForMxBatchResult(batchId, 15000);
+        for (const [domain, entry] of Object.entries(results)) {
+          domainMxMap.set(domain, entry.has_mx);
+        }
+        resolvedViaRust = true;
+        console.log(`[BulkImport] Rust MX batch resolved ${domainList.length} domains in parallel`);
+      } catch (rustErr: any) {
+        console.warn(`[BulkImport] Rust MX batch unavailable, falling back to Node.js: ${rustErr.message}`);
+      }
+
+      // Fallback: Node.js parallel Promise.allSettled
+      if (!resolvedViaRust) {
+        const entries = await Promise.allSettled(
+          domainList.map(async (domain) => {
+            const records = await dns.resolveMx(domain);
+            return [domain, records && records.length > 0] as const;
+          })
+        );
+        for (const entry of entries) {
+          if (entry.status === 'fulfilled') {
+            domainMxMap.set(entry.value[0], entry.value[1]);
+          } else {
+            console.warn(`[BulkImport] MX lookup failed for domain: ${entry.reason?.message || 'unknown'}`);
+          }
         }
       }
     }

@@ -60,3 +60,23 @@ pub struct MailboxVerifyResult {
     pub error: Option<String>,
     pub latency_ms: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MxBatchJob {
+    pub batch_id: String,
+    pub domains: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MxBatchEntry {
+    pub has_mx: bool,
+    pub mx_servers: Vec<String>,
+    pub lookup_time_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MxBatchResult {
+    pub batch_id: String,
+    pub results: std::collections::HashMap<String, MxBatchEntry>,
+    pub error: Option<String>,
+}

@@ -13,7 +13,7 @@ mod telemetry;
 mod scheduler;
 
 use config::Config;
-use queue::{EmailJob, MailboxVerifyJob, MailboxVerifyResult};
+use queue::{EmailJob, MailboxVerifyJob, MailboxVerifyResult, MxBatchJob, MxBatchResult, MxBatchEntry};
 use dns::{DnsResolver, DnsJob, DnsJobResult};
 use scheduler::{SchedulingJob, SchedulingJobType};
 use lettre::transport::smtp::authentication::Credentials;
@@ -89,10 +89,14 @@ async fn main() -> Result<()> {
     let verify_timeout = Duration::from_secs(config.smtp_timeout_secs);
     let verify_semaphore = Arc::new(Semaphore::new(config.max_concurrent_verifies));
 
+    let mx_batch_queue = config.mx_batch_queue.clone();
+    let mx_batch_result_queue = config.mx_batch_result_queue.clone();
+
     log::info!("Listening on email queue: {}", email_queue);
     log::info!("Listening on DNS queue: {}", dns_queue);
     log::info!("Listening on mailbox verify queue: {}", mailbox_verify_queue);
     log::info!("Listening on scheduling queue: {}", scheduling_queue);
+    log::info!("Listening on MX batch queue: {}", mx_batch_queue);
 
     // Spawn dedicated handler for bulk mailbox verification
     {
@@ -178,6 +182,79 @@ async fn main() -> Result<()> {
                     let mut r = redis.clone();
                     let _: () = r.lpush(&srq, &result_json).await.unwrap_or_default();
                     log::info!("[Scheduler] {} done", result.job_type);
+                }
+            }
+        });
+    }
+
+    // Spawn dedicated handler for MX batch lookups
+    // Bulk MX resolution for lead import — resolves ALL domains in parallel via tokio::join_all.
+    // Single Redis round-trip replaces 50k sequential Node.js DNS lookups.
+    {
+        let rq = redis_conn.clone();
+        let mxq = mx_batch_queue.clone();
+        let mxrq = mx_batch_result_queue.clone();
+        let resolver = dns_resolver.clone();
+        tokio::spawn(async move {
+            let mut redis = rq;
+            loop {
+                let job_opt: Option<Vec<String>> = redis.clone()
+                    .brpop(&[&mxq], 0.0).await.unwrap_or(None);
+                if let Some(mut parts) = job_opt {
+                    if parts.len() < 2 { continue; }
+                    let _queue_name = parts.remove(0);
+                    let job_json = parts.remove(0);
+                    let job: MxBatchJob = match serde_json::from_str(&job_json) {
+                        Ok(j) => j,
+                        Err(e) => {
+                            log::error!("Failed to deserialize MX batch job: {}", e);
+                            continue;
+                        }
+                    };
+
+                    let start = std::time::Instant::now();
+                    let resolver = resolver.clone();
+
+                    // Resolve all domains IN PARALLEL via join_all
+                    let futures: Vec<_> = job.domains.iter()
+                        .map(|domain| resolver.resolve_mx(domain))
+                        .collect();
+                    let mx_results = tokio::join_all(futures).await;
+
+                    let mut results = std::collections::HashMap::new();
+                    for (domain, mx_result) in job.domains.iter().zip(mx_results.into_iter()) {
+                        let entry = match mx_result {
+                            Ok(records) => {
+                                let lookup_time = start.elapsed().as_millis() as u64;
+                                MxBatchEntry {
+                                    has_mx: !records.is_empty(),
+                                    mx_servers: records.into_iter().map(|r| r.exchange).collect(),
+                                    lookup_time_ms: lookup_time,
+                                }
+                            }
+                            Err(_) => MxBatchEntry {
+                                has_mx: false,
+                                mx_servers: vec![],
+                                lookup_time_ms: start.elapsed().as_millis() as u64,
+                            },
+                        };
+                        results.insert(domain.clone(), entry);
+                    }
+
+                    let elapsed = start.elapsed().as_millis();
+                    let result_obj = MxBatchResult {
+                        batch_id: job.batch_id.clone(),
+                        results,
+                        error: None,
+                    };
+
+                    let result_json = serde_json::to_string(&result_obj)
+                        .unwrap_or_else(|e| format!("{{\"error\":\"{}\"}}", e));
+
+                    let mut r = redis.clone();
+                    let _: () = r.lpush(&mxrq, &result_json).await.unwrap_or_default();
+                    log::info!("[MxBatch] {} resolved {} domains in {}ms",
+                        job.batch_id, job.domains.len(), elapsed);
                 }
             }
         });

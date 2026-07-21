@@ -19,6 +19,8 @@ pub struct Config {
     pub mailbox_verify_result_queue: String,
     pub scheduling_queue: String,
     pub scheduling_result_queue: String,
+    pub mx_batch_queue: String,
+    pub mx_batch_result_queue: String,
     pub max_concurrent_verifies: usize,
 }
 
@@ -43,6 +45,10 @@ impl Config {
                 .unwrap_or_else(|_| "scheduling-queue".to_string()),
             scheduling_result_queue: env::var("SCHEDULING_RESULT_QUEUE")
                 .unwrap_or_else(|_| "scheduling-results".to_string()),
+            mx_batch_queue: env::var("MX_BATCH_QUEUE")
+                .unwrap_or_else(|_| "mx-batch-queue".to_string()),
+            mx_batch_result_queue: env::var("MX_BATCH_RESULT_QUEUE")
+                .unwrap_or_else(|_| "mx-batch-results".to_string()),
             worker_count: env::var("WORKER_COUNT")
                 .unwrap_or_else(|_| "4".to_string())
                 .parse()?,
