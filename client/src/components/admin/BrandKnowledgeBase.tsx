@@ -667,6 +667,28 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                     </div>
                   ) : (
                     <div className="space-y-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-slate-500">{history.length} PDF(s) stored</p>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs h-7"
+                          onClick={async () => {
+                            try {
+                              const res = await fetch("/api/brand-pdf/cache", { method: "DELETE", credentials: "include" });
+                              if (res.ok) {
+                                setHistory([]);
+                                setContent(prev => prev?.id ? { ...prev, exists: false, text: "" } : prev);
+                                toast({ title: "Cleared", description: "All PDFs removed from knowledge base" });
+                                window.dispatchEvent(new Event('settings_updated'));
+                              }
+                            } catch {}
+                          }}
+                        >
+                          <X className="w-3 h-3 mr-1" />
+                          Clear All
+                        </Button>
+                      </div>
                       {history.map((pdf, i) => (
                         <motion.div
                           key={pdf.id}
@@ -700,6 +722,26 @@ export function BrandKnowledgeBase({ onClose, embedded = false }: { onClose?: ()
                               )}
                               {pdf.analysisScore}%
                             </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs h-7 w-7 p-0"
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch(`/api/brand-pdf/cache/${pdf.id}`, { method: "DELETE", credentials: "include" });
+                                  if (res.ok) {
+                                    setHistory(prev => prev.filter(p => p.id !== pdf.id));
+                                    if (content?.id === pdf.id) {
+                                      setContent(prev => prev ? { ...prev, exists: false, text: "" } : prev);
+                                    }
+                                    toast({ title: "Deleted", description: `Removed ${pdf.fileName}` });
+                                    window.dispatchEvent(new Event('settings_updated'));
+                                  }
+                                } catch {}
+                              }}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
                           </div>
                         </motion.div>
                       ))}

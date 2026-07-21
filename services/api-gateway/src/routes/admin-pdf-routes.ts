@@ -790,6 +790,35 @@ router.delete(
 );
 
 /**
+ * DELETE /api/brand-pdf/cache/:id
+ * Delete a single cached PDF by ID
+ */
+router.delete(
+  "/cache/:id",
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const userId = getCurrentUserId(req);
+      if (!userId) {
+        res.status(401).json({ error: "Not authenticated" });
+        return;
+      }
+
+      const { id } = req.params;
+      await db.execute(sql`
+        DELETE FROM brand_pdf_cache WHERE id = ${id} AND user_id = ${userId}
+      `);
+
+      console.log(`🗑️ Deleted PDF ${id} for user ${userId}`);
+      res.json({ success: true, message: "PDF deleted" });
+    } catch (error: unknown) {
+      console.error("Error deleting PDF:", error);
+      res.status(500).json({ error: getErrorMessage(error) });
+    }
+  }
+);
+
+/**
  * GET /api/brand-pdf/extracted-text
  * Return full extracted text for in-place editing in the UI
  */

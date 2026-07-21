@@ -38,6 +38,7 @@ export default function LeadImportPage() {
   const [importing, setImporting] = useState(false);
   const [enableAi, setEnableAi] = useState(true);
   const [progress, setProgress] = useState(0);
+  const [importStatusText, setImportStatusText] = useState("");
   const [manualPasteText, setManualPasteText] = useState("");
   const [pasteMode, setPasteMode] = useState(false);
   const [importResults, setImportResults] = useState<{ imported: number; skipped: number; filtered?: number; leads?: any[] } | null>(null);
@@ -70,10 +71,12 @@ export default function LeadImportPage() {
 
     setImporting(true);
     setProgress(20);
+    setImportStatusText("Parsing text with AI...");
 
     try {
       // 1. Parse structured data from text
       setProgress(40);
+      setImportStatusText("Identifying leads...");
       const parseRes = await fetch('/api/ai/parse-body', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,6 +95,7 @@ export default function LeadImportPage() {
 
       // 2. Import into DB
       setProgress(80);
+      setImportStatusText("Checking MX records & spam filters...");
       const importRes = await apiRequest("POST", "/api/bulk/import-bulk", {
         leads: extractedLeads,
         aiPaused: !enableAi,
@@ -102,7 +106,8 @@ export default function LeadImportPage() {
       const result = await importRes.json();
       setImportResults(result);
       setProgress(100);
-      toast({ title: "Manual Import Success", description: `Imported ${result.imported} leads.` });
+      setImportStatusText("Import complete!");
+      toast({ title: "Manual Import Success", description: `Imported ${result.leadsImported || result.imported || 0} leads.` });
       refreshLeadStats();
     } catch (e: any) {
       toast({ title: "Manual import failed", description: e.message, variant: "destructive" });
@@ -110,6 +115,7 @@ export default function LeadImportPage() {
       setTimeout(() => {
         setImporting(false);
         setProgress(0);
+        setImportStatusText("");
       }, 500);
     }
   };
@@ -231,6 +237,7 @@ export default function LeadImportPage() {
 
     try {
       setProgress(30);
+      setImportStatusText(`Uploading ${isPDF ? 'PDF' : 'CSV'}...`);
       // For CSV, we now use preview mode first
       const endpoint = isPDF ? '/api/leads/import-pdf' : '/api/leads/import-csv?preview=true';
       const response = await fetch(endpoint, {
@@ -240,6 +247,7 @@ export default function LeadImportPage() {
       });
 
       setProgress(70);
+      setImportStatusText("Analyzing lead data...");
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -324,6 +332,7 @@ export default function LeadImportPage() {
     if (!importResults?.leads || importResults.leads.length === 0) return;
 
     setImporting(true); // Reuse loading state provided to modal
+    setImportStatusText("Checking MX records & spam filters...");
     try {
       const response = await fetch('/api/bulk/import-bulk', {
         method: 'POST',
@@ -623,7 +632,7 @@ export default function LeadImportPage() {
             <div className="space-y-3">
               <Progress value={progress} className="h-1 sm:h-1.5" />
               <p className="text-[10px] sm:text-xs font-medium text-center text-muted-foreground">
-                {progress < 30 ? 'Uploading file...' : progress < 70 ? 'Processing engagement data...' : 'Finalizing leads...'}
+                {importStatusText || (progress < 30 ? 'Uploading file...' : progress < 70 ? 'Processing engagement data...' : 'Finalizing leads...')}
               </p>
             </div>
           )}
