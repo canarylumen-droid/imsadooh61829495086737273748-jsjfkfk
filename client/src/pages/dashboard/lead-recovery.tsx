@@ -82,6 +82,13 @@ function LeadRecoveryContent() {
         </div>
       </div>
 
+      {store.statusMessage && (
+        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/10 text-xs text-primary">
+          <RefreshCw className="h-3 w-3 animate-spin" />
+          {store.statusMessage}
+        </div>
+      )}
+
       <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="rounded-lg border border-border/40 bg-card/70">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/30 p-4 gap-3">

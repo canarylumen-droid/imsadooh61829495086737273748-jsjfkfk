@@ -159,7 +159,8 @@ export function createApp() {
     // Lead-recovery routes also get longer — MySQL pool contention can exceed 30s.
     const isAuthRoute = req.path.startsWith('/api/user/auth') || req.path.startsWith('/api/auth');
     const isLeadRecovery = req.path.startsWith('/api/lead-recovery');
-    const timeoutMs = isAuthRoute || isLeadRecovery ? 60000 : 30000;
+    const isImportRoute = req.path.startsWith('/api/leads/import') || req.path.startsWith('/api/bulk/import');
+    const timeoutMs = isAuthRoute || isLeadRecovery || isImportRoute ? 60000 : 30000;
 
     res.setTimeout(timeoutMs, () => {
       if (!res.headersSent) {

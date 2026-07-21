@@ -63,6 +63,7 @@ interface LeadRecoveryState {
   loading: boolean;
   warningOpen: boolean;
   error: string | null;
+  statusMessage: string;
   loadAll: () => Promise<void>;
   activate: (mailboxId?: string) => Promise<void>;
   deactivate: () => Promise<void>;
@@ -90,6 +91,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
   const [warningOpen, setWarningOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
 
   const loadStatus = useCallback(async () => {
     try {
@@ -159,11 +161,16 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
 
   const activate = useCallback(async (mailboxId?: string) => {
     setLoading(true);
+    setStatusMessage("Starting...");
     try {
       await apiRequest("POST", "/api/lead-recovery/activate", mailboxId ? { mailboxId } : {});
+      setStatusMessage("Scheduling...");
       await loadAll();
+      setStatusMessage("Active");
+      toast({ title: "Lead Recovery Activated" });
     } catch (e) {
       console.warn('[LeadRecovery] Activate failed:', e);
+      setStatusMessage("");
       toast({ title: 'Failed to activate lead recovery', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -172,11 +179,15 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
 
   const deactivate = useCallback(async () => {
     setLoading(true);
+    setStatusMessage("Deactivating...");
     try {
       await apiRequest("POST", "/api/lead-recovery/deactivate", {});
       await loadAll();
+      setStatusMessage("");
+      toast({ title: "Lead Recovery Deactivated" });
     } catch (e) {
       console.warn('[LeadRecovery] Deactivate failed:', e);
+      setStatusMessage("");
       toast({ title: 'Failed to deactivate lead recovery', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -185,11 +196,20 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
 
   const syncNow = useCallback(async (mailboxId?: string) => {
     setLoading(true);
+    setStatusMessage("Queuing...");
     try {
       await apiRequest("POST", "/api/lead-recovery/sync", mailboxId ? { mailboxId } : {});
+      setStatusMessage("Syncing mailboxes...");
+      await new Promise(r => setTimeout(r, 2000));
       await loadAll();
+      setStatusMessage("Checking results...");
+      await new Promise(r => setTimeout(r, 1000));
+      // leads state updated by loadAll — show generic ready message
+      setStatusMessage("Sync complete");
+      toast({ title: "Sync complete", description: "Check Recoverable Leads section" });
     } catch (e) {
       console.warn('[LeadRecovery] Sync failed:', e);
+      setStatusMessage("");
       toast({ title: 'Failed to sync lead recovery', variant: 'destructive' });
     } finally {
       setLoading(false);
@@ -242,6 +262,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     loading,
     warningOpen,
     error,
+    statusMessage,
     loadAll,
     activate,
     deactivate,
@@ -265,6 +286,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     loading,
     warningOpen,
     error,
+    statusMessage,
     loadAll,
     activate,
     deactivate,

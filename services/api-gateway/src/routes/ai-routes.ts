@@ -376,6 +376,15 @@ router.post("/import-csv", requireAuthOrApiKey, upload.single('csv'), async (req
         return;
       }
 
+      // 2. Validate rows are not all empty
+      const validRows = previewRows.filter(r => Object.values(r).some(v => v && String(v).trim()));
+      if (validRows.length === 0) {
+        if (!res.headersSent) {
+          res.status(400).json({ error: "CSV appears to be empty or unreadable. Check delimiter and encoding." });
+        }
+        return;
+      }
+
       // 2. Extract leads from preview rows (all rows for preview mode)
       const rowsToProcess = previewMode ? previewRows : [...headerRows, ...previewRows];
       const processedLeads = rowsToProcess.map(row => {

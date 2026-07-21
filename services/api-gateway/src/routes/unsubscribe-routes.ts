@@ -141,7 +141,7 @@ function buildUnsubscribePage(title: string, message: string, icon: string): str
     <head>
       <meta charset="utf-8">
       <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>${title} - ReplyFlow</title>
+      <title>${title}</title>
       <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -150,7 +150,7 @@ function buildUnsubscribePage(title: string, message: string, icon: string): str
           display: flex;
           align-items: center;
           justify-content: center;
-          background: linear-gradient(135deg, #0f0f23 0%, #1a1a3e 50%, #0f0f23 100%);
+          background: linear-gradient(135deg, #0a0a1a 0%, #1a1a2e 50%, #0a0a1a 100%);
           color: #fff;
           padding: 24px;
         }
@@ -164,30 +164,23 @@ function buildUnsubscribePage(title: string, message: string, icon: string): str
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
         }
-        @keyframes checkmark {
-          0% { transform: scale(0) rotate(-45deg); opacity: 0; }
-          50% { transform: scale(1.2) rotate(0deg); opacity: 1; }
-          100% { transform: scale(1) rotate(0deg); opacity: 1; }
-        }
-        @keyframes pulse {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.8; }
+        @keyframes drawCheck {
+          to { stroke-dashoffset: 0; }
         }
         .icon-wrap {
-          width: 80px;
-          height: 80px;
+          width: 72px;
+          height: 72px;
           margin: 0 auto 24px;
           border-radius: 50%;
-          background: linear-gradient(135deg, rgba(34, 197, 94, 0.15), rgba(34, 197, 94, 0.05));
-          border: 2px solid rgba(34, 197, 94, 0.3);
+          background: linear-gradient(135deg, rgba(34, 197, 94, 0.12), rgba(34, 197, 94, 0.04));
+          border: 2px solid rgba(34, 197, 94, 0.25);
           display: flex;
           align-items: center;
           justify-content: center;
-          animation: checkmark 0.8s ease-out 0.2s both;
         }
         .icon-wrap svg {
-          width: 36px;
-          height: 36px;
+          width: 32px;
+          height: 32px;
           stroke: #22c55e;
           stroke-width: 2.5;
           fill: none;
@@ -197,49 +190,23 @@ function buildUnsubscribePage(title: string, message: string, icon: string): str
         .icon-wrap path {
           stroke-dasharray: 50;
           stroke-dashoffset: 50;
-          animation: drawPath 0.5s ease-out 0.6s forwards;
-        }
-        @keyframes drawPath {
-          to { stroke-dashoffset: 0; }
+          animation: drawCheck 0.5s ease-out 0.3s forwards;
         }
         h1 {
-          font-size: 24px;
+          font-size: 22px;
           font-weight: 700;
           margin-bottom: 8px;
-          letter-spacing: -0.02em;
+          letter-spacing: -0.01em;
         }
         .message {
-          font-size: 15px;
-          color: rgba(255, 255, 255, 0.6);
+          font-size: 14px;
+          color: rgba(255, 255, 255, 0.55);
           line-height: 1.6;
-          margin-bottom: 32px;
-        }
-        .divider {
-          height: 1px;
-          background: rgba(255, 255, 255, 0.08);
-          margin: 0 0 20px;
-        }
-        .footer {
-          font-size: 12px;
-          color: rgba(255, 255, 255, 0.3);
-          animation: pulse 3s ease-in-out infinite;
-        }
-        .glow {
-          position: fixed;
-          width: 300px;
-          height: 300px;
-          border-radius: 50%;
-          background: radial-gradient(circle, rgba(34, 197, 94, 0.08) 0%, transparent 70%);
-          top: 20%;
-          left: 50%;
-          transform: translateX(-50%);
-          pointer-events: none;
-          animation: pulse 4s ease-in-out infinite;
+          margin-bottom: 0;
         }
       </style>
     </head>
     <body>
-      <div class="glow"></div>
       <div class="container">
         <div class="icon-wrap">
           <svg viewBox="0 0 24 24">
@@ -248,8 +215,6 @@ function buildUnsubscribePage(title: string, message: string, icon: string): str
         </div>
         <h1>${title}</h1>
         <p class="message">${message}</p>
-        <div class="divider"></div>
-        <p class="footer">ReplyFlow — Autonomous Intelligence Outreach</p>
       </div>
     </body>
     </html>

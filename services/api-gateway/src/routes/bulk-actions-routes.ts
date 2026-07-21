@@ -45,7 +45,7 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
     let mailboxIndex = { current: 0 };
     if (distribute || !integrationId) {
       const integrations = await storage.getIntegrations(userId);
-      const { getMailboxPool } = await import('@shared/lib/imports/mailbox-router.js');
+      const { getMailboxPool, assignMailbox } = await import('@shared/lib/imports/mailbox-router.js');
       mailboxPool = getMailboxPool(integrations);
     }
 
@@ -159,7 +159,7 @@ router.post('/import-bulk', requireAuthOrApiKey, async (req: Request, res: Respo
           const assignedIntegrationId = integrationId
             ? integrationId
             : mailboxPool.length > 0
-              ? (await import('@shared/lib/imports/mailbox-router.js')).assignMailbox(email, mailboxPool, mailboxIndex)
+              ? assignMailbox(email, mailboxPool, mailboxIndex)
               : null;
           
           batchToInsert.push({
