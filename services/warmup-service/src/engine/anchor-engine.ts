@@ -84,6 +84,18 @@ export class AnchorEngine {
       );
     const allCustom = allDomainMailboxes.length > 0 && allDomainMailboxes.every(m => m.provider === 'custom_email');
     if (allCustom) {
+      // Custom SMTP domains: try to assign cross-domain seeds (Gmail/Outlook) as anchors.
+      // Seeds handle warmup reply-exchange even for custom_email mailboxes.
+      if (WARMUP_CONFIG.PLATFORM_SEED_ENABLED) {
+        const assigned = await seedFleetManager.assignSeedToDomainWithFallback(domain, orgId);
+        if (assigned) {
+          await this.rebalanceDomain(domain, orgId);
+          return;
+        }
+      }
+
+      // No seeds available — unpause members so they don't get stuck paused.
+      // Custom SMTP mailboxes can still warm up via within-pool exchanges.
       await db
         .update(warmupDomainClusters)
         .set({
@@ -96,6 +108,8 @@ export class AnchorEngine {
             orgId ? eq(warmupDomainClusters.organizationId, orgId) : isNull(warmupDomainClusters.organizationId)
           )
         );
+
+      await this.unpauseMembers(domain, orgId);
       return;
     }
 
