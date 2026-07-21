@@ -1265,7 +1265,7 @@ router.post('/google', authLimiter, async (req: Request, res: Response): Promise
         avatar: googleAvatar,
         username: tempUsername,
         password: '',  // No password — Google sign-in only
-        plan: 'free',
+        plan: 'trial',
         metadata: {
           googleSignIn: true,
           googleSignInAt: new Date().toISOString()

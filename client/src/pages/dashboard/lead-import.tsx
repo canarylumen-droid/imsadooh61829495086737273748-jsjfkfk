@@ -173,21 +173,19 @@ export default function LeadImportPage() {
     setImportResults(null);
   };
 
-  // Listen for socket progress
   useEffect(() => {
     if (!socket) return;
 
-    const handleProgress = (payload: any) => {
-      if (payload.type === 'bulk_import_progress') {
-        const { current, total } = payload;
-        const calcProgress = Math.round((current / total) * 100);
-        setProgress(calcProgress);
+    const handleLeadsUpdated = (payload: any) => {
+      if (payload?.type === 'bulk_import') {
+        setProgress(85);
+        setImportStatusText('Finalizing leads...');
       }
     };
 
-    socket.on('leads_updated', handleProgress);
+    socket.on('leads_updated', handleLeadsUpdated);
     return () => {
-      socket.off('leads_updated', handleProgress);
+      socket.off('leads_updated', handleLeadsUpdated);
     };
   }, [socket]);
 
