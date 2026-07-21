@@ -248,6 +248,7 @@ export default function CalendarPage() {
     queryKey: ["/api/calendar/settings"],
     retry: 3,
     refetchInterval: socketPollingMs,
+    refetchOnWindowFocus: true,
   });
 
   const { data: bookingsData, isLoading: bookingsLoading } = useQuery<{ bookings: CalendarBooking[] }>({
@@ -450,6 +451,8 @@ export default function CalendarPage() {
       return response.json();
     },
     onSuccess: () => {
+      // Immediately reset cache so UI shows "Connect" button without waiting for refetch
+      queryClient.setQueryData(["/api/calendar/settings"], (old: any) => old ? { ...old, settings: { ...old?.settings, calendlyEnabled: false } } : old);
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/settings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/calendar/bookings"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
@@ -536,7 +539,14 @@ export default function CalendarPage() {
       return data;
     },
     onError: (err: any) => {
-      toast({ title: "Connection failed", description: err?.message || "Try again", variant: "destructive" });
+      const msg = err?.message || '';
+      if (msg.includes('401') || msg.includes('Unauthorized')) {
+        toast({ title: "Session expired", description: "Please refresh and try again", variant: "destructive" });
+      } else if (msg.includes('No authorization URL')) {
+        toast({ title: "Connection failed", description: "OAuth URL not available. Check Calendly config.", variant: "destructive" });
+      } else {
+        toast({ title: "Connection failed", description: msg || "Try again", variant: "destructive" });
+      }
     },
   });
 

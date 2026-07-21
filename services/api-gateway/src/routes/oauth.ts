@@ -12,6 +12,7 @@ import calendlyRedirectRouter from './calendly-redirect.js';
 import instagramRedirectRouter from './instagram-redirect.js';
 import outlookRedirectRouter from './outlook-redirect.js';
 import { OutlookOAuth } from '@services/api-gateway/src/oauth/outlook.js';
+import { requireAuthOrApiKey } from '../middleware/auth.js';
 
 interface AuthenticatedRequest extends Request {
   session: Request['session'] & {
@@ -544,9 +545,9 @@ router.get('/google-calendar/events', async (req: Request, res: Response): Promi
 
 // ==================== CALENDLY OAUTH ====================
 
-router.get('/connect/calendly', async (req: Request, res: Response): Promise<void> => {
+router.get('/connect/calendly', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
   try {
-    const userId = getUserId(req as AuthenticatedRequest);
+    const userId = getUserId(req as AuthenticatedRequest)!;
 
     if (!userId) {
       res.status(401).json({ error: 'User not authenticated' });

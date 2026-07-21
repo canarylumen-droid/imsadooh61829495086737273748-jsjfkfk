@@ -46,16 +46,10 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
 
     const userId = stateData.userId;
 
-    // Re-attach userId to session — regenerate to create fresh session in case
-    // the original session cookie was not sent (e.g. cross-site OAuth redirect, ITP).
-    // This ensures the redirect to the SPA doesn't bounce to /auth.
-    await new Promise<void>((resolve, reject) => {
-      req.session.regenerate((err) => {
-        if (err) { reject(err); return; }
-        resolve();
-      });
-    });
-    (req as any).session.userId = userId;
+    // Re-attach userId to session (OAuth redirect may create a new browser context)
+    if ((req as any).session) {
+      (req as any).session.userId = userId;
+    }
 
     // Exchange code for tokens
     console.log(`[Calendly Redirect] Exchanging code for tokens for user: ${userId}`);
