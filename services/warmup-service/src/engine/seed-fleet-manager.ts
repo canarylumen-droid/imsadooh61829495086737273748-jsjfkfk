@@ -183,18 +183,11 @@ export class SeedFleetManager {
   }
 
   async assignSeedToDomain(domain: string, orgId: string | null, preferredProvider?: string): Promise<string | null> {
-    console.log(`[Warmup][Seeds] assignSeedToDomain(domain=${domain}, preferredProvider=${preferredProvider})`);
     const availableSeed = await this.findAvailableSeed(preferredProvider);
-    if (!availableSeed) {
-      console.log(`[Warmup][Seeds] No available seed for provider=${preferredProvider}`);
-      return null;
-    }
+    if (!availableSeed) return null;
 
     const cluster = await domainClusterEngine.getClusterByDomain(domain, orgId);
-    if (!cluster) {
-      console.log(`[Warmup][Seeds] No cluster for domain ${domain}`);
-      return null;
-    }
+    if (!cluster) return null;
 
     const meta = (availableSeed.metadata as any) || {};
     const config = meta as SeedConfig;
@@ -249,7 +242,6 @@ export class SeedFleetManager {
     if (preferredProvider) {
       const preferred = await this.findLeastLoadedSeed(preferredProvider);
       if (preferred) return preferred;
-      console.log(`[Warmup][Seeds] findLeastLoadedSeed(${preferredProvider}) returned null`);
     }
 
     const strategies: Array<(p?: string) => Promise<typeof warmupSeedAccounts.$inferSelect | null>> = [
@@ -283,9 +275,7 @@ export class SeedFleetManager {
       .orderBy(sql`${warmupSeedAccounts.partnerCount} ASC`)
       .limit(1);
 
-    const result = seeds[0] || null;
-    console.log(`[Warmup][Seeds] findLeastLoadedSeed(providerFilter=${providerFilter}) returned ${result ? result.email : 'null'}`);
-    return result;
+    return seeds[0] || null;
   }
 
   private async findCooledDownSeed(): Promise<typeof warmupSeedAccounts.$inferSelect | null> {
@@ -449,12 +439,8 @@ export class SeedFleetManager {
   }
 
   async assignSeedToDomainWithFallback(domain: string, orgId: string | null): Promise<string | null> {
-    console.log(`[Warmup][Seeds] assignSeedToDomainWithFallback(domain=${domain})`);
     const cluster = await domainClusterEngine.getClusterByDomain(domain, orgId);
-    if (!cluster) {
-      console.log(`[Warmup][Seeds] No cluster found for domain ${domain}`);
-      return null;
-    }
+    if (!cluster) return null;
 
     const existingSeedIds = [...cluster.seedMailboxIds, ...cluster.anchorMailboxIds];
     const existingSeeds = existingSeedIds.length > 0
@@ -463,7 +449,6 @@ export class SeedFleetManager {
 
     const hasGoogle = existingSeeds.some(s => s.provider === 'gmail');
     const hasMicrosoft = existingSeeds.some(s => s.provider === 'outlook');
-    console.log(`[Warmup][Seeds] Domain ${domain}: hasGoogle=${hasGoogle}, hasMicrosoft=${hasMicrosoft}, existingSeeds=${existingSeeds.length}`);
 
     let assigned: string | null = null;
 

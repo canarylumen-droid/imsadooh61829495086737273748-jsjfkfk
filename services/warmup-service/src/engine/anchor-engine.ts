@@ -84,12 +84,10 @@ export class AnchorEngine {
       );
     const allCustom = allDomainMailboxes.length > 0 && allDomainMailboxes.every(m => m.provider === 'custom_email');
     if (allCustom) {
-      console.log(`[Warmup][Anchor] allCustom domain ${domain} — ${allDomainMailboxes.length} mailboxes, PLATFORM_SEED_ENABLED=${WARMUP_CONFIG.PLATFORM_SEED_ENABLED}`);
       // Custom SMTP domains: try to assign cross-domain seeds (Gmail/Outlook) as anchors.
       // Seeds handle warmup reply-exchange even for custom_email mailboxes.
       if (WARMUP_CONFIG.PLATFORM_SEED_ENABLED) {
         const assigned = await seedFleetManager.assignSeedToDomainWithFallback(domain, orgId);
-        console.log(`[Warmup][Anchor] assignSeedToDomainWithFallback returned: ${assigned}`);
         if (assigned) {
           await this.rebalanceDomain(domain, orgId);
           return;
@@ -112,7 +110,6 @@ export class AnchorEngine {
         );
 
       await this.unpauseMembers(domain, orgId);
-      console.log(`[Warmup][Anchor] Unpaused members for domain ${domain} (no seeds available)`);
       return;
     }
 

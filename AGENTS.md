@@ -1160,3 +1160,30 @@ All resolve automatically via socket `insights_updated` event. No polling.
 ### Deploy
 - Push to GitHub, pull on EC2, build client, restart API gateway
 
+## This Session (Jul 21 2026) — Lead Import Fix + npm Vulns + EC2 Deploy
+
+### Changes
+1. **user-auth.ts type fix** (`services/api-gateway/src/routes/user-auth.ts:1268`): Changed `plan: 'free'` → `plan: 'trial'` — `'free'` not in DB enum (`trial|starter|pro|enterprise`), was causing `tsc --noEmit` build failure.
+2. **Lead import socket event fix** (`client/src/pages/dashboard/lead-import.tsx:177-192`): Changed listener from `bulk_import_progress` → `bulk_import` to match backend's actual event type (`notifyLeadsUpdated` with `{ type: 'bulk_import' }`). Simplified progress handler.
+3. **npm vulnerabilities fixed** (`package.json`): Updated `fast-xml-parser` from `^5.8.0` → `^5.10.1` (direct dep + override), added `fast-uri@^4.1.1` override. 2 high vulns fixed. 4 moderate remain (`request`/`google-it` — no fix available).
+4. **Build command fix**: Discovered `vite.config.ts` is at root, not in `client/`. Build must run from root. Updated deploy scripts accordingly.
+5. **EC2 deploy**: SSH key via EC2 Instance Connect (`SendSSHPublicKey`), `git pull`, `npx vite build` from root (24.50s), `pm2 restart audnix-api-gateway audnix-socket-server`. All 17 PM2 services online.
+
+### Files Changed
+- `services/api-gateway/src/routes/user-auth.ts` — `plan: 'free'` → `plan: 'trial'`
+- `client/src/pages/dashboard/lead-import.tsx` — socket event `bulk_import_progress` → `bulk_import`
+- `package.json` — fast-xml-parser `^5.8.0` → `^5.10.1`, fast-uri override `^4.1.1`
+
+### Git
+- Commit `72b76cd3` — `fix: lead import socket event name, user-auth plan type, npm vulns fast-uri/fast-xml-parser`
+- Pushed to GitHub main, deployed to EC2
+
+### Remaining Issues
+1. Warmup not sending for custom SMTP domains (no seeds)
+2. Lead recovery worker not processing
+3. Calendly disconnect redirects to `/auth`
+4. Calendar date click no-op
+5. Charts animation, mobile UI polish
+6. IMAP open tracking, reputation boost, domain auto-fix
+7. CodeQL (12 alerts) + npm vulns (4 moderate request/google-it)
+
