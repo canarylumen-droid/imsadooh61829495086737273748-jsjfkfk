@@ -326,6 +326,7 @@ module.exports = {
       interpreter_args: '--require ./polyfill-file.cjs --import tsx --import ./instrument.ts',
       instances: 1,
       exec_mode: 'fork',
+      dotenv: '.env',
       env: {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
