@@ -881,7 +881,79 @@ pm2 restart all
 - `audnix-worker-imap` (32) — deleted; Gmail/Outlook OAuth handled by `mailbox-worker.ts` BullMQ worker
 - 14 other Node.js workers unchanged
 
-## This Session (Jul 20 2026) — Integrations Layout Fix + Rust/TS Build Cleanup
+## This Session (Jul 20 2026) — Seed Spam Move + Reply Fixes
+
+### Bugs Found & Fixed
+
+**Bug 1: Seed monitor detects spam but never moves emails out** (`seed_monitor.rs:76-111`)
+- Rust seed monitor scanned Spam/Promotions folders, detected warmup emails, published `SEED_PLACEMENT` to Redis — but NEVER moved them to INBOX
+- The warmup email stayed in spam, the seed never saw it, the `expect-reply` handler never found it → seed never replied
+- **Fix**: Added `conn.uid_move(*uid, "INBOX")` after detection, with `uid_copy_and_delete()` fallback for providers that don't support UID MOVE (RFC 6851)
+- Added `uid_move()` and `uid_copy_and_delete()` methods to `imap_client.rs`
+
+**Bug 2: Inbox sweep race condition kills seed replies** (`inbound-worker.ts:42-80`)
+- `inbox-sweep` (every 2 min) moves warmup emails from INBOX to hidden folder BEFORE `expect-reply` fires (1-4 hour delay)
+- `handleExpectReply` called `sweepInboxToHidden()` → found nothing (already swept) → returned 0 → `!found` was true → exited without queuing reply
+- **Fix**: Added DB fast-path check — first looks for `warmupInteractions.movedToHiddenFolder = true` for the expected message ID. If found, skips IMAP sweep entirely. Falls back to IMAP sweep only when DB check fails.
+
+**Bug 3: Seeds limited by DAILY_SENT_LIMIT (20) instead of SEED_DAILY_LIMIT (400)** (`inbound-worker.ts:86-88`)
+- `handleExpectReply` used `getRampLimit(..., WARMUP_CONFIG.DAILY_SENT_LIMIT)` for ALL recipients including seeds
+- Seeds would stop replying after 20 daily sends instead of the intended 400
+- **Fix**: Added `anchorRole === 'seed'` check — seeds use `recipientMd[0].dailyLimit ?? WARMUP_CONFIG.SEED_DAILY_LIMIT`
+
+**Bug 4: Outbound worker pauses seeds on daily limit** (`outbound-worker.ts:95-104`)
+- Seeds hitting daily limit got `status: 'paused', pauseReason: 'daily_limit_reached'` like user mailboxes
+- Paused seeds don't process any new threads or replies until midnight reset
+- **Fix**: Added early return for seeds without pausing — `if (sender[0].anchorRole === 'seed') return;`
+
+**Bug 5: Scheduler pauses seeds on sent/received cap** (`scheduler-worker.ts:218-239`)
+- Same issue — seeds could be paused by the scheduler's daily limit checks
+- **Fix**: Added `if (isSeed) continue;` before pause logic in both sent and received cap checks
+
+**Bug 6: rescueSpamFolder doesn't mark warmupInteractions** (`imap-stealth.ts:222`)
+- `rescueSpamFolder` moved from spam to hidden + `\NotJunk` flag, but never updated `warmupInteractions.movedToHiddenFolder = true`
+- If the email was moved to hidden by spam rescue (not inbox sweep), the DB fast-path in `handleExpectReply` wouldn't find it
+- **Fix**: Added `db.update(warmupInteractions).set({ movedToHiddenFolder: true })` to `rescueSpamFolder`
+
+### Files Changed
+- `rust-imap-worker/src/imap_client.rs` — added `uid_move()` (RFC 6851) and `uid_copy_and_delete()` fallback
+- `rust-imap-worker/src/seed_monitor.rs` — moved detected spam/promotions warmup emails to INBOX
+- `services/warmup-service/src/workers/inbound-worker.ts` — DB fast-path for expect-reply + seed SEED_DAILY_LIMIT
+- `services/warmup-service/src/workers/outbound-worker.ts` — don't pause seeds on daily limit
+- `services/warmup-service/src/workers/scheduler-worker.ts` — don't pause seeds on sent/received cap
+- `services/warmup-service/src/lib/imap-stealth.ts` — rescueSpamFolder marks movedToHiddenFolder
+
+### Changes (Jul 20 2026 - round 2)
+1. **NotSpam + Important flags** (`imap_client.rs`): Added `mark_not_spam_and_important()` — issues `UID STORE +FLAGS (\NotJunk \Flagged)` after every spam→INBOX move, training the ISP spam filter that the email is legitimate.
+2. **Seed spike prevention** (`scheduler-worker.ts`): Added per-thread stagger of 0-30 min (`PER_THREAD_STAGGER_MAX_MINUTES`) on top of 30-90s send delay. If 500 mailboxes create threads in one scheduler cycle, their first sends land on seeds spread across 30 minutes instead of 60 seconds.
+3. **Inbox sweep interval 2m→5m** (`warmup-config.ts`): Reduces IMAP connection pressure, especially with 500+ mailboxes.
+4. **Warmup spam tracking** (`shared/schema.ts`, `migrator.ts`, `imap-stealth.ts`, `dashboard-routes.ts`, `warmup.tsx`):
+   - Added `placement` column to `warmupInteractions` (unknown/inbox/spam/promotions) with migration
+   - `rescueSpamFolder` sets `placement='spam'` when warmup email found in spam
+   - `sweepInboxToHidden` sets `placement='inbox'` when found in inbox
+   - Warmup-status endpoint returns `totalSpam` per mailbox
+   - Warmup-activity endpoint includes `spam` in time series data
+   - Warmup page shows Spam count in KPI cards + amber line in chart
+5. **All 6 fixes from round 1** (seed_monitor uid_move + flags, inbox sweep race DB fast-path, seed SEED_DAILY_LIMIT, no seed pausing, scheduler seed skip, rescueSpamFolder interaction marking).
+
+### Data Flow (complete)
+```
+User→seed warmup email lands in seed's Spam/Promotions
+  → Rust seed monitor detects (30s cycle)
+  → UID MOVE to INBOX + STORE +FLAGS (\NotJunk \Flagged)
+    → Trains ISP: "this is NOT spam, it's legitimate email"
+  → inbox-sweep (5min, 500 mailboxes staggered via queue concurrency=5)
+    OR expect-reply (1-4h, after outbound send delay + 0-30min stagger)
+    → Moves to hidden folder, marks warmupInteractions.movedToHiddenFolder=true
+    → Sets placement='inbox' (or 'spam' if rescued from spam folder)
+  → expect-reply finds interaction in DB (fast path, no IMAP needed)
+  → Queues send-reply, seed replies back (no pause, 400 daily limit)
+
+Seed→user warmup email lands in user's Spam
+  → rescueSpamFolder (30min) finds in spam
+  → Moves to hidden folder + marks placement='spam'
+  → Warmup page graph shows spam count (amber line)
+```
 
 ### Changes
 1. **Removed duplicate Status column** (`integrations.tsx`): Changed stats grid `grid-cols-5` → `grid-cols-4`, removed "Status Active/Inactive" column (duplicate of connection banner). Removed `min-w-[320px]` to prevent mobile overflow.
@@ -897,3 +969,106 @@ pm2 restart all
 4. **TS build fixes** (`custom-email-routes.ts`): Added explicit types to all `map()`/`findIndex()` callbacks (7 params), adopted strict `noImplicitAny` style. Added null guard for `getRedisClient()`. Changed `log.error` → `console.error`.
 5. **MessageType union** (`websocket-sync.ts`): Added `'bulk_import_progress'` to fix TS2345.
 6. **Deployed to EC2**: Rust build succeeds, client build succeeds (`npm run build:server` 0 errors), API gateway + Rust sender restarted.
+
+## This Session (Jul 20 2026) — Calendly OAuth + Cross-User Fixes + Developer Docs
+
+### Fixes
+1. **Developer docs rewrite** (`developer-docs.tsx`): Complete rewrite with real curl examples, JSON responses, SEO meta tags (Helmet), live search, 17+ endpoints
+2. **API key security** (`mcp-routes.ts`, `auth.ts`, `developer-docs.tsx`): Changed from 15B→32B random (70-char `audnix_`+64 hex), SHA-512 hashing (was SHA-256), AES-256-GCM at-rest encryption. Show once, mask forever
+3. **Auth audit**: Patched 4 unsecured routes — `expert-chat.ts` (trivially spoofable `req.body.isAuthenticated`), `stripe-payment-confirmation.ts`, `admin-migrations.ts` (added `requireAuth`/`requireAdmin`)
+4. **Rust scheduling module** (`scheduler.rs`): `calcDailyPlan` (25% warmup reserve), `distributeLeads` (floor/ceil MX-aware), `calcSpacing` (10-15min gap), `redistribute` (carry-over). 4 tests pass
+5. **Node.js scheduler bridge** (`scheduler-bridge.ts`): LPUSH→Rust→BRPOP with 5s timeout fallback to inline JS
+6. **Warmup coexistence** (`campaign-queue.ts`): 25% budget reservation via `calcDailyPlan()`, bidirectional 10min gap, `deferToTomorrow()` everywhere
+7. **ETA fix** (`outreach.ts`): `Math.ceil(remaining / avgDailyRate)` with fallback to `totalDailyLimit`
+8. **Even distribution** (`mailbox-router.ts`): `distributeLeadsEvenly()` with floor/ceil per MX domain
+9. **polyfill-file.cjs**: Created missing PM2 preload shim (was breaking `ecosystem.config.cjs` `--require`)
+10. **API.md**: Full API reference with curl commands, auth, rate limits, MCP JSON-RPC
+11. **SECURITY.md**: Updated with new key format/hash/encryption details
+12. **RecentConversations.tsx bug**: API returns plain array `[{...}]`, not `{leads:[...]}`. `allLeads` was always `[]` because it checked `leadsData?.leads` which is `undefined` on arrays. Leads list stayed stuck on "Loading leads..." spinner. Fixed by checking `Array.isArray(leadsData)` first. Also cleaned 5 `font-black`→`font-semibold`
+13. **Calendly OAuth redirect → `/auth`** (`calendly-redirect.ts`, `google-redirect.ts`): Root cause was cross-site OAuth redirect (Calendly→audnixai.com) where the session cookie wasn't reliably sent due to browser ITP/3rd-party cookie blocking. Both calednly and Google Calendar callbacks now `regenerate()` a fresh session before setting `userId`, `await session.save()`, and explicitly set `audnix.sid` cookie. Redirect URL changed from `/dashboard/integrations`→`/dashboard/calendar`
+14. **Google Calendar OAuth redirect** (`google-redirect.ts`): Same session fix as Calendly. Also redirects to `/dashboard/calendar` now instead of `/dashboard/integrations`
+15. **OAuth URL params on calendar page** (`calendar.tsx`): Added `useEffect` that reads `?success=calendly_connected`, `?error=calendly_denied`, etc. from URL params and shows toast + invalidates queries
+16. **Cross-user uniqueness removed for per-user services** (`drizzle-storage.ts`): Skipped the "already connected to another account" check for `calendly`, `google_calendar`, `instagram` — each user connects their own account, these shouldn't be shared
+17. **"already connected" error message** (`drizzle-storage.ts`): Changed `"This mailbox (...) is already connected by another account"` → `"is already connected to another Audnix account"`
+18. **Calendly accountType fix** (`calendly-redirect.ts`): Changed from `tokenData.user?.name` (display name, not unique) → `tokenData.user?.email` so the cross-user check uses a unique identifier
+19. **API.md**: Added `PATCH /api/integrations/:integrationId/outreach-limit` endpoint documentation (initialOutreachLimit)
+20. **Initial email throttle UI** (`UnifiedCampaignWizard.tsx`, `integrations-routes.ts`): Added `initialOutreachLimit` slider to campaign wizard per-mailbox section — sits below the daily limit slider, controls how many emails to send on day one before auto-ramping. Added `PATCH /api/integrations/:integrationId/outreach-limit` backend endpoint. Exposed `initialOutreachLimit` in integrations API response (`safeIntegrations`). Included in campaign config payload. The campaign queue already reads `integrations.initialOutreachLimit` at send time — fully wired.
+
+### Remaining
+- Lead recovery end-to-end (worker not working properly)
+
+## This Session (Jul 21 2026) — Warmup Reliability + Integrations Mobile Layout
+
+### Changes (Jul 21 2026)
+1. **Seed spam auto-move** (`rust-imap-worker/src/seed_monitor.rs`): When seed monitor detects warmup emails in Spam/Promotions folders (30s cycle), now does `UID MOVE` to INBOX + `STORE +FLAGS (\NotJunk \Flagged)` to train ISP. Uses `uid_move()` (RFC 6851) with `uid_copy_and_delete()` fallback.
+2. **Seed reply race condition** (`services/warmup-service/src/workers/inbound-worker.ts`): `handleExpectReply` added DB fast-path — checks `warmupInteractions.movedToHiddenFolder=true` for expected message ID before IMAP sweep. Seeds use `SEED_DAILY_LIMIT` (400) not `DAILY_SENT_LIMIT` (20).
+3. **Seeds never paused** (`outbound-worker.ts`, `scheduler-worker.ts`): Seeds skip pause logic on daily limit / sent/received cap — return early instead of setting `status='paused'`.
+4. **Per-thread stagger** (`warmup-config.ts`): `PER_THREAD_STAGGER_MAX_MINUTES=30` — if 500 mailboxes create threads in one scheduler cycle, first sends hit seeds spread across 30min instead of 60s.
+5. **Inbox sweep interval 2m→5m** (`warmup-config.ts`): Reduces IMAP pressure with 500+ mailboxes.
+6. **Spam tracking** (`shared/schema.ts`, `migrator.ts`, `imap-stealth.ts`, `dashboard-routes.ts`, `warmup.tsx`): Added `warmupInteractions.placement` column (unknown/inbox/spam/promotions). `rescueSpamFolder` sets `placement='spam'`, `sweepInboxToHidden` sets `placement='inbox'`. Dashboard returns `totalSpam` per mailbox. Warmup KPI cards show Spam count (amber if >0) + amber chart line.
+7. **`rescueSpamFolder` marks movedToHiddenFolder** (`imap-stealth.ts`): Updates `warmupInteractions.movedToHiddenFolder=true` so DB fast-path in expect-reply can find it.
+8. **`imap_client.rs`**: Added `uid_move()`, `uid_copy_and_delete()` (for providers without RFC 6851), `mark_not_spam_and_important()` (`STORE +FLAGS (\NotJunk \Flagged)`).
+9. **Integrations page mobile layout** (`integrations.tsx`): Stats grid changed to `grid-cols-2 sm:grid-cols-4` (was `grid-cols-4` causing overflow on mobile). Labels use `tracking-normal sm:tracking-widest`. Reduced gaps/padding. Removed `overflow-x-auto` wrapper.
+10. **`email-stats-routes.ts`**: Reverted `delivered`→inbox change — `placement='delivered'` stays as "other" (unconfirmed) on deliverability page until open/bounce/FBL/seed monitor confirms real placement.
+11. **Dynamic mailbox status badges** (`integrations.tsx:1635-1653`): Replaced static "Warmup"/"Warmup Paused"/"Disconnected" with short dynamic badges: `inactive` (gray, disconnected), `warming` (amber, warmup active & rep < 85), `warm` (emerald, warmup active & rep ≥ 85), `paused` (amber/secondary), `outreach` (sky/blue, connected no warmup). All lowercase, 4–8 chars.
+12. **Real-time placement pulse dot** (`integrations.tsx:1720-1728`): Small `animate-pulse` colored dot next to "Inbox" label that changes instantly when `deliverability_updated` socket event fires — green for `inbox`, red for `spam`, amber for `bounced`, blue for other. Uses `queryClient.setQueryData` to patch the specific mailbox's `lastPlacement` in cache before query invalidation.
+13. **Per-domain DNS badges** (`integrations.tsx:402`): `getDnsBadge` now checks `domainVerifications` per-domain result first. Falls back to aggregate `stats.health.dns` only when no per-domain data exists. Fixes SPF/DKIM/DMARC/MX/BL showing wrong (red) status in View All cards when the mailbox uses a different domain than the primary verified domain.
+14. **"Init..." → "—"** (`integrations.tsx`): All rate cells (Delivery/Bounce/Inbox/Rep) in both mailbox cards and reputation section now show "—" (em dash) instead of "Init..." when no data yet. Less misleading; rates populate instantly via `deliverability_updated` socket events from seed monitor / SMTP activity.
+
+### Data Flow (Complete Warmup + Deliverability)
+```
+User→seed warmup email lands in seed's Spam/Promotions
+  → Rust seed monitor detects (30s cycle)
+  → UID MOVE to INBOX + STORE +FLAGS (\NotJunk \Flagged)
+    → Trains ISP: "this is NOT spam"
+  → inbox-sweep (5min, staggered via queue concurrency=5)
+    OR expect-reply (1-5min after send delay + 0-30min stagger)
+    → Moves to hidden folder, marks movedToHiddenFolder=true, placement='inbox'
+  → expect-reply finds interaction in DB (fast path, no IMAP needed)
+  → Queues send-reply, seed replies back (no pause, 400 daily limit)
+
+Seed→user warmup email lands in user's Spam
+  → rescueSpamFolder (30min) finds in spam
+  → Moves to hidden folder + marks placement='spam', movedToHiddenFolder=true
+  → Warmup page graph shows spam count (amber line)
+  → Seed's seed_monitor detects email in spam → moves to INBOX + flags
+
+Manual inbox send → email.ts updateSendPlacement() → placement='delivered'
+  → deliverability page shows "other/pending"
+  → Later: open → placement='inbox', bounce → placement='bounced', FBL → placement='spam'
+```
+
+### Files Changed
+- `rust-imap-worker/src/seed_monitor.rs` — spam→INBOX move + flags
+- `rust-imap-worker/src/imap_client.rs` — uid_move, uid_copy_and_delete, mark_not_spam_and_important
+- `services/warmup-service/src/workers/inbound-worker.ts` — DB fast-path, SEED_DAILY_LIMIT
+- `services/warmup-service/src/workers/outbound-worker.ts` — no pause for seeds
+- `services/warmup-service/src/workers/scheduler-worker.ts` — no pause for seeds, stagger
+- `services/warmup-service/src/config/warmup-config.ts` — stagger timing, inbox sweep 5min
+- `services/warmup-service/src/lib/imap-stealth.ts` — placement tracking, movedToHiddenFolder in rescueSpamFolder
+- `shared/schema.ts` — warmupInteractions.placement
+- `shared/lib/db/migrator.ts` — warmup_interactions.placement migration
+- `services/api-gateway/src/routes/dashboard-routes.ts` — totalSpam, spam time series
+- `services/api-gateway/src/routes/email-stats-routes.ts` — 'delivered' stays 'other'
+- `client/src/pages/dashboard/warmup.tsx` — Spam KPI + chart line
+- `client/src/pages/dashboard/integrations.tsx` — grid-cols-2 sm:grid-cols-4, tracking-normal mobile, no wrapper, no duplicate badge
+
+### Remaining (Jul 21)
+- Warmup not sending (0 sent today) — backend scheduler/outbound worker issue, not frontend
+- Warmup throttle: 10-15/day default, 20-25% of campaign volume when campaign active (backend config)
+
+## This Session (Jul 21 2026) — Warmup Page Fixes + DNS Badges Per-Domain
+
+### Changes
+1. **Removed duplicate Active Warmup Progress** (`warmup.tsx:606-662`): Deleted the hardcoded bottom section. The real top section (lines 351-418) is the only one now.
+2. **5-column stats grid** (`warmup.tsx:395`): Changed `grid-cols-4` → `grid-cols-5`, added Rep column to Active Warmup Progress cards. Shows `--` when `totalSent === 0` (no real data yet), actual score with color when data exists.
+3. **Fake outreach count removed** (`warmup.tsx:370`): Changed `{mb.dailyLimit} warmup/day • {mb.dailyLimit * 3} outreach/day` → `{mb.provider} • {warmupCount} sent today • {mb.dailyLimit} limit`. No fake math.
+4. **Domain reputation shows `--` for empty** (`integrations.tsx:2307-2325`): `PerMailboxReputationSection` now checks `rep.sent === 0` before showing score/spam/bounce — shows `--` (gray) and "Pending" badge when no data. Score only shows when there's actual email activity.
+5. **Warmup events update all KPIs** (`use-realtime.tsx:539-542`): `warmup_update` handler now also calls `debouncedInvalidateStats()` (in addition to `debouncedInvalidateWarmup()`), so warmup sends update home page KPIs, deliverability, analytics, and warmup simultaneously.
+
+### Files Changed
+- `client/src/pages/dashboard/warmup.tsx` — removed duplicate section, 5-col grid with rep, real data display
+- `client/src/pages/dashboard/integrations.tsx` — PerMailboxReputationSection shows --/Pending for empty mailboxes
+- `client/src/hooks/use-realtime.tsx` — warmup_update also invalidates all stats queries
+- `client/src/pages/dashboard/calendar.tsx` — getRelativeDateLabel timezone-aware diff (not UTC Math.round), today text white
+

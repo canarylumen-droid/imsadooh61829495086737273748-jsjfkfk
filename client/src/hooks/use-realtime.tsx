@@ -537,6 +537,7 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
 
     // WARMUP UPDATES
     socketInstance.on('warmup_update', () => {
+      debouncedInvalidateStats();
       debouncedInvalidateWarmup();
     });
 

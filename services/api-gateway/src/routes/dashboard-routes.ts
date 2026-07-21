@@ -1269,6 +1269,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                     sent: sqlFn<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound')::int`,
                     bounced: sqlFn<number>`count(*) filter (where ${warmupInteractions.status} IN ('bounced', 'failed'))::int`,
                     opened: sqlFn<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound' AND ${warmupInteractions.status} = 'delivered')::int`,
+                    spam: sqlFn<number>`count(*) filter (where ${warmupInteractions.placement} = 'spam')::int`,
                 }).from(warmupInteractions)
                     .where(inArray(warmupInteractions.fromMailboxId, enrolledIds))
                     .groupBy(warmupInteractions.fromMailboxId);
@@ -1276,6 +1277,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                     sent: Number(r.sent) || 0,
                     bounced: Number(r.bounced) || 0,
                     opened: Number(r.opened) || 0,
+                    spam: Number(r.spam) || 0,
                 }]));
             } catch (_) {}
         }
@@ -1286,20 +1288,21 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                 const isEnrolled = !!wm;
                 const warmupStatus = wm?.status || int.warmupStatus || 'none';
                 const isWarmingUp = wm?.status === 'active';
-                const dailyLimit = wm?.dailyLimit || 5;
+                const dailyLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 5;
                 const dailySentCount = wm?.dailySentCount || 0;
                 const dailyReceivedCount = wm?.dailyReceivedCount || 0;
                 const daysSinceConnected = int.createdAt
                     ? Math.max(0, Math.floor((Date.now() - new Date(int.createdAt).getTime()) / 86400000))
                     : 0;
 
-                let totalSent = 0, totalBounced = 0, totalOpened = 0;
+                let totalSent = 0, totalBounced = 0, totalOpened = 0, totalSpam = 0;
                 if (isEnrolled && wm) {
                     const stats = interactionStats.get(wm.id);
                     if (stats) {
                         totalSent = stats.sent;
                         totalBounced = stats.bounced;
                         totalOpened = stats.opened;
+                        totalSpam = stats.spam;
                     }
                 }
 
@@ -1328,6 +1331,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                     totalSent,
                     totalBounced,
                     totalOpened,
+                    totalSpam,
                     warmupStatus,
                 });
             } catch (e: any) {
@@ -1418,6 +1422,7 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
             sends: sql<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound')`,
             opens: sql<number>`count(*) filter (where ${warmupInteractions.direction} = 'outbound' AND ${warmupInteractions.status} = 'delivered')`,
             bounces: sql<number>`count(*) filter (where ${warmupInteractions.status} = 'bounced' OR ${warmupInteractions.status} = 'failed')`,
+            spam: sql<number>`count(*) filter (where ${warmupInteractions.placement} = 'spam')`,
         })
             .from(warmupInteractions)
             .where(and(
@@ -1427,11 +1432,12 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
             .groupBy(timeField)
             .orderBy(timeField);
 
-        const periods: Array<{ period: string; sends: number; opens: number; bounces: number }> = rows.map(r => ({
+        const periods: Array<{ period: string; sends: number; opens: number; bounces: number; spam: number }> = rows.map(r => ({
             period: r.period,
             sends: Number(r.sends),
             opens: Number(r.opens),
             bounces: Number(r.bounces),
+            spam: Number(r.spam),
         }));
 
         res.json({ periods, hourly: useHourly });

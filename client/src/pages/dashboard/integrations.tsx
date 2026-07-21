@@ -359,7 +359,7 @@ export default function IntegrationsPage() {
   const { data: customEmailStatus, refetch: refetchStatus } = useQuery<{
     connected: boolean;
     email: string | null;
-    integrations: Array<{ id: string; email: string; connected: boolean; provider: string; reputationScore?: number; bounceRate?: number; dailyLimit?: number; warmupStatus?: string; deliveryRate?: number; placementRate?: number }>;
+    integrations: Array<{ id: string; email: string; connected: boolean; provider: string; reputationScore?: number; bounceRate?: number; dailyLimit?: number; warmupStatus?: string; deliveryRate?: number; placementRate?: number; lastPlacement?: string; placementUpdatedAt?: number }>;
   }>({
     queryKey: ["/api/custom-email/status"],
     placeholderData: (prev) => prev,
@@ -399,11 +399,13 @@ export default function IntegrationsPage() {
 
   const getDnsBadge = (record: 'spf' | 'dkim' | 'dmarc' | 'mx' | 'blacklist', mailboxEmail: string) => {
     if (!stats?.health?.dns) return null;
-    const isPresent = record === 'blacklist' ? !stats.health.dns.blacklist : !!stats.health.dns[record];
     const label = record === 'blacklist' ? 'BL' : record.toUpperCase();
     const domain = mailboxEmail?.split('@')[1] || '';
     const verification = stats?.domainVerifications?.find((v: any) => v.domain === domain);
     const result = verification?.result?.[record === 'blacklist' ? 'blacklist' : record];
+    const isPresent = result !== undefined
+      ? (record === 'blacklist' ? !result?.listedOn?.length : !!result?.record || !!result?.records?.length)
+      : (record === 'blacklist' ? !stats.health.dns.blacklist : !!stats.health.dns[record]);
     let tooltip = '';
     if (record === 'blacklist') {
       tooltip = isPresent ? 'Not blacklisted' : `Blacklisted on: ${result?.listedOn?.join(', ') || 'unknown RBL'}`;
@@ -494,7 +496,20 @@ export default function IntegrationsPage() {
     if (socket) {
       socket.on('stats_updated', handleStatsUpdated);
       socket.on('integration_health_updated', handleStatsUpdated);
-      socket.on('deliverability_updated', handleStatsUpdated);
+      socket.on('deliverability_updated', (data: any) => {
+        queryClient.setQueryData(["/api/custom-email/status"], (old: any) => {
+          if (!old?.integrations) return old;
+          return {
+            ...old,
+            integrations: old.integrations.map((i: any) =>
+              i.id === data?.integrationId
+                ? { ...i, lastPlacement: data?.placement || i.lastPlacement, placementUpdatedAt: Date.now() }
+                : i
+            )
+          };
+        });
+        handleStatsUpdated();
+      });
       socket.on('settings_updated', handleSettingsUpdated);
       socket.on('integration_reputation_updated', handleStatsUpdated);
       socket.on('dns_verified', handleSettingsUpdated);
@@ -1620,15 +1635,23 @@ export default function IntegrationsPage() {
                                 {mailbox.email}
                               </h4>
                               {!mailbox.connected && (
-                                <Badge variant="outline" className="text-muted-foreground border-muted text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Disconnected</Badge>
+                                <Badge variant="outline" className="text-muted-foreground border-muted text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">inactive</Badge>
                               )}
                               {mailbox.connected && mailbox.warmupStatus === 'active' && (
-                                <Badge className="bg-emerald-500/10 text-emerald-500 border-0 text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">Warmup</Badge>
-                              )}
-                              {mailbox.connected && mailbox.warmupStatus !== 'active' && mailbox.warmupStatus !== 'none' && (
-                                <Badge variant="secondary" className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">
-                                  Warmup {mailbox.warmupStatus === 'paused' ? 'Paused' : 'Off'}
+                                <Badge className={cn(
+                                  "border-0 text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0",
+                                  (mailbox.reputationScore ?? 0) >= 85
+                                    ? "bg-emerald-500/15 text-emerald-500"
+                                    : "bg-amber-500/15 text-amber-500"
+                                )}>
+                                  {(mailbox.reputationScore ?? 0) >= 85 ? "warm" : "warming"}
                                 </Badge>
+                              )}
+                              {mailbox.connected && mailbox.warmupStatus === 'paused' && (
+                                <Badge variant="secondary" className="text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">paused</Badge>
+                              )}
+                              {mailbox.connected && (!mailbox.warmupStatus || mailbox.warmupStatus === 'none') && (
+                                <Badge className="bg-sky-500/10 text-sky-500 border-0 text-[7px] sm:text-[8px] font-black uppercase tracking-widest px-1 py-0 shrink-0">outreach</Badge>
                               )}
                               {/* DNS badges with tooltips */}
                               {mailbox.connected && stats?.health?.dns && (
@@ -1666,10 +1689,9 @@ export default function IntegrationsPage() {
 
                         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 mt-2 lg:mt-0">
                           {mailbox.connected && (
-                            <div className="flex overflow-x-auto -mx-3 px-3 w-auto sm:mx-0 sm:px-0">
-                              <div className="grid grid-cols-4 gap-2 px-3 py-2 bg-background/50 rounded-xl border border-border/50 min-w-0">
+                              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 sm:gap-2 px-2 sm:px-3 py-2 bg-background/50 rounded-xl border border-border/50 min-w-0">
                                 <div className="flex flex-col justify-center">
-                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Delivery</span>
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-normal sm:tracking-widest text-muted-foreground">Delivery</span>
                                   <span className={cn(
                                     "text-xs sm:text-sm font-black",
                                     mailbox.deliveryRate === null || mailbox.deliveryRate === undefined ? "text-sky-500" :
@@ -1678,11 +1700,11 @@ export default function IntegrationsPage() {
                                   )}>
                                     {mailbox.deliveryRate !== null && mailbox.deliveryRate !== undefined
                                       ? `${mailbox.deliveryRate}%`
-                                      : "Init..."}
+                                      : "—"}
                                   </span>
                                 </div>
-                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
-                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Bounce</span>
+                                <div className="flex flex-col justify-center sm:border-l sm:border-border/40 sm:pl-2">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-normal sm:tracking-widest text-muted-foreground">Bounce</span>
                                   <span className={cn(
                                     "text-xs sm:text-sm font-black",
                                     mailbox.bounceRate === null || mailbox.bounceRate === undefined ? "text-sky-500" :
@@ -1691,11 +1713,22 @@ export default function IntegrationsPage() {
                                   )}>
                                     {mailbox.bounceRate !== null && mailbox.bounceRate !== undefined
                                       ? `${mailbox.bounceRate}%`
-                                      : "Init..."}
+                                      : "—"}
                                   </span>
                                 </div>
-                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
-                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Inbox</span>
+                                <div className="flex flex-col justify-center sm:border-l sm:border-border/40 sm:pl-2">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-normal sm:tracking-widest text-muted-foreground flex items-center gap-1">
+                                    Inbox
+                                    {mailbox.lastPlacement && (
+                                      <span className={cn(
+                                        "inline-block h-1.5 w-1.5 rounded-full animate-pulse",
+                                        mailbox.lastPlacement === 'inbox' ? "bg-emerald-500" :
+                                        mailbox.lastPlacement === 'spam' ? "bg-red-500" :
+                                        mailbox.lastPlacement === 'bounced' ? "bg-amber-500" :
+                                        "bg-sky-500"
+                                      )} />
+                                    )}
+                                  </span>
                                   <span className={cn(
                                     "text-xs sm:text-sm font-black",
                                     mailbox.placementRate === null || mailbox.placementRate === undefined ? "text-sky-500" :
@@ -1704,11 +1737,11 @@ export default function IntegrationsPage() {
                                   )}>
                                     {mailbox.placementRate !== null && mailbox.placementRate !== undefined
                                       ? `${mailbox.placementRate}%`
-                                      : "Init..."}
+                                      : "—"}
                                   </span>
                                 </div>
-                                <div className="flex flex-col justify-center border-l border-border/40 pl-2">
-                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Rep</span>
+                                <div className="flex flex-col justify-center sm:border-l sm:border-border/40 sm:pl-2">
+                                  <span className="text-[8px] sm:text-[10px] font-bold uppercase tracking-normal sm:tracking-widest text-muted-foreground">Rep</span>
                                   <span className={cn(
                                     "text-xs sm:text-sm font-black",
                                     mailbox.reputationScore === null || mailbox.reputationScore === undefined ? "text-sky-500" :
@@ -1721,7 +1754,6 @@ export default function IntegrationsPage() {
                                   </span>
                                 </div>
                               </div>
-                            </div>
                           )}
 
                           <div className="flex gap-2 w-full sm:w-auto">
@@ -2127,12 +2159,6 @@ export default function IntegrationsPage() {
                           {mailbox.provider === 'gmail' ? 'Gmail' : mailbox.provider === 'outlook' ? 'Outlook' : 'Custom SMTP'}
                         </p>
                       </div>
-                      <Badge className={cn(
-                        "text-[8px] shrink-0 ml-2",
-                        mailbox.connected ? "bg-emerald-500/10 text-emerald-500" : "bg-muted text-muted-foreground"
-                      )}>
-                        {mailbox.connected ? 'Active' : 'Disconnected'}
-                      </Badge>
                     </div>
 
                     {/* DNS badges */}
@@ -2158,19 +2184,19 @@ export default function IntegrationsPage() {
                     <div className="grid grid-cols-4 gap-2">
                       <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 text-center">
                         <p className={cn("text-xs font-bold", deliveryRate !== null ? deliveryRate >= 95 ? "text-emerald-500" : deliveryRate >= 80 ? "text-amber-500" : "text-red-500" : "text-sky-500")}>
-                          {deliveryRate !== null ? `${deliveryRate}%` : 'Init...'}
+                          {deliveryRate !== null ? `${deliveryRate}%` : '—'}
                         </p>
                         <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Delivery</p>
                       </div>
                       <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 text-center">
                         <p className={cn("text-xs font-bold", bounceRate !== null ? bounceRate < 2 ? "text-emerald-500" : bounceRate < 5 ? "text-amber-500" : "text-red-500" : "text-sky-500")}>
-                          {bounceRate !== null ? `${bounceRate}%` : 'Init...'}
+                          {bounceRate !== null ? `${bounceRate}%` : '—'}
                         </p>
                         <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Bounce</p>
                       </div>
                       <div className="p-1.5 rounded-lg bg-background/50 border border-border/30 text-center">
                         <p className={cn("text-xs font-bold", placementRate !== null ? placementRate >= 90 ? "text-emerald-500" : placementRate >= 70 ? "text-amber-500" : "text-red-500" : "text-sky-500")}>
-                          {placementRate !== null ? `${placementRate}%` : 'Init...'}
+                          {placementRate !== null ? `${placementRate}%` : '—'}
                         </p>
                         <p className="text-[8px] text-muted-foreground uppercase tracking-wider">Inbox</p>
                       </div>
@@ -2274,11 +2300,12 @@ function PerMailboxReputationSection({ integrations, selectedMailboxId }: {
                     <span className="text-xs font-bold text-foreground/80 truncate">{email}</span>
                     <Badge className={cn(
                       "text-[7px] font-black uppercase tracking-wider px-1.5 py-0 shrink-0 border",
+                      rep.sent === 0 ? "bg-muted/20 text-muted-foreground border-border/30" :
                       rep.score >= 70 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
                       rep.score >= 40 ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
                       "bg-red-500/10 text-red-500 border-red-500/20"
                     )}>
-                      {rep.score >= 70 ? 'Healthy' : rep.score >= 40 ? 'At Risk' : 'Critical'}
+                      {rep.sent === 0 ? 'Pending' : rep.score >= 70 ? 'Healthy' : rep.score >= 40 ? 'At Risk' : 'Critical'}
                     </Badge>
                   </div>
                   <div className="grid grid-cols-4 gap-3 text-center">
@@ -2288,15 +2315,15 @@ function PerMailboxReputationSection({ integrations, selectedMailboxId }: {
                     </div>
                     <div>
                       <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/60">Spam</p>
-                      <p className={cn("text-sm font-black", spamColor)}>{rep.spamRate}%</p>
+                      <p className={cn("text-sm font-black", rep.sent === 0 ? "text-muted-foreground" : spamColor)}>{rep.sent === 0 ? '--' : `${rep.spamRate}%`}</p>
                     </div>
                     <div>
                       <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/60">Bounce</p>
-                      <p className={cn("text-sm font-black", bounceColor)}>{rep.bounceRate}%</p>
+                      <p className={cn("text-sm font-black", rep.sent === 0 ? "text-muted-foreground" : bounceColor)}>{rep.sent === 0 ? '--' : `${rep.bounceRate}%`}</p>
                     </div>
                     <div>
                       <p className="text-[8px] font-bold uppercase tracking-widest text-muted-foreground/60">Score</p>
-                      <p className={cn("text-sm font-black", scoreColor)}>{rep.score}/100</p>
+                      <p className={cn("text-sm font-black", rep.sent === 0 ? "text-muted-foreground" : scoreColor)}>{rep.sent === 0 ? '--' : `${rep.score}/100`}</p>
                     </div>
                   </div>
                 </div>

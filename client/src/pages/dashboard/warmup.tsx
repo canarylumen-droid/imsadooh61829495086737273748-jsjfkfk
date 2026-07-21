@@ -35,6 +35,7 @@ interface MailboxWarmup {
   totalSent: number;
   totalBounced: number;
   totalOpened: number;
+  totalSpam: number;
   warmupStatus: string;
 }
 
@@ -96,7 +97,7 @@ export default function WarmupPage() {
   });
 
   const warmupStatuses: MailboxWarmup[] = warmupData?.mailboxes || [];
-  const activityPeriods: { period: string; sends: number; opens: number; bounces: number }[] = activityData?.periods || [];
+  const activityPeriods: { period: string; sends: number; opens: number; bounces: number; spam: number }[] = activityData?.periods || [];
   const isHourly = activityData?.hourly ?? true;
 
   const filtered = useMemo(() => {
@@ -339,6 +340,7 @@ export default function WarmupPage() {
                   <Line type="monotone" dataKey="sends" name="Sends" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
                   <Line type="monotone" dataKey="opens" name="Opens" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
                   <Line type="monotone" dataKey="bounces" name="Bounces" stroke="#ef4444" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
+                  <Line type="monotone" dataKey="spam" name="Spam" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={{ r: 4, strokeWidth: 0 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -365,7 +367,7 @@ export default function WarmupPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate">{mb.email}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {mb.provider} • {mb.dailyLimit} warmup/day • {mb.dailyLimit * 3} outreach/day
+                        {mb.provider} • {warmupCount} sent today • {mb.dailyLimit} limit
                       </p>
                     </div>
                     <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] shrink-0 ml-2">Active</Badge>
@@ -389,8 +391,8 @@ export default function WarmupPage() {
 
                   <p className="text-[10px] text-muted-foreground mb-2">{getStageLabel(mb.warmupPercent)}</p>
 
-                  {/* Stats grid: sent / opened / bounced */}
-                  <div className="grid grid-cols-3 gap-3">
+                  {/* Stats grid: sent / opened / bounced / spam / rep */}
+                  <div className="grid grid-cols-5 gap-2">
                     <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
                       <p className="text-sm font-bold">{mb.totalSent}</p>
                       <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Sent</p>
@@ -402,6 +404,16 @@ export default function WarmupPage() {
                     <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
                       <p className="text-sm font-bold text-red-500">{mb.totalBounced}</p>
                       <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Bounced</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
+                      <p className={cn("text-sm font-bold", mb.totalSpam > 0 ? "text-amber-500" : "text-muted-foreground")}>{mb.totalSpam}</p>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Spam</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
+                      <p className={cn("text-sm font-bold", mb.totalSent > 0 ? getReputationColor(mb.reputationScore) : "text-muted-foreground")}>
+                        {mb.totalSent > 0 ? mb.reputationScore : '--'}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Rep</p>
                     </div>
                   </div>
                 </div>
@@ -596,60 +608,6 @@ export default function WarmupPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Active Warmup Details */}
-      {activeMailboxes.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingUp className="h-4 w-4 text-amber-500" />
-              Active Warmup Progress
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {activeMailboxes.map((mb) => (
-              <div key={mb.mailboxId} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{mb.email}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {mb.provider} • {mb.dailySentCount} sent today • {mb.dailyLimit} limit
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="text-amber-500 border-amber-500/30 shrink-0 ml-2">
-                    {mb.warmupPercent}% warmed
-                  </Badge>
-                </div>
-                <Progress value={mb.warmupPercent} className="h-2" />
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{getStageLabel(mb.warmupPercent)}</span>
-                  <span>{mb.totalSent} sent • {mb.totalOpened} opened</span>
-                </div>
-                <div className="grid grid-cols-4 gap-2 text-center">
-                  <div className="bg-muted/30 rounded p-2">
-                    <p className="text-lg font-bold">{mb.totalSent}</p>
-                    <p className="text-[10px] text-muted-foreground">Sent</p>
-                  </div>
-                  <div className="bg-muted/30 rounded p-2">
-                    <p className="text-lg font-bold">{mb.totalOpened}</p>
-                    <p className="text-[10px] text-muted-foreground">Opened</p>
-                  </div>
-                  <div className="bg-muted/30 rounded p-2">
-                    <p className="text-lg font-bold text-red-500">{mb.totalBounced}</p>
-                    <p className="text-[10px] text-muted-foreground">Bounced</p>
-                  </div>
-                  <div className="bg-muted/30 rounded p-2">
-                    <p className="text-lg font-bold" style={{ color: mb.reputationScore >= 80 ? '#10b981' : mb.reputationScore >= 60 ? '#eab308' : mb.reputationScore >= 40 ? '#f97316' : '#ef4444' }}>
-                      {mb.reputationScore}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">Reputation</p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Completed Mailboxes */}
       {warmupStatuses.filter(m => m.warmupStatus !== 'active' && m.warmupPercent >= 100).length > 0 && (

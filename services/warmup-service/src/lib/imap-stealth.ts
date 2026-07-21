@@ -139,7 +139,7 @@ export class ImapStealth {
         if (msg.messageId) {
           await db
             .update(warmupInteractions)
-            .set({ movedToHiddenFolder: true })
+            .set({ movedToHiddenFolder: true, placement: 'inbox' })
             .where(eq(warmupInteractions.messageId, msg.messageId));
         }
       }
@@ -219,6 +219,12 @@ export class ImapStealth {
         }
         rescuedCount++;
         await this.incrementDailyReceivedCount(mailbox.id);
+        if (msg.messageId) {
+          await db
+            .update(warmupInteractions)
+            .set({ movedToHiddenFolder: true, placement: 'spam' })
+            .where(eq(warmupInteractions.messageId, msg.messageId));
+        }
       }
       return rescuedCount;
     } finally {

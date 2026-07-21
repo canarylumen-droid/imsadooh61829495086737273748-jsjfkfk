@@ -42,25 +42,41 @@ export function createInboundWorker(): Worker {
 async function handleExpectReply(data: any) {
   const { threadId, recipientMailboxId, expectedMessageId } = data;
 
-  const mailbox = await db
+  // Fast path: check DB for the expected interaction marked as received
+  // (inbox-sweep may have already moved the email to hidden folder)
+  const existingInteraction = await db
     .select()
-    .from(warmupMailboxes)
-    .where(eq(warmupMailboxes.id, recipientMailboxId))
+    .from(warmupInteractions)
+    .where(
+      and(
+        eq(warmupInteractions.messageId, expectedMessageId),
+        eq(warmupInteractions.movedToHiddenFolder, true)
+      )
+    )
     .limit(1);
 
-  if (!mailbox[0]) return;
+  if (existingInteraction[0]) {
+    console.log(`[Warmup][Inbound] Message ${expectedMessageId} already received and swept — proceeding`);
+  } else {
+    // Fallback: poll IMAP inbox for the expected reply
+    const mailbox = await db
+      .select()
+      .from(warmupMailboxes)
+      .where(eq(warmupMailboxes.id, recipientMailboxId))
+      .limit(1);
 
-  // Poll IMAP for the expected reply
-  const found = await withImapTimeout(
-    () => imapStealth.sweepInboxToHidden(mailbox[0]),
-    mailbox[0].id,
-    'expect-reply'
-  );
+    if (!mailbox[0]) return;
 
-  if (!found) {
-    // If not found, we don't auto-reply — just let the thread potentially stall
-    // The scheduler will clean up stalled threads later
-    return;
+    const found = await withImapTimeout(
+      () => imapStealth.sweepInboxToHidden(mailbox[0]),
+      mailbox[0].id,
+      'expect-reply'
+    );
+
+    if (!found) {
+      // Wait longer — the scheduler will clean up stalled threads
+      return;
+    }
   }
 
   // If the thread is still active and we found the reply, queue the next outbound
@@ -79,11 +95,15 @@ async function handleExpectReply(data: any) {
       .where(eq(warmupMailboxes.id, recipientMailboxId))
       .limit(1);
 
-    const recipientLimit = getRampLimit(recipientMb[0].createdAt, WARMUP_CONFIG.DAILY_SENT_LIMIT);
-    if (
-      recipientMb[0] &&
-      recipientMb[0].dailySentCount < recipientLimit
-    ) {
+    if (!recipientMb[0]) return;
+
+    // Seeds are internal platform accounts — no daily limit enforcement
+    // User mailboxes use the ramp-adjusted daily limit
+    const recipientLimit = recipientMb[0].anchorRole === 'seed'
+      ? (recipientMb[0].dailyLimit ?? WARMUP_CONFIG.SEED_DAILY_LIMIT)
+      : getRampLimit(recipientMb[0].createdAt, WARMUP_CONFIG.DAILY_SENT_LIMIT);
+
+    if (recipientMb[0].dailySentCount < recipientLimit) {
       await warmupOutboundQueue.add(
         'send-reply',
         {
@@ -94,14 +114,13 @@ async function handleExpectReply(data: any) {
         },
         {
           delay:
-            (WARMUP_CONFIG.MIN_REPLY_EXPECTATION_HOURS +
+            (WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
               Math.floor(
                 Math.random() *
-                  (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_HOURS -
-                    WARMUP_CONFIG.MIN_REPLY_EXPECTATION_HOURS +
+                  (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_MINUTES -
+                    WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
                     1)
               )) *
-              60 *
               60 *
               1000,
         }

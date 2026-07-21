@@ -73,7 +73,7 @@ impl SeedMonitor {
             let raw = conn.fetch(0).await?;
             let messages = parse_fetch_response(&raw);
 
-            for (_uid, headers) in &messages {
+            for (uid, headers) in &messages {
                 let id = headers.get("x-audnix-id")
                     .or_else(|| headers.get("message-id"))
                     .cloned();
@@ -91,6 +91,28 @@ impl SeedMonitor {
                     };
 
                     info!("Seed placement: {} → {} (message: {})", id, placement, folder);
+
+                    // ════════════════════════════════════════════════════════════
+                    // CRITICAL: Move warmup emails from Spam/Promotions to INBOX
+                    // so the Node.js inbound worker can find them and reply.
+                    // Without this, seeds detect placement but never reply.
+                    // ════════════════════════════════════════════════════════════
+                    if placement != "inbox" {
+                        info!("Moving seed message {} from {} to INBOX", id, folder);
+                        match conn.uid_move(*uid, "INBOX").await {
+                            Ok(true) => {
+                                info!("Moved {} → INBOX successfully", id);
+                                // Mark as not-spam + important — trains ISP spam filter
+                                let _ = conn.mark_not_spam_and_important(*uid).await;
+                            }
+                            Ok(false) => warn!("UID MOVE returned false for {} — trying COPY+DELETE fallback", id),
+                            Err(_) => {
+                                // Fallback: UID COPY + STORE +FLAGS.SILENT (\Deleted)
+                                warn!("UID MOVE failed for {}, trying COPY+DELETE fallback", id);
+                                let _ = conn.uid_copy_and_delete(*uid, "INBOX").await;
+                            }
+                        }
+                    }
 
                     let payload = serde_json::json!({
                         "type": "SEED_PLACEMENT",

@@ -136,6 +136,7 @@ export class EnrollmentEngine {
       plan: string;
       subscriptionTier: string | null;
       encryptedMeta: string | null;
+      warmupLimit: number | null;
     }> = [];
 
     for (const row of candidates) {
@@ -177,6 +178,7 @@ export class EnrollmentEngine {
         plan: row.user.plan,
         subscriptionTier: row.user.subscriptionTier,
         encryptedMeta: (row.integration as any).encryptedMeta || null,
+        warmupLimit: (row.integration as any).warmupLimit ?? null,
       });
     }
 
@@ -192,6 +194,7 @@ export class EnrollmentEngine {
     plan: string;
     subscriptionTier: string | null;
     encryptedMeta: string | null;
+    warmupLimit: number | null;
   }) {
     let metadata: any = {};
     if (candidate.encryptedMeta) {
@@ -225,6 +228,7 @@ export class EnrollmentEngine {
       anchorRole: 'member',
       dailySentCount: 0,
       dailyReceivedCount: 0,
+      dailyLimit: candidate.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT,
       metadata,
     }).returning();
 

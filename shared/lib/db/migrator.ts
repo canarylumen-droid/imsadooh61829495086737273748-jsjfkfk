@@ -519,6 +519,7 @@ export async function runDatabaseMigrations() {
                         x_audnix_warmup BOOLEAN NOT NULL DEFAULT true,
                         expunged_from_sent BOOLEAN NOT NULL DEFAULT false,
                         moved_to_hidden_folder BOOLEAN NOT NULL DEFAULT false,
+                        placement TEXT NOT NULL DEFAULT 'unknown' CHECK (placement IN ('unknown', 'inbox', 'spam', 'promotions')),
                         status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'sent', 'delivered', 'failed', 'bounced', 'expunged')),
                         error_message TEXT,
                         sent_at TIMESTAMP,
@@ -687,6 +688,15 @@ export async function runDatabaseMigrations() {
                     END IF;
                     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_tracking_user_created_idx') THEN
                         CREATE INDEX email_tracking_user_created_idx ON email_tracking(user_id, created_at);
+                    END IF;
+                END IF;
+
+                -- Warmup interactions: placement column
+                IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='warmup_interactions') THEN
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_interactions' AND column_name='placement') THEN
+                        ALTER TABLE warmup_interactions ADD COLUMN placement TEXT DEFAULT 'unknown';
+                        ALTER TABLE warmup_interactions ADD CONSTRAINT warmup_interactions_placement_check CHECK (placement IN ('unknown', 'inbox', 'spam', 'promotions'));
+                        CREATE INDEX wi_placement_idx ON warmup_interactions(placement);
                     END IF;
                 END IF;
 

@@ -216,6 +216,8 @@ export class WarmupScheduler {
 
       // Check daily sent cap against dynamic warmup limit
       if (mb.dailySentCount >= effectiveDynamicLimit) {
+        // Seeds are internal platform accounts — never pause
+        if (isSeed) continue;
         // Don't pause recovery mailboxes — let them keep warming
         if (!reputationRecovery.isInRecovery(mb)) {
           await db
@@ -228,6 +230,8 @@ export class WarmupScheduler {
 
       // Check daily received cap (same limit for symmetry)
       if (mb.dailyReceivedCount >= effectiveDynamicLimit) {
+        // Seeds are internal platform accounts — never pause
+        if (isSeed) continue;
         await db
           .update(warmupMailboxes)
           .set({ status: 'paused', pauseReason: 'daily_received_limit_reached' })
@@ -293,8 +297,11 @@ export class WarmupScheduler {
       // Create thread
       const thread = await threadManager.createThread(mb, recipient[0]);
 
-      // Queue first outbound job
+      // Queue first outbound job with per-mailbox stagger
+      // Random 0-30min stagger + 30-90s send delay = even spread across mailboxes
+      // Prevents 500+ seeds from all receiving emails simultaneously
       const { warmupOutboundQueue } = await import('../queues/warmup-queues.js');
+      const threadStagger = Math.floor(Math.random() * WARMUP_CONFIG.PER_THREAD_STAGGER_MAX_MINUTES) * 60 * 1000;
       const sendDelay = this.randomBetween(
         WARMUP_CONFIG.MIN_SEND_DELAY_SECONDS,
         WARMUP_CONFIG.MAX_SEND_DELAY_SECONDS
@@ -304,7 +311,7 @@ export class WarmupScheduler {
         'send-first',
         { threadId: thread.id },
         {
-          delay: sendDelay * 1000,
+          delay: threadStagger + sendDelay * 1000,
           jobId: `warmup-send-first:${thread.id}`,
           removeOnComplete: true,
           removeOnFail: 100,

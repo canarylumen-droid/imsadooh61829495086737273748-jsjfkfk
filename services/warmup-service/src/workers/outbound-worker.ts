@@ -93,7 +93,11 @@ export function createOutboundWorker(): Worker {
       const effectiveLimit = reputationRecovery.getEffectiveLimit(sender[0], dynamicLimit);
 
       if (sender[0].dailySentCount >= effectiveLimit) {
-        // Don't pause mailboxes in recovery mode — let them keep warming
+        // Seeds are internal platform accounts — skip, don't pause
+        // User mailboxes get paused (unless in recovery mode)
+        if (sender[0].anchorRole === 'seed') {
+          return;
+        }
         if (!reputationRecovery.isInRecovery(sender[0])) {
           await db
             .update(warmupMailboxes)
@@ -240,11 +244,11 @@ export function createOutboundWorker(): Worker {
         const replyDelay =
           Math.floor(
             Math.random() *
-              (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_HOURS -
-                WARMUP_CONFIG.MIN_REPLY_EXPECTATION_HOURS +
+              (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_MINUTES -
+                WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
                 1)
           ) +
-          WARMUP_CONFIG.MIN_REPLY_EXPECTATION_HOURS;
+          WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES;
 
         await warmupInboundQueue.add(
           'expect-reply',
@@ -253,7 +257,7 @@ export function createOutboundWorker(): Worker {
             recipientMailboxId: recipient[0].id,
             expectedMessageId: messageId,
           },
-          { delay: replyDelay * 60 * 60 * 1000 }
+          { delay: replyDelay * 60 * 1000 }
         );
 
         // Synchronous sent-folder expunge — runs immediately after SMTP 250 OK.

@@ -196,26 +196,31 @@ router.get('/google-calendar/callback', async (req: Request, res: Response): Pro
     const { code, state, error } = req.query;
 
     if (error === 'access_denied') {
-      res.redirect('/dashboard/integrations?error=denied');
+      res.redirect('/dashboard/calendar?error=denied');
       return;
     }
 
     if (!code || !state) {
-      res.redirect('/dashboard/integrations?error=invalid_request');
+      res.redirect('/dashboard/calendar?error=invalid_request');
       return;
     }
 
     const stateData = decryptState(state as string);
     if (!stateData) {
       console.error('[Google Redirect] Invalid or expired Calendar state signature');
-      res.redirect('/dashboard/integrations?error=invalid_state');
+      res.redirect('/dashboard/calendar?error=invalid_state');
       return;
     }
 
     const userId = stateData.userId;
-    if ((req as any).session) {
-      (req as any).session.userId = userId;
-    }
+
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => {
+        if (err) { reject(err); return; }
+        resolve();
+      });
+    });
+    (req as any).session.userId = userId;
 
     const tokenData = await googleCalendarOAuth.exchangeCodeForTokens(code as string);
 
@@ -246,12 +251,23 @@ router.get('/google-calendar/callback', async (req: Request, res: Response): Pro
     wsSync.notifySettingsUpdated(userId);
 
     console.log(`[Google Redirect] Calendar connection successful for user: ${userId}. Saving session and redirecting...`);
-    req.session.save(() => {
-      res.redirect('/dashboard/integrations?success=google_calendar_connected');
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => {
+        if (err) { reject(err); return; }
+        resolve();
+      });
     });
+    (req as any).session.userId = userId;
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) { reject(err); return; }
+        resolve();
+      });
+    });
+    res.redirect('/dashboard/calendar?success=google_calendar_connected');
   } catch (error) {
     console.error('[Google Redirect] Google Calendar OAuth callback error:', error);
-    res.redirect('/dashboard/integrations?error=oauth_failed');
+    res.redirect('/dashboard/calendar?error=oauth_failed');
   }
 });
 

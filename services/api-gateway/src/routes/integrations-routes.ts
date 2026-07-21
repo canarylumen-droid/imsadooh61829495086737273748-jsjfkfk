@@ -60,6 +60,7 @@ router.get('/', requireAuthOrApiKey, async (req: Request, res: Response): Promis
       lastSync: integration.lastSync,
       createdAt: integration.createdAt,
       dailyLimit: (integration as any).dailyLimit ?? 50,
+      initialOutreachLimit: (integration as any).initialOutreachLimit ?? 50,
       gracefulDailyLimit: (integration as any).gracefulDailyLimit ?? null,
       reputationScore: (integration as any).reputationScore ?? null,
       healthLevel: (integration as any).healthLevel ?? null,
@@ -392,6 +393,51 @@ router.patch('/:integrationId/daily-limit', requireAuthOrApiKey, async (req: Req
   } catch (error) {
     console.error('Error updating daily limit:', error);
     res.status(500).json({ error: 'Failed to update daily limit' });
+  }
+});
+
+/**
+ * PATCH /api/integrations/:integrationId/outreach-limit
+ * Sets the initialOutreachLimit — the throttle applied to the FIRST days of a campaign.
+ * The reputation system may increase this over time toward dailyLimit.
+ */
+router.patch('/:integrationId/outreach-limit', requireAuthOrApiKey, async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = getCurrentUserId(req);
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
+    }
+
+    const { integrationId } = req.params;
+    const { initialOutreachLimit } = req.body;
+
+    if (typeof initialOutreachLimit !== 'number' || initialOutreachLimit < 1 || initialOutreachLimit > 250) {
+      res.status(400).json({ error: 'initialOutreachLimit must be a number between 1 and 250' });
+      return;
+    }
+
+    const integration = await storage.getIntegrationById(integrationId);
+    if (!integration || integration.userId !== userId) {
+      res.status(404).json({ error: 'Integration not found' });
+      return;
+    }
+
+    if (!['custom_email', 'gmail', 'outlook'].includes(integration.provider)) {
+      res.status(400).json({ error: 'Outreach limits only apply to email providers' });
+      return;
+    }
+
+    await storage.updateIntegrationById(integrationId, { initialOutreachLimit } as any);
+
+    const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+    wsSync.notifySettingsUpdated(userId);
+
+    console.log(`[Integrations] User ${userId} updated initialOutreachLimit for ${integrationId} to ${initialOutreachLimit}`);
+    res.json({ success: true, integrationId, initialOutreachLimit });
+  } catch (error) {
+    console.error('Error updating outreach limit:', error);
+    res.status(500).json({ error: 'Failed to update outreach limit' });
   }
 });
 export default router;

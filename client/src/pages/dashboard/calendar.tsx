@@ -196,6 +196,36 @@ export default function CalendarPage() {
       socket.off("calendar_updated", handleUpdate);
     };
   }, [socket, queryClient]);
+
+  // Handle OAuth success/error redirect params (Calendly, Google Calendar)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get('success');
+    const error = params.get('error');
+    if (error) {
+      const labels: Record<string, string> = {
+        'calendly_denied': 'Calendly authorization was denied.',
+        'calendly_oauth_failed': 'Calendly connection failed. Please try again.',
+        'invalid_request': 'Invalid OAuth request.',
+        'invalid_state': 'Session expired. Try again.',
+      };
+      toast({ title: 'Connection Failed', description: labels[error] || error.replace(/_/g, ' '), variant: 'destructive' });
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (success) {
+      const labels: Record<string, string> = {
+        'calendly_connected': 'Calendly',
+        'google_calendar_connected': 'Google Calendar',
+      };
+      if (labels[success]) {
+        toast({ title: `${labels[success]} Connected`, description: 'Ready for use.' });
+        queryClient.invalidateQueries({ queryKey: ["/api/calendar/"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/channels/"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
+      }
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
   const { selectedMailboxId, setSelectedMailboxId } = useMailbox();
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<'month' | 'week'>('month');
@@ -284,8 +314,12 @@ export default function CalendarPage() {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     if (dateToTzStr(tomorrow, tz) === dateStr) return 'Tomorrow';
-    const now = new Date();
-    const diffDays = Math.round((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    // Timezone-aware day diff using date strings
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const [ty, tm, td] = todayInTz.split('-').map(Number);
+    const normalizedDate = new Date(y, m - 1, d);
+    const normalizedToday = new Date(ty, tm - 1, td);
+    const diffDays = Math.round((normalizedDate.getTime() - normalizedToday.getTime()) / (1000 * 60 * 60 * 24));
     if (diffDays > 0 && diffDays <= 7) return 'Next week';
     if (diffDays < 0 && diffDays >= -7) return 'Last week';
     if (diffDays > 7 && diffDays <= 30) return 'Next month';
@@ -677,7 +711,7 @@ export default function CalendarPage() {
                           <span className={cn(
                             "inline-flex items-center justify-center w-8 h-8 text-xs font-semibold transition-all",
                             isSelected && !isToday ? 'bg-white/10 text-white rounded-full' : 'rounded-full',
-                            isToday ? 'bg-primary text-primary-foreground rounded-full shadow-lg shadow-primary/30' : '',
+                            isToday ? 'bg-primary text-white rounded-full shadow-lg shadow-primary/30' : '',
                             isSelected && isToday ? 'ring-2 ring-white/50' : '',
                             !isToday && !isSelected ? 'text-white/60' : ''
                           )}>
@@ -718,7 +752,7 @@ export default function CalendarPage() {
                           <div className="text-[10px] text-white/30 uppercase">{day.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                           <div className={cn(
                             "text-sm font-bold w-8 h-8 rounded-full inline-flex items-center justify-center",
-                            isToday ? 'bg-primary text-primary-foreground' : 'text-white/60'
+                            isToday ? 'bg-primary text-white' : 'text-white/60'
                           )}>
                             {day.getDate()}
                           </div>

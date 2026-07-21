@@ -18,9 +18,15 @@ export const WARMUP_CONFIG = {
   MIN_SEND_DELAY_SECONDS: 30,
   MAX_SEND_DELAY_SECONDS: 90,
 
-  // Reply expectation window (hours)
-  MIN_REPLY_EXPECTATION_HOURS: 1,
-  MAX_REPLY_EXPECTATION_HOURS: 4,
+  // Per-mailbox stagger when creating threads (minutes)
+  // Spreads out seed email arrival from 500+ mailboxes to avoid spike.
+  // Total delay = random(PER_THREAD_STAGGER_MAX_MINUTES) + random(MIN_SEND_DELAY_SECONDS..MAX_SEND_DELAY_SECONDS)
+  PER_THREAD_STAGGER_MAX_MINUTES: parseInt(process.env.WARMUP_THREAD_STAGGER_MINUTES || '30', 10),
+
+  // Reply expectation (minutes)
+  // Seeds reply fast (1-5min). User mailboxes get their own pacing via ramp limits.
+  MIN_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MIN_REPLY_EXPECTATION_MINUTES || '1', 10),
+  MAX_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MAX_REPLY_EXPECTATION_MINUTES || '5', 10),
 
   HIDDEN_FOLDER_NAME: process.env.WARMUP_HIDDEN_FOLDER || '.Warmup-Archive',
   IMAP_TIMEOUT_MS: parseInt(process.env.WARMUP_IMAP_TIMEOUT_MS || '15000', 10),
@@ -30,7 +36,7 @@ export const WARMUP_CONFIG = {
   POOL_HEALTH_INTERVAL_MS: 5 * 60 * 1000,
   SPAM_RESCUE_INTERVAL_MS: 30 * 60 * 1000,
   THREAD_SCHEDULER_INTERVAL_MS: 60 * 1000,
-  INBOX_SWEEP_INTERVAL_MS: 2 * 60 * 1000,
+  INBOX_SWEEP_INTERVAL_MS: 5 * 60 * 1000,
 
   // BullMQ
   OUTBOUND_QUEUE_NAME: 'warmup-outbound',

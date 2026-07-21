@@ -27,12 +27,12 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
 
     if (error) {
       console.error(`[Calendly Redirect] OAuth error: ${error}`);
-      res.redirect('/dashboard/integrations?error=calendly_denied');
+      res.redirect('/dashboard/calendar?error=calendly_denied');
       return;
     }
 
     if (!code || !state) {
-      res.redirect('/dashboard/integrations?error=invalid_request');
+      res.redirect('/dashboard/calendar?error=invalid_request');
       return;
     }
 
@@ -40,16 +40,22 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     const stateData = decryptState(state as string);
     if (!stateData) {
       console.error('[Calendly Redirect] Invalid or expired state signature');
-      res.redirect('/dashboard/integrations?error=invalid_state');
+      res.redirect('/dashboard/calendar?error=invalid_state');
       return;
     }
 
     const userId = stateData.userId;
 
-    // Re-attach userId to session conditionally to prevent crashes if session is undefined
-    if ((req as any).session) {
-      (req as any).session.userId = userId;
-    }
+    // Re-attach userId to session — regenerate to create fresh session in case
+    // the original session cookie was not sent (e.g. cross-site OAuth redirect, ITP).
+    // This ensures the redirect to the SPA doesn't bounce to /auth.
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => {
+        if (err) { reject(err); return; }
+        resolve();
+      });
+    });
+    (req as any).session.userId = userId;
 
     // Exchange code for tokens
     console.log(`[Calendly Redirect] Exchanging code for tokens for user: ${userId}`);
@@ -73,7 +79,7 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     await storage.createIntegration({
       userId: userId,
       provider: 'calendly',
-      accountType: tokenData.user?.name || 'calendly',
+      accountType: tokenData.user?.email || tokenData.user?.name || 'calendly',
       encryptedMeta: encryptedMeta,
       connected: true,
       lastSync: new Date(),
@@ -124,12 +130,24 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     clusterSync.notifyStatsCacheInvalidate(userId).catch(() => {});
 
     console.log('[Calendly Redirect] Success. Saving session and redirecting back to dashboard.');
-    req.session.save(() => {
-      res.redirect('/dashboard/integrations?success=calendly_connected&t=' + Date.now());
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) { reject(err); return; }
+        resolve();
+      });
     });
+    // Explicitly set cookie to survive cross-site OAuth redirect browsers
+    res.cookie('audnix.sid', req.sessionID, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+      path: '/',
+    });
+    res.redirect('/dashboard/calendar?success=calendly_connected&t=' + Date.now());
   } catch (error) {
     console.error('[Calendly Redirect] Fatal callback error:', error);
-    res.redirect('/dashboard/integrations?error=calendly_oauth_failed');
+    res.redirect('/dashboard/calendar?error=calendly_oauth_failed');
   }
 });
 

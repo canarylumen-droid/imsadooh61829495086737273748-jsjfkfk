@@ -92,6 +92,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
   const [mailboxRenderLimit, setMailboxRenderLimit] = useState(30);
 
   const [mailboxLimits, setMailboxLimits] = useState<Record<string, number>>({});
+  const [initialOutreachLimits, setInitialOutreachLimits] = useState<Record<string, number>>({});
   const [mailboxMaxMultipliers, setMailboxMaxMultipliers] = useState<Record<string, number>>({});
   const [defaultPerMailbox, setDefaultPerMailbox] = useState(35);
   const [useDefaultForAll, setUseDefaultForAll] = useState(true);
@@ -172,6 +173,13 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         const next = { ...prev };
         availableMailboxes.forEach((mb: any) => {
           if (!next[mb.id]) next[mb.id] = Math.min(getDefaultMailboxLimit(mb), getSafeMailboxCeiling(mb));
+        });
+        return next;
+      });
+      setInitialOutreachLimits(prev => {
+        const next = { ...prev };
+        availableMailboxes.forEach((mb: any) => {
+          if (!next[mb.id]) next[mb.id] = mb.initialOutreachLimit ?? 50;
         });
         return next;
       });
@@ -393,6 +401,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
         config: {
           dailyLimit: totalDailyVolume,
           mailboxLimits: Object.fromEntries(selectedMailboxes.map(id => [id, mailboxLimits[id] || 35])),
+          initialOutreachLimits: Object.fromEntries(selectedMailboxes.map(id => [id, initialOutreachLimits[id] ?? 50])),
           mailboxMaxMultipliers,
           mailboxIds: selectedMailboxes,
           targetDays,
@@ -826,6 +835,31 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                       <div className="flex justify-between text-[9px] font-black tracking-wider mt-1">
                                         <span className="text-muted-foreground/60">~{Math.round((mailboxLimits[mb.id] || 35) / 24)}/hr (1 every {Math.round(1440 / (mailboxLimits[mb.id] || 35))}min)</span>
                                         <span className="text-primary">{mailboxLimits[mb.id] || 35}/day max</span>
+                                      </div>
+
+                                      {/* Initial Throttle — starts slow, ramps up */}
+                                      <div className="border-t border-border/10 pt-3 mt-2">
+                                        <div className="flex justify-between text-[9px] font-semibold uppercase tracking-widest">
+                                          <span className="opacity-60">Initial Throttle (first days)</span>
+                                          <span className="text-amber-400">{initialOutreachLimits[mb.id] ?? 50}/day</span>
+                                        </div>
+                                        <div className="text-[9px] text-muted-foreground/60 italic mb-2">
+                                          How many to send on day one. The app auto-ramps up toward the max daily cap as reputation builds.
+                                        </div>
+                                        <Slider 
+                                          value={[initialOutreachLimits[mb.id] ?? 50]} 
+                                          onValueChange={v => {
+                                            setInitialOutreachLimits(prev => ({ ...prev, [mb.id]: v[0] }));
+                                            apiRequest('PATCH', `/api/integrations/${mb.id}/outreach-limit`, { initialOutreachLimit: v[0] }).catch(() => {});
+                                          }} 
+                                          min={1} 
+                                          max={mailboxLimits[mb.id] || 50} 
+                                          step={1} 
+                                        />
+                                        <div className="flex justify-between text-[9px] font-medium tracking-wider mt-1">
+                                          <span className="text-muted-foreground/60">Starts at this rate</span>
+                                          <span className="text-amber-400/70">{initialOutreachLimits[mb.id] ?? 50}/day initial</span>
+                                        </div>
                                       </div>
                                     </div>
                                   )}

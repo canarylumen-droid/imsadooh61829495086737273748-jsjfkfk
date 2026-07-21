@@ -268,6 +268,57 @@ impl ImapConnection {
         Ok(data)
     }
 
+    /// UID MOVE a message to a target folder (RFC 6851).
+    /// Returns Ok(true) on success.
+    pub async fn uid_move(&mut self, uid: u32, target_folder: &str) -> Result<bool> {
+        self.idle_done().await?;
+        let tag = self.next_tag();
+        let cmd = format!("{} UID MOVE {} \"{}\"\r\n", tag, uid, target_folder);
+        self.send_command(&cmd).await?;
+        let response = self.read_response().await?;
+        if response.contains(&format!("{} OK", tag)) {
+            self.last_activity = std::time::Instant::now();
+            Ok(true)
+        } else {
+            anyhow::bail!("UID MOVE failed: {}", response)
+        }
+    }
+
+    /// STORE +FLAGS (\NotJunk \Flagged) after moving to INBOX — tells the ISP
+    /// this email is legitimate, training the spam filter over time.
+    pub async fn mark_not_spam_and_important(&mut self, uid: u32) -> Result<bool> {
+        self.idle_done().await?;
+        let tag = self.next_tag();
+        let cmd = format!("{} UID STORE {} +FLAGS (\\NotJunk \\Flagged)\r\n", tag, uid);
+        self.send_command(&cmd).await?;
+        let response = self.read_response().await?;
+        let ok = response.contains(&format!("{} OK", tag));
+        self.last_activity = std::time::Instant::now();
+        Ok(ok)
+    }
+
+    /// UID COPY + STORE +FLAGS.SILENT (\Deleted) as fallback when UID MOVE is unsupported.
+    pub async fn uid_copy_and_delete(&mut self, uid: u32, target_folder: &str) -> Result<bool> {
+        self.idle_done().await?;
+        let tag = self.next_tag();
+        let copy_cmd = format!("{} UID COPY {} \"{}\"\r\n", tag, uid, target_folder);
+        self.send_command(&copy_cmd).await?;
+        let response = self.read_response().await?;
+        if !response.contains(&format!("{} OK", tag)) {
+            anyhow::bail!("UID COPY failed: {}", response)
+        }
+        let tag2 = self.next_tag();
+        let del_cmd = format!("{} UID STORE {} +FLAGS.SILENT (\\Deleted)\r\n", tag2, uid);
+        self.send_command(&del_cmd).await?;
+        let response2 = self.read_response().await?;
+        if response2.contains(&format!("{} OK", tag2)) {
+            self.last_activity = std::time::Instant::now();
+            Ok(true)
+        } else {
+            anyhow::bail!("UID STORE +FLAGS.SILENT (\\Deleted) failed: {}", response2)
+        }
+    }
+
     async fn send_command(&mut self, cmd: &str) -> Result<()> {
         if let Some(stream) = &mut self.stream {
             stream.write_all(cmd.as_bytes()).await

@@ -153,8 +153,8 @@ export function RecentConversations() {
     enabled: !!selectedLead,
   });
 
-  const allLeads = (leadsData as any)?.leads || [];
-  const hasLoadedLeads = Array.isArray(leadsData?.leads);
+  const allLeads = Array.isArray(leadsData) ? leadsData : (leadsData as any)?.leads || [];
+  const hasLoadedLeads = Array.isArray(leadsData) || Array.isArray((leadsData as any)?.leads);
   const messages = (messagesData as any)?.messages || [];
   const leads = allLeads.filter((l: Lead) => {
     const ch = l.channel || l.metadata?.provider || 'email';
@@ -175,7 +175,7 @@ export function RecentConversations() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <Avatar className="h-12 w-12 border-2 border-border/30">
-            <AvatarFallback className={`${channelConfig[selectedLead.channel]?.bgColor || channelConfig.email.bgColor} ${channelConfig[selectedLead.channel]?.textColor || channelConfig.email.textColor} font-black text-lg`}>
+            <AvatarFallback className={`${channelConfig[selectedLead.channel]?.bgColor || channelConfig.email.bgColor} ${channelConfig[selectedLead.channel]?.textColor || channelConfig.email.textColor} font-semibold text-lg`}>
               {selectedLead.name.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
@@ -199,10 +199,10 @@ export function RecentConversations() {
             variant="outline"
             className={
               selectedLead.status === "converted"
-                ? "bg-purple-500/10 text-purple-500 border-purple-500/20 font-black px-3"
+                ? "bg-purple-500/10 text-purple-500 border-purple-500/20 font-semibold px-3"
                 : selectedLead.status === "replied"
-                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-black px-3"
-                  : "bg-primary/10 text-primary border-primary/20 font-black px-3"
+                  ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20 font-semibold px-3"
+                  : "bg-primary/10 text-primary border-primary/20 font-semibold px-3"
             }
           >
             {selectedLead.status.toUpperCase()}
@@ -353,7 +353,7 @@ export function RecentConversations() {
                       >
                         <div className="flex items-center gap-4">
                           <Avatar className="h-12 w-12 rounded-2xl border-2 border-border/20 transition-transform group-hover:scale-110">
-                            <AvatarFallback className={`${config.bgColor} ${config.textColor} font-black text-md`}>
+                            <AvatarFallback className={`${config.bgColor} ${config.textColor} font-semibold text-md`}>
                               {lead.name.charAt(0).toUpperCase()}
                             </AvatarFallback>
                           </Avatar>

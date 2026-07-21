@@ -1515,7 +1515,8 @@ export class DrizzleStorage implements IStorage {
     // Cross-user uniqueness check: Prevent the same email from being connected by multiple users.
     // This checks across ALL users — if the mailbox email is already connected by someone else,
     // we reject the connection with a clear message.
-    if (integration.accountType) {
+    // Skip for per-user services (calendly, google_calendar, instagram) — each user connects their own.
+    if (integration.accountType && !['calendly', 'google_calendar', 'instagram'].includes(integration.provider)) {
       const existingAcrossUsers = await db
         .select({ id: integrations.id, userId: integrations.userId })
         .from(integrations)
@@ -1529,7 +1530,7 @@ export class DrizzleStorage implements IStorage {
 
       if (existingAcrossUsers[0] && existingAcrossUsers[0].userId !== integration.userId) {
         throw new Error(
-          `This mailbox (${integration.accountType}) is already connected by another account. Please ask the current owner to disconnect it first before reconnecting.`
+          `${integration.accountType} is already connected to another Audnix account. Ask the current owner to disconnect it first, or use a different account.`
         );
       }
     }
