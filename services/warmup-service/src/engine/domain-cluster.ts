@@ -8,6 +8,7 @@ import type { DomainClusterInfo, DomainAnchorMode, AnchorRole } from '../types/w
 
 export class DomainClusterEngine {
   async scanAndCluster(): Promise<void> {
+    // 1. Process unclustered mailboxes (no registeredDomain yet)
     const unclustered = await db
       .select()
       .from(warmupMailboxes)
@@ -23,52 +24,102 @@ export class DomainClusterEngine {
 
     for (const [domain, mailboxes] of grouped) {
       const orgId = this.resolveOrgId(mailboxes);
+      await this.ensureCluster(domain, orgId, mailboxes);
+
+      const mailboxIds = mailboxes.map(m => m.id);
+      await db
+        .update(warmupMailboxes)
+        .set({ registeredDomain: domain })
+        .where(inArray(warmupMailboxes.id, mailboxIds));
+    }
+
+    // 2. Ensure all domains with registeredDomain have a cluster row.
+    // Handles the case where mailboxes were clustered in a previous run
+    // but the clusters table was wiped (deploy/truncate/migration).
+    const allDomains = await db
+      .select({
+        domain: warmupMailboxes.registeredDomain,
+        organizationId: warmupMailboxes.organizationId,
+      })
+      .from(warmupMailboxes)
+      .where(sql`${warmupMailboxes.registeredDomain} IS NOT NULL AND ${warmupMailboxes.registeredDomain} != ''`);
+
+    const seen = new Set<string>();
+    for (const row of allDomains) {
+      if (!row.domain) continue;
+      const key = `${row.domain}|${row.organizationId ?? 'null'}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
       const existing = await db
         .select()
         .from(warmupDomainClusters)
         .where(
           and(
-            eq(warmupDomainClusters.registeredDomain, domain),
-            orgId ? eq(warmupDomainClusters.organizationId, orgId) : isNull(warmupDomainClusters.organizationId)
+            eq(warmupDomainClusters.registeredDomain, row.domain),
+            row.organizationId
+              ? eq(warmupDomainClusters.organizationId, row.organizationId)
+              : isNull(warmupDomainClusters.organizationId)
           )
         )
         .limit(1);
 
-      const mailboxIds = mailboxes.map(m => m.id);
-      const memberIds = mailboxes
-        .filter(m => m.anchorRole === 'member' || (!m.anchorRole))
-        .map(m => m.id);
-      const anchorIds = mailboxes.filter(m => m.anchorRole === 'anchor').map(m => m.id);
-
-      const clusterData = {
-        registeredDomain: domain,
-        organizationId: orgId,
-        memberMailboxIds: memberIds,
-        anchorMailboxIds: anchorIds,
-        totalMailboxes: mailboxes.length,
-        anchorCount: anchorIds.length,
-        lastActivityAt: new Date(),
-      };
-
       if (existing.length === 0) {
-        await db.insert(warmupDomainClusters).values({
-          ...clusterData,
-          mode: anchorIds.length >= WARMUP_CONFIG.ANCHORS_PER_DOMAIN ? 'user_provided' : 'internal_only',
-          isHealthy: anchorIds.length >= WARMUP_CONFIG.ANCHORS_PER_DOMAIN,
-        });
-      } else {
-        await db
-          .update(warmupDomainClusters)
-          .set(clusterData)
-          .where(eq(warmupDomainClusters.id, existing[0].id));
-      }
+        const mailboxes = await db
+          .select()
+          .from(warmupMailboxes)
+          .where(
+            and(
+              eq(warmupMailboxes.registeredDomain, row.domain),
+              row.organizationId
+                ? eq(warmupMailboxes.organizationId, row.organizationId)
+                : isNull(warmupMailboxes.organizationId)
+            )
+          );
 
+        await this.ensureCluster(row.domain, row.organizationId, mailboxes as any[]);
+      }
+    }
+  }
+
+  private async ensureCluster(domain: string, orgId: string | null, mailboxes: Array<Record<string, any>>): Promise<void> {
+    const existing = await db
+      .select()
+      .from(warmupDomainClusters)
+      .where(
+        and(
+          eq(warmupDomainClusters.registeredDomain, domain),
+          orgId ? eq(warmupDomainClusters.organizationId, orgId) : isNull(warmupDomainClusters.organizationId)
+        )
+      )
+      .limit(1);
+
+    const memberIds = mailboxes
+      .filter(m => m.anchorRole === 'member' || !m.anchorRole)
+      .map(m => m.id);
+    const anchorIds = mailboxes.filter(m => m.anchorRole === 'anchor').map(m => m.id);
+
+    const clusterData = {
+      registeredDomain: domain,
+      organizationId: orgId,
+      memberMailboxIds: memberIds,
+      anchorMailboxIds: anchorIds,
+      totalMailboxes: mailboxes.length,
+      anchorCount: anchorIds.length,
+      lastActivityAt: new Date(),
+    };
+
+    if (existing.length === 0) {
+      await db.insert(warmupDomainClusters).values({
+        ...clusterData,
+        mode: anchorIds.length >= WARMUP_CONFIG.ANCHORS_PER_DOMAIN ? 'user_provided' : 'internal_only',
+        isHealthy: anchorIds.length >= WARMUP_CONFIG.ANCHORS_PER_DOMAIN,
+      });
+    } else {
       await db
-        .update(warmupMailboxes)
-        .set({ registeredDomain: domain })
-        .where(
-          inArray(warmupMailboxes.id, mailboxIds)
-        );
+        .update(warmupDomainClusters)
+        .set(clusterData)
+        .where(eq(warmupDomainClusters.id, existing[0].id));
     }
   }
 
