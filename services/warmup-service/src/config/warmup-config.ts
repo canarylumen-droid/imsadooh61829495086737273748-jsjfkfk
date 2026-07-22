@@ -9,8 +9,8 @@ export const WARMUP_CONFIG = {
   DAILY_RECEIVED_LIMIT: parseInt(process.env.WARMUP_DAILY_RECEIVED_LIMIT || '20', 10),
 
   // Threading
-  MIN_MESSAGES_PER_THREAD: 2,
-  MAX_MESSAGES_PER_THREAD: 3,
+  MIN_MESSAGES_PER_THREAD: 3,
+  MAX_MESSAGES_PER_THREAD: 6,
   MIN_THREAD_INTERVAL_HOURS: 4,
   MAX_THREAD_INTERVAL_HOURS: 12,
 
@@ -27,6 +27,12 @@ export const WARMUP_CONFIG = {
   // Seeds reply fast (1-5min). User mailboxes get their own pacing via ramp limits.
   MIN_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MIN_REPLY_EXPECTATION_MINUTES || '1', 10),
   MAX_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MAX_REPLY_EXPECTATION_MINUTES || '5', 10),
+
+  // Seed-to-user reply pacing (minutes)
+  // After each seed email, the next reply is delayed by this range.
+  // Progressively increases: reply 1 = 5-10min, reply 2 = 8-18min, reply 3 = 12-28min
+  SEED_REPLY_MIN_DELAY_MINUTES: 5,
+  SEED_REPLY_MAX_DELAY_MINUTES: 15,
 
   HIDDEN_FOLDER_NAME: process.env.WARMUP_HIDDEN_FOLDER || '.Warmup-Archive',
   IMAP_TIMEOUT_MS: parseInt(process.env.WARMUP_IMAP_TIMEOUT_MS || '15000', 10),

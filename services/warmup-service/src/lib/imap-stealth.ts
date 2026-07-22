@@ -123,11 +123,15 @@ export class ImapStealth {
       const warmupMessages: Array<{ uid: number; messageId?: string }> = [];
       for await (const message of client.fetch(
         uids,
-        { headers: ['X-Audnix-Warmup'], envelope: true }
+        { headers: ['X-Audnix-Warmup'], envelope: true, flags: true }
       )) {
         const headers = (message.headers as any)?.toString() || '';
         if (headers.includes('X-Audnix-Warmup: true')) {
-          warmupMessages.push({ uid: message.uid, messageId: message.envelope?.messageId });
+          warmupMessages.push({
+            uid: message.uid,
+            messageId: message.envelope?.messageId,
+            seen: message.flags?.includes('\\Seen') || false,
+          });
         }
       }
 
@@ -137,9 +141,13 @@ export class ImapStealth {
         movedCount++;
         await this.incrementDailyReceivedCount(mailbox.id);
         if (msg.messageId) {
+          const updateData: any = { movedToHiddenFolder: true, placement: 'inbox' };
+          if ((msg as any).seen) {
+            updateData.openedAt = new Date();
+          }
           await db
             .update(warmupInteractions)
-            .set({ movedToHiddenFolder: true, placement: 'inbox' })
+            .set(updateData)
             .where(eq(warmupInteractions.messageId, msg.messageId));
         }
       }
@@ -196,14 +204,18 @@ export class ImapStealth {
       });
       if (!uids || uids.length === 0) return 0;
 
-      const warmupMessages: Array<{ uid: number; messageId?: string }> = [];
+      const warmupMessages: Array<{ uid: number; messageId?: string; seen?: boolean }> = [];
       for await (const message of client.fetch(
         uids,
-        { headers: ['X-Audnix-Warmup'], envelope: true }
+        { headers: ['X-Audnix-Warmup'], envelope: true, flags: true }
       )) {
         const headers = (message.headers as any)?.toString() || '';
         if (headers.includes('X-Audnix-Warmup: true')) {
-          warmupMessages.push({ uid: message.uid, messageId: message.envelope?.messageId });
+          warmupMessages.push({
+            uid: message.uid,
+            messageId: message.envelope?.messageId,
+            seen: message.flags?.includes('\\Seen') || false,
+          });
         }
       }
 
@@ -220,9 +232,13 @@ export class ImapStealth {
         rescuedCount++;
         await this.incrementDailyReceivedCount(mailbox.id);
         if (msg.messageId) {
+          const updateData: any = { movedToHiddenFolder: true, placement: 'spam' };
+          if (msg.seen) {
+            updateData.openedAt = new Date();
+          }
           await db
             .update(warmupInteractions)
-            .set({ movedToHiddenFolder: true, placement: 'spam' })
+            .set(updateData)
             .where(eq(warmupInteractions.messageId, msg.messageId));
         }
       }

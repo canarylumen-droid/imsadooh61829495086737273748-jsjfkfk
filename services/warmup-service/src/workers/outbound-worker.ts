@@ -245,25 +245,51 @@ export function createOutboundWorker(): Worker {
           resetSeedFailureCount(sender[0].id);
         }
 
-        // Queue inbound expect-reply
-        const replyDelay =
-          Math.floor(
-            Math.random() *
-              (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_MINUTES -
-                WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
-                1)
-          ) +
-          WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES;
+        // After successful send, decide next step based on thread progress
+        const newCount = thread[0].messageCount + 1;
+        const isLastSend = newCount >= thread[0].maxMessages;
 
-        await warmupInboundQueue.add(
-          'expect-reply',
-          {
-            threadId,
-            recipientMailboxId: recipient[0].id,
-            expectedMessageId: messageId,
-          },
-          { delay: replyDelay * 60 * 1000 }
-        );
+        if (!isLastSend) {
+          // Queue another seed-to-user reply with progressive delay
+          // Each reply gets progressively longer to look natural
+          const baseDelay = WARMUP_CONFIG.SEED_REPLY_MIN_DELAY_MINUTES
+            + Math.floor(Math.random() * (WARMUP_CONFIG.SEED_REPLY_MAX_DELAY_MINUTES - WARMUP_CONFIG.SEED_REPLY_MIN_DELAY_MINUTES + 1));
+          // Later replies get extra delay: +0, +3-8, +6-16, +9-24...
+          const extraDelay = (newCount - 1) * (3 + Math.floor(Math.random() * 6));
+          const totalDelay = Math.max(1, baseDelay + extraDelay);
+
+          await warmupOutboundQueue.add(
+            'send-reply',
+            {
+              threadId,
+            },
+            { delay: totalDelay * 60 * 1000 }
+          );
+
+          console.log(
+            `[Warmup][Outbound] Queued reply ${newCount}/${thread[0].maxMessages} in ${totalDelay}min for thread ${threadId}`
+          );
+        } else {
+          // Last send — queue expect-reply for open tracking
+          const replyDelay =
+            Math.floor(
+              Math.random() *
+                (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_MINUTES -
+                  WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
+                  1)
+            ) +
+            WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES;
+
+          await warmupInboundQueue.add(
+            'expect-reply',
+            {
+              threadId,
+              recipientMailboxId: recipient[0].id,
+              expectedMessageId: messageId,
+            },
+            { delay: replyDelay * 60 * 1000 }
+          );
+        }
 
       }
 

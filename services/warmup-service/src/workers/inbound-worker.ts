@@ -42,8 +42,7 @@ export function createInboundWorker(): Worker {
 async function handleExpectReply(data: any) {
   const { threadId, recipientMailboxId, expectedMessageId } = data;
 
-  // Fast path: check DB for the expected interaction marked as received
-  // (inbox-sweep may have already moved the email to hidden folder)
+  // Check if the email was received by the user (inbox sweep or spam rescue)
   const existingInteraction = await db
     .select()
     .from(warmupInteractions)
@@ -56,9 +55,8 @@ async function handleExpectReply(data: any) {
     .limit(1);
 
   if (existingInteraction[0]) {
-    console.log(`[Warmup][Inbound] Message ${expectedMessageId} already received and swept — proceeding`);
+    console.log(`[Warmup][Inbound] Message ${expectedMessageId} received — open tracking`);
   } else {
-    // Fallback: poll IMAP inbox for the expected reply
     const mailbox = await db
       .select()
       .from(warmupMailboxes)
@@ -67,14 +65,12 @@ async function handleExpectReply(data: any) {
 
     if (!mailbox[0]) return;
 
-    // First try INBOX sweep
     let found = await withImapTimeout(
       () => imapStealth.sweepInboxToHidden(mailbox[0]),
       mailbox[0].id,
       'expect-reply'
     );
 
-    // If INBOX sweep didn't find it, try Spam folder (Gmail/Outlook often filters warmup)
     if (!found) {
       found = await withImapTimeout(
         () => imapStealth.rescueSpamFolder(mailbox[0]),
@@ -83,64 +79,40 @@ async function handleExpectReply(data: any) {
       );
     }
 
-    if (!found) {
-      // Wait longer — the scheduler will clean up stalled threads
-      return;
-    }
+    if (!found) return;
   }
 
-  // If the thread is still active and we found the reply, queue the next outbound
-  const thread = await db
+  // Re-check interaction for open tracking flag (sweep may have set openedAt)
+  const interaction = await db
     .select()
-    .from(warmupThreads)
-    .where(eq(warmupThreads.id, threadId))
+    .from(warmupInteractions)
+    .where(eq(warmupInteractions.messageId, expectedMessageId))
     .limit(1);
 
-  if (thread[0] && thread[0].status === 'active') {
-    // The recipient is now the sender for the next volley
-    // But first check the recipient hasn't hit its daily sent limit
-    const recipientMb = await db
+  if (interaction[0]?.openedAt) {
+    console.log(`[Warmup][Inbound] ✅ Warmup email ${expectedMessageId} was opened!`);
+    // Fire socket event for real-time UI update
+    const thread = await db
       .select()
-      .from(warmupMailboxes)
-      .where(eq(warmupMailboxes.id, recipientMailboxId))
+      .from(warmupThreads)
+      .where(eq(warmupThreads.id, threadId))
       .limit(1);
-
-    if (!recipientMb[0]) return;
-
-    // Seeds are internal platform accounts — no daily limit enforcement
-    // User mailboxes use the ramp-adjusted daily limit
-    const recipientLimit = recipientMb[0].anchorRole === 'seed'
-      ? (recipientMb[0].dailyLimit ?? WARMUP_CONFIG.SEED_DAILY_LIMIT)
-      : getRampLimit(recipientMb[0].createdAt, WARMUP_CONFIG.DAILY_SENT_LIMIT);
-
-    if (recipientMb[0].dailySentCount < recipientLimit) {
-      await warmupOutboundQueue.add(
-        'send-reply',
-        {
-          threadId,
-          // The "reply" direction flips — recipient becomes sender
-          senderMailboxId: recipientMailboxId,
-          recipientMailboxId: thread[0].senderMailboxId,
-        },
-        {
-          delay:
-            (WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
-              Math.floor(
-                Math.random() *
-                  (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_MINUTES -
-                    WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
-                    1)
-              )) *
-              60 *
-              1000,
-        }
-      );
-    } else {
-      console.log(
-        `[Warmup][Inbound] Skipping reply for ${recipientMailboxId} — daily sent limit reached`
-      );
+    if (thread[0]) {
+      const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+      const mailbox = await db
+        .select()
+        .from(warmupMailboxes)
+        .where(eq(warmupMailboxes.id, thread[0].senderMailboxId))
+        .limit(1);
+      if (mailbox[0]) {
+        clusterSync.notifyStatsUpdated(mailbox[0].userId).catch(() => {});
+        clusterSync.notifyWarmupUpdated(mailbox[0].userId, { mailboxId: mailbox[0].integrationId, status: 'active' }).catch(() => {});
+      }
     }
   }
+
+  // Thread advances naturally via outbound worker sends.
+  // No direction flipping or queueing here — the seed drives all volleys.
 }
 
 async function handleExpungeSent(data: any) {

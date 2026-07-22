@@ -2909,7 +2909,8 @@ export class DrizzleStorage implements IStorage {
     const msgWhere = and(
       eq(messages.userId, userId), 
       gte(messages.createdAt, startDate),
-      integrationId ? eq(messages.integrationId, integrationId) : undefined
+      integrationId ? eq(messages.integrationId, integrationId) : undefined,
+      eq(messages.isWarmup, false)
     );
 
     const [counts] = await db.select({

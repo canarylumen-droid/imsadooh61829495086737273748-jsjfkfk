@@ -1857,6 +1857,7 @@ export const warmupInteractions = pgTable("warmup_interactions", {
   status: text("status", { enum: ["pending", "sent", "delivered", "failed", "bounced", "expunged"] }).notNull().default("pending"),
   errorMessage: text("error_message"),
   sentAt: timestamp("sent_at"),
+  openedAt: timestamp("opened_at"),
   deliveredAt: timestamp("delivered_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => ({

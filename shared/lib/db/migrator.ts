@@ -698,6 +698,9 @@ export async function runDatabaseMigrations() {
                         ALTER TABLE warmup_interactions ADD CONSTRAINT warmup_interactions_placement_check CHECK (placement IN ('unknown', 'inbox', 'spam', 'promotions'));
                         CREATE INDEX wi_placement_idx ON warmup_interactions(placement);
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='warmup_interactions' AND column_name='opened_at') THEN
+                        ALTER TABLE warmup_interactions ADD COLUMN opened_at TIMESTAMP;
+                    END IF;
                 END IF;
 
             END $$;
