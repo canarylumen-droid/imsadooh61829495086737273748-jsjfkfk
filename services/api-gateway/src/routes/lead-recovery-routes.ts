@@ -55,35 +55,49 @@ function renderTemplate(template: string, values: Record<string, string>): strin
   });
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
+  ]);
+}
+
 async function getMailboxDetails(tenantId: string) {
-  const integrations = await storage.getIntegrations(tenantId);
+  const emptyCampaignStatus = { isBusy: false, availableAt: null as Date | null, activeCampaignIds: [] as string[] };
+
+  const [integrations, states, campaignStatus] = await Promise.all([
+    withTimeout(storage.getIntegrations(tenantId), 25000, []),
+    withTimeout(getLeadRecoveryStates(tenantId), 25000, []),
+    withTimeout(
+      checkMailboxCampaignStatus(tenantId, "").catch(() => emptyCampaignStatus),
+      25000,
+      emptyCampaignStatus
+    ),
+  ]);
+
   const mailboxes = integrations.filter(
     (integration) => EMAIL_PROVIDERS.has(integration.provider) && integration.connected
   );
-  const states = await getLeadRecoveryStates(tenantId);
   const stateByMailbox = new Map(states.map((state) => [state.mailboxId, state]));
 
-  return Promise.all(
-    mailboxes.map(async (mailbox) => {
-      const status = await checkMailboxCampaignStatus(tenantId, mailbox.id);
-      const state = stateByMailbox.get(mailbox.id);
-      return {
-        id: mailbox.id,
-        provider: mailbox.provider,
-        accountType: mailbox.accountType,
-        healthStatus: mailbox.healthStatus,
-        reputationScore: mailbox.reputationScore,
-        isBusy: status.isBusy,
-        availableAt: status.availableAt?.toISOString() || null,
-        activeCampaignIds: status.activeCampaignIds,
-        isRecoveryActive: Boolean(state?.isActive),
-        lastSyncAt: state?.lastSyncAt?.toISOString?.() || null,
-        syncRequestedAt: state?.syncRequestedAt?.toISOString?.() || null,
-        syncStatus: state?.syncStatus || "idle",
-        errorMessage: state?.errorMessage || null,
-      };
-    })
-  );
+  return mailboxes.map((mailbox) => {
+    const state = stateByMailbox.get(mailbox.id);
+    return {
+      id: mailbox.id,
+      provider: mailbox.provider,
+      accountType: mailbox.accountType,
+      healthStatus: mailbox.healthStatus,
+      reputationScore: mailbox.reputationScore,
+      isBusy: campaignStatus.isBusy,
+      availableAt: campaignStatus.availableAt?.toISOString() || null,
+      activeCampaignIds: campaignStatus.activeCampaignIds,
+      isRecoveryActive: Boolean(state?.isActive),
+      lastSyncAt: state?.lastSyncAt?.toISOString?.() || null,
+      syncRequestedAt: state?.syncRequestedAt?.toISOString?.() || null,
+      syncStatus: state?.syncStatus || "idle",
+      errorMessage: state?.errorMessage || null,
+    };
+  });
 }
 
 async function getConnectedEmailMailboxes(tenantId: string) {
