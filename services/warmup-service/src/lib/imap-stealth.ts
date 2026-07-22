@@ -11,6 +11,7 @@ import { warmupMailboxes, warmupInteractions } from '@audnix/shared';
 import { WARMUP_CONFIG } from '../config/warmup-config.js';
 import type { ImapCredentials, WarmupMailbox } from '../types/warmup-types.js';
 import { decryptWarmupSecret } from './warmup-crypto.js';
+import { clusterSync } from '@shared/lib/realtime/redis-pubsub.js';
 
 interface CachedClient {
   client: ImapFlow;
@@ -156,7 +157,6 @@ export class ImapStealth {
 
       // Fire socket events for real-time UI
       if (mailbox.userId && mailbox.userId !== 'system') {
-        const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
         if (hadOpen) {
           clusterSync.notifyStatsUpdated(mailbox.userId).catch(() => {});
         }
@@ -261,7 +261,6 @@ export class ImapStealth {
       }
 
       if (mailbox.userId && mailbox.userId !== 'system') {
-        const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
         if (hadOpen) {
           clusterSync.notifyStatsUpdated(mailbox.userId).catch(() => {});
         }
