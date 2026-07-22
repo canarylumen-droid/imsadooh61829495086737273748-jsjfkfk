@@ -44,15 +44,6 @@ function tenantIdFrom(req: Express.Request): string {
   return req.user?.id || req.session?.userId || "";
 }
 
-function renderTemplate(template: string, values: Record<string, string>): string {
-  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => {
-    if (!(key in values) || values[key] === "") {
-      console.warn(`[LeadRecovery] Unresolved template variable: {{${key}}}`);
-    }
-    return values[key] || "";
-  });
-}
-
 async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
   return Promise.race([
     promise,
