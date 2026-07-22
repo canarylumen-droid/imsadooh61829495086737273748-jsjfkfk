@@ -1297,21 +1297,19 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                 const isEnrolled = !!wm;
                 const warmupStatus = wm?.status || int.warmupStatus || 'none';
                 const isWarmingUp = wm?.status === 'active';
-                const baseLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 12;
-                // Same logic as scheduler-worker.ts — show what scheduler actually uses
-                let dailyLimit = baseLimit;
-                if (!hasActiveCampaigns) {
-                    dailyLimit = 12; // Baseline: ~12 warmup emails/day (10-15 range)
-                } else {
-                    dailyLimit = Math.max(1, Math.round(baseLimit * 0.20)); // 20% of cap when campaign active
+                const capLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 50;
+                // Match scheduler logic: 25% of cap (max 15) when no campaign, 20% when active
+                let dailyLimit = Math.min(Math.max(3, Math.round(capLimit * 0.25)), 15);
+                if (hasActiveCampaigns) {
+                    dailyLimit = Math.min(Math.max(3, Math.round(capLimit * 0.20)), 15);
                 }
                 // Apply ramp schedule matching warmup-config.ts
                 if (int.createdAt) {
                     const ageDays = (Date.now() - new Date(int.createdAt).getTime()) / 86400000;
-                    if (ageDays <= 1) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.30));
-                    else if (ageDays <= 4) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.50));
-                    else if (ageDays <= 9) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.75));
-                    // day 10+: 100% of computed limit
+                    if (ageDays <= 2) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.20));
+                    else if (ageDays <= 5) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.40));
+                    else if (ageDays <= 10) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.60));
+                    else if (ageDays <= 14) dailyLimit = Math.max(1, Math.round(dailyLimit * 0.80));
                 }
                 const dailySentCount = wm?.dailySentCount || 0;
                 const dailyReceivedCount = wm?.dailyReceivedCount || 0;

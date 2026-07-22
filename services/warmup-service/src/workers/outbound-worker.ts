@@ -47,7 +47,7 @@ export function createOutboundWorker(): Worker {
   return new Worker(
     WARMUP_CONFIG.OUTBOUND_QUEUE_NAME,
     async (job) => {
-      const { threadId, interactionType } = job.data;
+      const { threadId, interactionType, volley, totalVolleys, parentMessageId } = job.data;
       if (!threadId) throw new Error('Missing threadId in outbound job');
 
       const thread = await db
@@ -152,11 +152,15 @@ export function createOutboundWorker(): Worker {
       // Always set Message-ID to match what's stored in the interaction
       headers['Message-ID'] = messageId;
 
-      if (thread[0].lastMessageId) {
-        headers['In-Reply-To'] = thread[0].lastMessageId;
+      // Thread replies properly using In-Reply-To / References
+      // For volley chains, parentMessageId points to the original send so all
+      // replies in the chain reference the same parent (not each other).
+      const replyTarget = parentMessageId || thread[0].lastMessageId;
+      if (replyTarget) {
+        headers['In-Reply-To'] = replyTarget;
         headers['References'] = [
           ...(thread[0].references || []),
-          thread[0].lastMessageId,
+          replyTarget,
         ].join(' ');
       }
 
@@ -245,53 +249,52 @@ export function createOutboundWorker(): Worker {
           resetSeedFailureCount(sender[0].id);
         }
 
-        // After successful send, decide next step based on thread progress
-        const newCount = thread[0].messageCount + 1;
-        const isLastSend = newCount >= thread[0].maxMessages;
-
-        if (!isLastSend) {
-          // Queue another seed-to-user reply with progressive delay
-          // Each reply gets progressively longer to look natural
-          const baseDelay = WARMUP_CONFIG.SEED_REPLY_MIN_DELAY_MINUTES
-            + Math.floor(Math.random() * (WARMUP_CONFIG.SEED_REPLY_MAX_DELAY_MINUTES - WARMUP_CONFIG.SEED_REPLY_MIN_DELAY_MINUTES + 1));
-          // Later replies get extra delay: +0, +3-8, +6-16, +9-24...
-          const extraDelay = (newCount - 1) * (3 + Math.floor(Math.random() * 6));
-          // Per-thread stagger to prevent all threads firing at the same time
-          const threadStagger = crypto.createHash('sha256').update(threadId).digest()[0] % 25;
-          const totalDelay = Math.max(1, baseDelay + extraDelay + threadStagger);
+        // ── REPLY CHAIN ────────────────────────────────────────────────
+        // After each successful warmup send, queue 2-3 replies back in the thread.
+        // Each reply uses proper In-Reply-To / References threading.
+        // Total cycle: ~5 minutes (replies every 60-120 seconds).
+        // This mimics natural human conversation and avoids Gmail spam flagging.
+        const repliesPerSend = WARMUP_CONFIG.REPLIES_PER_SEND; // default 3
+        for (let v = 1; v <= repliesPerSend; v++) {
+          const delaySec = WARMUP_CONFIG.REPLY_CHAIN_MIN_DELAY_SECONDS +
+            Math.floor(Math.random() * (
+              WARMUP_CONFIG.REPLY_CHAIN_MAX_DELAY_SECONDS - WARMUP_CONFIG.REPLY_CHAIN_MIN_DELAY_SECONDS + 1
+            ));
+          const totalMs = v * delaySec * 1000 + // progressive: reply 1 @ 60s, reply 2 @ 120s, reply 3 @ 180s
+            (Math.floor(Math.random() * 30) * 1000); // +0-30s jitter per reply
 
           await warmupOutboundQueue.add(
             'send-reply',
             {
               threadId,
+              volley: v,
+              totalVolleys: repliesPerSend,
+              parentMessageId: messageId, // In-Reply-To targets the original send
             },
-            { delay: totalDelay * 60 * 1000 }
+            { delay: totalMs, jobId: `warmup-reply-${threadId}-v${v}` }
           );
 
           console.log(
-            `[Warmup][Outbound] Queued reply ${newCount}/${thread[0].maxMessages} in ${totalDelay}min for thread ${threadId}`
-          );
-        } else {
-          // Last send — queue expect-reply for open tracking
-          const replyDelay =
-            Math.floor(
-              Math.random() *
-                (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_MINUTES -
-                  WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES +
-                  1)
-            ) +
-            WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES;
-
-          await warmupInboundQueue.add(
-            'expect-reply',
-            {
-              threadId,
-              recipientMailboxId: recipient[0].id,
-              expectedMessageId: messageId,
-            },
-            { delay: replyDelay * 60 * 1000 }
+            `[Warmup][Outbound] Queued reply volley ${v}/${repliesPerSend} in ${Math.round(totalMs/1000)}s for thread ${threadId}`
           );
         }
+
+        // After reply chain, queue expect-reply for open tracking
+        const replyDelay = Math.floor(
+          Math.random() *
+            (WARMUP_CONFIG.MAX_REPLY_EXPECTATION_MINUTES -
+              WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES + 1)
+        ) + WARMUP_CONFIG.MIN_REPLY_EXPECTATION_MINUTES;
+
+        await warmupInboundQueue.add(
+          'expect-reply',
+          {
+            threadId,
+            recipientMailboxId: recipient[0].id,
+            expectedMessageId: messageId,
+          },
+          { delay: replyDelay * 60 * 1000 }
+        );
 
       }
 

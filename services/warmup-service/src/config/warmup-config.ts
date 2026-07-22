@@ -5,8 +5,26 @@ export const WARMUP_CONFIG = {
   ENTERPRISE_FLEET_THRESHOLD: parseInt(process.env.WARMUP_ENTERPRISE_FLEET_THRESHOLD || '20', 10),
 
   // Daily volume caps per mailbox
-  DAILY_SENT_LIMIT: parseInt(process.env.WARMUP_DAILY_SENT_LIMIT || '20', 10),
-  DAILY_RECEIVED_LIMIT: parseInt(process.env.WARMUP_DAILY_RECEIVED_LIMIT || '20', 10),
+  // MAX 15/day per mailbox for warmup (soft ceiling). Hard ceiling = mailbox cap_limit * 0.25, capped at 15.
+  DAILY_SENT_LIMIT: parseInt(process.env.WARMUP_DAILY_SENT_LIMIT || '15', 10),
+  DAILY_RECEIVED_LIMIT: parseInt(process.env.WARMUP_DAILY_RECEIVED_LIMIT || '15', 10),
+
+  // Warmup hourly rate limit — max 1 warmup email per mailbox per hour
+  MAX_WARMUP_PER_HOUR: parseInt(process.env.WARMUP_MAX_PER_HOUR || '1', 10),
+
+  // Warmup cap percent — percentage of mailbox cap_limit used when no campaign active
+  // e.g. 25% of 50 = 12-13 emails (range 10-15 acceptable). Never exceeds DAILY_SENT_LIMIT (15).
+  WARMUP_CAP_PERCENT: parseFloat(process.env.WARMUP_CAP_PERCENT || '0.25'),
+
+  // Minimum warmup per mailbox per day (even when campaign is active)
+  MIN_WARMUP_PER_DAY: parseInt(process.env.WARMUP_MIN_PER_DAY || '3', 10),
+
+  // Reply volleys per warmup send — for each outbound warmup email, generate this many replies back
+  REPLIES_PER_SEND: parseInt(process.env.WARMUP_REPLIES_PER_SEND || '3', 10),
+
+  // Reply chain timing (seconds between replies in the chain)
+  REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '60', 10),
+  REPLY_CHAIN_MAX_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MAX_DELAY || '120', 10),
 
   // Threading
   MIN_MESSAGES_PER_THREAD: 3,
@@ -56,14 +74,16 @@ export const WARMUP_CONFIG = {
 
   // Ramp schedule — percentage of final daily warmup target
   // Gradually increase warmup volume to avoid ISP rate limiting and flagging.
-  // Day 1:     30%   (e.g. ~4/day if target=12)
-  // Day 2-4:   50%   (e.g. ~6/day)
-  // Day 5-9:   75%   (e.g. ~9/day)
-  // Day 10+:   100%  (full target)
+  // Day 1-2:   20%   (e.g. ~3/day if target=15)
+  // Day 3-5:   40%   (e.g. ~6/day)
+  // Day 6-10:  60%   (e.g. ~9/day)
+  // Day 11-14: 80%   (e.g. ~12/day)
+  // Day 15+:   100%  (full target 15/day)
   RAMP_DAILY_PERCENTS: [
-    { maxDays: 1, percent: 0.30 },
-    { maxDays: 4, percent: 0.50 },
-    { maxDays: 9, percent: 0.75 },
+    { maxDays: 2, percent: 0.20 },
+    { maxDays: 5, percent: 0.40 },
+    { maxDays: 10, percent: 0.60 },
+    { maxDays: 14, percent: 0.80 },
   ] as const,
 
   // Domain clustering

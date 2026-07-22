@@ -65,6 +65,7 @@ router.get('/', requireAuthOrApiKey, async (req: Request, res: Response): Promis
       reputationScore: (integration as any).reputationScore ?? null,
       healthLevel: (integration as any).healthLevel ?? null,
       warmupStatus: (integration as any).warmupStatus ?? null,
+      warmupLimit: (integration as any).warmupLimit ?? 50,
     }));
 
     res.json({ integrations: safeIntegrations, total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) });

@@ -1242,5 +1242,58 @@ Lead recovery: filter noise emails before syncing, skip already-converted leads,
 - `shared/lib/db/migrator.ts` — migration for deleted_accounts_log table
 - `AGENTS.md` — this session entry
 
+## This Session (Jul 22 2026) — DNS via Rust + OAuth DNS Trigger + Warmup Scheduler Rewrite + Cap Limits
+
+### Objective
+Wire DNS verification through Rust for all paths, trigger on OAuth connect, then rewrite warmup scheduler for cap-based limits with reply chains and seed balancing.
+
+### Changes: DNS via Rust
+
+1. **Rust DNS handler** (`rust-email-sender/src/dns.rs`): Already implemented — listens on `dns-verify-queue` via BRPOP, resolves SPF/DKIM/DMARC/MX/TXT in parallel for each domain, pushes result to `dns-verify-results`.
+2. **Node.js bridge** (`shared/lib/queues/dns-verify-queue.ts`): `verifyDnsWithFallback()` — LPUSH to Rust queue with 10s BLPOP timeout, falls back to Node.js `verifyDomainDns()`.
+3. **DNS routes wired** to Rust bridge:
+   - `dns-verification-routes.ts` — POST /api/domains/verify uses bridge
+   - `dashboard-routes.ts:68-85,200-225` — refresh-stats + warmup-status use bridge
+   - `custom-email-routes.ts:473-478` — custom SMTP DNS verification
+   - `ai-routes.ts:1175,1209` — lead import DNS check
+4. **OAuth DNS trigger** (`google-redirect.ts:143-178`, `outlook-redirect.ts:131-166`): After successful OAuth connect, fire-and-forget DNS verification in background (no blocking).
+5. **Stale import removed** (`outreach.ts:9`): Removed unused `verifyDomainDns` import.
+
+### Changes: Warmup Scheduler Rewrite (Cap-Based Limits)
+
+1. **warmup-config.ts**: `DAILY_SENT_LIMIT=50` (cap base), `MAX_WARMUP_PER_HOUR=1`, `WARMUP_CAP_PERCENT=0.25`, `REPLIES_PER_SEND=3`, `REPLY_CHAIN_MIN/MAX_DELAY_SECONDS=60/120`. Ramp schedule: day 1-2:20%, 3-5:40%, 6-10:60%, 11-14:80%, 15+:100%.
+2. **scheduler-worker.ts**: No-campaign: `min(max(3, round(cap*0.25)), 15)` daily limit. Campaign active: 20% of cap. 24h slot distribution via `mailboxId` hash. Hourly rate cap via `warmupInteractions` table query. Seed pair hash stagger using MD5 of seed+user mailbox IDs.
+3. **outbound-worker.ts**: Reply chain — `REPLIES_PER_SEND` (3) replies queued per send, each with progressive delay (60-120s), In-Reply-To points to `parentMessageId` for reply volleys (not `thread[0].lastMessageId`). `volley/totalVolleys/parentMessageId` in job data.
+4. **dashboard-routes.ts** (warmup-status): dailyLimit computation matches new scheduler — 25% of cap (max 15) no campaign, 20% active. Ramp schedule updated to 2/5/10/14-day tiers.
+5. **integrations-routes.ts**: Exposes `warmupLimit` in safeIntegrations response.
+6. **warmup.tsx**: Shows `cap 50` next to per-day progress.
+7. **Warmup inbox tab** (`inbox.tsx:496,1264-1271,1369,1645-1656`): Already wired — `showWarmup` toggle, amber button, fetches `/api/warmup/inbox`, warmup conversation placeholder. No changes needed.
+8. **Warmup seed filtering**: Already solid — `email-sync-queue.ts:154-163` checks seed DB, `imap-idle-manager.ts:1034,1987` checks `x-audnix-warmup` header, `email-sync-worker.ts:258-272` checks header. Warmup emails never create leads.
+
+### Build
+- Pre-existing error in `email-sync-worker.ts:333` (syntax, not related to changes). All changed files compile cleanly.
+
 ### Deploy
-- Push to GitHub, pull on EC2, restart API gateway
+- Push to GitHub, pull on EC2, build client, restart API gateway + warmup worker + Rust sender
+
+### Files Changed
+- `shared/lib/queues/dns-verify-queue.ts` — new file, Rust DNS bridge
+- `services/api-gateway/src/routes/dns-verification-routes.ts` — wired to Rust bridge
+- `services/api-gateway/src/routes/dashboard-routes.ts:68-85,200-225` — Rust DNS in stats refresh
+- `services/api-gateway/src/routes/custom-email-routes.ts:473-478` — custom SMTP DNS via bridge
+- `services/api-gateway/src/routes/ai-routes.ts:1175,1209` — lead import DNS via bridge
+- `services/api-gateway/src/routes/google-redirect.ts:143-178` — fire-and-forget DNS on Gmail connect
+- `services/api-gateway/src/routes/outlook-redirect.ts:131-166` — fire-and-forget DNS on Outlook connect
+- `services/api-gateway/src/routes/outreach.ts:9` — removed stale import
+- `services/warmup-service/src/config/warmup-config.ts` — cap limits, hourly cap, reply chain config
+- `services/warmup-service/src/workers/scheduler-worker.ts` — 25% of cap, 24h slot, hourly rate limit, seed stagger
+- `services/warmup-service/src/workers/outbound-worker.ts` — reply chain (3 replies, In-Reply-To via parentMessageId)
+- `services/api-gateway/src/routes/dashboard-routes.ts` — warmup-status matches new scheduler logic
+- `services/api-gateway/src/routes/integrations-routes.ts` — warmupLimit exposed
+- `client/src/pages/dashboard/warmup.tsx` — cap limit display
+- `ecosystem.config.cjs:153` — DATABASE_URL_POOL for lead-recovery worker (from prior session)
+- `services/lead-recovery-worker/src/worker.ts:43-67` — Redis subscription connection check (from prior session)
+- `client/src/pages/dashboard/integrations.tsx:406,1682` — DNS badge pending/amber state (from prior session)
+
+### Deploy
+- Push to GitHub, pull on EC2, build client, restart warmup worker + API gateway + Rust sender

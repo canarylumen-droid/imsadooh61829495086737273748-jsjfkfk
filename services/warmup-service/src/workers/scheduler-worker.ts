@@ -3,9 +3,10 @@
  * 24/7 loop: enrollment, pool health, thread creation, spam rescue, daily reset.
  */
 
+import crypto from 'crypto';
 import { db } from '../db/warmup-db.js';
 import { eq, and, or, sql, isNotNull, inArray } from 'drizzle-orm';
-import { warmupMailboxes, warmupThreads, integrations } from '@audnix/shared';
+import { warmupMailboxes, warmupThreads, warmupInteractions, integrations } from '@audnix/shared';
 import { WARMUP_CONFIG, getRampLimit } from '../config/warmup-config.js';
 import { enrollmentEngine } from '../engine/enrollment-engine.js';
 import { poolHealthMonitor } from '../engine/pool-health-monitor.js';
@@ -185,25 +186,49 @@ export class WarmupScheduler {
       : { rows: [] };
     const campaignVolumeMap = new Map((campaignVolumes.rows as any[]).map((r: any) => [r.user_id, parseInt(r.total_daily) || 0]));
 
+    const now = new Date();
+    const currentHour = now.getUTCHours();
+
     for (const mb of allMailboxes) {
       const isSeed = mb.anchorRole === 'seed';
-      let dynamicLimit = mb.dailyLimit ?? (isSeed ? WARMUP_CONFIG.SEED_DAILY_LIMIT : WARMUP_CONFIG.DAILY_SENT_LIMIT);
+
+      // ── CAP LIMIT RESOLUTION ─────────────────────────────────────────
+      // Resolve the mailbox's cap limit from warmupMailboxes.dailyLimit, 
+      // integrations.warmupLimit, or the default DAILY_SENT_LIMIT.
+      // capLimit = the user's configured mailbox cap (default 50 from integrations.dailyLimit).
+      let capLimit = 50; // Default cap
       if (!isSeed && mb.integrationId) {
-        dynamicLimit = mb.dailyLimit ?? integrationMap.get(mb.integrationId)?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+        const intInfo = integrationMap.get(mb.integrationId);
+        if (intInfo) {
+          capLimit = intInfo.warmupLimit ?? 50;
+        }
+        // Override with warmupMailboxes.dailyLimit if explicitly set
+        if (mb.dailyLimit && mb.dailyLimit > 0) {
+          capLimit = mb.dailyLimit;
+        }
       }
 
-      // Campaign-aware warmup volume:
-      // - If user has NO active campaigns: baseline 10-15 warmup emails/day
-      // - If user HAS active campaigns: warmup = 20-25% of mailbox warmup cap
-      //   This gives warmup its own allocation without competing with campaign volume.
-      // - Reputation recovery then scales this up if reputation is poor
+      // ── DYNAMIC LIMIT CALCULATION ────────────────────────────────────
+      // Rule: When NO campaign active → 20-25% of cap (max 15/day).
+      //       When campaign active → 20% of cap (coexistence).
+      //       NEVER exceed 15/day.
+      //       Minimum 3/day to maintain deliverability.
+      let dynamicLimit = isSeed
+        ? WARMUP_CONFIG.SEED_DAILY_LIMIT
+        : Math.min(
+            Math.max(WARMUP_CONFIG.MIN_WARMUP_PER_DAY, Math.round(capLimit * WARMUP_CONFIG.WARMUP_CAP_PERCENT)),
+            WARMUP_CONFIG.DAILY_SENT_LIMIT
+          );
+
       if (!isSeed && mb.integrationId) {
         const info = integrationMap.get(mb.integrationId);
         const campaignDaily = campaignVolumeMap.get(info?.userId ?? '') ?? 0;
-        if (campaignDaily <= 0) {
-          dynamicLimit = 12; // Baseline: ~12 warmup emails/day (10-15 range)
-        } else {
-          dynamicLimit = Math.max(1, Math.round(dynamicLimit * 0.20)); // 20% of mailbox warmup cap
+        if (campaignDaily > 0) {
+          // When campaign active: 20% of cap, still capped at 15
+          dynamicLimit = Math.min(
+            Math.max(WARMUP_CONFIG.MIN_WARMUP_PER_DAY, Math.round(capLimit * 0.20)),
+            WARMUP_CONFIG.DAILY_SENT_LIMIT
+          );
         }
       }
 
@@ -212,19 +237,41 @@ export class WarmupScheduler {
         dynamicLimit = getRampLimit(mb.createdAt, dynamicLimit);
       }
 
-      // Check if mailbox has too many active threads
+      // ── HOURLY RATE LIMIT CHECK ──────────────────────────────────────
+      // Max 1 warmup email per mailbox per hour.
+      // Check how many warmup sends happened this hour.
+      const thisHourStart = new Date(now);
+      thisHourStart.setUTCMinutes(0, 0, 0);
+      const hourlyCount = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(warmupInteractions)
+        .where(
+          and(
+            eq(warmupInteractions.senderMailboxId, mb.id),
+            sql`sent_at >= ${thisHourStart.toISOString()}::timestamp`
+          )
+        )
+        .limit(1);
+
+      if (Number(hourlyCount[0]?.count ?? 0) >= WARMUP_CONFIG.MAX_WARMUP_PER_HOUR) continue;
+
+      // ── 24H DISTRIBUTION ─────────────────────────────────────────────
+      // Evenly spread sends across 24 hours by assigning each mailbox a 
+      // preferred send hour based on hash of its ID.
+      const mailboxHour = parseInt(mb.id.slice(-2), 16) % 24;
+      if (currentHour !== mailboxHour) continue; // Only schedule during this mailbox's slot
+
+      // Check thread cap
       const activeThreadCount = (mb.activeThreadIds || []).length;
       const maxThreads = reputationRecovery.getMaxThreadsForMailbox(mb);
       if (activeThreadCount >= maxThreads) continue;
 
-      // Apply reputation recovery boost: if IP is dead/repairing, increase warmup volume
+      // Apply reputation recovery boost
       const effectiveDynamicLimit = reputationRecovery.getEffectiveLimit(mb, dynamicLimit);
 
-      // Check daily sent cap against dynamic warmup limit
+      // Check daily sent cap
       if (mb.dailySentCount >= effectiveDynamicLimit) {
-        // Seeds are internal platform accounts — never pause
         if (isSeed) continue;
-        // Don't pause recovery mailboxes — let them keep warming
         if (!reputationRecovery.isInRecovery(mb)) {
           await db
             .update(warmupMailboxes)
@@ -234,9 +281,8 @@ export class WarmupScheduler {
         continue;
       }
 
-      // Check daily received cap (same limit for symmetry)
+      // Check daily received cap
       if (mb.dailyReceivedCount >= effectiveDynamicLimit) {
-        // Seeds are internal platform accounts — never pause
         if (isSeed) continue;
         await db
           .update(warmupMailboxes)
@@ -279,7 +325,9 @@ export class WarmupScheduler {
         if ((recentCampaign.rows as any[]).length > 0) continue;
       }
 
-      // Find partner
+      // ── SEED BALANCING ────────────────────────────────────────────────
+      // Prevent all seeds from sending to all targets at once.
+      // Distribute across time by staggering based on seed-target pair hash.
       const partner = await pairingEngine.findPartner(mb);
       if (!partner) continue;
 
@@ -291,7 +339,10 @@ export class WarmupScheduler {
 
       if (!recipient[0] || recipient[0].status !== 'active') continue;
 
-      const recipientLimit = recipient[0].dailyLimit ?? integrationMap.get(recipient[0].integrationId ?? '')?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      const recipientLimit = Math.min(
+        Math.max(WARMUP_CONFIG.MIN_WARMUP_PER_DAY, Math.round((recipient[0].dailyLimit ?? 50) * 0.25)),
+        WARMUP_CONFIG.DAILY_SENT_LIMIT
+      );
       const effectiveRecipientLimit = reputationRecovery.getEffectiveLimit(recipient[0], recipientLimit);
       if (
         recipient[0].dailySentCount >= effectiveRecipientLimit ||
@@ -300,14 +351,19 @@ export class WarmupScheduler {
         continue;
       }
 
+      // Seed pair hash for staggered timing (prevents Gmail flagging)
+      const pairHash = parseInt(
+        crypto.createHash('md5').update(`${mb.id}-${recipient[0].id}`).digest('hex').slice(0, 8),
+        16
+      );
+      const pairStaggerMinutes = pairHash % WARMUP_CONFIG.PER_THREAD_STAGGER_MAX_MINUTES;
+
       // Create thread
       const thread = await threadManager.createThread(mb, recipient[0]);
 
-      // Queue first outbound job with per-mailbox stagger
-      // Random 0-30min stagger + 30-90s send delay = even spread across mailboxes
-      // Prevents 500+ seeds from all receiving emails simultaneously
+      // Queue first outbound job with seed-balanced stagger + per-mailbox hour slot
       const { warmupOutboundQueue } = await import('../queues/warmup-queues.js');
-      const threadStagger = Math.floor(Math.random() * WARMUP_CONFIG.PER_THREAD_STAGGER_MAX_MINUTES) * 60 * 1000;
+      const threadStagger = pairStaggerMinutes * 60 * 1000;
       const sendDelay = this.randomBetween(
         WARMUP_CONFIG.MIN_SEND_DELAY_SECONDS,
         WARMUP_CONFIG.MAX_SEND_DELAY_SECONDS
