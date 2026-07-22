@@ -120,7 +120,7 @@ export class ImapStealth {
       });
       if (!uids || uids.length === 0) return 0;
 
-      const warmupMessages: Array<{ uid: number; messageId?: string }> = [];
+      const warmupMessages: Array<{ uid: number; messageId?: string; seen?: boolean }> = [];
       for await (const message of client.fetch(
         uids,
         { headers: ['X-Audnix-Warmup'], envelope: true, flags: true }
@@ -136,14 +136,16 @@ export class ImapStealth {
       }
 
       let movedCount = 0;
+      let hadOpen = false;
       for (const msg of warmupMessages) {
         await client.messageMove(msg.uid.toString(), hiddenPath);
         movedCount++;
         await this.incrementDailyReceivedCount(mailbox.id);
         if (msg.messageId) {
           const updateData: any = { movedToHiddenFolder: true, placement: 'inbox' };
-          if ((msg as any).seen) {
+          if (msg.seen) {
             updateData.openedAt = new Date();
+            hadOpen = true;
           }
           await db
             .update(warmupInteractions)
@@ -151,6 +153,19 @@ export class ImapStealth {
             .where(eq(warmupInteractions.messageId, msg.messageId));
         }
       }
+
+      // Fire socket events for real-time UI
+      if (mailbox.userId && mailbox.userId !== 'system') {
+        const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+        if (hadOpen) {
+          clusterSync.notifyStatsUpdated(mailbox.userId).catch(() => {});
+        }
+        clusterSync.notifyWarmupUpdated(mailbox.userId, {
+          mailboxId: mailbox.integrationId,
+          status: 'active',
+        }).catch(() => {});
+      }
+
       return movedCount;
     } finally {
       lock.release();
@@ -220,6 +235,7 @@ export class ImapStealth {
       }
 
       let rescuedCount = 0;
+      let hadOpen = false;
       for (const msg of warmupMessages) {
         await client.messageMove(msg.uid.toString(), hiddenPath);
         try {
@@ -235,6 +251,7 @@ export class ImapStealth {
           const updateData: any = { movedToHiddenFolder: true, placement: 'spam' };
           if (msg.seen) {
             updateData.openedAt = new Date();
+            hadOpen = true;
           }
           await db
             .update(warmupInteractions)
@@ -242,6 +259,18 @@ export class ImapStealth {
             .where(eq(warmupInteractions.messageId, msg.messageId));
         }
       }
+
+      if (mailbox.userId && mailbox.userId !== 'system') {
+        const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+        if (hadOpen) {
+          clusterSync.notifyStatsUpdated(mailbox.userId).catch(() => {});
+        }
+        clusterSync.notifyWarmupUpdated(mailbox.userId, {
+          mailboxId: mailbox.integrationId,
+          status: 'active',
+        }).catch(() => {});
+      }
+
       return rescuedCount;
     } finally {
       lock.release();
