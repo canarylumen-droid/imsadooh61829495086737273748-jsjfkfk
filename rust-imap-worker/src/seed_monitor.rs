@@ -39,166 +39,249 @@ impl SeedMonitor {
         // Deduplicate seen message IDs in-process (faster than Redis round-trip)
         let seen_ids: Arc<DashSet<String>> = Arc::new(DashSet::new());
 
-        loop {
-            let result = self.run_once(&redis, &seen_ids).await;
-            if let Err(e) = result {
-                error!("Seed monitor error: {}. Reconnecting in 10s...", e);
-            }
-            time::sleep(Duration::from_secs(30)).await;
-        }
+        // Track last processed UID per folder to avoid re-fetching everything
+        let inbox_last_uid: Arc<std::sync::Mutex<u32>> = Arc::new(std::sync::Mutex::new(0));
+        let spam_last_uid: Arc<std::sync::Mutex<u32>> = Arc::new(std::sync::Mutex::new(0));
+
+        // Reconnect and scan all folders from scratch on startup
+        self.scan_spam_promotions(&redis, &seen_ids, &spam_last_uid).await?;
+
+        // Enter continuous IDLE loop for INBOX — periodically breaks to re-scan Spam/Promotions
+        self.idle_loop(&redis, &seen_ids, &inbox_last_uid, &spam_last_uid).await
     }
 
-    async fn run_once(&self, redis: &Arc<Mutex<ConnectionManager>>, seen_ids: &DashSet<String>) -> Result<()> {
+    /// Scan Spam and Promotions folders for warmup emails, move to INBOX.
+    async fn scan_spam_promotions(
+        &self,
+        redis: &Arc<Mutex<ConnectionManager>>,
+        seen_ids: &DashSet<String>,
+        spam_last_uid: &std::sync::Mutex<u32>,
+    ) -> Result<()> {
         let mut conn = ImapConnection::new("INBOX".to_string());
         conn.connect(&self.imap_host, self.imap_port, true).await?;
         conn.authenticate(&self.seed_email, &self.seed_password).await?;
 
-        let folders = vec!["INBOX", "[Gmail]/Spam", "[Gmail]/Promotions"];
+        let spam_folders = vec!["[Gmail]/Spam", "[Gmail]/Promotions", "[Gmail]/Junk"];
 
-        for folder in &folders {
+        for folder in &spam_folders {
             if let Err(e) = conn.select(folder).await {
                 debug!("Cannot select {}: {}", folder, e);
                 continue;
             }
 
-            // Use IDLE for real-time inbox monitoring on INBOX folder
-            if *folder == "INBOX" {
-                if let Err(e) = self.idle_and_fetch(&mut conn, redis, seen_ids).await {
-                    error!("IDLE failed on {}: {}", folder, e);
-                }
-                continue;
-            }
-
-            // Poll-based for Spam/Promotions (IDLE not supported on non-INBOX in most providers)
-            let raw = conn.fetch(0).await?;
+            let last_uid = *spam_last_uid.lock().unwrap();
+            let raw = conn.fetch(last_uid).await?;
             let messages = parse_fetch_response(&raw);
 
-            for (uid, headers) in &messages {
-                let id = headers.get("x-audnix-id")
-                    .or_else(|| headers.get("message-id"))
-                    .cloned();
-                if let Some(ref id) = id {
-                    if !seen_ids.insert(id.clone()) {
-                        continue; // Already processed
-                    }
-
-                    let placement = if folder.contains("Spam") || folder.contains("Junk") {
-                        "spam"
-                    } else if folder.contains("Promotions") {
-                        "promotions"
-                    } else {
-                        "inbox"
-                    };
-
-                    info!("Seed placement: {} → {} (message: {})", id, placement, folder);
-
-                    // ════════════════════════════════════════════════════════════
-                    // CRITICAL: Move warmup emails from Spam/Promotions to INBOX
-                    // so the Node.js inbound worker can find them and reply.
-                    // Without this, seeds detect placement but never reply.
-                    // ════════════════════════════════════════════════════════════
-                    if placement != "inbox" {
-                        info!("Moving seed message {} from {} to INBOX", id, folder);
-                        match conn.uid_move(*uid, "INBOX").await {
-                            Ok(true) => {
-                                info!("Moved {} → INBOX successfully", id);
-                                // Mark as not-spam + important — trains ISP spam filter
-                                let _ = conn.mark_not_spam_and_important(*uid).await;
-                            }
-                            Ok(false) => warn!("UID MOVE returned false for {} — trying COPY+DELETE fallback", id),
-                            Err(_) => {
-                                // Fallback: UID COPY + STORE +FLAGS.SILENT (\Deleted)
-                                warn!("UID MOVE failed for {}, trying COPY+DELETE fallback", id);
-                                let _ = conn.uid_copy_and_delete(*uid, "INBOX").await;
-                            }
-                        }
-                    }
-
-                    let payload = serde_json::json!({
-                        "type": "SEED_PLACEMENT",
-                        "message_id": id,
-                        "seed_email": self.seed_email,
-                        "folder": folder,
-                        "placement": placement,
-                        "timestamp": chrono::Utc::now().to_rfc3339()
-                    });
-
-                    let msg = serde_json::json!({
-                        "event": "SEED_MONITOR",
-                        "userId": null,
-                        "payload": payload
-                    });
-
-                    let mut guard = redis.lock().await;
-                    let _ = guard.publish::<_, _, ()>("audnix-cluster:events", msg.to_string()).await;
+            // Update last_uid from response if we saw a higher UID
+            if let Some(max_uid) = messages.keys().max() {
+                let mut stored = spam_last_uid.lock().unwrap();
+                if *max_uid > *stored {
+                    *stored = *max_uid;
                 }
             }
+
+            self.process_messages(messages, folder, conn, redis, seen_ids).await;
         }
 
         let _ = conn.logout().await;
         Ok(())
     }
 
-    async fn idle_and_fetch(&self, conn: &mut ImapConnection, redis: &Arc<Mutex<ConnectionManager>>, seen_ids: &DashSet<String>) -> Result<()> {
-        // Enter IDLE — wait for server push notifications
-        conn.idle().await?;
-        info!("Seed monitor entered IDLE on INBOX");
-
-        // Read server pushes in a loop with a keepalive NOOP every 15min
-        let mut last_noop = std::time::Instant::now();
-        loop {
-            // Read line from server (IDLE pushes untagged "* ..." lines)
-            let _ = conn.noop().await; // Triggers a read that gets IDLE notifications
-            // Actually we need a different approach for IDLE - let's just read raw
-
-            // For simplicity, check for EXISTS responses after exiting IDLE
-            conn.idle_done().await?;
-
-            // Fetch new messages
-            let raw = conn.fetch(0).await?;
-            let messages = parse_fetch_response(&raw);
-
-            for (_uid, headers) in &messages {
-                let id = headers.get("x-audnix-id")
-                    .or_else(|| headers.get("message-id"))
-                    .cloned();
-                if let Some(ref id) = id {
-                    if !seen_ids.insert(id.clone()) { continue; }
-
-                    info!("Seed inbox: {} (message: {})", id, "INBOX");
-
-                    let payload = serde_json::json!({
-                        "type": "SEED_PLACEMENT",
-                        "message_id": id,
-                        "seed_email": self.seed_email,
-                        "folder": "INBOX",
-                        "placement": "inbox",
-                        "timestamp": chrono::Utc::now().to_rfc3339()
-                    });
-
-                    let msg = serde_json::json!({
-                        "event": "SEED_MONITOR",
-                        "userId": null,
-                        "payload": payload
-                    });
-
-                    let mut guard = redis.lock().await;
-                    let _ = guard.publish::<_, _, ()>("audnix-cluster:events", msg.to_string()).await;
+    /// Process parsed IMAP messages: check headers, move from spam, publish events.
+    async fn process_messages(
+        &self,
+        messages: HashMap<u32, HashMap<String, String>>,
+        folder: &str,
+        conn: &mut ImapConnection,
+        redis: &Arc<Mutex<ConnectionManager>>,
+        seen_ids: &DashSet<String>,
+    ) {
+        for (uid, headers) in &messages {
+            let id = headers.get("x-audnix-id")
+                .or_else(|| headers.get("message-id"))
+                .cloned();
+            if let Some(ref id) = id {
+                if !seen_ids.insert(id.clone()) {
+                    continue;
                 }
+
+                let placement = if folder.contains("Spam") || folder.contains("Junk") {
+                    "spam"
+                } else if folder.contains("Promotions") {
+                    "promotions"
+                } else {
+                    "inbox"
+                };
+
+                info!("Seed placement: {} → {} (message: {})", id, placement, folder);
+
+                // Move warmup emails from Spam/Promotions to INBOX
+                if placement != "inbox" {
+                    info!("Moving seed message {} from {} to INBOX", id, folder);
+                    match conn.uid_move(*uid, "INBOX").await {
+                        Ok(true) => {
+                            info!("Moved {} → INBOX successfully", id);
+                            let _ = conn.mark_not_spam_and_important(*uid).await;
+                        }
+                        Ok(false) => warn!("UID MOVE returned false for {} — trying COPY+DELETE fallback", id),
+                        Err(_) => {
+                            warn!("UID MOVE failed for {}, trying COPY+DELETE fallback", id);
+                            let _ = conn.uid_copy_and_delete(*uid, "INBOX").await;
+                        }
+                    }
+                }
+
+                let payload = serde_json::json!({
+                    "type": "SEED_PLACEMENT",
+                    "message_id": id,
+                    "seed_email": self.seed_email,
+                    "folder": folder,
+                    "placement": placement,
+                    "timestamp": chrono::Utc::now().to_rfc3339()
+                });
+
+                let msg = serde_json::json!({
+                    "event": "SEED_MONITOR",
+                    "userId": null,
+                    "payload": payload
+                });
+
+                let mut guard = redis.lock().await;
+                let _ = guard.publish::<_, _, ()>("audnix-cluster:events", msg.to_string()).await;
+            }
+        }
+    }
+
+    /// Continuous IDLE loop for INBOX. Processes push notifications as they arrive.
+    /// Breaks out every SPAM_SCAN_INTERVAL to re-scan Spam/Promotions folders.
+    async fn idle_loop(
+        &self,
+        redis: &Arc<Mutex<ConnectionManager>>,
+        seen_ids: &DashSet<String>,
+        inbox_last_uid: &std::sync::Mutex<u32>,
+        spam_last_uid: &std::sync::Mutex<u32>,
+    ) -> Result<()> {
+        const SPAM_SCAN_INTERVAL_SECS: u64 = 300; // 5 minutes
+
+        loop {
+            let mut conn = ImapConnection::new("INBOX".to_string());
+            conn.connect(&self.imap_host, self.imap_port, true).await?;
+            conn.authenticate(&self.seed_email, &self.seed_password).await?;
+
+            // Scan Spam/Promotions first
+            let _ = self.scan_spam_promotions(redis, seen_ids, spam_last_uid).await;
+
+            // Enter IDLE for INBOX — continuous monitoring for up to 5 minutes
+            let scan_start = std::time::Instant::now();
+            let _ = self.idle_and_fetch(redis, seen_ids, inbox_last_uid, SPAM_SCAN_INTERVAL_SECS).await;
+            let elapsed = scan_start.elapsed();
+
+            // Logout cleanly
+            let _ = conn.logout().await;
+
+            // If IDLE loop exited early (error or timeout), wait a moment before reconnecting
+            if elapsed.as_secs() < SPAM_SCAN_INTERVAL_SECS {
+                time::sleep(Duration::from_secs(5)).await;
             }
 
-            // Re-enter IDLE
-            conn.idle().await?;
+            // Loop back: scan Spam/Promotions again, then re-enter IDLE
+        }
+    }
 
-            // Short sleep before next IDLE cycle
-            time::sleep(Duration::from_secs(5)).await;
+    async fn idle_and_fetch(
+        &self,
+        redis: &Arc<Mutex<ConnectionManager>>,
+        seen_ids: &DashSet<String>,
+        inbox_last_uid: &std::sync::Mutex<u32>,
+        max_duration_secs: u64,
+    ) -> Result<()> {
+        let mut conn = ImapConnection::new("INBOX".to_string());
+        conn.connect(&self.imap_host, self.imap_port, true).await?;
+        conn.authenticate(&self.seed_email, &self.seed_password).await?;
+        let select_resp = conn.select("INBOX").await?;
+        info!("Seed monitor selected INBOX");
 
-            if last_noop.elapsed() > Duration::from_secs(60) {
-                conn.idle_done().await?;
-                conn.noop().await?;
-                conn.idle().await?;
-                last_noop = std::time::Instant::now();
+        // Update last_uid from UIDNEXT in SELECT response — skip old messages
+        let uidnext = conn.get_uidnext(&select_resp);
+        if uidnext > 0 {
+            let mut stored = inbox_last_uid.lock().unwrap();
+            if uidnext > *stored {
+                *stored = uidnext - 1;
             }
+        }
+
+        let start = std::time::Instant::now();
+
+        loop {
+            // Check if we've exceeded the max duration — time to scan Spam/Promotions
+            if start.elapsed().as_secs() >= max_duration_secs {
+                info!("Seed idle period complete, reconnecting to scan Spam/Promotions");
+                let _ = conn.logout().await;
+                return Ok(());
+            }
+
+            // Enter IDLE — wait for server push notifications
+            if let Err(e) = conn.idle().await {
+                warn!("IDLE enter failed: {}, reconnecting", e);
+                let _ = conn.logout().await;
+                return Ok(());
+            }
+
+            // Wait for push notification or timeout (60s max)
+            let push = conn.wait_for_idle_push(60).await.unwrap_or_default();
+
+            // Exit IDLE
+            let _ = conn.idle_done().await;
+
+            if push.contains("EXISTS") || push.contains("RECENT") {
+                // New mail! Fetch only unprocessed messages
+                let last_uid = *inbox_last_uid.lock().unwrap();
+                let raw = conn.fetch(last_uid).await?;
+                let messages = parse_fetch_response(&raw);
+
+                // Update last_uid
+                if let Some(max_uid) = messages.keys().max() {
+                    let mut stored = inbox_last_uid.lock().unwrap();
+                    if *max_uid > *stored {
+                        *stored = *max_uid;
+                    }
+                }
+
+                for (_uid, headers) in &messages {
+                    let id = headers.get("x-audnix-id")
+                        .or_else(|| headers.get("message-id"))
+                        .cloned();
+                    if let Some(ref id) = id {
+                        if !seen_ids.insert(id.clone()) { continue; }
+
+                        info!("Seed inbox: {} (new message)", id);
+
+                        let payload = serde_json::json!({
+                            "type": "SEED_PLACEMENT",
+                            "message_id": id,
+                            "seed_email": self.seed_email,
+                            "folder": "INBOX",
+                            "placement": "inbox",
+                            "timestamp": chrono::Utc::now().to_rfc3339()
+                        });
+
+                        let msg = serde_json::json!({
+                            "event": "SEED_MONITOR",
+                            "userId": null,
+                            "payload": payload
+                        });
+
+                        let mut guard = redis.lock().await;
+                        let _ = guard.publish::<_, _, ()>("audnix-cluster:events", msg.to_string()).await;
+                    }
+                }
+            } else if !push.is_empty() {
+                debug!("IDLE push received but no new mail: {}", push);
+            }
+
+            // NOOP keepalive every cycle (IDLE was just re-entered and exited)
+            let _ = conn.noop().await;
         }
     }
 }

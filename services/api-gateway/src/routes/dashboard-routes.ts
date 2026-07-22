@@ -1486,6 +1486,111 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
     }
 });
 
+/**
+ * GET /api/warmup/inbox
+ * Returns warmup interactions as conversation-like data for the inbox warmup tab.
+ */
+router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Response) => {
+    try {
+        const userId = req.session?.userId!;
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const offset = parseInt(req.query.offset as string) || 0;
+
+        const { db } = await import('@shared/lib/db/db.js');
+        const { warmupMailboxes, warmupInteractions, warmupThreads } = await import('@audnix/shared');
+        const { eq, and, desc, sql, inArray } = await import('drizzle-orm');
+
+        const wms = await db.select({ id: warmupMailboxes.id, integrationId: warmupMailboxes.integrationId })
+            .from(warmupMailboxes)
+            .where(eq(warmupMailboxes.userId, userId));
+        const warmupMailboxIds = wms.map((w: any) => w.id);
+        const integrationIdMap = new Map(wms.map((w: any) => [w.id, w.integrationId]));
+
+        if (warmupMailboxIds.length === 0) { res.json({ conversations: [], total: 0 }); return; }
+
+        const countResult = await db.select({ count: sql<number>`count(distinct ${warmupInteractions.threadId})` })
+            .from(warmupInteractions)
+            .where(inArray(warmupInteractions.fromMailboxId, warmupMailboxIds));
+        const total = Number(countResult[0]?.count || 0);
+
+        // Get latest interaction per thread (most recent message)
+        const rows = await db.select({
+            threadId: warmupInteractions.threadId,
+            direction: warmupInteractions.direction,
+            subject: warmupInteractions.subject,
+            snippet: warmupInteractions.snippet,
+            status: warmupInteractions.status,
+            placement: warmupInteractions.placement,
+            sentAt: warmupInteractions.sentAt,
+            openedAt: warmupInteractions.openedAt,
+            fromMailboxId: warmupInteractions.fromMailboxId,
+            toMailboxId: warmupInteractions.toMailboxId,
+        })
+            .from(warmupInteractions)
+            .where(inArray(warmupInteractions.fromMailboxId, warmupMailboxIds))
+            .orderBy(desc(warmupInteractions.sentAt))
+            .limit(limit)
+            .offset(offset);
+
+        // Group by thread, keep only the latest interaction per thread
+        const threadMap = new Map<string, any>();
+        for (const row of rows) {
+            if (!threadMap.has(row.threadId)) {
+                threadMap.set(row.threadId, {
+                    threadId: row.threadId,
+                    lastMessage: row.direction,
+                    subject: row.subject,
+                    snippet: row.snippet,
+                    status: row.status,
+                    placement: row.placement,
+                    sentAt: row.sentAt,
+                    openedAt: row.openedAt,
+                    fromMailboxId: row.fromMailboxId,
+                    toMailboxId: row.toMailboxId,
+                });
+            }
+        }
+
+        // Get thread metadata
+        const threadIds = Array.from(threadMap.keys());
+        const threads = threadIds.length > 0 ? await db.select({
+            id: warmupThreads.id,
+            status: warmupThreads.status,
+            messageCount: warmupThreads.messageCount,
+            maxMessages: warmupThreads.maxMessages,
+            partnerMailboxId: warmupThreads.partnerMailboxId,
+        })
+            .from(warmupThreads)
+            .where(inArray(warmupThreads.id, threadIds))
+            .limit(threadIds.length) : [];
+
+        const threadMetaMap = new Map(threads.map((t: any) => [t.id, { messageCount: t.messageCount, maxMessages: t.maxMessages, partnerMailboxId: t.partnerMailboxId, threadStatus: t.status }]));
+
+        const conversations = Array.from(threadMap.entries()).map(([threadId, conv]) => {
+            const meta = threadMetaMap.get(threadId);
+            return {
+                id: threadId,
+                subject: conv.subject,
+                snippet: conv.snippet,
+                status: conv.status,
+                placement: conv.placement,
+                sentAt: conv.sentAt,
+                openedAt: conv.openedAt,
+                direction: conv.lastMessage,
+                messageCount: meta?.messageCount || 0,
+                maxMessages: meta?.maxMessages || 0,
+                threadStatus: meta?.threadStatus || 'active',
+                integrationId: integrationIdMap.get(conv.fromMailboxId) || integrationIdMap.get(conv.toMailboxId) || null,
+            };
+        });
+
+        res.json({ conversations, total });
+    } catch (error: any) {
+        console.error('[Warmup] Inbox error:', error.message);
+        res.json({ conversations: [], total: 0 });
+    }
+});
+
 export default router;
 
 

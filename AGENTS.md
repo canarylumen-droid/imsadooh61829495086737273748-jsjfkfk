@@ -1192,46 +1192,34 @@ All resolve automatically via socket `insights_updated` event. No polling.
 ### Overview
 Lead recovery: filter noise emails before syncing, skip already-converted leads, send recovery drafts as thread replies. Also fixed EC2 node_modules crisis (all 191 packages missing from disk).
 
-### Commits
-- `01613c3e` — Lead recovery: noise email filter (40+ rules), dead status guard, thread-reply send endpoint, UI "Send Recovery Email" + "Open in Inbox" buttons
-
 ### Changes
 
-1. **Noise email filter** (`services/lead-recovery-worker/src/filter.ts`): Added `classifyEmail()` with 40+ detection rules across 13 noise categories (otp_security, transactional, marketing, auto_reply, bounce_failure, social_notification, calendar_invite, password_reset, welcome_onboarding, account_alert, system_ci_notification, delivery_status_report, forwarded_reply_stripped). Any match filtered out before AI analysis.
+1. **Noise email filter** (`services/lead-recovery-worker/src/filter.ts`): Added `classifyEmail()` with 40+ detection rules across 13 noise categories. Any match filtered out before AI analysis.
+2. **Dead status guard** (`services/lead-recovery-worker/src/worker.ts`): Guard 3 in sync analysis — if lead status is `converted`, `booked`, `not_interested`, `unsubscribed`, or `no_show`, skip with `SkippedDeadStatus` event.
+3. **Thread-reply send endpoint** (`lead-recovery-routes.ts:384-535`): `POST /api/lead-recovery/send/:leadId` — sends recovery email as thread reply with `isPriorityReply: true`, creates message record, updates lead status to `contacted`.
+4. **UI buttons** (`lead-recovery.tsx`): Draft modal has "Send Recovery Email" and "Open in Inbox" buttons.
+5. **EC2 node_modules crisis**: All 191 npm packages were missing from `/home/ubuntu/app/node_modules/` (23 stale `package-firewall.replit.local` URLs in `package-lock.json`). Fix: `sed` replacement → `registry.npmjs.org`, then `npm ci --prefer-offline --no-audit --no-fund` restored 1421 packages from 1.1GB cache (36s).
 
-2. **Dead status guard** (`services/lead-recovery-worker/src/worker.ts`): Guard 3 in sync analysis — if lead status is `converted`, `booked`, `not_interested`, `unsubscribed`, or `no_show`, skip with `SkippedDeadStatus` event log entry. Prevents wasted AI calls on dead leads.
+## This Session (Jul 22 2026) — IMAP Seed Monitor Rewrite + Per-Thread Stagger + Rust Println Fix + Warmup Inbox Tab
 
-3. **Thread-reply send endpoint** (`services/api-gateway/src/routes/lead-recovery-routes.ts:384-535`): `POST /api/lead-recovery/send/:leadId` — finds/creates lead in main PG leads table, resolves last inbound message's externalId for In-Reply-To/References, calls `sendEmail` with `isPriorityReply: true` (bypasses daily limits), creates message record, updates lead status to `contacted`, emits `RecoverySent` event.
+### Changes
+1. **Rust println removed** (`rust-imap-worker/src/main.rs:25`): Raw IMAP protocol text `println!("Server response:\n{}", &data[..500])` deleted — was leaking raw IMAP response to stdout. Now only prints `"✅ IMAP Test Successful!"`.
+2. **Seed monitor rewritten** (`rust-imap-worker/src/seed_monitor.rs`): 
+   - **Before**: `fetch(0)` fetched ALL messages every 5s (including thousands of old ones). IDLE loop used NOOP+idle_done → fetch(0) → re-IDLE — never scanned Spam/Promotions because `idle_and_fetch` looped forever.
+   - **After**: Tracks `last_uid` per seed per folder. IDLE now uses `wait_for_idle_push(60s)` — blocks until EXISTS notification, fetches only `> last_uid`. Every 5 minutes, breaks out of IDLE to scan Spam + Promotions folders for new warmup emails. Extracted `scan_spam_promotions()` + `process_messages()` for reuse.
+3. **Per-thread stagger** (`outbound-worker.ts:260`): Each `send-reply` delay now includes `threadStagger = crypto.createHash('sha256').update(threadId).digest()[0] % 25` (0-24 min deterministic offset). Prevents all threads firing replies at the same time.
+4. **Warmup inbox filter tab** (`inbox.tsx`): New `showWarmup` state + "Warmup" button (amber) in inbox toolbar alongside Archive button. Fetches from `GET /api/warmup/inbox` — shows warmup conversations (subject, direction, message count, placement/opened status). Click navigates to warmup dashboard for details.
+5. **Warmup inbox endpoint** (`dashboard-routes.ts:1492-1568`): `GET /api/warmup/inbox` returns warmup interactions grouped by thread with metadata (messageCount, maxMessages, threadStatus, placement, openedAt). Filters by userId.
+6. **Messages area guard**: When `showWarmup` is true and a lead is selected, shows "Warmup Conversation" placeholder with link to Warmup Dashboard instead of regular messages area.
 
-4. **UI buttons** (`client/src/pages/dashboard/lead-recovery.tsx`, `client/src/stores/leadRecoveryStore.tsx`): Draft modal has "Send Recovery Email" (calls send endpoint then navigates to inbox on success) and "Open in Inbox" buttons.
-
-5. **Event types** (`services/api-gateway/src/lib/events.ts`, `services/lead-recovery-worker/src/events.ts`): Added `RecoverySent` to `RecoveryEventAction`, `SkippedDeadStatus` to `LeadRecoveryWorkerEvent`.
-
-6. **EC2 node_modules crisis** (Jul 22 crisis): All 191 npm packages were missing from `node_modules/` on EC2 (only 7 items: tsx+esbuild from npx cache + symlinks). Caused by replit firewall blocking npm registry → `npm ci` never completed on any previous deploy. Services were running on stale 10h-old processes that had modules in memory. Any restart crashed immediately. **Fix**: Fixed 23 stale `package-firewall.replit.local` URLs in `package-lock.json` → `registry.npmjs.org` with `sed`, then `npm ci --prefer-offline --no-audit --no-fund` restored all 1421 packages from 1.1GB local cache (36s). Restarted all services online.
-
-### Key Technical Knowledge
-- **EC2 package crisis**: `package-lock.json` had 23 `resolved` URLs pointing to `http://package-firewall.replit.local/npm/...` (replit's proxy). This proxy is offline on EC2 → EAI_AGAIN on those packages. Fixed with `sed -i 's|http://package-firewall.replit.local/npm/|https://registry.npmjs.org/|g' package-lock.json`.
-- **npm cache is viable**: `/home/ubuntu/.npm/` has 1.1GB cache. `npm ci --prefer-offline` installs directly from cache (36s for 1421 packages).
-- **Instrument.ts crash**: `instrument.ts` imports `@sentry/node` with `require('@sentry/node')` which crashes when package missing. Changed to dynamic ESM import.
-
-### Files Changed (this session)
-- `services/lead-recovery-worker/src/filter.ts` — noise classification (40+ rules, 13 categories)
-- `services/lead-recovery-worker/src/worker.ts` — Guard 3 (SkippedDeadStatus)
-- `services/api-gateway/src/routes/lead-recovery-routes.ts` — POST /send/:leadId endpoint
-- `services/api-gateway/src/lib/events.ts` — added RecoverySent to RecoveryEventAction
-- `services/lead-recovery-worker/src/events.ts` — added SkippedDeadStatus to LeadRecoveryWorkerEvent
-- `client/src/stores/leadRecoveryStore.tsx` — sendRecovery callback
-- `client/src/pages/dashboard/lead-recovery.tsx` — Send Recovery / Open in Inbox buttons in draft modal
-- `instrument.ts` — changed @sentry/node import from require() to dynamic import()
-- `package-lock.json` — fixed 23 stale replit proxy URLs
+### Files Changed
+- `rust-imap-worker/src/seed_monitor.rs` — full rewrite of idle loop, last_uid tracking, Spam/Promotions scanning
+- `rust-imap-worker/src/main.rs` — removed raw IMAP println
+- `services/warmup-service/src/workers/outbound-worker.ts` — threadStagger in reply delay
+- `services/api-gateway/src/routes/dashboard-routes.ts` — GET /api/warmup/inbox endpoint
+- `client/src/pages/dashboard/inbox.tsx` — warmup filter tab + messages guard
+- `AGENTS.md` — this session entry
 
 ### Deploy
-- `git push github main` then on EC2:
-  ```bash
-  cd /home/ubuntu/app && git pull
-  sed -i 's|http://package-firewall.replit.local/npm/|https://registry.npmjs.org/|g' package-lock.json
-  npm ci --prefer-offline --no-audit --no-fund
-  npm run build:client
-  pm2 restart all
-  ```
+- Push to GitHub, pull on EC2, build client, restart Rust IMAP worker + API gateway
 

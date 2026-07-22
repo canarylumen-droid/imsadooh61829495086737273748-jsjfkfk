@@ -493,6 +493,7 @@ export default function InboxPage() {
 
 
   const [showArchived, setShowArchived] = useState(false);
+  const [showWarmup, setShowWarmup] = useState(false);
   const hasArchivedLeads = useMemo(() => allLeads.some(l => l.archived), [allLeads]);
   const [page, setPage] = useState(0);
   const PAGE_SIZE = 50;
@@ -528,6 +529,22 @@ export default function InboxPage() {
     staleTime: 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+  });
+
+  const { data: warmupInboxData, isLoading: warmupInboxLoading } = useQuery<any>({
+    queryKey: ["/api/warmup/inbox"],
+    enabled: showWarmup,
+    placeholderData: (prev: any) => prev,
+    staleTime: 10_000,
+    refetchOnMount: true,
+    refetchOnWindowFocus: true,
+  });
+
+  const { data: warmupDetailsData, isLoading: warmupDetailsLoading } = useQuery<any>({
+    queryKey: ["/api/warmup/activity", { threadId: showWarmup && leadId ? leadId : undefined }],
+    enabled: showWarmup && !!leadId,
+    placeholderData: (prev: any) => prev,
+    staleTime: 5_000,
   });
 
   const { data: channelStatus, isLoading: channelsLoading, isError: channelsError } = useQuery<any>({
@@ -1238,10 +1255,20 @@ export default function InboxPage() {
                   variant={showArchived ? "secondary" : hasArchivedLeads ? "outline" : "ghost"}
                   size="icon"
                   className={cn("h-8 w-8", showArchived && "text-primary")}
-                  onClick={() => setShowArchived(!showArchived)}
+                  onClick={() => { setShowArchived(!showArchived); if (showWarmup) setShowWarmup(false); }}
                   title={showArchived ? "Hide Archived" : hasArchivedLeads ? "Show Archived" : "No archived leads"}
                 >
                   <Archive className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant={showWarmup ? "secondary" : "ghost"}
+                  size="sm"
+                  className={cn("h-8 gap-1.5 text-xs", showWarmup && "text-amber-500")}
+                  onClick={() => { setShowWarmup(!showWarmup); if (showArchived) setShowArchived(false); setFilterStatus('all'); }}
+                  title="Warmup conversations"
+                >
+                  <Activity className="h-3.5 w-3.5" />
+                  Warmup
                 </Button>
               </div>
             </div>
@@ -1339,7 +1366,61 @@ export default function InboxPage() {
             )}
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-border/5">
-            {((leadsFetching && allLeads.length === 0) || (channelsLoading && !hasLoadedLeadsRef.current && !channelsError)) && page === 0 ? (
+            {showWarmup ? (
+              warmupInboxLoading ? (
+                <div className="p-4 space-y-4">
+                  {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
+                </div>
+              ) : !warmupInboxData?.conversations?.length ? (
+                <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
+                  <div className="max-w-xs">
+                    <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center mb-6 mx-auto">
+                      <Activity className="h-10 w-10 text-amber-400" />
+                    </div>
+                    <p className="text-sm font-bold text-foreground/80">No warmup conversations</p>
+                    <p className="text-xs text-muted-foreground mt-2">Warmup emails and replies will appear here as they are exchanged.</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="divide-y divide-border/5">
+                  {warmupInboxData.conversations.map((conv: any) => (
+                    <div
+                      key={conv.id}
+                      onClick={() => {
+                        setSelectedLeadIds([]);
+                        setLocation('/dashboard/warmup');
+                      }}
+                      className={cn(
+                        "p-3 cursor-pointer border-b border-border/10 transition-all relative group flex gap-3",
+                        leadId === conv.id ? "bg-amber-500/10" : "hover:bg-muted/30"
+                      )}
+                    >
+                      <div className="flex gap-3 items-center w-full">
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-1">
+                            <span className="text-sm font-semibold truncate flex-1 min-w-0">
+                              {conv.subject || 'Warmup Conversation'}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 ml-auto">
+                              {conv.sentAt ? formatDateShort(conv.sentAt) : ''}
+                            </span>
+                          </div>
+                          <p className="text-xs line-clamp-1 overflow-hidden text-foreground/60">
+                            <span className="inline-flex items-center gap-1">
+                              {conv.direction === 'inbound' ? '← Received' : '→ Sent'}
+                              {' • '}
+                              {conv.messageCount}/{conv.maxMessages} messages
+                              {conv.placement === 'spam' && <span className="text-amber-500 ml-1">⚠ Spam</span>}
+                              {conv.openedAt && <span className="text-emerald-500 ml-1">✓✓ Opened</span>}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : ((leadsFetching && allLeads.length === 0) || (channelsLoading && !hasLoadedLeadsRef.current && !channelsError)) && page === 0 ? (
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
               </div>
@@ -1559,6 +1640,21 @@ export default function InboxPage() {
                 <p className="text-sm text-muted-foreground/60 leading-relaxed">
                   Select a live conversation to view deep lead intelligence, handle objections, or let the AI Agent take full control.
                 </p>
+              </div>
+            </div>
+          ) : showWarmup ? (
+            <div className="flex-1 flex items-center justify-center">
+              <div className="text-center space-y-4 max-w-sm px-6">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto">
+                  <Activity className="h-8 w-8 text-amber-400" />
+                </div>
+                <h3 className="text-lg font-bold">Warmup Conversation</h3>
+                <p className="text-sm text-muted-foreground">
+                  Warmup details and full conversation history are available on the Warmup Dashboard.
+                </p>
+                <Button variant="outline" size="sm" onClick={() => setLocation('/dashboard/warmup')}>
+                  Open Warmup Dashboard
+                </Button>
               </div>
             </div>
           ) : (

@@ -256,7 +256,9 @@ export function createOutboundWorker(): Worker {
             + Math.floor(Math.random() * (WARMUP_CONFIG.SEED_REPLY_MAX_DELAY_MINUTES - WARMUP_CONFIG.SEED_REPLY_MIN_DELAY_MINUTES + 1));
           // Later replies get extra delay: +0, +3-8, +6-16, +9-24...
           const extraDelay = (newCount - 1) * (3 + Math.floor(Math.random() * 6));
-          const totalDelay = Math.max(1, baseDelay + extraDelay);
+          // Per-thread stagger to prevent all threads firing at the same time
+          const threadStagger = crypto.createHash('sha256').update(threadId).digest()[0] % 25;
+          const totalDelay = Math.max(1, baseDelay + extraDelay + threadStagger);
 
           await warmupOutboundQueue.add(
             'send-reply',

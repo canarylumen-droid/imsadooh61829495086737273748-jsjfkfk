@@ -20,9 +20,8 @@ async fn main() -> Result<()> {
         let password = &args[4];
         let folder = args.get(5).map(|s| s.as_str()).unwrap_or("INBOX");
         match test_imap_connect(host, port, username, password, folder).await {
-            Ok(data) => {
+            Ok(_) => {
                 println!("✅ IMAP Test Successful!");
-                println!("Server response:\n{}", &data[..data.len().min(500)]);
             }
             Err(e) => {
                 eprintln!("❌ IMAP Test Failed: {}", e);
