@@ -81,7 +81,7 @@ impl SeedMonitor {
                 }
             }
 
-            self.process_messages(messages, folder, conn, redis, seen_ids).await;
+            self.process_messages(messages, folder, &mut conn, redis, seen_ids).await;
         }
 
         let _ = conn.logout().await;
