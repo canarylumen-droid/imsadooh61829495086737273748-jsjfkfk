@@ -276,7 +276,8 @@ export class EnrollmentEngine {
       .where(
         and(
           isNull(integrations.id),
-          not(eq(warmupMailboxes.status, 'unenrolled'))
+          not(eq(warmupMailboxes.status, 'unenrolled')),
+          not(eq(warmupMailboxes.anchorRole, 'seed'))
         )
       );
 
