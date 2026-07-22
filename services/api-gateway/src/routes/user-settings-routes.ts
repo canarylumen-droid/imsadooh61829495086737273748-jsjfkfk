@@ -502,7 +502,7 @@ router.delete('/account', requireAuthOrApiKey, async (req: Request, res: Respons
       return;
     }
 
-    await revocationService.revokeAllAndDestroyUser(userId);
+    await revocationService.revokeAllAndDestroyUser(userId, (req as any).session?.email);
 
     try {
       (req as any).logout?.((err: any) => {
@@ -536,8 +536,10 @@ async function processExpiredDeletions(): Promise<void> {
     for (const row of result.rows as any[]) {
       try {
         console.log(`[AccountDeletion] Processing expired deletion for user ${row.id}`);
-        await revocationService.revokeAllAndDestroyUser(row.id);
-        console.log(`[AccountDeletion] Successfully deleted user ${row.id}`);
+        const userResult = await db.execute(sql`SELECT email FROM users WHERE id = ${row.id}::uuid`);
+        const email = userResult.rows?.[0]?.email;
+        await revocationService.revokeAllAndDestroyUser(row.id, email);
+        console.log(`[AccountDeletion] Successfully deleted user ${row.id}${email ? ` (${email})` : ''}`);
       } catch (err) {
         console.error(`[AccountDeletion] Failed to delete user ${row.id}:`, err);
       }

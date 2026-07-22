@@ -2010,6 +2010,14 @@ export type InsertLeadCampaignOutcome = z.infer<typeof leadCampaignOutcomesInser
 export type LeadExclusionRule = z.infer<typeof leadExclusionRulesSelect>;
 export type InsertLeadExclusionRule = z.infer<typeof leadExclusionRulesInsert>;
 
+// Deleted accounts tracking — used by login to show helpful message
+export const deletedAccountsLog = pgTable("deleted_accounts_log", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  deletedAt: timestamp("deleted_at").notNull().defaultNow(),
+  reason: text("reason"),
+});
+
 export type WarmupMailbox = z.infer<typeof warmupMailboxesSelect>;
 export type InsertWarmupMailbox = z.infer<typeof warmupMailboxesInsert>;
 export type WarmupThread = z.infer<typeof warmupThreadsSelect>;
@@ -2022,3 +2030,8 @@ export type WarmupDomainCluster = z.infer<typeof warmupDomainClustersSelect>;
 export type InsertWarmupDomainCluster = z.infer<typeof warmupDomainClustersInsert>;
 export type WarmupSeedAccount = z.infer<typeof warmupSeedAccountsSelect>;
 export type InsertWarmupSeedAccount = z.infer<typeof warmupSeedAccountsInsert>;
+
+export const deletedAccountsLogSelect = createSelectSchema(deletedAccountsLog);
+export const deletedAccountsLogInsert = createInsertSchema(deletedAccountsLog);
+export type DeletedAccountLog = z.infer<typeof deletedAccountsLogSelect>;
+export type InsertDeletedAccountLog = z.infer<typeof deletedAccountsLogInsert>;

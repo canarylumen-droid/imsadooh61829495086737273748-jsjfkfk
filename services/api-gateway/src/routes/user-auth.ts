@@ -642,9 +642,30 @@ router.post('/login', authLimiter, async (req: Request, res: Response): Promise<
       return;
     }
 
-    if (!user || !user.password) {
-      console.log(`❌ Login failed: User not found or no password for ${email}`);
-      res.status(401).json({ error: 'Invalid email or password' });
+    if (!user) {
+      console.log(`❌ Login failed: No account exists for ${email}`);
+      // Check if this email was previously deleted
+      try {
+        const { db } = await import('@shared/lib/db/db.js');
+        const { deletedAccountsLog } = await import('@audnix/shared');
+        const { eq } = await import('drizzle-orm');
+        const deleted = await db.select({ deletedAt: deletedAccountsLog.deletedAt })
+          .from(deletedAccountsLog)
+          .where(eq(deletedAccountsLog.email, email.toLowerCase()))
+          .limit(1);
+        if (deleted[0]) {
+          const date = new Date(deleted[0].deletedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+          res.status(401).json({ error: `This account was deleted on ${date}. Deletion is permanent — data cannot be restored. Please create a new account.` });
+          return;
+        }
+      } catch {}
+      res.status(401).json({ error: 'No account found with this email. Please sign up or check your email address.' });
+      return;
+    }
+
+    if (!user.password) {
+      console.log(`❌ Login failed: Account exists but no password set for ${email}`);
+      res.status(401).json({ error: 'This account has no password set. Please use Google OAuth to sign in.' });
       return;
     }
 

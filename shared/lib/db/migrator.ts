@@ -703,6 +703,17 @@ export async function runDatabaseMigrations() {
                     END IF;
                 END IF;
 
+                -- Deleted accounts log for login messaging
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='deleted_accounts_log') THEN
+                    CREATE TABLE deleted_accounts_log (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        email TEXT NOT NULL,
+                        deleted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        reason TEXT
+                    );
+                    CREATE INDEX dal_email_idx ON deleted_accounts_log(email);
+                END IF;
+
             END $$;
         `); });
         console.log("✅ Emergency schema synchronization completed.");

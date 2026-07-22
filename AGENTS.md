@@ -1223,3 +1223,24 @@ Lead recovery: filter noise emails before syncing, skip already-converted leads,
 ### Deploy
 - Push to GitHub, pull on EC2, build client, restart Rust IMAP worker + API gateway
 
+## This Session (Jul 22 2026) — Login Error Messages + Deleted Account Tracking + warmup config docs
+
+### Changes
+1. **Login error messages improved** (`user-auth.ts:645-670`): Three distinct error states:
+   - **Account not found** → `"No account found with this email. Please sign up or check your email address."`
+   - **Account deleted** → `"This account was deleted on {date}. Deletion is permanent — data cannot be restored. Please create a new account."` (checks `deleted_accounts_log` table)
+   - **No password set** → `"This account has no password set. Please use Google OAuth to sign in."`
+   - **Wrong password** → `"Invalid email or password"` (unchanged for security)
+2. **Deleted accounts tracking** (`revocation-service.ts`, `schema.ts`, `migrator.ts`): New `deleted_accounts_log` table logs email + `deleted_at` + reason before user data is cascade-deleted. `revokeAllAndDestroyUser()` now accepts optional `email` param. Both direct delete endpoint and `processExpiredDeletions()` cron pass the email.
+3. **Migration** (`migrator.ts`): Auto-creates `deleted_accounts_log` table if not exists (id UUID PK, email TEXT, deleted_at TIMESTAMP, reason TEXT, index on email).
+
+### Files Changed
+- `services/api-gateway/src/routes/user-auth.ts` — login error differentiation + deleted account check
+- `services/api-gateway/src/oauth/revocation-service.ts` — email param in revokeAllAndDestroyUser, logs to deleted_accounts_log
+- `services/api-gateway/src/routes/user-settings-routes.ts` — passes session.email to revokeAllAndDestroyUser
+- `shared/schema.ts` — deletedAccountsLog table definition + select/insert schemas + types
+- `shared/lib/db/migrator.ts` — migration for deleted_accounts_log table
+- `AGENTS.md` — this session entry
+
+### Deploy
+- Push to GitHub, pull on EC2, restart API gateway
