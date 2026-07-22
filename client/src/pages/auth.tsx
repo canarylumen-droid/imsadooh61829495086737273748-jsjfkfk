@@ -113,7 +113,8 @@ export default function AuthPage() {
           width: '100%',
           text: 'signin_with',
           shape: 'rectangular',
-          logo_alignment: 'left',
+          logo_alignment: 'center',
+          locale: 'en',
         });
         gsiInitializedRef.current = true;
       }
@@ -769,7 +770,7 @@ export default function AuthPage() {
             ) : isDedicatedPage ? (
               <div className="text-center py-2">
                 <CardTitle className="text-2xl font-bold text-white tracking-tight">
-                  {isLogin ? "Sign In" : "Register"}
+                  {isLogin ? "Sign In" : "Sign Up"}
                 </CardTitle>
                 <CardDescription className="text-white/60 text-xs mt-1.5">
                   {isLogin 
@@ -783,13 +784,13 @@ export default function AuthPage() {
                   onClick={() => { setIsLogin(true); setSignupStep(1); }}
                   className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${isLogin ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
                 >
-                  Login
+                  Sign In
                 </button>
                 <button
                   onClick={() => setIsLogin(false)}
                   className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${!isLogin ? "bg-primary text-white shadow-lg" : "text-white/60 hover:text-white"}`}
                 >
-                  Register
+                  Sign Up
                 </button>
               </div>
             )}
@@ -950,7 +951,7 @@ export default function AuthPage() {
                       Signing in...
                     </Button>
                   ) : googleClientId ? (
-                    <div ref={googleButtonRef} className="w-full [&>div]:!w-full [&>div>div]:!w-full [&>div>div>iframe]:!w-full [&>div>div>iframe]:!h-11" />
+                    <div ref={googleButtonRef} className="w-full flex justify-center [&>div]:!w-full [&>div>div]:!w-full [&>div>div>iframe]:!w-full [&>div>div>iframe]:!min-h-[44px] [&>div>div>iframe]:!rounded-lg" />
                   ) : null}
 
                   {googleClientId && (
@@ -959,7 +960,7 @@ export default function AuthPage() {
                         <span className="w-full border-t border-white/10" />
                       </div>
                       <div className="relative flex justify-center text-xs">
-                        <span className="bg-card/50 px-2 text-white/40">or sign in with email</span>
+                        <span className="bg-card/50 px-2 text-white/40">or continue with email</span>
                       </div>
                     </div>
                   )}
@@ -982,7 +983,7 @@ export default function AuthPage() {
                           onClick={() => setLocation("/signup")}
                           className="text-primary hover:underline font-semibold"
                         >
-                          Register here
+                          Sign up here
                         </button>
                       </p>
                     </div>

@@ -204,8 +204,8 @@ export default function WarmupPage() {
           <MailboxSwitcher value={selectedMailboxId} onValueChange={setSelectedMailboxId} />
           <Badge variant={activeMailboxes.length > 0 ? "default" : "secondary"} className={cn("text-xs shrink-0", activeMailboxes.length > 0 && "bg-emerald-500/10 text-emerald-500 border-emerald-500/20")}>
             {activeMailboxes.length > 0
-              ? `Warmup set (${activeMailboxes.length})`
-              : warmupStatuses.length > 0 ? "Warmup paused" : "—"}
+              ? `${activeMailboxes.length} active`
+              : warmupStatuses.length > 0 ? "paused" : "—"}
           </Badge>
           {warmupStatuses.length > 0 && (
             <Button
@@ -216,7 +216,7 @@ export default function WarmupPage() {
               disabled={toggleWarmupMutation.isPending}
             >
               {warmupStatuses.some(m => m.warmupStatus === 'active') ? (
-                <><Pause className="h-3.5 w-3.5" /> Pause All</>
+                <><Pause className="h-3.5 w-3.5" /> Stop All</>
               ) : (
                 <><Play className="h-3.5 w-3.5" /> Start All</>
               )}

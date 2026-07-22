@@ -39,9 +39,21 @@ export class RevocationService {
         console.error(`[RevocationService] Failed to revoke Calendly token for user: ${userId}`, err);
       }
 
-      // 3. (Future) Revoke Microsoft/Gmail tokens directly if needed,
-      // currently handled mostly by deleteIntegrations cascaded in the DB
-      // but if we need a specific http revocation we can do it here.
+      // 3. Clear all Redis queues/jobs for this user so nothing processes after deletion
+      try {
+        const redis = (await import('@shared/lib/redis/redis.js')).getRedisClient;
+        const client = redis();
+        if (client) {
+          // Pattern-delete all user-scoped keys
+          const keys = await client.keys(`*:${userId}:*`);
+          if (keys.length > 0) await client.del(keys);
+          // Also delete broad user keys
+          const userKeys = await client.keys(`*${userId}*`);
+          if (userKeys.length > 0) await client.del(userKeys);
+        }
+      } catch (err) {
+        console.error(`[RevocationService] Failed to clear Redis queues for user: ${userId}`, err);
+      }
 
       // 4. Finally, securely delete all user data from our databases
       await storage.deleteUser(userId);

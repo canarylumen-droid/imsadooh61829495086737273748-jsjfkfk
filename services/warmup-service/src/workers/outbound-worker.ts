@@ -252,16 +252,17 @@ export function createOutboundWorker(): Worker {
         // ── REPLY CHAIN ────────────────────────────────────────────────
         // After each successful warmup send, queue 2-3 replies back in the thread.
         // Each reply uses proper In-Reply-To / References threading.
-        // Total cycle: ~5 minutes (replies every 60-120 seconds).
+        // Progressive spacing: reply 1 @ 3-6min, reply 2 @ 6-12min, reply 3 @ 12-24min.
         // This mimics natural human conversation and avoids Gmail spam flagging.
         const repliesPerSend = WARMUP_CONFIG.REPLIES_PER_SEND; // default 3
         for (let v = 1; v <= repliesPerSend; v++) {
-          const delaySec = WARMUP_CONFIG.REPLY_CHAIN_MIN_DELAY_SECONDS +
+          const baseDelay = WARMUP_CONFIG.REPLY_CHAIN_MIN_DELAY_SECONDS +
             Math.floor(Math.random() * (
               WARMUP_CONFIG.REPLY_CHAIN_MAX_DELAY_SECONDS - WARMUP_CONFIG.REPLY_CHAIN_MIN_DELAY_SECONDS + 1
             ));
-          const totalMs = v * delaySec * 1000 + // progressive: reply 1 @ 60s, reply 2 @ 120s, reply 3 @ 180s
-            (Math.floor(Math.random() * 30) * 1000); // +0-30s jitter per reply
+          // Progressive: each subsequent reply has wider spacing
+          const totalMs = Math.pow(2, v - 1) * baseDelay * 1000 +
+            (Math.floor(Math.random() * 60) * 1000); // +0-60s jitter per reply
 
           await warmupOutboundQueue.add(
             'send-reply',

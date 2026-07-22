@@ -23,8 +23,8 @@ export const WARMUP_CONFIG = {
   REPLIES_PER_SEND: parseInt(process.env.WARMUP_REPLIES_PER_SEND || '3', 10),
 
   // Reply chain timing (seconds between replies in the chain)
-  REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '60', 10),
-  REPLY_CHAIN_MAX_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MAX_DELAY || '120', 10),
+  REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '180', 10),
+  REPLY_CHAIN_MAX_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MAX_DELAY || '360', 10),
 
   // Threading
   MIN_MESSAGES_PER_THREAD: 3,

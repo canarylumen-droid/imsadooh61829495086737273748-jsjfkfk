@@ -554,12 +554,23 @@ router.get('/connect/calendly', requireAuthOrApiKey, async (req: Request, res: R
       return;
     }
 
+    // Check if Calendly already connected for this user (per-user, not shareable)
+    const existingInt = await storage.getIntegration(userId, 'calendly');
+    if (existingInt) {
+      res.status(409).json({ error: 'Calendly is already connected. Each Calendly account links to one Audnix user. Disconnect first to reconnect.' });
+      return;
+    }
+
     const state = encryptState(`${userId}:${Date.now()}`);
     const authUrl = calendlyOAuth.getAuthUrl(state);
+    if (!authUrl || !authUrl.startsWith('https://')) {
+      res.status(500).json({ error: 'Invalid Calendly authorization URL. Check Calendly client configuration.' });
+      return;
+    }
     res.json({ authUrl });
   } catch (error) {
     console.error('Error initiating Calendly OAuth:', error);
-    res.status(500).json({ error: 'Failed to initiate OAuth flow' });
+    res.status(500).json({ error: 'Failed to initiate Calendly connection. Please try again.' });
   }
 });
 

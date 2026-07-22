@@ -196,9 +196,21 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
 
     // 11. Redirect back to dashboard with success confirmation
     console.log(`[Google Redirect] ✅ Gmail connected successfully for ${emailAddress}. Saving session and redirecting...`);
-    req.session.save(() => {
-      res.redirect('/dashboard/integrations?success=gmail_connected');
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err: any) => {
+        if (err) { reject(err); return; }
+        resolve();
+      });
     });
+    // Explicit cookie set to survive cross-site OAuth redirect browsers
+    res.cookie('audnix.sid', req.sessionID, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+      path: '/',
+    });
+    res.redirect('/dashboard/integrations?success=gmail_connected&t=' + Date.now());
 
   } catch (error: any) {
     // Advanced error logging for Google exchange failures
@@ -293,7 +305,14 @@ router.get('/google-calendar/callback', async (req: Request, res: Response): Pro
         resolve();
       });
     });
-    res.redirect('/dashboard/calendar?success=google_calendar_connected');
+    res.cookie('audnix.sid', req.sessionID, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 1000 * 60 * 60 * 24 * 30,
+      path: '/',
+    });
+    res.redirect('/dashboard/calendar?success=google_calendar_connected&t=' + Date.now());
   } catch (error) {
     console.error('[Google Redirect] Google Calendar OAuth callback error:', error);
     res.redirect('/dashboard/calendar?error=oauth_failed');

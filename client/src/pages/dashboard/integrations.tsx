@@ -801,17 +801,20 @@ export default function IntegrationsPage() {
 
     try {
       const apiProvider = provider.replace(/_/g, '-');
-      const response = await fetch(`/api/oauth/connect/${apiProvider}`);
+      const response = await fetch(`/api/oauth/connect/${apiProvider}`, { credentials: 'include' });
       if (!response.ok) {
         const errText = await response.text();
         throw new Error(errText.substring(0, 50));
       }
       const data = await response.json();
-      if (data.authUrl) window.location.href = data.authUrl;
-      else throw new Error(data.error || "No auth URL returned");
+      if (data.authUrl) {
+        window.location.href = data.authUrl;
+      } else {
+        throw new Error(data.error || "No auth URL returned");
+      }
     } catch (e: any) {
       console.error(e);
-      toast({ title: "Error", description: `Could not start connection setup: ${e.message}`, variant: "destructive" });
+      toast({ title: "Connection failed", description: e.message, variant: "destructive" });
     }
   };
 
