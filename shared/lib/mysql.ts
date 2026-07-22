@@ -169,7 +169,7 @@ export function getMySqlPool(): any | null {
   return pool || null;
 }
 
-export async function connectMySql(): Promise<any> {
+export async function connectMySql(timeoutMs = 15000): Promise<any> {
   if (!mysql) throw new Error("mysql2 package not available - install it with: npm install mysql2");
   if (pool) return pool;
 
@@ -179,7 +179,7 @@ export async function connectMySql(): Promise<any> {
   const password = process.env.MYSQL_PASSWORD || "";
   const database = process.env.MYSQL_DATABASE || "lead_recovery";
 
-  pool = mysql.createPool({
+  const newPool = mysql.createPool({
     host,
     port,
     user,
@@ -190,14 +190,30 @@ export async function connectMySql(): Promise<any> {
     queueLimit: 0,
     enableKeepAlive: true,
     keepAliveInitialDelay: 10000,
+    connectTimeout: 10000,
+    acquireTimeout: 10000,
   });
 
-  const conn = await pool.getConnection();
+  const timeout = setTimeout(() => {
+    console.warn(`[MySQL] Connection to ${host}:${port}/${database} timed out after ${timeoutMs}ms`);
+    newPool.end().catch(() => {});
+  }, timeoutMs);
+
   try {
-    await conn.ping();
-    console.log(`[MySQL] Connected to ${host}:${port}/${database}`);
-  } finally {
-    conn.release();
+    const conn = await newPool.getConnection();
+    clearTimeout(timeout);
+    try {
+      await conn.ping();
+      pool = newPool;
+      console.log(`[MySQL] Connected to ${host}:${port}/${database}`);
+    } finally {
+      conn.release();
+    }
+  } catch (e) {
+    clearTimeout(timeout);
+    newPool.end().catch(() => {});
+    console.warn(`[MySQL] Connection failed:`, (e as Error).message);
+    throw e;
   }
 
   return pool;

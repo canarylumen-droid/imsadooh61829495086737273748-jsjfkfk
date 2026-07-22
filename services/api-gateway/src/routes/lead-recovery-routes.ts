@@ -31,13 +31,11 @@ const SKIP_WARNING =
 
 router.use(requireAuthOrApiKey, requireProPlan);
 
-router.use(async (_req, _res, next) => {
-  if (hasMySqlUri()) {
-    try {
-      await connectMySql();
-    } catch {
-      // MySQL unavailable — routes will return empty/fallback data
-    }
+let mySqlConnected = false;
+router.use((_req, _res, next) => {
+  if (hasMySqlUri() && !mySqlConnected) {
+    mySqlConnected = true;
+    connectMySql().catch(() => {}); // fire-and-forget, routes handle null pool
   }
   next();
 });
