@@ -427,10 +427,10 @@ export async function completeMailboxSync(
   const p = getMySqlPool();
   if (!p) return;
   await p.query(
-    `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, available_at, last_sync_at, sync_status)
-     VALUES (?, ?, ?, 0, NULL, NOW(), 'completed')
+    `INSERT INTO lead_recovery_state (id, tenant_id, mailbox_id, is_busy, available_at, last_sync_at, sync_status, error_message)
+     VALUES (?, ?, ?, 0, NULL, NOW(), 'completed', NULL)
      ON DUPLICATE KEY UPDATE
-       is_busy = 0, available_at = NULL, last_sync_at = NOW(), sync_status = 'completed'`,
+       is_busy = 0, available_at = NULL, last_sync_at = NOW(), sync_status = 'completed', error_message = NULL`,
     [generateId(), tenantId, mailboxId]
   );
 }
@@ -571,32 +571,29 @@ export async function upsertRecoveredLead(
   const p = getMySqlPool();
   if (!p) return null;
 
-  const existingRows = await p.query(
-    "SELECT * FROM recovered_leads WHERE tenant_id = ? AND mailbox_id = ? AND email = ?",
-    [tenantId, mailboxId, email]
-  );
-  const existing = (existingRows[0] as Record<string, unknown>[])[0] ?? null;
+  const allowed = [
+    "source_mailbox_provider", "source_mailbox_account_type", "subject",
+    "intent", "deliverability_status", "follow_up_draft",
+    "conversation_summary", "last_message_text", "last_message_at",
+  ];
+  const mapped = mapDataToSnakeCase(data as Record<string, unknown>, allowed);
 
-  if (existing) {
-    const allowed = [
-      "source_mailbox_provider", "source_mailbox_account_type", "subject",
-      "intent", "deliverability_status", "follow_up_draft",
-      "conversation_summary", "last_message_text", "last_message_at",
-    ];
-    const mapped = mapDataToSnakeCase(data as Record<string, unknown>, allowed);
+  const conn = await p.getConnection();
+  try {
+    await conn.beginTransaction();
 
-    const setClauses: string[] = [];
-    const values: unknown[] = [];
-    for (const [column, value] of Object.entries(mapped)) {
-      setClauses.push(`${column} = ?`);
-      values.push(value ?? null);
-    }
-    setClauses.push("updated_at = NOW()");
+    const [existingRows] = await conn.query(
+      "SELECT * FROM recovered_leads WHERE tenant_id = ? AND mailbox_id = ? AND email = ? FOR UPDATE",
+      [tenantId, mailboxId, email]
+    );
+    const existing = (existingRows as Record<string, unknown>[])[0] ?? null;
 
-    let currentMessageIds: string[] =
-      parseJsonField<string[]>(existing.source_message_ids) ?? [];
-    let currentObjections: BrainstormedObjection[] =
-      parseJsonField<BrainstormedObjection[]>(existing.brainstormed_objections) ?? [];
+    let currentMessageIds: string[] = existing
+      ? parseJsonField<string[]>((existing as any).source_message_ids) ?? []
+      : [];
+    let currentObjections: BrainstormedObjection[] = existing
+      ? parseJsonField<BrainstormedObjection[]>((existing as any).brainstormed_objections) ?? []
+      : [];
 
     if (data.sourceMessageIds) {
       for (const id of data.sourceMessageIds) {
@@ -615,61 +612,71 @@ export async function upsertRecoveredLead(
       }
     }
 
+    const setClauses: string[] = [];
+    const values: unknown[] = [];
+    for (const [column, value] of Object.entries(mapped)) {
+      setClauses.push(`${column} = ?`);
+      values.push(value ?? null);
+    }
+
     const messageIdsJson = serializeJson(currentMessageIds);
     const objectionsJson = serializeJson(currentObjections);
 
-    await p.query(
-      `UPDATE recovered_leads
-       SET ${setClauses.join(", ")},
-           source_message_ids = ?,
-           brainstormed_objections = ?
-       WHERE tenant_id = ? AND mailbox_id = ? AND email = ?`,
-      [...values, messageIdsJson, objectionsJson, tenantId, mailboxId, email]
-    );
-  } else {
-    const messageIdsJson = serializeJson(data.sourceMessageIds ?? []);
-    const objectionsJson = serializeJson(data.brainstormedObjections ?? []);
+    if (existing) {
+      setClauses.push("updated_at = NOW()");
+      await conn.query(
+        `UPDATE recovered_leads
+         SET ${setClauses.join(", ")},
+             source_message_ids = ?,
+             brainstormed_objections = ?
+         WHERE tenant_id = ? AND mailbox_id = ? AND email = ?`,
+        [...values, messageIdsJson, objectionsJson, tenantId, mailboxId, email]
+      );
+    } else {
+      await conn.query(
+        `INSERT INTO recovered_leads
+           (id, tenant_id, mailbox_id, source_mailbox_provider,
+            source_mailbox_account_type, email, subject, intent,
+            deliverability_status, follow_up_draft, conversation_summary,
+            last_message_text, last_message_at, source_message_ids,
+            brainstormed_objections)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          generateId(), tenantId, mailboxId,
+          data.sourceMailboxProvider ?? null,
+          data.sourceMailboxAccountType ?? null,
+          email, data.subject ?? null,
+          data.intent ?? "Reply-Needed",
+          data.deliverabilityStatus ?? "unknown",
+          data.followUpDraft ?? null,
+          data.conversationSummary ?? null,
+          data.lastMessageText ?? null,
+          data.lastMessageAt ?? null,
+          messageIdsJson, objectionsJson,
+        ]
+      );
+    }
 
-    await p.query(
-      `INSERT INTO recovered_leads
-         (id, tenant_id, mailbox_id, source_mailbox_provider,
-          source_mailbox_account_type, email, subject, intent,
-          deliverability_status, follow_up_draft, conversation_summary,
-          last_message_text, last_message_at, source_message_ids,
-          brainstormed_objections)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        generateId(),
-        tenantId,
-        mailboxId,
-        data.sourceMailboxProvider ?? null,
-        data.sourceMailboxAccountType ?? null,
-        email,
-        data.subject ?? null,
-        data.intent ?? "Reply-Needed",
-        data.deliverabilityStatus ?? "unknown",
-        data.followUpDraft ?? null,
-        data.conversationSummary ?? null,
-        data.lastMessageText ?? null,
-        data.lastMessageAt ?? null,
-        messageIdsJson,
-        objectionsJson,
-      ]
+    await conn.commit();
+
+    const [rows] = await p.query(
+      "SELECT * FROM recovered_leads WHERE tenant_id = ? AND mailbox_id = ? AND email = ?",
+      [tenantId, mailboxId, email]
     );
+    const row = parseRow<RecoveredLeadRow>((rows as Record<string, unknown>[])[0] as Record<string, unknown>);
+    return {
+      ...row,
+      brainstormedObjections: parseJsonField<BrainstormedObjection[]>(
+        (row as any).brainstormedObjections
+      ),
+      sourceMessageIds: parseJsonField<string[]>((row as any).sourceMessageIds),
+    };
+  } catch (error) {
+    await conn.rollback();
+    throw error;
+  } finally {
+    conn.release();
   }
-
-  const [rows] = await p.query(
-    "SELECT * FROM recovered_leads WHERE tenant_id = ? AND mailbox_id = ? AND email = ?",
-    [tenantId, mailboxId, email]
-  );
-  const row = parseRow<RecoveredLeadRow>(rows[0] as Record<string, unknown>);
-  return {
-    ...row,
-    brainstormedObjections: parseJsonField<BrainstormedObjection[]>(
-      (row as any).brainstormedObjections
-    ),
-    sourceMessageIds: parseJsonField<string[]>((row as any).sourceMessageIds),
-  };
 }
 
 // ─── RecoveryPromptConfig helpers ──────────────────────────────────────────
@@ -697,7 +704,9 @@ export async function upsertRecoveryPromptConfig(
   await p.query(
     `INSERT INTO recovery_prompt_config (id, name, system_prompt, user_prompt_template)
      VALUES (?, ?, ?, ?)
-     ON DUPLICATE KEY UPDATE id = id`,
+     ON DUPLICATE KEY UPDATE
+       system_prompt = VALUES(system_prompt),
+       user_prompt_template = VALUES(user_prompt_template)`,
     [generateId(), name, systemPrompt, userPromptTemplate]
   );
 }

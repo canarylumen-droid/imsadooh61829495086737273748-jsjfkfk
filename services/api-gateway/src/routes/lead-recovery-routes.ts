@@ -5,6 +5,7 @@ import {
   getMySqlPool,
   getLeadRecoveryStates,
   getActiveLeadRecoveryState,
+  getRecoveryStats,
   promptConfigExists,
   upsertRecoveryState,
   deactivateAllRecoveryStates,
@@ -26,7 +27,7 @@ import { generateReply } from "@services/brain-worker/src/ai-lib/core/ai-service
 const router = Router();
 const EMAIL_PROVIDERS = new Set(["custom_email", "gmail", "outlook"]);
 const SKIP_WARNING =
-  "If you skip this now, you may not be able to activate Lead Recovery until this campaign is finished and mailboxes are free again. However, we will notify you when the campaign completes so you can activate it then.";
+  "Lead Recovery works alongside your active campaigns. Mailboxes are scanned in read-only mode and will not interfere with campaign delivery.";
 
 router.use(requireAuthOrApiKey, requireProPlan);
 
@@ -223,7 +224,6 @@ router.get("/leads", async (req, res) => {
 
 router.get("/stats", async (req, res) => {
   const tenantId = tenantIdFrom(req);
-  const { getRecoveryStats } = await import("@shared/lib/mysql.js");
   const stats = await getRecoveryStats(tenantId);
   res.json(stats);
 });

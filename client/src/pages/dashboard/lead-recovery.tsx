@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AlertTriangle, Brain, CheckCircle2, Clock, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud } from "lucide-react";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { LeadRecoveryProvider, useLeadRecoveryStore, type RecoveredLead } from "@/stores/leadRecoveryStore";
+import { useRealtime } from "@/hooks/use-realtime";
 
 function intentTone(intent: RecoveredLead["intent"]) {
   if (intent === "Converted") return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
@@ -18,6 +19,8 @@ function intentTone(intent: RecoveredLead["intent"]) {
 
 function LeadRecoveryContent() {
   const store = useLeadRecoveryStore();
+  const { socket } = useRealtime();
+  const [confirmDeactivate, setConfirmDeactivate] = useState(false);
 
   useEffect(() => {
     store.loadAll().catch(() => undefined);
@@ -28,6 +31,19 @@ function LeadRecoveryContent() {
     }, 5000);
     return () => clearTimeout(retryTimer);
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const refresh = () => store.loadAll().catch(() => undefined);
+    socket.on('stats_updated', refresh);
+    socket.on('leads_updated', refresh);
+    socket.on('settings_updated', refresh);
+    return () => {
+      socket.off('stats_updated', refresh);
+      socket.off('leads_updated', refresh);
+      socket.off('settings_updated', refresh);
+    };
+  }, [socket, store.loadAll]);
 
   const syncingMailboxes = store.mailboxDetails.filter((mailbox) => mailbox.syncStatus === "queued" || mailbox.syncStatus === "syncing").length;
 
@@ -62,7 +78,7 @@ function LeadRecoveryContent() {
           <Switch
             checked={store.isActive}
             disabled={store.loading}
-            onCheckedChange={(checked) => { checked ? store.activate() : store.deactivate(); }}
+            onCheckedChange={(checked) => { checked ? store.activate() : setConfirmDeactivate(true); }}
           />
         </div>
       </div>
@@ -74,7 +90,7 @@ function LeadRecoveryContent() {
         </div>
         <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4">
           <p className="text-[10px] sm:text-xs font-medium uppercase tracking-widest text-muted-foreground">Synced Mailboxes</p>
-          <p className="mt-1 text-2xl sm:text-3xl font-bold">{store.mailboxDetails.filter((mailbox) => mailbox.lastSyncAt).length}</p>
+          <p className="mt-1 text-2xl sm:text-3xl font-bold">{store.mailboxDetails.filter((mailbox) => mailbox.syncStatus === 'completed').length}</p>
         </div>
         <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4 col-span-2 md:col-span-1">
           <p className="text-[10px] sm:text-xs font-medium uppercase tracking-widest text-muted-foreground">Audit Events</p>
@@ -119,12 +135,12 @@ function LeadRecoveryContent() {
                 </p>
               </div>
             ) : store.leads.map((lead) => (
-              <div key={lead._id} className="grid gap-3 p-3 sm:p-4 grid-cols-2 md:grid-cols-[1fr_120px_120px_auto] md:items-center">
+              <div key={lead.id} className="grid gap-3 p-3 sm:p-4 grid-cols-2 md:grid-cols-[1fr_120px_120px_auto] md:items-center">
                 <div className="min-w-0 col-span-2 md:col-span-1">
                   <p className="truncate text-xs sm:text-sm">{lead.email}</p>
                   <p className="truncate text-xs text-muted-foreground">{lead.subject || "No subject"}</p>
                   <p className="truncate text-[10px] text-muted-foreground">
-                    Source: {lead.sourceMailboxSnapshot?.accountType || lead.sourceMailboxSnapshot?.provider || lead.mailboxId || "mailbox"}
+                    Source: {lead.sourceMailboxAccountType || lead.sourceMailboxProvider || lead.mailboxId || "mailbox"}
                   </p>
                   {!!lead.brainstormedObjections?.length && (
                     <div className="mt-1.5 flex items-center gap-1.5 text-[10px] sm:text-xs text-primary">
@@ -139,7 +155,7 @@ function LeadRecoveryContent() {
                 <div className="flex items-center">
                   <Badge variant="outline" className="text-[9px] sm:text-xs capitalize">{lead.deliverabilityStatus}</Badge>
                 </div>
-                <Button size="sm" className="col-span-2 md:col-span-1 text-xs py-1.5 h-8 mt-1 md:mt-0" onClick={() => store.recoverLead(lead._id)}>
+                <Button size="sm" className="col-span-2 md:col-span-1 text-xs py-1.5 h-8 mt-1 md:mt-0" onClick={() => store.recoverLead(lead.id)}>
                   <Sparkles className="mr-1.5 h-3.5 w-3.5" />
                   Recover
                 </Button>
@@ -185,7 +201,7 @@ function LeadRecoveryContent() {
             <ScrollArea className="h-[320px] pr-3">
               <div className="space-y-3">
                 {store.events.map((event) => (
-                  <div key={event._id} className="rounded-lg border border-border/30 p-3">
+                  <div key={event.id} className="rounded-lg border border-border/30 p-3">
                     <p className="text-sm font-medium">{event.action}</p>
                     <p className="text-xs text-muted-foreground">{new Date(event.timestamp).toLocaleString()}</p>
                   </div>
@@ -195,6 +211,25 @@ function LeadRecoveryContent() {
           </div>
         </div>
       </div>
+
+      <Dialog open={confirmDeactivate} onOpenChange={setConfirmDeactivate}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Deactivate Lead Recovery?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Synced leads and drafts will be saved, but no new mailboxes will be scanned until you reactivate.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setConfirmDeactivate(false)}>Cancel</Button>
+              <Button variant="destructive" onClick={() => { setConfirmDeactivate(false); store.deactivate(); }}>
+                Deactivate
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={store.draftModalOpen} onOpenChange={store.setDraftModalOpen}>
         <DialogContent className="max-w-2xl">
@@ -211,7 +246,7 @@ function LeadRecoveryContent() {
               <p className="font-semibold">Recovery context</p>
               <p className="mt-1 text-muted-foreground">{store.selectedLead?.conversationSummary || "No context stored."}</p>
               <p className="mt-2 text-xs text-muted-foreground">
-                Send from: {store.selectedLead?.sourceMailboxSnapshot?.accountType || store.selectedLead?.sourceMailboxSnapshot?.provider || store.selectedLead?.mailboxId || "source mailbox"}
+                Send from: {store.selectedLead?.sourceMailboxAccountType || store.selectedLead?.sourceMailboxProvider || store.selectedLead?.mailboxId || "source mailbox"}
               </p>
             </div>
             {!!store.selectedLead?.brainstormedObjections?.length && (
@@ -228,7 +263,7 @@ function LeadRecoveryContent() {
                     </div>
                   ))}
                 </div>
-                <Button className="mt-4" size="sm" onClick={() => store.syncObjections([store.selectedLead!._id])}>
+                <Button className="mt-4" size="sm" onClick={() => store.syncObjections([store.selectedLead!.id])}>
                   Sync objections
                 </Button>
               </div>

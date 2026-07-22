@@ -19,33 +19,31 @@ export interface LeadRecoveryMailbox {
 }
 
 export interface RecoveredLead {
-  _id: string;
+  id: string;
   email: string;
-  subject: string;
+  subject: string | null;
   intent: "Converted" | "Ghosted" | "Not-Interested" | "Reply-Needed";
   deliverabilityStatus: "safe" | "risky" | "invalid" | "unknown";
-  followUpDraft?: string;
+  followUpDraft?: string | null;
   mailboxId?: string;
-  sourceMailboxSnapshot?: {
-    provider?: string;
-    accountType?: string;
-  };
-  conversationSummary?: string;
-  lastMessageText?: string;
-  lastMessageAt?: string;
+  sourceMailboxProvider?: string | null;
+  sourceMailboxAccountType?: string | null;
+  conversationSummary?: string | null;
+  lastMessageText?: string | null;
+  lastMessageAt?: string | null;
   brainstormedObjections?: Array<{
     category: string;
     rule: string;
     evidence?: string;
     syncedAt?: string;
-  }>;
+  }> | null;
   createdAt: string;
 }
 
 export interface RecoveryEventLog {
-  _id: string;
+  id: string;
   action: string;
-  payload: Record<string, unknown>;
+  payload: Record<string, unknown> | null;
   timestamp: string;
 }
 
@@ -220,13 +218,18 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     setLoading(true);
     try {
       const res = await apiRequest("POST", `/api/lead-recovery/recover/${leadId}`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || err.message || `HTTP ${res.status}`);
+      }
       const data = await res.json();
       setSelectedLead(data.lead);
       setDraftModalOpen(true);
       await Promise.all([loadLeads(), loadEvents()]);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
       console.warn('[LeadRecovery] Recover failed:', e);
-      toast({ title: 'Failed to recover lead', variant: 'destructive' });
+      toast({ title: 'Failed to recover lead', description: msg, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -236,12 +239,17 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     setLoading(true);
     try {
       const res = await apiRequest("POST", "/api/lead-recovery/brainstorm-sync", { leadIds });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || err.message || `HTTP ${res.status}`);
+      }
       const data = await res.json();
       await Promise.all([loadLeads(), loadEvents()]);
       return Number(data.synced || 0);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
       console.warn('[LeadRecovery] Sync objections failed:', e);
-      toast({ title: 'Failed to sync objections', variant: 'destructive' });
+      toast({ title: 'Failed to sync objections', description: msg, variant: 'destructive' });
       return 0;
     } finally {
       setLoading(false);

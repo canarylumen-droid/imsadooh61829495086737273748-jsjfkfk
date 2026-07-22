@@ -33,12 +33,12 @@ async function startRecoveryService() {
 export { startRecoveryService };
 
 if (process.env.UNIFIED_MODE !== 'true') {
-  const worker = new LeadRecoveryWorker();
+  let worker: LeadRecoveryWorker;
 
   async function shutdown(signal: string) {
     console.log(`[LeadRecoveryWorker] ${signal} received. Shutting down...`);
     try { await serviceRegistry.deregister(); } catch (_e) {}
-    await worker.stop();
+    if (worker) await worker.stop();
     process.exit(0);
   }
 
@@ -50,6 +50,7 @@ if (process.env.UNIFIED_MODE !== 'true') {
       await connectMySql();
       await ensureTables();
       console.log("[LeadRecoveryWorker] ✅ MySQL tables ensured");
+      worker = new LeadRecoveryWorker();
       await worker.start();
     } catch (error) {
       console.error("[LeadRecoveryWorker] Fatal startup failure", error);

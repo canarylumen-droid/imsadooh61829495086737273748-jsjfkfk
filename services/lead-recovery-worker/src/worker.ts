@@ -186,8 +186,9 @@ export class LeadRecoveryWorker {
       try { await completeMailboxSync(tenantId, mailboxId); } catch {}
       try { await logRecoveryEvent(tenantId, "SyncCompleted", { mailboxId, fetched: emails.length, analyzed, filtered }); } catch {}
     } catch (error: any) {
-      try { await failMailboxSync(tenantId, mailboxId, error.message?.substring(0, 500)); } catch {}
-      try { await logRecoveryEvent(tenantId, "SyncFailed", { mailboxId, error: error.message }); } catch {}
+      const errorMsg = typeof error === 'string' ? error : (error?.message || String(error));
+      try { await failMailboxSync(tenantId, mailboxId, errorMsg.slice(0, 500)); } catch {}
+      try { await logRecoveryEvent(tenantId, "SyncFailed", { mailboxId, error: errorMsg }); } catch {}
     }
   }
 
@@ -196,12 +197,18 @@ export class LeadRecoveryWorker {
     const leadEmail = email.from || email.to[0];
     if (!leadEmail) return;
 
-    // SAFETY GUARD: Skip leads that are already part of an active campaign.
+    // SAFETY GUARD: Skip leads that are already part of an active campaign or being actively worked on.
     // Lead recovery must NOT interfere with leads currently being handled.
+    // Only ONE DB connection block — consolidate all reads here.
+    let dbReady = false;
+    let conversationContext = '';
     try {
       const { db } = await import('@shared/lib/db/db.js');
-      const { leads, campaignLeads, outreachCampaigns } = await import('@audnix/shared');
-      const { eq, and } = await import('drizzle-orm');
+      const { leads, campaignLeads, outreachCampaigns, messages } = await import('@audnix/shared');
+      const { eq, and, desc, gt } = await import('drizzle-orm');
+      dbReady = true;
+
+      // Guard 1: Skip if lead is in an ACTIVE campaign
       const inActiveCampaign = await db.select({ id: leads.id })
         .from(leads)
         .innerJoin(campaignLeads, eq(campaignLeads.leadId, leads.id))
@@ -216,23 +223,24 @@ export class LeadRecoveryWorker {
         await logRecoveryEvent(tenantId, "SkippedInActiveCampaign", { mailboxId, email: leadEmail });
         return; // Lead is being handled by an active campaign — skip recovery
       }
-    } catch {
-      // DB unavailable — skip the guard gracefully
-    }
 
-    // Fetch full conversation history so the AI knows exactly where the conversation left off.
-    // This provides context beyond just the latest email — e.g., previous replies, objections,
-    // booking intent, etc. that were exchanged before the conversation went cold.
-    let conversationContext = '';
-    try {
-      const { db } = await import('@shared/lib/db/db.js');
-      const { leads: leadsTable, messages } = await import('@audnix/shared');
-      const { eq, and, desc } = await import('drizzle-orm');
-      const [leadRecord] = await db.select({ id: leadsTable.id })
-        .from(leadsTable)
-        .where(and(eq(leadsTable.email, leadEmail.toLowerCase()), eq(leadsTable.userId, tenantId)))
+      // Guard 2: Skip if lead already exists in main leads table and has recent messages (< 7 days old)
+      const recentCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const [leadRecord] = await db.select({ id: leads.id })
+        .from(leads)
+        .where(and(eq(leads.email, leadEmail.toLowerCase()), eq(leads.userId, tenantId)))
         .limit(1);
       if (leadRecord) {
+        const recentActivity = await db.select({ id: messages.id })
+          .from(messages)
+          .where(and(eq(messages.leadId, leadRecord.id), gt(messages.createdAt, recentCutoff)))
+          .limit(1);
+        if (recentActivity.length > 0) {
+          await logRecoveryEvent(tenantId, "SkippedRecentActivity", { mailboxId, email: leadEmail, leadId: leadRecord.id });
+          return; // Lead has recent messages — being actively handled, skip recovery
+        }
+
+        // Fetch full conversation history for AI context
         const threadMessages = await db.select({ direction: messages.direction, body: messages.body, createdAt: messages.createdAt })
           .from(messages)
           .where(eq(messages.leadId, leadRecord.id))
@@ -244,8 +252,8 @@ export class LeadRecoveryWorker {
           ).join('\n');
         }
       }
-    } catch {
-      // Non-critical — proceed without context if DB unavailable
+    } catch (err) {
+      console.warn(`[LeadRecoveryWorker] Safety guard DB error for ${leadEmail}:`, err instanceof Error ? err.message : String(err));
     }
 
     // Enrich the email object with conversation history for the AI
