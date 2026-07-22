@@ -1,59 +1,39 @@
-# CSV/Bulk Import — Full Pipeline
+# Audnix Documentation
 
-## Flow
+> **Migrated to `docs/` folder** — comprehensive documentation for all subsystems.
 
-```
-User uploads CSV
-  → /api/leads/import-csv?preview=true        (CSV preview — column mapping)
-    → csv-parser (Node.js) parses rows
-    → mapCSVColumnsToSchema()
-        → AI (Gemini/OpenAI, 12s timeout) maps columns
-        → Fallback: regex pattern matching
-    → Returns preview with mapped leads
-  → User confirms
-    → /api/bulk/import-bulk                    (actual import)
+| Document | Description |
+|---|---|
+| [docs/README.md](docs/README.md) | Overview, service map, tech stack |
+| [docs/architecture.md](docs/architecture.md) | Full system architecture, communication patterns |
+| [docs/auth.md](docs/auth.md) | Auth flow, sessions, API keys, account deletion |
+| [docs/warmup.md](docs/warmup.md) | Warmup engine, seed monitoring, reply chain |
+| [docs/inbox.md](docs/inbox.md) | Inbox, leads, messages, AI features |
+| [docs/deliverability.md](docs/deliverability.md) | Email placement tracking, deliverability |
+| [docs/campaigns.md](docs/campaigns.md) | Outreach campaigns, scheduling, coexistence |
+| [docs/import.md](docs/import.md) | CSV/bulk import pipeline, MX batch queue |
+| [docs/lead-recovery.md](docs/lead-recovery.md) | Lead recovery system, noise filtering |
+| [docs/api.md](docs/api.md) | Full API reference, socket events, error codes |
+| [docs/deployment.md](docs/deployment.md) | EC2 deployment, PM2, CI/CD, SSH key mgmt |
 
-User pastes leads or calls API directly
-  → /api/bulk/import-bulk                      (JSON bulk import)
-```
+## Quick Stats
 
-## Per-Lead Processing
+- **~4.5k lines** total documentation across 12 files
+- **18** PM2 services (16 Node.js + 2 Rust)
+- **50+** database tables
+- **80+** API endpoints
+- **40+** socket event handlers across dashboard pages
 
-Every lead goes through:
+## What's Covered
 
-| Step | What | Detail |
-|---|---|---|
-| MX resolution | DNS MX lookup | Batch via Rust `mx-batch-queue` (BRPOP) or Node.js `Promise.allSettled` fallback. Results cached per domain. |
-| Spam trap scan | `SpamTrapDetector.scan()` | Checks known trap domains, disposable email patterns, spam signatures |
-| Dedup | DB + batch check | `getExistingEmails()` query + in-memory `Set`. Duplicates filtered. |
-| Smart MX routing | `assignMailbox()` | `@gmail.com` → Gmail mailbox, `@outlook.com` → Outlook, custom domain → matching `custom_email`, fallback round-robin |
-| Status assignment | `'bouncy'` or `'new'` | `'bouncy'` if spam trap detected OR no MX records. Tags `['spam_trap', 'spam_risk']` added. |
-| Metadata stored | JSON in `leads.metadata` | `spam_check`, `spam_reason`, `is_disposable`, `has_mx`, `imported_via`, `import_date` |
-| Background enrich | BullMQ `timezone-enrichment` job | AI-based timezone + geolocation enrichment dispatched per lead |
-
-## Server-Side Fixes Deployed
-
-- **AI mapping timeout**: 12s `Promise.race` → falls back to regex instead of hanging 60s+
-- **Missing-email fallback**: If AI returns valid JSON with null email/name, regex runs
-- **Nginx proxy timeout**: `proxy_read_timeout 120s` for `/api/` (was default 60s → 502)
-- **Express timeout**: Import routes 60s (was 30s)
-- **Dynamic import hoisted**: `mailbox-router` imported once, not per-lead
-
-## DB Migration
-
-- `warmup_interactions.placement` column added (was missing → warmup chart 500 error)
-
-## Test Results (Jul 21 2026)
-
-```
-=== CSV Preview ===
-preview: true  total: 5  leads: 5
-  - Test Lead One   <test1@example.com>   Acme Corp
-  - Test Lead Two   <test2@example.com>   Globex Inc
-  - Test Lead Three <test3@example.com>   Initech
-  - Test Lead Four  <test4@example.com>   Umbrella Corp
-  - Test Lead Five  <test5@example.com>   Hooli
-
-=== Bulk Import ===
-status: OK  imported: 5  filtered: 0
-```
+- ✅ Architecture & system design
+- ✅ Auth (session, cookies, API keys, OAuth, account deletion)
+- ✅ Warmup engine (seeds, threads, IMAP stealth, stagger, spam tracking)
+- ✅ Inbox & lead management (filtering, tick indicators, real-time, drafts)
+- ✅ Deliverability (placement tracking, spam detection, seed monitoring, SMTP telemetry)
+- ✅ Campaigns (sequences, broadcasts, coexistence, per-mailbox routing)
+- ✅ Import pipeline (CSV parsing, MX batch, smart routing, dedup)
+- ✅ Lead recovery (event-driven, noise filtering, AI analysis)
+- ✅ Full API reference with curl-ready examples
+- ✅ Deployment guide (EC2, PM2, SSH, Rust compilation)
+- ✅ Known issues & workarounds (encryption key crisis, PM2 env traps)
