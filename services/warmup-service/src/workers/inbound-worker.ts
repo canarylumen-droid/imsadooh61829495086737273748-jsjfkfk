@@ -67,11 +67,21 @@ async function handleExpectReply(data: any) {
 
     if (!mailbox[0]) return;
 
-    const found = await withImapTimeout(
+    // First try INBOX sweep
+    let found = await withImapTimeout(
       () => imapStealth.sweepInboxToHidden(mailbox[0]),
       mailbox[0].id,
       'expect-reply'
     );
+
+    // If INBOX sweep didn't find it, try Spam folder (Gmail/Outlook often filters warmup)
+    if (!found) {
+      found = await withImapTimeout(
+        () => imapStealth.rescueSpamFolder(mailbox[0]),
+        mailbox[0].id,
+        'expect-reply'
+      );
+    }
 
     if (!found) {
       // Wait longer — the scheduler will clean up stalled threads

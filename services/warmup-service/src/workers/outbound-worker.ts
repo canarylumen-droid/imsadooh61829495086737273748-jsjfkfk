@@ -133,6 +133,13 @@ export function createOutboundWorker(): Worker {
       const msPriorityOptions = ['', '', 'High', 'Normal', 'Low'];
       const chosenPriority = priorityOptions[Math.floor(Math.random() * priorityOptions.length)];
       const headers: Record<string, string> = {};
+
+      // CRITICAL: X-Audnix-Warmup header identifies this as a warmup email.
+      // IMAP inbox sweep and spam rescue look for this header to detect
+      // received warmup emails and trigger auto-replies. Without it,
+      // the reply chain is never completed.
+      headers['X-Audnix-Warmup'] = 'true';
+
       if (chosenPriority) {
         headers['X-Priority'] = chosenPriority;
       }
@@ -142,10 +149,8 @@ export function createOutboundWorker(): Worker {
       if (msPriorityOptions[Math.floor(Math.random() * msPriorityOptions.length)] && Math.random() > 0.5) {
         headers['X-MSMail-Priority'] = msPriorityOptions[Math.floor(Math.random() * msPriorityOptions.length)];
       }
-      // Rarely add Message-ID header override — normally leave it to the MTA
-      if (Math.random() > 0.8) {
-        headers['Message-ID'] = messageId;
-      }
+      // Always set Message-ID to match what's stored in the interaction
+      headers['Message-ID'] = messageId;
 
       if (thread[0].lastMessageId) {
         headers['In-Reply-To'] = thread[0].lastMessageId;
@@ -260,14 +265,11 @@ export function createOutboundWorker(): Worker {
           { delay: replyDelay * 60 * 1000 }
         );
 
-        // Synchronous sent-folder expunge — runs immediately after SMTP 250 OK.
-        // Retries up to 3 times with 1.5s backoff if the message hasn't appeared
-        // in the Sent folder yet (some providers have sub-second indexing delay).
-        // Target: < 800ms from SMTP success to IMAP EXPUNGE.
-        expungeSentSync(sender[0], messageId).catch((err: any) => {
-          console.warn(`[Warmup][Outbound] Sent-folder expunge failed for ${messageId}:`, err.message);
-        });
       }
+
+      // NOTE: Sent-folder expunge intentionally disabled.
+      // Users complained about warmup emails disappearing from Sent folder.
+      // Warmup interactions are tracked in the DB — no need to hide from Sent.
 
       // Mark non-seed failures as bounced for reputation recovery tracking
       if (!result.success && sender[0].anchorRole !== 'seed') {
