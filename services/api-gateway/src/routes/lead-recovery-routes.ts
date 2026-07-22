@@ -52,34 +52,39 @@ async function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Pro
 }
 
 async function getMailboxDetails(tenantId: string) {
-  const emptyCampaignStatus = { isBusy: false, availableAt: null as Date | null, activeCampaignIds: [] as string[] };
-
-  const [integrations, states, campaignStatus] = await Promise.all([
+  const [integrations, states] = await Promise.all([
     withTimeout(storage.getIntegrations(tenantId), 25000, []),
     withTimeout(getLeadRecoveryStates(tenantId), 25000, []),
-    withTimeout(
-      checkMailboxCampaignStatus(tenantId, "").catch(() => emptyCampaignStatus),
-      25000,
-      emptyCampaignStatus
-    ),
   ]);
 
   const mailboxes = integrations.filter(
     (integration) => EMAIL_PROVIDERS.has(integration.provider) && integration.connected
   );
+
+  const mailboxIds = mailboxes.map((m) => m.id);
+  const campaignStatus = mailboxIds.length > 0
+    ? await withTimeout(
+        checkMailboxCampaignStatus(tenantId, mailboxIds).catch(() => new Map()),
+        25000,
+        new Map()
+      )
+    : new Map();
+
   const stateByMailbox = new Map(states.map((state) => [state.mailboxId, state]));
+  const emptyCs = { isBusy: false, availableAt: null as Date | null, activeCampaignIds: [] as string[] };
 
   return mailboxes.map((mailbox) => {
     const state = stateByMailbox.get(mailbox.id);
+    const cs = campaignStatus.get(mailbox.id) || emptyCs;
     return {
       id: mailbox.id,
       provider: mailbox.provider,
       accountType: mailbox.accountType,
       healthStatus: mailbox.healthStatus,
       reputationScore: mailbox.reputationScore,
-      isBusy: campaignStatus.isBusy,
-      availableAt: campaignStatus.availableAt?.toISOString() || null,
-      activeCampaignIds: campaignStatus.activeCampaignIds,
+      isBusy: cs.isBusy,
+      availableAt: cs.availableAt?.toISOString() || null,
+      activeCampaignIds: cs.activeCampaignIds,
       isRecoveryActive: Boolean(state?.isActive),
       lastSyncAt: state?.lastSyncAt?.toISOString?.() || null,
       syncRequestedAt: state?.syncRequestedAt?.toISOString?.() || null,
@@ -136,7 +141,20 @@ router.post("/activate", async (req, res) => {
     return res.status(400).json({ error: "No connected email mailbox is available." });
   }
 
-  for (const mailbox of selectedMailboxes) {
+  const statuses = await checkMailboxCampaignStatus(
+    tenantId,
+    selectedMailboxes.map((m) => m.id)
+  ).catch(() => new Map());
+
+  const available = selectedMailboxes.filter((mb) => !statuses.get(mb.id)?.isBusy);
+  if (available.length === 0) {
+    return res.status(409).json({
+      error: "All selected mailboxes are busy with active campaigns",
+      message: "Wait for campaigns to finish or pause them before activating Lead Recovery.",
+    });
+  }
+
+  for (const mailbox of available) {
     await upsertRecoveryState(tenantId, mailbox.id, {
       isActive: true,
       isBusy: false,
@@ -145,16 +163,24 @@ router.post("/activate", async (req, res) => {
     });
   }
 
+  const skipped = selectedMailboxes.length - available.length;
   recoveryEvents.emitRecovery({
     tenantId,
     action: "RecoveryActivated",
     payload: {
-      mailboxIds: selectedMailboxes.map((mailbox) => mailbox.id),
-      syncStartsOnlyAfterUserClicksSync: true,
+      mailboxIds: available.map((mailbox) => mailbox.id),
+      skippedMailboxes: skipped,
     },
   });
 
-  res.json({ success: true, activatedMailboxes: selectedMailboxes.length });
+  res.json({
+    success: true,
+    activatedMailboxes: available.length,
+    skippedMailboxes: skipped,
+    message: skipped > 0
+      ? `${skipped} mailbox${skipped === 1 ? "" : "es"} skipped — busy with active campaigns`
+      : undefined,
+  });
 });
 
 router.post("/sync", async (req, res) => {
@@ -281,6 +307,12 @@ router.post("/recover/:leadId", async (req, res) => {
     ? await storage.getIntegrationById(String(lead.mailboxId))
     : null;
 
+  const mailboxBusy = lead.mailboxId
+    ? await checkMailboxCampaignStatus(tenantId, [lead.mailboxId])
+        .then((m) => m.get(lead.mailboxId!)?.isBusy ?? false)
+        .catch(() => false)
+    : false;
+
   const objections = Array.isArray(lead.brainstormedObjections)
     ? lead.brainstormedObjections.map((o: any) => `- ${o.category}: ${o.rule}`).join("\n")
     : "None recorded";
@@ -334,6 +366,7 @@ router.post("/recover/:leadId", async (req, res) => {
     success: true,
     draft,
     lead,
+    mailboxBusy,
     sendMailboxId: lead.mailboxId,
     sendMailbox: sourceMailbox
       ? {
@@ -342,6 +375,9 @@ router.post("/recover/:leadId", async (req, res) => {
           accountType: sourceMailbox.accountType,
         }
       : null,
+    message: mailboxBusy
+      ? "This mailbox has active campaign activity. The draft is saved but sending is delayed until campaigns finish."
+      : undefined,
   });
 });
 
