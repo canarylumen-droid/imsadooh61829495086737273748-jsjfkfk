@@ -1187,3 +1187,51 @@ All resolve automatically via socket `insights_updated` event. No polling.
 6. IMAP open tracking, reputation boost, domain auto-fix
 7. CodeQL (12 alerts) + npm vulns (4 moderate request/google-it)
 
+## This Session (Jul 22 2026) — Lead Recovery: Thread Replies + Noise Filtering + EC2 node_modules Crisis
+
+### Overview
+Lead recovery: filter noise emails before syncing, skip already-converted leads, send recovery drafts as thread replies. Also fixed EC2 node_modules crisis (all 191 packages missing from disk).
+
+### Commits
+- `01613c3e` — Lead recovery: noise email filter (40+ rules), dead status guard, thread-reply send endpoint, UI "Send Recovery Email" + "Open in Inbox" buttons
+
+### Changes
+
+1. **Noise email filter** (`services/lead-recovery-worker/src/filter.ts`): Added `classifyEmail()` with 40+ detection rules across 13 noise categories (otp_security, transactional, marketing, auto_reply, bounce_failure, social_notification, calendar_invite, password_reset, welcome_onboarding, account_alert, system_ci_notification, delivery_status_report, forwarded_reply_stripped). Any match filtered out before AI analysis.
+
+2. **Dead status guard** (`services/lead-recovery-worker/src/worker.ts`): Guard 3 in sync analysis — if lead status is `converted`, `booked`, `not_interested`, `unsubscribed`, or `no_show`, skip with `SkippedDeadStatus` event log entry. Prevents wasted AI calls on dead leads.
+
+3. **Thread-reply send endpoint** (`services/api-gateway/src/routes/lead-recovery-routes.ts:384-535`): `POST /api/lead-recovery/send/:leadId` — finds/creates lead in main PG leads table, resolves last inbound message's externalId for In-Reply-To/References, calls `sendEmail` with `isPriorityReply: true` (bypasses daily limits), creates message record, updates lead status to `contacted`, emits `RecoverySent` event.
+
+4. **UI buttons** (`client/src/pages/dashboard/lead-recovery.tsx`, `client/src/stores/leadRecoveryStore.tsx`): Draft modal has "Send Recovery Email" (calls send endpoint then navigates to inbox on success) and "Open in Inbox" buttons.
+
+5. **Event types** (`services/api-gateway/src/lib/events.ts`, `services/lead-recovery-worker/src/events.ts`): Added `RecoverySent` to `RecoveryEventAction`, `SkippedDeadStatus` to `LeadRecoveryWorkerEvent`.
+
+6. **EC2 node_modules crisis** (Jul 22 crisis): All 191 npm packages were missing from `node_modules/` on EC2 (only 7 items: tsx+esbuild from npx cache + symlinks). Caused by replit firewall blocking npm registry → `npm ci` never completed on any previous deploy. Services were running on stale 10h-old processes that had modules in memory. Any restart crashed immediately. **Fix**: Fixed 23 stale `package-firewall.replit.local` URLs in `package-lock.json` → `registry.npmjs.org` with `sed`, then `npm ci --prefer-offline --no-audit --no-fund` restored all 1421 packages from 1.1GB local cache (36s). Restarted all services online.
+
+### Key Technical Knowledge
+- **EC2 package crisis**: `package-lock.json` had 23 `resolved` URLs pointing to `http://package-firewall.replit.local/npm/...` (replit's proxy). This proxy is offline on EC2 → EAI_AGAIN on those packages. Fixed with `sed -i 's|http://package-firewall.replit.local/npm/|https://registry.npmjs.org/|g' package-lock.json`.
+- **npm cache is viable**: `/home/ubuntu/.npm/` has 1.1GB cache. `npm ci --prefer-offline` installs directly from cache (36s for 1421 packages).
+- **Instrument.ts crash**: `instrument.ts` imports `@sentry/node` with `require('@sentry/node')` which crashes when package missing. Changed to dynamic ESM import.
+
+### Files Changed (this session)
+- `services/lead-recovery-worker/src/filter.ts` — noise classification (40+ rules, 13 categories)
+- `services/lead-recovery-worker/src/worker.ts` — Guard 3 (SkippedDeadStatus)
+- `services/api-gateway/src/routes/lead-recovery-routes.ts` — POST /send/:leadId endpoint
+- `services/api-gateway/src/lib/events.ts` — added RecoverySent to RecoveryEventAction
+- `services/lead-recovery-worker/src/events.ts` — added SkippedDeadStatus to LeadRecoveryWorkerEvent
+- `client/src/stores/leadRecoveryStore.tsx` — sendRecovery callback
+- `client/src/pages/dashboard/lead-recovery.tsx` — Send Recovery / Open in Inbox buttons in draft modal
+- `instrument.ts` — changed @sentry/node import from require() to dynamic import()
+- `package-lock.json` — fixed 23 stale replit proxy URLs
+
+### Deploy
+- `git push github main` then on EC2:
+  ```bash
+  cd /home/ubuntu/app && git pull
+  sed -i 's|http://package-firewall.replit.local/npm/|https://registry.npmjs.org/|g' package-lock.json
+  npm ci --prefer-offline --no-audit --no-fund
+  npm run build:client
+  pm2 restart all
+  ```
+
