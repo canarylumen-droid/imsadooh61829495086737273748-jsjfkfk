@@ -41,17 +41,27 @@ export class LeadRecoveryWorker {
     await this.runOnce();
 
     // Subscribe to sync-requested events via Redis Pub/Sub.
+    let subscribedViaRedis = false;
     try {
       const { subscribe } = await import('@services/event-bus/src/redis-pubsub.js');
-      subscribe('lead-recovery:sync-requested', async (msg: any) => {
-        const { tenantId, mailboxId } = msg || {};
-        if (!tenantId) return;
-        console.log(`[LeadRecoveryWorker] ⚡ Sync requested for tenant ${tenantId}`);
-        await this.processState(String(tenantId), mailboxId ? String(mailboxId) : undefined);
-      });
-      console.log("[LeadRecoveryWorker] ✅ Subscribed to lead-recovery:sync-requested");
+      const { getPubClient } = await import('@shared/lib/redis/redis.js');
+      const pub = await getPubClient();
+      if (pub) {
+        subscribe('lead-recovery:sync-requested', async (msg: any) => {
+          const { tenantId, mailboxId } = msg || {};
+          if (!tenantId) return;
+          console.log(`[LeadRecoveryWorker] ⚡ Sync requested for tenant ${tenantId}`);
+          await this.processState(String(tenantId), mailboxId ? String(mailboxId) : undefined);
+        });
+        subscribedViaRedis = true;
+        console.log("[LeadRecoveryWorker] ✅ Subscribed to lead-recovery:sync-requested via Redis");
+      }
     } catch (err) {
-      console.warn("[LeadRecoveryWorker] Redis Pub/Sub unavailable — fallback to polling");
+      console.warn("[LeadRecoveryWorker] Redis Pub/Sub unavailable:", (err as Error)?.message);
+    }
+
+    if (!subscribedViaRedis) {
+      console.log("[LeadRecoveryWorker] No Redis — will rely on polling every 30s");
     }
 
     // Polling fallback: every 30s check for pending syncs (safe if Redis event was lost)

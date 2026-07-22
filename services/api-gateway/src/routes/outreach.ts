@@ -6,7 +6,6 @@ import { Router } from 'express';
 import { createOutreachCampaign, validateCampaignSafety, formatCampaignMetrics } from '@services/outreach-worker/src/sales-engine/outreach-engine.js';
 import { requireAuthOrApiKey } from '../middleware/auth.js';
 import { isValidUUID } from '@shared/lib/utils/validation.js';
-import { verifyDomainDns } from '@services/email-service/src/email/dns-verification.js';
 import { generateExpertOutreach, generateCampaignTemplateSequence } from '@services/brain-worker/src/ai-lib/core/conversation-ai.js';
 import { outreachCampaigns, campaignLeads, messages, campaignEmails, leads as leadsTable, users } from '@audnix/shared';
 import { storage } from '@shared/lib/storage/storage.js';

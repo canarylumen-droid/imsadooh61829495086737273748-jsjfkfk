@@ -470,7 +470,8 @@ router.post('/connect', requireAuthOrApiKey, async (req: Request, res: Response)
     // Store detailed DNS verification result for dashboard display
     try {
       if (emailDomain) {
-        const dnsResult = await verifyDomainDns(emailDomain, undefined, false);
+        const { verifyDnsWithFallback } = await import('@shared/lib/queues/dns-verify-queue.js');
+        const dnsResult = await verifyDnsWithFallback(userId, emailDomain);
         await storage.createDomainVerification(userId, {
           domain: emailDomain,
           verificationResult: dnsResult,

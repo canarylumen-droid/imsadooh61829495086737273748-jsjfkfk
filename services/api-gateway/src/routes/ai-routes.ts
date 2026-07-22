@@ -1172,7 +1172,7 @@ router.post("/import-bulk", requireAuthOrApiKey, async (req: Request, res: Respo
       return;
     }
 
-    const { verifyDomainDns } = await import("@services/email-service/src/email/dns-verification.js");
+    const { verifyDnsWithFallback } = await import("@shared/lib/queues/dns-verify-queue.js");
     const { generateContextAwareMessage } = await import("@services/brain-worker/src/orchestrator/agents/universal-sales-agent-integrated.js");
 
     const results = {
@@ -1206,8 +1206,8 @@ router.post("/import-bulk", requireAuthOrApiKey, async (req: Request, res: Respo
           const domain = leadData.email.split('@')[1];
           if (domain) {
             try {
-              const dnsCheck = await verifyDomainDns(domain).catch(() => null);
-              if (dnsCheck && (dnsCheck.overallStatus === 'poor' || !dnsCheck.mx.found)) {
+              const dnsCheck = await verifyDnsWithFallback(userId, domain).catch(() => null);
+              if (dnsCheck && (dnsCheck.overall_status === 'poor' || !dnsCheck.mx_found)) {
                 deliverability = 'risky';
               }
             } catch (e) { }

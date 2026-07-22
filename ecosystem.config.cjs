@@ -150,6 +150,7 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'lead-recovery',
+        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify',
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
         MYSQL_HOST: 'database-3.cuns46ao86xu.us-east-1.rds.amazonaws.com',
         MYSQL_USER: 'admin',

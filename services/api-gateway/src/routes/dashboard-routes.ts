@@ -65,24 +65,16 @@ router.post('/dns/verify', requireAuthOrApiKey, async (req: Request, res: Respon
     let overallStatus = 'verified';
 
     // Rust-backed DNS (async)
-    if (process.env.ENABLE_RUST_DNS === 'true') {
-      try {
-        const { enqueueDnsVerification } = await import('@shared/lib/queues/dns-verify-queue.js');
-        enqueueDnsVerification(`dns_${userId}_${domain}`, userId, domain, undefined);
-        overallStatus = 'pending_rust';
-      } catch (e) {
-        console.warn('[DNS] Rust enqueue failed, falling back:', e);
-      }
+    // Try Rust DNS first, fall back to Node.js
+    const { verifyDnsWithFallback } = await import('@shared/lib/queues/dns-verify-queue.js');
+    const result = await verifyDnsWithFallback(userId, domain);
+
+    if (result) {
+      await storage.createDomainVerification(userId, {
+        domain,
+        verificationResult: result
+      });
     }
-
-    // Node.js fallback (always runs for immediate response)
-    const { verifyDomainDns } = await import('@services/email-service/src/email/dns-verification.js');
-    const result = await verifyDomainDns(domain, undefined, true);
-
-    await storage.createDomainVerification(userId, {
-      domain,
-      verificationResult: result
-    });
 
     statsCache.delete(userId);
 
@@ -203,29 +195,29 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
         }
       }
 
-      // ── Node.js fallback ───────────────────────────────────────────
+      // ── Rust DNS with Node.js fallback ─────────────────────────────
       (async () => {
         try {
-          const { verifyDomainDns } = await import('@services/email-service/src/email/dns-verification.js');
+          const { verifyDnsWithFallback } = await import('@shared/lib/queues/dns-verify-queue.js');
           for (const domain of emailedDomains) {
-            const result = await verifyDomainDns(domain, undefined, true);
-            await storage.createDomainVerification(userId, { domain, verificationResult: result });
-            // Push real-time update to the UI
-            try {
-              const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
-              wsSync.notifyDnsVerified(userId, {
-                domain,
-                score: result.overallScore,
-                spf: result.spf?.valid ?? false,
-                dkim: result.dkim?.valid ?? false,
-                dmarc: result.dmarc?.valid ?? false,
-                mx: result.mx?.found ?? false,
-                blacklist: result.blacklist?.isBlacklisted ?? false,
-              });
-              wsSync.notifyStatsUpdated(userId);
-            } catch {}
+            const result = await verifyDnsWithFallback(userId, domain);
+            if (result) {
+              await storage.createDomainVerification(userId, { domain, verificationResult: result });
+              try {
+                const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+                wsSync.notifyDnsVerified(userId, {
+                  domain,
+                  score: result.overall_score ?? 0,
+                  spf: result.spf?.valid ?? false,
+                  dkim: result.dkim?.valid ?? false,
+                  dmarc: result.dmarc?.valid ?? false,
+                  mx: result.mx_found ?? false,
+                  blacklist: result.blacklist?.is_blacklisted ?? false,
+                });
+                wsSync.notifyStatsUpdated(userId);
+              } catch {}
+            }
           }
-          // Refresh domainVerifications for this response
           domainVerifications = await storage.getDomainVerifications(userId, 5);
         } catch (e) {
           console.warn('[DNS] Real-time verification failed:', e);

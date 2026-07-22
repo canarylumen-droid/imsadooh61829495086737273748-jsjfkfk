@@ -143,8 +143,8 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
     if (domain) {
       (async () => {
         try {
-          const { verifyDomainDns } = await import('@services/email-service/src/email/dns-verification.js');
-          const result = await verifyDomainDns(domain, undefined, false);
+          const { verifyDnsWithFallback } = await import('@shared/lib/queues/dns-verify-queue.js');
+          const result = await verifyDnsWithFallback(userId!, domain);
           if (result) {
             const { db } = await import('@shared/lib/db/db.js');
             const { sql } = await import('drizzle-orm');
@@ -156,12 +156,12 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
             `);
             wsSync.notifyDnsVerified(userId, {
               domain,
-              score: result.overallScore,
+              score: result.overall_score ?? 0,
               spf: result.spf?.valid ?? false,
               dkim: result.dkim?.valid ?? false,
               dmarc: result.dmarc?.valid ?? false,
-              mx: result.mx?.found ?? false,
-              blacklist: result.blacklist?.isBlacklisted ?? false,
+              mx: result.mx_found ?? false,
+              blacklist: result.blacklist?.is_blacklisted ?? false,
             });
           }
         } catch (e) {
