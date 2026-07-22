@@ -189,6 +189,24 @@ export class SeedFleetManager {
     const cluster = await domainClusterEngine.getClusterByDomain(domain, orgId);
     if (!cluster) return null;
 
+    // Check if seed already assigned to this domain — prevent duplicates
+    const existingSeed = await db
+      .select()
+      .from(warmupMailboxes)
+      .where(
+        and(
+          eq(warmupMailboxes.anchorRole, 'seed'),
+          eq(warmupMailboxes.registeredDomain, domain),
+          eq(warmupMailboxes.email, availableSeed.email),
+          eq(warmupMailboxes.status, 'active'),
+        )
+      )
+      .limit(1);
+
+    if (existingSeed[0]) {
+      return existingSeed[0].id;
+    }
+
     const meta = (availableSeed.metadata as any) || {};
     const config = meta as SeedConfig;
 
