@@ -9,7 +9,7 @@
   "dependencies": {
     "@audnix/core": "1.0.0",
     "@audnix/shared": "1.0.0",
-    "bullmq": "^5.70.1",
+    "bullmq": "^5.80.10",
     "imap": "^0.8.17",
     "ioredis": "^5.10.0",
     "mailparser": "^3.9.1",
