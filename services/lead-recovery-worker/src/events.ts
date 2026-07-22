@@ -15,7 +15,8 @@ export type LeadRecoveryWorkerEvent =
   | "EmailFiltered"
   | "DeliverabilityChecked"
   | "SkippedInActiveCampaign"
-  | "SkippedRecentActivity";
+  | "SkippedRecentActivity"
+  | "SkippedDeadStatus";
 
 export async function logRecoveryEvent(
   tenantId: string,

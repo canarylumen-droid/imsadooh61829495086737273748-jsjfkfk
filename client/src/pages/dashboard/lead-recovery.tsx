@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Brain, CheckCircle2, Clock, Inbox, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud } from "lucide-react";
+import { AlertTriangle, Brain, CheckCircle2, Clock, Inbox, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud, Send, ExternalLink } from "lucide-react";
+import { useLocation } from "wouter";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,9 +22,11 @@ function intentTone(intent: RecoveredLead["intent"]) {
 function LeadRecoveryContent() {
   const store = useLeadRecoveryStore();
   const { socket } = useRealtime();
+  const [, setLocation] = useLocation();
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
   const [activateDialogOpen, setActivateDialogOpen] = useState(false);
   const [activateTarget, setActivateTarget] = useState<string>("all");
+  const [sendingRecovery, setSendingRecovery] = useState(false);
 
   useEffect(() => {
     store.loadAll().catch(() => undefined);
@@ -362,6 +365,37 @@ function LeadRecoveryContent() {
               <p className="mt-2 text-xs text-muted-foreground">
                 Send from: {store.selectedLead?.sourceMailboxAccountType || store.selectedLead?.sourceMailboxProvider || store.selectedLead?.mailboxId || "source mailbox"}
               </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                disabled={sendingRecovery}
+                onClick={async () => {
+                  if (!store.selectedLead) return;
+                  setSendingRecovery(true);
+                  const pgLeadId = await store.sendRecovery(store.selectedLead.id);
+                  setSendingRecovery(false);
+                  if (pgLeadId) {
+                    setLocation(`/dashboard/inbox/${pgLeadId}`);
+                  }
+                }}
+              >
+                {sendingRecovery ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {sendingRecovery ? "Sending..." : "Send Recovery Email"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  store.setDraftModalOpen(false);
+                  if (store.selectedLead?.id) {
+                    setLocation(`/dashboard/inbox?recoveryDraft=${encodeURIComponent(store.selectedLead.followUpDraft || "")}&recoveryEmail=${encodeURIComponent(store.selectedLead.email)}`);
+                  }
+                }}
+              >
+                <ExternalLink className="mr-1 h-4 w-4" />
+                Open in Inbox
+              </Button>
             </div>
             {!!store.selectedLead?.brainstormedObjections?.length && (
               <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">

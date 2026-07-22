@@ -11,7 +11,7 @@ import {
 import { storage } from "@shared/lib/storage/storage.js";
 import { analyzeRecoveryEmail } from "./agent.js";
 import { checkDeliverability } from "./deliverability.js";
-import { shouldFilterEmail } from "./filter.js";
+import { shouldFilterEmail, getEmailClassification } from "./filter.js";
 import { fetchRecoveryEmails, type RecoveryEmail } from "./mailbox.js";
 import { logRecoveryEvent } from "./events.js";
 
@@ -208,6 +208,8 @@ export class LeadRecoveryWorker {
       const { eq, and, desc, gt } = await import('drizzle-orm');
       dbReady = true;
 
+      const DEAD_STATUSES = new Set(['converted', 'booked', 'not_interested', 'unsubscribed', 'no_show']);
+
       // Guard 1: Skip if lead is in an ACTIVE campaign
       const inActiveCampaign = await db.select({ id: leads.id })
         .from(leads)
@@ -225,12 +227,19 @@ export class LeadRecoveryWorker {
       }
 
       // Guard 2: Skip if lead already exists in main leads table and has recent messages (< 7 days old)
+      // or has a terminal status (converted, booked, not_interested, unsubscribed, no_show)
       const recentCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-      const [leadRecord] = await db.select({ id: leads.id })
+      const [leadRecord] = await db.select({ id: leads.id, status: leads.status })
         .from(leads)
         .where(and(eq(leads.email, leadEmail.toLowerCase()), eq(leads.userId, tenantId)))
         .limit(1);
       if (leadRecord) {
+        // Guard 3: Skip if lead is already converted/booked/not_interested/unsubscribed/no_show
+        if (DEAD_STATUSES.has(leadRecord.status)) {
+          await logRecoveryEvent(tenantId, "SkippedDeadStatus", { mailboxId, email: leadEmail, leadId: leadRecord.id, status: leadRecord.status });
+          return; // Lead is already converted/churned — do NOT re-engage
+        }
+
         const recentActivity = await db.select({ id: messages.id })
           .from(messages)
           .where(and(eq(messages.leadId, leadRecord.id), gt(messages.createdAt, recentCutoff)))
@@ -256,10 +265,12 @@ export class LeadRecoveryWorker {
       console.warn(`[LeadRecoveryWorker] Safety guard DB error for ${leadEmail}:`, err instanceof Error ? err.message : String(err));
     }
 
-    // Enrich the email object with conversation history for the AI
-    const enrichedEmail = {
+    // Enrich the email object with conversation history + classification for the AI
+    const emailClassification = getEmailClassification(email);
+    const enrichedEmail: RecoveryEmail & { threadHistory?: string; emailType?: string } = {
       ...email,
       threadHistory: conversationContext || undefined,
+      emailType: emailClassification,
     };
 
     const deliverabilityStatus = await checkDeliverability(leadEmail);

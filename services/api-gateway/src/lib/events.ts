@@ -9,7 +9,8 @@ export type RecoveryEventAction =
   | "RecoveryActivated"
   | "RecoveryDeactivated"
   | "MailboxStatusChecked"
-  | "BrainstormSyncCompleted";
+  | "BrainstormSyncCompleted"
+  | "RecoverySent";
 
 export interface RecoveryEvent {
   tenantId: string;

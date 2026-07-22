@@ -69,6 +69,7 @@ interface LeadRecoveryState {
   syncNow: (mailboxId?: string) => Promise<void>;
   recoverLead: (leadId: string) => Promise<void>;
   syncObjections: (leadIds?: string[]) => Promise<number>;
+  sendRecovery: (leadId: string) => Promise<string | null>;
   setSelectedLead: (lead: RecoveredLead | null) => void;
   setSelectedMailboxId: (id: string) => void;
   setDraftModalOpen: (open: boolean) => void;
@@ -240,6 +241,28 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     }
   }, [loadLeads, loadEvents]);
 
+  const sendRecovery = useCallback(async (leadId: string) => {
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", `/api/lead-recovery/send/${leadId}`, {});
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        throw new Error(err.error || err.message || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      await Promise.all([loadLeads(), loadEvents()]);
+      toast({ title: "Recovery sent", description: "Draft sent as reply to the original thread." });
+      return data.leadId || null;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      toast({ title: 'Failed to send recovery', description: msg, variant: 'destructive' });
+      return null;
+    } finally {
+      setLoading(false);
+      setDraftModalOpen(false);
+    }
+  }, [loadLeads, loadEvents]);
+
   const syncObjections = useCallback(async (leadIds?: string[]) => {
     setLoading(true);
     try {
@@ -283,6 +306,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     syncNow,
     recoverLead,
     syncObjections,
+    sendRecovery,
     setSelectedLead,
     setSelectedMailboxId,
     setDraftModalOpen,
@@ -309,6 +333,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     syncNow,
     recoverLead,
     syncObjections,
+    sendRecovery,
   ]);
 
   return <LeadRecoveryContext.Provider value={value}>{children}</LeadRecoveryContext.Provider>;
