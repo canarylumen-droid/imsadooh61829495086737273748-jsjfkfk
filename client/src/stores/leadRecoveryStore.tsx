@@ -57,6 +57,7 @@ interface LeadRecoveryState {
   leads: RecoveredLead[];
   events: RecoveryEventLog[];
   selectedLead: RecoveredLead | null;
+  selectedMailboxId: string;
   draftModalOpen: boolean;
   loading: boolean;
   warningOpen: boolean;
@@ -69,6 +70,7 @@ interface LeadRecoveryState {
   recoverLead: (leadId: string) => Promise<void>;
   syncObjections: (leadIds?: string[]) => Promise<number>;
   setSelectedLead: (lead: RecoveredLead | null) => void;
+  setSelectedMailboxId: (id: string) => void;
   setDraftModalOpen: (open: boolean) => void;
   setWarningOpen: (open: boolean) => void;
 }
@@ -85,6 +87,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
   const [leads, setLeads] = useState<RecoveredLead[]>([]);
   const [events, setEvents] = useState<RecoveryEventLog[]>([]);
   const [selectedLead, setSelectedLead] = useState<RecoveredLead | null>(null);
+  const [selectedMailboxId, setSelectedMailboxId] = useState("all");
   const [draftModalOpen, setDraftModalOpen] = useState(false);
   const [warningOpen, setWarningOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -124,25 +127,27 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
 
   const loadLeads = useCallback(async () => {
     try {
-      const res = await apiRequest("GET", "/api/lead-recovery/leads");
+      const params = selectedMailboxId !== "all" ? `?mailboxId=${encodeURIComponent(selectedMailboxId)}` : "";
+      const res = await apiRequest("GET", `/api/lead-recovery/leads${params}`);
       const data = await res.json();
       setLeads(data.leads || []);
     } catch (e) {
       console.warn('[LeadRecovery] Failed to load leads:', e);
       toast({ title: 'Failed to load recovery leads', variant: 'destructive' });
     }
-  }, []);
+  }, [selectedMailboxId]);
 
   const loadEvents = useCallback(async () => {
     try {
-      const res = await apiRequest("GET", "/api/lead-recovery/events");
+      const params = selectedMailboxId !== "all" ? `?mailboxId=${encodeURIComponent(selectedMailboxId)}` : "";
+      const res = await apiRequest("GET", `/api/lead-recovery/events${params}`);
       const data = await res.json();
       setEvents(data.events || []);
     } catch (e) {
       console.warn('[LeadRecovery] Failed to load events:', e);
       toast({ title: 'Failed to load recovery events', variant: 'destructive' });
     }
-  }, []);
+  }, [selectedMailboxId]);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -266,6 +271,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     leads,
     events,
     selectedLead,
+    selectedMailboxId,
     draftModalOpen,
     loading,
     warningOpen,
@@ -278,6 +284,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     recoverLead,
     syncObjections,
     setSelectedLead,
+    setSelectedMailboxId,
     setDraftModalOpen,
     setWarningOpen,
   }), [
@@ -290,6 +297,7 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
     leads,
     events,
     selectedLead,
+    selectedMailboxId,
     draftModalOpen,
     loading,
     warningOpen,

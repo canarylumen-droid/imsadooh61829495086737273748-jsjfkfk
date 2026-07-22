@@ -510,14 +510,20 @@ export async function deactivateAllRecoveryStates(
 
 export async function getRecoveredLeads(
   tenantId: string,
-  limit: number
+  limit: number,
+  mailboxId?: string
 ): Promise<RecoveredLeadRow[]> {
   const p = getMySqlPool();
   if (!p) return [];
-  const [rows] = await p.query(
-    "SELECT * FROM recovered_leads WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?",
-    [tenantId, limit]
-  );
+  let sql = "SELECT * FROM recovered_leads WHERE tenant_id = ?";
+  const params: unknown[] = [tenantId];
+  if (mailboxId && mailboxId !== "all") {
+    sql += " AND mailbox_id = ?";
+    params.push(mailboxId);
+  }
+  sql += " ORDER BY created_at DESC LIMIT ?";
+  params.push(limit);
+  const [rows] = await p.query(sql, params);
   return parseRows<RecoveredLeadRow>(rows as Record<string, unknown>[]).map(
     (row) => ({
       ...row,
@@ -725,14 +731,20 @@ export async function promptConfigExists(name: string): Promise<boolean> {
 
 export async function getRecoveryEventLogs(
   tenantId: string,
-  limit: number
+  limit: number,
+  mailboxId?: string
 ): Promise<RecoveryEventLogRow[]> {
   const p = getMySqlPool();
   if (!p) return [];
-  const [rows] = await p.query(
-    "SELECT * FROM recovery_event_logs WHERE tenant_id = ? ORDER BY timestamp DESC LIMIT ?",
-    [tenantId, limit]
-  );
+  let sql = "SELECT * FROM recovery_event_logs WHERE tenant_id = ?";
+  const params: unknown[] = [tenantId];
+  if (mailboxId && mailboxId !== "all") {
+    sql += " AND JSON_EXTRACT(payload, '$.mailboxId') = ?";
+    params.push(mailboxId);
+  }
+  sql += " ORDER BY timestamp DESC LIMIT ?";
+  params.push(limit);
+  const [rows] = await p.query(sql, params);
   return parseRows<RecoveryEventLogRow>(rows as Record<string, unknown>[]).map(
     (row) => ({
       ...row,

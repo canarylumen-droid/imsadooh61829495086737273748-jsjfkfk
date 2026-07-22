@@ -218,7 +218,8 @@ router.post("/deactivate", async (req, res) => {
 router.get("/leads", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const limit = Math.min(Number(req.query.limit || 100), 250);
-  const leads = await getRecoveredLeads(tenantId, limit);
+  const mailboxId = typeof req.query.mailboxId === "string" ? req.query.mailboxId : undefined;
+  const leads = await getRecoveredLeads(tenantId, limit, mailboxId);
   res.json({ leads });
 });
 
@@ -231,7 +232,8 @@ router.get("/stats", async (req, res) => {
 router.get("/events", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const limit = Math.min(Number(req.query.limit || 50), 100);
-  const events = await getRecoveryEventLogs(tenantId, limit);
+  const mailboxId = typeof req.query.mailboxId === "string" ? req.query.mailboxId : undefined;
+  const events = await getRecoveryEventLogs(tenantId, limit, mailboxId);
   res.json({ events });
 });
 

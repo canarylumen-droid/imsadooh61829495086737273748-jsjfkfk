@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Brain, CheckCircle2, Clock, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud } from "lucide-react";
+import { AlertTriangle, Brain, CheckCircle2, Clock, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud, ChevronDown } from "lucide-react";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { LeadRecoveryProvider, useLeadRecoveryStore, type RecoveredLead } from "@/stores/leadRecoveryStore";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -21,6 +22,8 @@ function LeadRecoveryContent() {
   const store = useLeadRecoveryStore();
   const { socket } = useRealtime();
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
+  const [activateDialogOpen, setActivateDialogOpen] = useState(false);
+  const [activateTarget, setActivateTarget] = useState<string>("all");
 
   useEffect(() => {
     store.loadAll().catch(() => undefined);
@@ -45,7 +48,29 @@ function LeadRecoveryContent() {
     };
   }, [socket, store.loadAll]);
 
+  useEffect(() => {
+    store.loadAll().catch(() => undefined);
+  }, [store.selectedMailboxId]);
+
   const syncingMailboxes = store.mailboxDetails.filter((mailbox) => mailbox.syncStatus === "queued" || mailbox.syncStatus === "syncing").length;
+  const completedMailboxes = store.mailboxDetails.filter((mailbox) => mailbox.syncStatus === 'completed').length;
+
+  const handleToggleOn = () => {
+    if (store.mailboxDetails.length <= 1) {
+      store.activate().catch(() => undefined);
+    } else {
+      setActivateTarget("all");
+      setActivateDialogOpen(true);
+    }
+  };
+
+  const handleActivateConfirm = () => {
+    setActivateDialogOpen(false);
+    const mailboxId = activateTarget === "all" ? undefined : activateTarget;
+    store.activate(mailboxId).catch(() => undefined);
+  };
+
+  const selectedMailbox = store.selectedMailboxId === "all" ? null : store.mailboxDetails.find(m => m.id === store.selectedMailboxId);
 
   return (
     <div className="space-y-6">
@@ -58,16 +83,15 @@ function LeadRecoveryContent() {
           </div>
         </div>
       )}
+
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
-              <Mail className="h-5 w-5" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">Lead Recovery</h1>
-              <p className="text-sm text-muted-foreground">Email-only recovery for inactive prospects and missed replies.</p>
-            </div>
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+            <Mail className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Lead Recovery</h1>
+            <p className="text-sm text-muted-foreground">Email-only recovery for inactive prospects and missed replies.</p>
           </div>
         </div>
         <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-card/70 px-4 py-3">
@@ -78,10 +102,32 @@ function LeadRecoveryContent() {
           <Switch
             checked={store.isActive}
             disabled={store.loading}
-            onCheckedChange={(checked) => { checked ? store.activate() : setConfirmDeactivate(true); }}
+            onCheckedChange={(checked) => { checked ? handleToggleOn() : setConfirmDeactivate(true); }}
           />
         </div>
       </div>
+
+      {store.mailboxDetails.length > 1 && (
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-medium text-muted-foreground whitespace-nowrap">Viewing:</p>
+          <Select value={store.selectedMailboxId} onValueChange={store.setSelectedMailboxId}>
+            <SelectTrigger className="w-[220px] h-8 text-xs">
+              <SelectValue placeholder="All Mailboxes" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Mailboxes</SelectItem>
+              {store.mailboxDetails.map((mb) => (
+                <SelectItem key={mb.id} value={mb.id}>{mb.accountType || mb.provider}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedMailbox && (
+            <Badge variant="outline" className={cn("text-[10px]", selectedMailbox.syncStatus === "completed" ? "border-emerald-500/30 text-emerald-500" : "text-muted-foreground")}>
+              {selectedMailbox.syncStatus || "idle"}
+            </Badge>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
         <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4">
@@ -90,7 +136,7 @@ function LeadRecoveryContent() {
         </div>
         <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4">
           <p className="text-[10px] sm:text-xs font-medium uppercase tracking-widest text-muted-foreground">Synced Mailboxes</p>
-          <p className="mt-1 text-2xl sm:text-3xl font-bold">{store.mailboxDetails.filter((mailbox) => mailbox.syncStatus === 'completed').length}</p>
+          <p className="mt-1 text-2xl sm:text-3xl font-bold">{completedMailboxes}</p>
         </div>
         <div className="rounded-lg border border-border/40 bg-card/70 p-3 sm:p-4 col-span-2 md:col-span-1">
           <p className="text-[10px] sm:text-xs font-medium uppercase tracking-widest text-muted-foreground">Audit Events</p>
@@ -110,14 +156,17 @@ function LeadRecoveryContent() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-border/30 p-4 gap-3">
             <div>
               <h2 className="font-semibold text-sm sm:text-base">Recoverable Leads</h2>
-              <p className="text-[10px] sm:text-xs text-muted-foreground">Cold leads &amp; missed replies found across your mailboxes.</p>
+              <p className="text-[10px] sm:text-xs text-muted-foreground">Cold leads &amp; missed replies found in selected mailboxes.</p>
             </div>
             <div className="flex gap-2 w-full sm:w-auto">
               <Button variant="outline" size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => store.loadAll()} disabled={store.loading}>
                 <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
                 Refresh
               </Button>
-              <Button size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => store.syncNow().catch(() => {})} disabled={store.loading || store.mailboxDetails.length === 0}>
+              <Button size="sm" className="flex-1 sm:flex-initial text-xs" onClick={() => {
+                const mbId = store.selectedMailboxId !== "all" ? store.selectedMailboxId : undefined;
+                store.syncNow(mbId).catch(() => {});
+              }} disabled={store.loading || store.mailboxDetails.length === 0}>
                 <DownloadCloud className="mr-1.5 h-3.5 w-3.5" />
                 {syncingMailboxes > 0 ? `Syncing ${syncingMailboxes}` : "Sync 90 days"}
               </Button>
@@ -226,6 +275,39 @@ function LeadRecoveryContent() {
               <Button variant="destructive" onClick={() => { setConfirmDeactivate(false); store.deactivate(); }}>
                 Deactivate
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={activateDialogOpen} onOpenChange={setActivateDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Activate Lead Recovery</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">Choose which mailboxes to enable lead recovery for:</p>
+            <div className="space-y-2">
+              <label className="flex items-center gap-3 rounded-lg border border-border/40 p-3 cursor-pointer hover:bg-accent/50 transition-colors">
+                <input type="radio" name="activateTarget" value="all" checked={activateTarget === "all"} onChange={() => setActivateTarget("all")} className="accent-primary" />
+                <div>
+                  <p className="text-sm font-medium">All Mailboxes</p>
+                  <p className="text-xs text-muted-foreground">{store.mailboxDetails.length} mailboxes</p>
+                </div>
+              </label>
+              {store.mailboxDetails.map((mb) => (
+                <label key={mb.id} className="flex items-center gap-3 rounded-lg border border-border/40 p-3 cursor-pointer hover:bg-accent/50 transition-colors">
+                  <input type="radio" name="activateTarget" value={mb.id} checked={activateTarget === mb.id} onChange={() => setActivateTarget(mb.id)} className="accent-primary" />
+                  <div>
+                    <p className="text-sm font-medium">{mb.accountType || mb.provider}</p>
+                    <p className="text-xs text-muted-foreground">{mb.provider}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setActivateDialogOpen(false)}>Cancel</Button>
+              <Button onClick={handleActivateConfirm}>Activate</Button>
             </div>
           </div>
         </DialogContent>
