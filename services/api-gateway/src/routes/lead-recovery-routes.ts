@@ -35,7 +35,7 @@ let mySqlConnected = false;
 router.use((_req, _res, next) => {
   if (hasMySqlUri() && !mySqlConnected) {
     mySqlConnected = true;
-    connectMySql().catch(() => {}); // fire-and-forget, routes handle null pool
+    connectMySql().catch(() => { mySqlConnected = false; });
   }
   next();
 });
