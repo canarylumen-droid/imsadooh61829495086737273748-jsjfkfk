@@ -222,7 +222,7 @@ export class EnrollmentEngine {
       organizationId: candidate.organizationId,
       email: mailboxEmail,
       provider: candidate.provider as any,
-      status: 'active',
+      status: 'paused',  // Default OFF — user toggles via UI
       poolType,
       registeredDomain,
       anchorRole: 'member',
@@ -232,10 +232,10 @@ export class EnrollmentEngine {
       metadata,
     }).returning();
 
-    // Also auto-set integrations.warmupStatus='active' so the dashboard shows it
+    // Set integrations.warmupStatus='inactive' (default OFF — user toggles)
     try {
       await db.update(integrations)
-        .set({ warmupStatus: 'active' } as any)
+        .set({ warmupStatus: 'inactive' } as any)
         .where(eq(integrations.id, candidate.integrationId));
     } catch (_) {}
 

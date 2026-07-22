@@ -406,8 +406,11 @@ export default function IntegrationsPage() {
     const isPresent = result !== undefined
       ? (record === 'blacklist' ? !result?.listedOn?.length : !!result?.record || !!result?.records?.length)
       : (record === 'blacklist' ? !stats.health.dns.blacklist : !!stats.health.dns[record]);
+    const isPending = !verification && !stats?.health?.dns?.[record];
     let tooltip = '';
-    if (record === 'blacklist') {
+    if (isPending) {
+      tooltip = 'DNS check pending — verifying domain records...';
+    } else if (record === 'blacklist') {
       tooltip = isPresent ? 'Not blacklisted' : `Blacklisted on: ${result?.listedOn?.join(', ') || 'unknown RBL'}`;
     } else if (record === 'mx') {
       tooltip = isPresent ? `MX: ${result?.records?.map((r: any) => `${r.exchange} (priority ${r.priority})`).join(', ') || 'found'}` : 'No MX records found';
@@ -416,7 +419,7 @@ export default function IntegrationsPage() {
         ? `${label}: ${result?.record?.substring(0, 80) || 'valid'}`
         : `${label}: ${result?.issues?.join('; ') || 'not configured'}`;
     }
-    return { isPresent, label, tooltip };
+    return { isPresent, label, tooltip, isPending };
   };
 
   // Handle OAuth success/error redirect params
@@ -1676,7 +1679,7 @@ export default function IntegrationsPage() {
                                         <TooltipTrigger asChild>
                                           <Badge className={cn(
                                             "text-[7px] font-black uppercase tracking-wider px-1.5 py-0.5 shrink-0 border cursor-help",
-                                            badge.isPresent ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
+                                            badge.isPending ? "bg-amber-500/10 text-amber-500 border-amber-500/20" : badge.isPresent ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-red-500/10 text-red-500 border-red-500/20"
                                           )}>
                                             {badge.label}
                                           </Badge>

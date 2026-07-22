@@ -128,10 +128,42 @@ router.get('/outlook/callback', async (req: Request, res: Response): Promise<voi
       }
     }
 
-    // 9. Notify frontend
+    // 9. Background: DNS verification for this domain
+    const domain = emailAddress.split('@')[1];
+    if (domain) {
+      (async () => {
+        try {
+          const { verifyDomainDns } = await import('@services/email-service/src/email/dns-verification.js');
+          const result = await verifyDomainDns(domain, undefined, false);
+          if (result) {
+            const { db } = await import('@shared/lib/db/db.js');
+            const { sql } = await import('drizzle-orm');
+            await db.execute(sql`
+              INSERT INTO domain_verifications (id, user_id, domain, verification_result, created_at)
+              VALUES (gen_random_uuid(), ${userId}, ${domain}, ${JSON.stringify(result)}::jsonb, NOW())
+              ON CONFLICT (user_id, domain)
+              DO UPDATE SET verification_result = ${JSON.stringify(result)}::jsonb, created_at = NOW()
+            `);
+            wsSync.notifyDnsVerified(userId, {
+              domain,
+              score: result.overallScore,
+              spf: result.spf?.valid ?? false,
+              dkim: result.dkim?.valid ?? false,
+              dmarc: result.dmarc?.valid ?? false,
+              mx: result.mx?.found ?? false,
+              blacklist: result.blacklist?.isBlacklisted ?? false,
+            });
+          }
+        } catch (e) {
+          // DNS verification is best-effort, non-blocking
+        }
+      })();
+    }
+
+    // 10. Notify frontend
     wsSync.notifySettingsUpdated(userId);
 
-    // 10. Background: lead distribution
+    // 11. Background: lead distribution
     try {
       const { distributeLeadsFromPool } = await import('@services/outreach-worker/src/sales-engine/outreach-engine.js');
       const updatedIntegrations = await storage.getIntegrations(userId);

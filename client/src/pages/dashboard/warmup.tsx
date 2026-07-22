@@ -378,7 +378,7 @@ export default function WarmupPage() {
                     <div className="min-w-0">
                       <p className="text-sm font-semibold truncate">{mb.email}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {mb.provider} • {warmupCount} sent today • {mb.dailyLimit} limit
+                        {mb.provider} • <span className="font-semibold text-foreground/80">{warmupCount}</span>/{mb.dailyLimit} today
                       </p>
                     </div>
                     <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] shrink-0 ml-2">Active</Badge>

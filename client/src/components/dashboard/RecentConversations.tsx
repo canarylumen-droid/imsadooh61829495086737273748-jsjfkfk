@@ -360,7 +360,7 @@ export function RecentConversations() {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center justify-between mb-1.5">
-                              <h4 className="font-semibold text-foreground text-md uppercase tracking-tight group-hover:text-primary transition-colors">
+                              <h4 className="font-medium text-foreground text-md uppercase tracking-tight group-hover:text-primary transition-colors">
                                 {lead.name}
                               </h4>
                               <span className="text-[9px] font-medium uppercase tracking-widest text-muted-foreground/40">
@@ -374,7 +374,7 @@ export function RecentConversations() {
                               </div>
                               <div className="flex items-center gap-2">
                                 <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/40">Score:</span>
-                                <span className={`text-[10px] font-bold ${lead.score > 80 ? 'text-orange-500' : 'text-primary'}`}>{lead.score}</span>
+                                <span className={`text-[10px] font-medium ${lead.score > 80 ? 'text-orange-500' : 'text-primary'}`}>{lead.score}</span>
                               </div>
                               <Badge
                                 variant="outline"
