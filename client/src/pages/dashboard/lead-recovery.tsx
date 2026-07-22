@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Brain, CheckCircle2, Clock, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud, ChevronDown } from "lucide-react";
+import { AlertTriangle, Brain, CheckCircle2, Clock, Inbox, Mail, RefreshCw, ShieldCheck, Sparkles, DownloadCloud } from "lucide-react";
 import { PageWrapper } from "@/components/ui/page-wrapper";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -176,12 +176,34 @@ function LeadRecoveryContent() {
             {store.leads.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="w-12 h-12 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 rounded-xl flex items-center justify-center mb-4">
-                  <RefreshCw className="h-6 w-6 text-amber-400" />
+                  {store.mailboxDetails.length === 0 ? (
+                    <Inbox className="h-6 w-6 text-amber-400" />
+                  ) : (
+                    <RefreshCw className="h-6 w-6 text-amber-400" />
+                  )}
                 </div>
-                <p className="text-sm font-semibold text-foreground">No recovered leads yet</p>
-                <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                  Activate Lead Recovery, then click Sync 90 days to scan connected mailboxes for cold leads.
-                </p>
+                {store.mailboxDetails.length === 0 ? (
+                  <>
+                    <p className="text-sm font-semibold text-foreground">No mailboxes connected</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      Connect an email mailbox in Settings &gt; Integrations first, then return here to recover cold leads.
+                    </p>
+                  </>
+                ) : !store.isActive ? (
+                  <>
+                    <p className="text-sm font-semibold text-foreground">Recovery is inactive</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      Toggle the Recovery switch above to activate Lead Recovery, then click Sync 90 days to scan your mailboxes.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-semibold text-foreground">No recoverable leads found</p>
+                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+                      Click Sync 90 days above to scan your connected mailboxes for missed replies and cold leads.
+                    </p>
+                  </>
+                )}
               </div>
             ) : store.leads.map((lead) => (
               <div key={lead.id} className="grid gap-3 p-3 sm:p-4 grid-cols-2 md:grid-cols-[1fr_120px_120px_auto] md:items-center">
@@ -213,11 +235,16 @@ function LeadRecoveryContent() {
           </div>
         </div>
 
-        <div className="space-y-6">
+          <div className="space-y-6">
           <div className="rounded-lg border border-border/40 bg-card/70 p-4">
             <h2 className="mb-3 font-semibold">Mailbox Status</h2>
             <div className="space-y-3">
-              {store.mailboxDetails.map((mailbox) => (
+              {store.mailboxDetails.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <p className="text-xs font-semibold text-muted-foreground">No email mailboxes connected</p>
+                  <p className="text-[10px] text-muted-foreground/70 mt-1">Connect one in Settings → Integrations</p>
+                </div>
+              ) : store.mailboxDetails.map((mailbox) => (
                 <div key={mailbox.id} className="rounded-lg border border-border/30 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
@@ -249,7 +276,12 @@ function LeadRecoveryContent() {
             </div>
             <ScrollArea className="h-[320px] pr-3">
               <div className="space-y-3">
-                {store.events.map((event) => (
+                {store.events.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-center">
+                    <p className="text-xs font-semibold text-muted-foreground">No audit events yet</p>
+                    <p className="text-[10px] text-muted-foreground/70 mt-1">Events appear when you sync mailboxes or generate drafts</p>
+                  </div>
+                ) : store.events.map((event) => (
                   <div key={event.id} className="rounded-lg border border-border/30 p-3">
                     <p className="text-sm font-medium">{event.action}</p>
                     <p className="text-xs text-muted-foreground">{new Date(event.timestamp).toLocaleString()}</p>

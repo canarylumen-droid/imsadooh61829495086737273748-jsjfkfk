@@ -267,45 +267,61 @@ router.put("/prompt-config/:name", async (req, res) => {
   res.json({ success: true, prompt });
 });
 
+const RECOVERY_DRAFT_SYSTEM_PROMPT = `You are a lead recovery specialist. Your only job: write a short, personalized follow-up email to re-engage a cold lead.
+
+## RULES
+1. This is a real past conversation — do NOT write a generic first-touch email.
+2. Reference exactly where the conversation left off: the lead's last question, objection, or stopping point.
+3. Do not invent facts about the lead or your prior relationship. Use ONLY the context provided.
+4. Keep it 3–4 sentences. Low pressure. The goal is to reopen the conversation, not close.
+5. Do NOT apologize for following up. Be natural, direct, and human.
+6. Match the sender's voice from the original conversation (formal vs casual based on context).
+7. If the lead went silent after a specific question, reference it and offer a simpler next step.
+
+## OUTPUT
+Return JSON: { "followUpDraft": "the email body text" }`;
+
 router.post("/recover/:leadId", async (req, res) => {
   const tenantId = tenantIdFrom(req);
   const lead = await getRecoveredLeadById(req.params.leadId, tenantId);
   if (!lead) return res.status(404).json({ error: "Lead not found" });
 
-  const prompt = await getRecoveryPromptConfig("email-lead-recovery");
-  if (!prompt) {
-    return res.status(409).json({
-      error: "Prompt configuration missing",
-      message:
-        "Create a RecoveryPromptConfig named email-lead-recovery before generating recovery drafts.",
-    });
-  }
-
   const sourceMailbox = lead.mailboxId
     ? await storage.getIntegrationById(String(lead.mailboxId))
     : null;
-  const renderedPrompt = renderTemplate(prompt.userPromptTemplate, {
-    email: lead.email,
-    subject: lead.subject || "",
-    intent: lead.intent,
-    deliverabilityStatus: lead.deliverabilityStatus,
-    mailbox: sourceMailbox?.accountType || sourceMailbox?.provider || "",
-    conversationSummary: lead.conversationSummary || "",
-    lastMessage: lead.lastMessageText || "",
-  });
 
-  const aiResult = await generateReply(
-    `${prompt.systemPrompt}\n\nThis is Lead Recovery, not a normal outreach campaign. Generate a personalized recovery reply using the exact prior conversation state. Do not reuse generic initial outreach copy.`,
-    renderedPrompt,
-    {
-      userId: tenantId,
-      jsonMode: true,
-      temperature: 0.3,
-      maxTokens: 900,
-      channel: "email",
-      isEmailBody: true,
-    }
-  );
+  const objections = Array.isArray(lead.brainstormedObjections)
+    ? lead.brainstormedObjections.map((o: any) => `- ${o.category}: ${o.rule}`).join("\n")
+    : "None recorded";
+
+  const context = [
+    `Lead email: ${lead.email}`,
+    `Last subject: ${lead.subject || "(none)"}`,
+    `Intent: ${lead.intent}`,
+    `Deliverability: ${lead.deliverabilityStatus}`,
+    `Source mailbox: ${sourceMailbox?.accountType || sourceMailbox?.provider || "(unknown)"}`,
+    `Source mailbox provider: ${sourceMailbox?.provider || "(unknown)"}`,
+    `Last message at: ${lead.lastMessageAt ? new Date(lead.lastMessageAt).toLocaleString() : "(unknown)"}`,
+    ``,
+    lead.conversationSummary
+      ? `Conversation summary:\n${lead.conversationSummary}`
+      : "Conversation summary: (none available)",
+    ``,
+    lead.lastMessageText
+      ? `Lead's last message:\n"""\n${lead.lastMessageText}\n"""`
+      : "Lead's last message: (none available)",
+    ``,
+    `Known objections:\n${objections}`,
+  ].join("\n");
+
+  const aiResult = await generateReply(RECOVERY_DRAFT_SYSTEM_PROMPT, context, {
+    userId: tenantId,
+    jsonMode: true,
+    temperature: 0.3,
+    maxTokens: 900,
+    channel: "email",
+    isEmailBody: true,
+  });
 
   let draft = aiResult.text;
   try {
@@ -320,7 +336,7 @@ router.post("/recover/:leadId", async (req, res) => {
   recoveryEvents.emitRecovery({
     tenantId,
     action: "DraftGenerated",
-    payload: { leadId: lead.id, promptConfig: prompt.name },
+    payload: { leadId: lead.id },
   });
 
   res.json({
