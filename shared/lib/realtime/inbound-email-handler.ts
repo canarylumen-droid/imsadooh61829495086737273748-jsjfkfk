@@ -57,12 +57,20 @@ async function handleInboundEmail(payload: any) {
   let parsedHtml: string | undefined;
   if (raw_email && raw_email.length > 0) {
     try {
-      // Strip IMAP protocol framing if present (e.g., "* 58 FETCH (BODY[] {size}\n...")
+      // Strip IMAP protocol framing thoroughly
       let rfc822 = raw_email;
       const bodyMatch = raw_email.match(/BODY\[\]\s*\{[^}]+\}\s*\n?([\s\S]*)/);
       if (bodyMatch) {
         rfc822 = bodyMatch[1].replace(/\n\)\s*$/, '').trim();
       }
+      // Remove any remaining IMAP response lines
+      rfc822 = rfc822.split('\n').filter((l: string) => {
+        const t = l.trim();
+        return !t.startsWith('* ') && !t.startsWith('A0') && !t.startsWith('A1') &&
+               !t.startsWith('+ ') && !t.includes('OK FETCH') && !t.includes('OK UID') &&
+               !t.startsWith(')') && !t.startsWith('FLAGS ') && !t.startsWith('UID ');
+      }).join('\n');
+
       const { simpleParser } = await import('mailparser');
       const parsed = await simpleParser(rfc822);
       if (parsed.text) {
@@ -74,6 +82,10 @@ async function handleInboundEmail(payload: any) {
           parsedBody = parsed.html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().substring(0, 10000);
         }
       }
+      // Final safety: if body still looks like IMAP protocol, use empty
+      if (parsedBody && (parsedBody.startsWith('* ') || parsedBody.includes('OK FETCH completed'))) {
+        parsedBody = '';
+      }
     } catch (parseErr: any) {
       console.warn('[InboundEmailHandler] Failed to parse raw_email:', parseErr.message);
     }
@@ -83,6 +95,14 @@ async function handleInboundEmail(payload: any) {
   console.log(`[InboundEmailHandler] 📬 Processing inbound email (uid=${uid}, from=${from?.substring(0, 50)}, user=${user_id})`);
 
   try {
+    // ── WARMUP HEADER CHECK ──────────────────────────────────────────
+    // Skip any email with X-Audnix-Warmup or X-Audnix-Id header (warmup/tracking emails)
+    let rawHeaders = (raw_email || '').toLowerCase();
+    if (rawHeaders.includes('x-audnix-warmup') || rawHeaders.includes('x-audnix-id')) {
+      console.log(`[InboundEmailHandler] Skipping warmup/tracking email from ${from?.substring(0, 50)}`);
+      return;
+    }
+
     const senderAddr = (from || '').toLowerCase().trim().replace(/.*<([^>]+)>.*/, '$1');
     if (!senderAddr) return;
 
@@ -146,6 +166,23 @@ async function handleInboundEmail(payload: any) {
     const senderName = (from || '').replace(/<[^>]+>/g, '').trim() || senderAddr.split('@')[0];
     const isNewLead = !lead;
 
+    // ── DEDUP: Check if this message_id already exists (before any socket push) ────
+    if (message_id) {
+      try {
+        const { db } = await import('@shared/lib/db/db.js');
+        const { emailMessages } = await import('@audnix/shared');
+        const { eq } = await import('drizzle-orm');
+        const existing = await db.select({ id: emailMessages.id })
+          .from(emailMessages)
+          .where(eq(emailMessages.messageId, message_id))
+          .limit(1);
+        if (existing.length > 0) {
+          console.log(`[InboundEmailHandler] ⏭️ Skipping duplicate message_id=${message_id} (already exists from a prior EXISTS notification)`);
+          return;
+        }
+      } catch { /* non-critical dedup check */ }
+    }
+
     // ── PHASE 1: Push to UI BEFORE DB (instant) ──────────────────────
     const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
 
@@ -177,23 +214,6 @@ async function handleInboundEmail(payload: any) {
     ]);
 
     console.log(`[InboundEmailHandler] ⚡ Phase 1 done — UI notified instantly for ${isNewLead ? 'NEW' : lead!.id}`);
-
-    // ── DEDUP: Check if this message_id already exists ────────────────
-    if (message_id) {
-      try {
-        const { db } = await import('@shared/lib/db/db.js');
-        const { emailMessages } = await import('@audnix/shared');
-        const { eq } = await import('drizzle-orm');
-        const existing = await db.select({ id: emailMessages.id })
-          .from(emailMessages)
-          .where(eq(emailMessages.messageId, message_id))
-          .limit(1);
-        if (existing.length > 0) {
-          console.log(`[InboundEmailHandler] ⏭️ Skipping duplicate message_id=${message_id} (already exists)`);
-          return;
-        }
-      } catch { /* non-critical dedup check */ }
-    }
 
     // ── PHASE 2: Save to DB ───────────────────────────────────────────
 

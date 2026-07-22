@@ -389,7 +389,29 @@ async fn run_idle_session(
             if *uid <= last_uid { continue; }
             if *uid > max_uid { max_uid = *uid; }
 
-            // Skip warmup seed / test emails (self-sent check)
+            // Warmup/tracking emails — MOVE to hidden folder so user's real inbox stays clean
+            let warmup_header = headers.get("x-audnix-warmup").cloned().unwrap_or_default();
+            let audit_id_header = headers.get("x-audnix-id").cloned().unwrap_or_default();
+            if !warmup_header.is_empty() || !audit_id_header.is_empty() {
+                info!("MailboxMonitor: Moving warmup/tracking email uid={} to hidden folder (x-audnix-warmup={}, x-audnix-id={})", uid, warmup_header, audit_id_header);
+                // Try to move to hidden warmup folder
+                let hidden = ".Warmup-Archive";
+                // Also try creating [Gmail]/Warmup-Archive for Gmail
+                match conn.uid_move(*uid, hidden).await {
+                    Ok(true) => info!("MailboxMonitor: Moved warmup uid={} to {}", uid, hidden),
+                    Ok(false) => warn!("MailboxMonitor: UID MOVE returned false for uid={}", uid),
+                    Err(e) => {
+                        // Fallback: try UID COPY + STORE \Deleted
+                        warn!("MailboxMonitor: UID MOVE failed for uid={}: {}. Trying copy+delete fallback", uid, e);
+                        if let Err(e2) = conn.uid_copy_and_delete(*uid, hidden).await {
+                            warn!("MailboxMonitor: Copy+delete fallback also failed for uid={}: {}", uid, e2);
+                        }
+                    }
+                }
+                // Still skip Redis publish — no lead creation for warmup
+                continue;
+            }
+            // Skip self-sent emails
             let sender_addr = headers.get("from").cloned().unwrap_or_default().to_lowercase();
             if sender_addr.contains(&config.email.to_lowercase()) {
                 debug!("MailboxMonitor: Skipping self-sent email {}", uid);

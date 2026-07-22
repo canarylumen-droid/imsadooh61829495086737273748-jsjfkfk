@@ -314,14 +314,22 @@ class EmailSyncWorker {
           return { imported: 0, skipped: 0, errors: [] };
         }
         const data = await response.json() as any;
-        return data.value ? await pagedEmailImport(userId, data.value.map((m: any) => ({
-          from: m.from?.emailAddress?.address,
-          to: m.toRecipients?.[0]?.emailAddress?.address,
-          subject: m.subject,
-          text: m.bodyPreview,
-          html: m.body?.content,
-          date: new Date(m.receivedDateTime),
-          integrationId: integration.id
+        return data.value ? await pagedEmailImport(userId, data.value.map((m: any) => {
+          const bodyContent = (m.body?.content || m.bodyPreview || '').toLowerCase();
+          // Remove tracking/warmup params from subject for clean display
+          const cleanSubject = (m.subject || '').replace(/\[.*?\]\s*/g, '').trim();
+          return {
+            from: m.from?.emailAddress?.address,
+            to: m.toRecipients?.[0]?.emailAddress?.address,
+            subject: cleanSubject,
+            text: m.bodyPreview,
+            html: m.body?.content,
+            date: new Date(m.receivedDateTime),
+            integrationId: integration.id,
+            headers: {
+              'x-audnix-warmup': bodyContent.includes('x-audnix-warmup') ? 'yes' : undefined,
+            },
+          };
         })), () => { }, direction) : { imported: 0, skipped: 0, errors: [] };
       };
 

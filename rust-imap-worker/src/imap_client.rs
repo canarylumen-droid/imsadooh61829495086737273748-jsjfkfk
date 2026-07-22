@@ -235,7 +235,7 @@ impl ImapConnection {
     pub async fn fetch(&mut self, last_uid: u32) -> Result<String> {
         self.idle_done().await?;
         let tag = self.next_tag();
-        let cmd = format!("{} FETCH {}:* (UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES CONTENT-TYPE)])\r\n", tag, last_uid + 1);
+        let cmd = format!("{} FETCH {}:* (UID FLAGS BODY.PEEK[HEADER.FIELDS (FROM TO SUBJECT DATE MESSAGE-ID IN-REPLY-TO REFERENCES CONTENT-TYPE X-AUDNIX-WARMUP X-AUDNIX-ID)])\r\n", tag, last_uid + 1);
         self.send_command(&cmd).await?;
         let mut data = String::new();
         loop {

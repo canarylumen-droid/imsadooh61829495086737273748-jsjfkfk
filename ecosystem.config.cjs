@@ -397,6 +397,12 @@ module.exports = {
       env: {
         RUST_LOG: 'warn',
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        // Seed monitor — uncomment with plaintext seed credentials (encrypted in DB, not accessible from Rust)
+        // SEED_MONITOR_EMAIL: 'fortune@network.replyflow.pro',
+        // SEED_MONITOR_PASSWORD: '<plaintext-password>',
+        // SEED_MONITOR_IMAP_HOST: 'admin.mail.replyflow.pro',
+        // SEED_MONITOR_IMAP_PORT: '993',
+        // For multiple seeds, Node.js inbound worker handles via DB (fallback)
       },
       error_file: './logs/rust-imap-error.log',
       out_file: './logs/rust-imap-out.log',
