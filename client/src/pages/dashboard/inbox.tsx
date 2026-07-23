@@ -1477,39 +1477,29 @@ export default function InboxPage() {
                   {warmupInboxData.conversations.map((conv: any) => (
                     <div
                       key={conv.id}
-                      onClick={() => {
-                        setSelectedWarmupThreadId(conv.id);
-                      }}
+                      onClick={() => setSelectedWarmupThreadId(conv.id)}
                       className={cn(
-                        "p-3 cursor-pointer border-b border-border/10 transition-all relative group flex gap-3",
+                        "p-2.5 cursor-pointer transition-all flex items-center gap-2",
                         selectedWarmupThreadId === conv.id ? "bg-amber-500/10" : "hover:bg-muted/30"
                       )}
                     >
-                      <div className="flex gap-3 items-center w-full">
-                        <div className="flex-1 min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-0.5">
-                            {conv.mailboxEmail && (
-                              <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0 mr-1.5 truncate max-w-[120px]">
-                                {conv.mailboxEmail}
-                              </span>
-                            )}
-                            <span className="text-sm font-semibold truncate flex-1 min-w-0">
-                              {conv.subject ? conv.subject.replace(/^(Subject|From|To|Date|Message-ID|Content-Type|MIME-Version|DKIM-Signature|Authentication-Results|Received|X-[^:]*|ARC-[^:]*):\s*/i, '').substring(0, 80) : 'Warmup Conversation'}
-                            </span>
-                            <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 ml-auto">
-                              {conv.sentAt ? formatDateShort(conv.sentAt) : ''}
-                            </span>
-                          </div>
-                          <p className="text-xs line-clamp-1 overflow-hidden text-foreground/60">
-                            <span className="inline-flex items-center gap-1">
-                              {conv.direction === 'inbound' ? '← Received' : '→ Sent'}
-                              {' • '}
-                              {conv.messageCount}/{conv.maxMessages} messages
-                              {conv.placement === 'spam' && <span className="text-amber-500 ml-1">⚠ Spam</span>}
-                              {conv.openedAt && <span className="text-emerald-500 ml-1">✓✓ Opened</span>}
-                            </span>
-                          </p>
+                      <div className={cn(
+                        "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
+                        conv.direction === 'inbound' ? "bg-emerald-500/10" : "bg-primary/10"
+                      )}>
+                        {conv.direction === 'inbound' ? '←' : '→'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-semibold truncate">
+                            {(conv.subject || '').replace(/^(Subject|From|To|Date|Message-ID|Content-Type|MIME-Version|DKIM-Signature|Authentication-Results|Received|X-[^:]*|ARC-[^:]*):\s*/i, '').substring(0, 60) || 'Warmup'}
+                          </span>
+                          {conv.placement === 'spam' && <span className="text-[9px] text-amber-500 shrink-0">⚠</span>}
+                          {conv.openedAt && <span className="text-[9px] text-emerald-500 shrink-0">✓✓</span>}
                         </div>
+                        <p className="text-[10px] text-muted-foreground/60">
+                          {conv.messageCount} msgs • {conv.sentAt ? formatDateShort(conv.sentAt) : ''}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -1740,58 +1730,47 @@ export default function InboxPage() {
             </div>
           ) : showWarmup && selectedWarmupThreadId ? (
             <div className="flex-1 flex flex-col h-full min-w-0">
-              <div className="flex items-center gap-2 p-3 border-b border-border/10">
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedWarmupThreadId(null)}>
-                  <ArrowLeft className="h-4 w-4" />
+              <div className="flex items-center gap-2 p-2.5 border-b border-border/10">
+                <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" onClick={() => setSelectedWarmupThreadId(null)}>
+                  <ArrowLeft className="h-3.5 w-3.5" /> Back
                 </Button>
-                <div className="flex items-center gap-2">
-                  <Activity className="h-4 w-4 text-amber-400" />
-                  <span className="text-sm font-semibold">Warmup</span>
-                </div>
-                <div className="ml-auto">
+                <div className="ml-auto flex items-center gap-2">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { queryClient.invalidateQueries({ queryKey: ["/api/warmup/thread", selectedWarmupThreadId, "messages"] }); }}>
+                    <RefreshCw className="h-3 w-3 mr-1" /> Refresh
+                  </Button>
                   <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setLocation('/dashboard/warmup')}>
                     Dashboard
                   </Button>
                 </div>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto p-3 space-y-2">
                 {warmupMessagesLoading ? (
-                  <div className="space-y-3 p-4">
-                    {[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+                  <div className="space-y-2">
+                    {[1,2,3].map(i => <Skeleton key={i} className="h-12 w-full rounded-lg" />)}
                   </div>
                 ) : !warmupMessagesData?.messages?.length ? (
                   <div className="flex flex-col items-center justify-center h-full text-center">
-                    <p className="text-sm text-muted-foreground">No messages yet</p>
+                    <p className="text-xs text-muted-foreground">No messages yet</p>
                   </div>
                 ) : (
                   warmupMessagesData.messages.map((msg: any) => (
-                    <div key={msg.id} className={cn(
-                      "flex gap-2",
-                      msg.direction === 'outbound' ? "justify-end" : "justify-start"
-                    )}>
+                    <div key={msg.id} className={cn("flex", msg.direction === 'outbound' ? "justify-end" : "justify-start")}>
                       <div className={cn(
-                        "max-w-[80%] rounded-xl p-3 border",
-                        msg.direction === 'outbound'
-                          ? "bg-primary/10 border-primary/20"
-                          : "bg-muted/50 border-border/20"
+                        "max-w-[80%] rounded-lg px-3 py-2 text-xs",
+                        msg.direction === 'outbound' ? "bg-primary/10" : "bg-muted/50"
                       )}>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] font-medium text-muted-foreground">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[9px] font-medium text-muted-foreground">
                             {msg.direction === 'outbound' ? 'Sent' : 'Received'}
                           </span>
                           {msg.sentAt && (
-                            <span className="text-[9px] text-muted-foreground/50">
+                            <span className="text-[8px] text-muted-foreground/40">
                               {new Date(msg.sentAt).toLocaleString()}
                             </span>
                           )}
-                          {msg.placement === 'spam' && (
-                            <Badge variant="outline" className="text-[8px] h-4 px-1 text-amber-500 border-amber-500/30">Spam</Badge>
-                          )}
-                          {msg.status === 'delivered' && (
-                            <Badge variant="outline" className="text-[8px] h-4 px-1 text-emerald-500 border-emerald-500/30">Delivered</Badge>
-                          )}
+                          {msg.placement === 'spam' && <span className="text-[8px] text-amber-500">⚠ Spam</span>}
                         </div>
-                        <p className="text-xs whitespace-pre-wrap break-words">{stripQuotedText(msg.body || '' ) || '(no content)'}</p>
+                        <p className="whitespace-pre-wrap break-words leading-relaxed">{stripQuotedText(msg.body || '') || '(no content)'}</p>
                       </div>
                     </div>
                   ))
