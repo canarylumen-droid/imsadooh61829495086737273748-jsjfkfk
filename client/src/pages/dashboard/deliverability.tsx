@@ -405,33 +405,33 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
             </div>
           </div>
         </CardHeader>
-        <CardContent className="h-[180px] flex items-center justify-center">
+        <CardContent className="min-h-[280px] flex items-center justify-center py-4">
           {hasData ? (
-            <div className="w-full flex items-center gap-3 px-2">
-              <ChartContainer config={{}} className="w-[45%] h-full aspect-auto">
+            <div className="w-full flex flex-col sm:flex-row items-center gap-4 sm:gap-6 px-2">
+              <ChartContainer config={{}} className="w-48 h-48 sm:w-56 sm:h-56 shrink-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={25} outerRadius={50} paddingAngle={3}>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={80} paddingAngle={3}>
                       {pieData.map(entry => <Cell key={entry.name} fill={entry.color} />)}
                     </Pie>
                     <ChartTooltip content={<ChartTooltipContent />} />
                   </PieChart>
                 </ResponsiveContainer>
               </ChartContainer>
-              <div className="space-y-3">
+              <div className="space-y-3 self-center sm:self-auto">
                 {pieData.map(entry => {
                   const pct = totals.sent > 0 ? ((entry.value / totals.sent) * 100).toFixed(0) : '0';
                   return (
                     <div key={entry.name} className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
-                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12">{entry.name}</span>
+                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-14">{entry.name}</span>
                       <span className="text-xs font-bold tabular-nums">{entry.value}</span>
                       <span className="text-[10px] text-muted-foreground/60">({pct}%)</span>
                     </div>
                   );
                 })}
                 <div className="flex items-center gap-2 pt-2 border-t border-border/20">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12">Total</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-14">Total</span>
                   <span className="text-xs font-bold tabular-nums">{totals.sent}</span>
                   {hasRealPlacement && (
                     <Badge variant="outline" className="text-[9px] text-emerald-500 border-emerald-500/30 bg-emerald-500/5 ml-auto">
