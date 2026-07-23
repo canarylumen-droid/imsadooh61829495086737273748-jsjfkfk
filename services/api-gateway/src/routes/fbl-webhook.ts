@@ -26,6 +26,14 @@ import { getRedisClient } from '@shared/lib/redis/redis.js';
 const log = createLogger('FBL-HANDLER');
 const router = Router();
 
+// Verify FBL webhook origin via shared secret header
+router.use((req, res, next) => {
+  const secret = req.headers['x-webhook-secret'];
+  if (secret === process.env.FBL_WEBHOOK_SECRET) return next();
+  // Still return 200 to prevent ISP retries, but don't process
+  return res.status(200).json({ status: 'acknowledged' });
+});
+
 interface FBLPayload {
   feedbackType: 'abuse' | 'fraud' | 'virus' | 'other';
   arrivalDate?: string;

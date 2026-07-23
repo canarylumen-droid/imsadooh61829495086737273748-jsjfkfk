@@ -363,25 +363,6 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       }
     });
 
-    // SPAM DETECTED — immediate alert + analytics refresh
-    socketInstance.on('spam_detected', (payload: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/stats/seed-placement'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/analytics/full'] });
-      toast({
-        title: '⚠️ Spam Detected',
-        description: payload?.message || 'Email detected in spam folder',
-        variant: 'destructive',
-      });
-      showPushNotification('⚠️ Spam Detected', {
-        body: payload?.message || 'Email detected in spam folder',
-        tag: 'spam-detected',
-        data: { url: '/dashboard/deliverability' }
-      });
-    });
-
     // MAILBOX STATUS — reputation and health refresh
     socketInstance.on('mailbox_status', (payload: any) => {
       queryClient.invalidateQueries({ queryKey: ['/api/custom-email/status'] });

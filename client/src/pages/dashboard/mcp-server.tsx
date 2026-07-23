@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "@/hooks/use-toast";
 import {
   Terminal, Copy, Check, Play, Server, Search, ArrowUpRight,
-  Sparkles, Cpu, Workflow, Puzzle, Heart, Radius, FileCode,
+  Sparkles, Cpu, Workflow, Puzzle, Heart, Radius, FileCode, Loader2,
 } from "lucide-react";
 import {
   SiClaude, SiCursor, SiWindsurf, SiCline, SiGithubcopilot,
@@ -96,6 +96,19 @@ function McpServerPage() {
     const q = llmQ.toLowerCase();
     return LLM_TABS.filter(l => l.name.toLowerCase().includes(q) || l.id.includes(q));
   }, [llmQ]);
+
+  const [tools, setTools] = useState<any[] | null>(null);
+  const [toolsLoading, setToolsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/mcp/tools").then(r => r.json()).then(d => {
+      setTools(d.tools || []);
+      setToolsLoading(false);
+    }).catch(() => {
+      setTools(null);
+      setToolsLoading(false);
+    });
+  }, []);
 
   const baseUrl = window.location.origin;
   const keyLabel = "<YOUR_API_KEY>";
@@ -231,6 +244,40 @@ function McpServerPage() {
           </CardContent>
         </Card>
       </div>
+
+      {tools !== null && (
+        <Card className="bg-white/5 border-white/10">
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Server className="h-5 w-5 text-primary" />
+              Available Tools
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {tools.map((t: any) => (
+                <div key={t.name} className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-primary/30 transition-colors">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <code className="text-xs font-mono text-primary">{t.name}</code>
+                      {t.blocked ? (
+                        <Badge variant="outline" className="text-[9px] border-red-500/30 text-red-400">blocked</Badge>
+                      ) : t.needsScope === 'dangerous' ? (
+                        <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">dangerous</Badge>
+                      ) : t.needsScope ? (
+                        <Badge variant="outline" className="text-[9px] border-sky-500/30 text-sky-400">{t.needsScope}</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[9px] border-emerald-500/30 text-emerald-400">read</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{t.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="bg-white/5 border-white/10">
         <CardHeader className="p-4 md:p-6">

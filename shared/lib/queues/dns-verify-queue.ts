@@ -124,11 +124,11 @@ export async function verifyDnsWithFallback(
           record: nodeResult.dmarc?.record ?? null,
           issues: nodeResult.dmarc?.issues ?? [],
         },
-        mx: (nodeResult.mx ?? []).map((m: any) => ({
+        mx: (nodeResult.mx?.records ?? []).map((m: any) => ({
           exchange: m.exchange ?? m,
           priority: m.priority ?? 0,
         })),
-        mx_found: nodeResult.mx_found ?? !!nodeResult.mx?.length,
+        mx_found: nodeResult.mx?.found ?? false,
         blacklist: {
           is_blacklisted: nodeResult.blacklist?.isBlacklisted ?? false,
           listed_on: nodeResult.blacklist?.listedOn ?? [],

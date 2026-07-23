@@ -74,7 +74,7 @@ export function AuthGuard({ children, adminOnly = false }: AuthGuardProps) {
         setLocation("/auth");
       }
     }
-  }, [user, isLoading, error, adminOnly, setLocation]);
+    }, [user, isLoading, error, adminOnly, setLocation, localOnboardingStatus]);
 
   // Show loading while checking auth
   // IF we have a local flag that onboarding is done, don't show the full page loader 

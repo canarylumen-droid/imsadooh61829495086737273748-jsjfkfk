@@ -61,12 +61,8 @@ interface StoredTokens {
   email?: string;
 }
 
-function getUserId(req: AuthenticatedRequest, fromBody = false): string | undefined {
-  if (fromBody) {
-    const body = req.body as DisconnectBody;
-    return req.session?.userId || body.user_id;
-  }
-  return req.session?.userId || (req.query.user_id as string | undefined);
+function getUserId(req: AuthenticatedRequest, _fromBody = false): string | undefined {
+  return req.session?.userId;
 }
 
 const router = Router();

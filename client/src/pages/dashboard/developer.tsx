@@ -11,6 +11,9 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
@@ -30,8 +33,9 @@ function DeveloperPage() {
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createName, setCreateName] = useState("");
-  const [newKeyData, setNewKeyData] = useState<{ key: string; name: string } | null>(null);
+  const [newKeyData, setNewKeyData] = useState<{ key: string; name: string; permissionLevel: string } | null>(null);
   const [showFullKey, setShowFullKey] = useState(false);
+  const [permissionLevel, setPermissionLevel] = useState("read_write");
 
   const { data: keysData, isLoading } = useQuery<{ keys: ApiKey[] }>({
     queryKey: ["/api/mcp/keys"],
@@ -40,7 +44,7 @@ function DeveloperPage() {
   const keys = keysData?.keys || [];
 
   const createKey = useMutation({
-    mutationFn: (d: { name: string }) =>
+    mutationFn: (d: { name: string; permission_level: string }) =>
       apiRequest("POST", "/api/mcp/key/create", d).then(async r => {
         if (!r.ok) {
           const err = await r.json();
@@ -49,10 +53,11 @@ function DeveloperPage() {
         return r.json();
       }),
     onSuccess: (d) => {
-      setNewKeyData({ key: d.key, name: d.name });
+      setNewKeyData({ key: d.key, name: d.name, permissionLevel: d.permissionLevel || permissionLevel });
       setShowFullKey(true);
       setDialogOpen(false);
       setCreateName("");
+      setPermissionLevel("read_write");
       toast({ title: "API key created" });
       qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
     },
@@ -102,21 +107,35 @@ function DeveloperPage() {
               <DialogTitle>Create API key</DialogTitle>
               <DialogDescription>Name your key and we'll generate one for you.</DialogDescription>
             </DialogHeader>
-            <div className="py-3">
-              <Label>Name</Label>
-              <Input
-                value={createName}
-                onChange={e => setCreateName(e.target.value)}
-                placeholder="My API key"
-                className="mt-1.5"
-              />
+            <div className="py-3 space-y-3">
+              <div>
+                <Label>Name</Label>
+                <Input
+                  value={createName}
+                  onChange={e => setCreateName(e.target.value)}
+                  placeholder="My API key"
+                  className="mt-1.5"
+                />
+              </div>
+              <div>
+                <Label>Permission</Label>
+                <Select value={permissionLevel} onValueChange={setPermissionLevel}>
+                  <SelectTrigger className="mt-1.5">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="read_only">Read only — only GET endpoints</SelectItem>
+                    <SelectItem value="read_write">Read/Write — all operations except account deletion</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline">Cancel</Button>
               </DialogClose>
               <Button
-                onClick={() => createKey.mutate({ name: createName || "My API key" })}
+                onClick={() => createKey.mutate({ name: createName || "My API key", permission_level: permissionLevel })}
                 disabled={createKey.isPending || !createName.trim()}
               >
                 {createKey.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}

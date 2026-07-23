@@ -702,13 +702,13 @@ export default function CalendarPage() {
                       {day}
                     </div>
                   ))}
-                    {monthDays.map(({ date, isCurrentMonth }, idx) => {
+                    {monthDays.map(({ date, isCurrentMonth }) => {
                     const dayEvents = eventsForDate(date);
                     const isToday = dateToTzStr(date) === todayInTz;
                     const isSelected = dateToTzStr(date) === dateToTzStr(selectedDate);
                     return (
                       <button
-                        key={idx}
+                        key={date.toISOString()}
                         onClick={() => setSelectedDate(date)}
                         className={cn(
                           "relative h-20 md:h-24 p-1 text-left transition-colors border border-transparent",
@@ -755,10 +755,10 @@ export default function CalendarPage() {
                 <div className="space-y-px">
                   <div className="grid grid-cols-8 gap-px mb-2">
                     <div />
-                    {weekDays.map((day, i) => {
+                    {weekDays.map((day) => {
                       const isToday = day.toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
                       return (
-                        <div key={i} className="text-center">
+                        <div key={day.toISOString()} className="text-center">
                           <div className="text-[10px] text-white/30 uppercase">{day.toLocaleDateString('en-US', { weekday: 'short' })}</div>
                           <div className={cn(
                             "text-sm font-bold w-8 h-8 rounded-full inline-flex items-center justify-center",
@@ -773,14 +773,14 @@ export default function CalendarPage() {
                   {Array.from({ length: 12 }, (_, i) => i + 8).map(hour => (
                     <div key={hour} className="grid grid-cols-8 gap-px">
                       <div className="text-[10px] text-white/30 text-right pr-2 pt-1">{hour}:00</div>
-                      {weekDays.map((day, di) => {
+                      {weekDays.map((day) => {
                         const hourEvents = eventsForDate(day).filter(e => {
                           const h = new Date(e.startTime).getHours();
                           return h === hour;
                         });
                         return (
                           <div
-                            key={di}
+                            key={day.toISOString()}
                             className="h-10 border border-white/5 rounded-sm hover:bg-white/5 transition-colors cursor-pointer"
                             onClick={() => {
                               if (hourEvents.length > 0) setShowEventDetail(hourEvents[0]);
@@ -1036,8 +1036,8 @@ export default function CalendarPage() {
               </CardHeader>
               <CardContent className="p-4 pt-0">
                 <div className="space-y-1.5">
-                  {availableSlots.slice(0, 6).map((slot, i) => (
-                    <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5 text-xs">
+                  {availableSlots.slice(0, 6).map((slot) => (
+                    <div key={slot.start} className="flex items-center justify-between p-2 rounded-lg bg-white/[0.02] border border-white/5 text-xs">
                       <span className="text-white/60">{new Date(slot.start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                       <span className="text-white/40">{new Date(slot.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</span>
                     </div>

@@ -69,12 +69,13 @@ router.post('/dns/verify', requireAuthOrApiKey, async (req: Request, res: Respon
     const { verifyDnsWithFallback } = await import('@shared/lib/queues/dns-verify-queue.js');
     const result = await verifyDnsWithFallback(userId, domain);
 
-    if (result) {
-      await storage.createDomainVerification(userId, {
-        domain,
-        verificationResult: result
-      });
+    if (!result) {
+      return res.status(502).json({ error: 'DNS verification failed' });
     }
+    await storage.createDomainVerification(userId, {
+      domain,
+      verificationResult: result
+    });
 
     statsCache.delete(userId);
 
@@ -91,7 +92,7 @@ router.post('/dns/verify', requireAuthOrApiKey, async (req: Request, res: Respon
     res.json({
       success: true,
       domain,
-      status: overallStatus === 'pending_rust' ? result.overallStatus : result.overallStatus,
+      status: result.overall_status,
       message: 'Domain reputation and DNS records verification completed.'
     });
 
@@ -186,9 +187,9 @@ router.get('/stats', requireAuthOrApiKey, async (req: Request, res: Response): P
       // ── Rust-backed DNS (async, if enabled) ────────────────────────
       if (process.env.ENABLE_RUST_DNS === 'true') {
         try {
-          const { enqueueDnsVerification } = await import('@shared/lib/queues/dns-verify-queue.js');
+          const { verifyDnsWithFallback } = await import('@shared/lib/queues/dns-verify-queue.js');
           for (const domain of emailedDomains) {
-            enqueueDnsVerification(`dns_${userId}_${domain}`, userId, domain, undefined);
+            await verifyDnsWithFallback(userId, domain);
           }
         } catch (e) {
           console.warn('[DNS] Failed to enqueue Rust DNS job:', e);
@@ -1365,7 +1366,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
         res.json({ mailboxes: results });
     } catch (error: any) {
         console.error('[Dashboard] Warmup status error:', error.message);
-        res.json({ mailboxes: [] });
+        res.status(500).json({ error: error.message || 'Failed to fetch warmup status' });
     }
 });
 
@@ -1472,7 +1473,7 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
         res.json({ periods, hourly: useHourly });
     } catch (error: any) {
         console.error('[Warmup] Activity error:', error.message);
-        res.json({ hours: [] });
+        res.status(500).json({ error: error.message || 'Failed to fetch warmup activity' });
     }
 });
 
@@ -1513,11 +1514,10 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
             threadId: warmupInteractions.threadId,
             direction: warmupInteractions.direction,
             subject: warmupInteractions.subject,
-            snippet: warmupInteractions.snippet,
+            snippet: sql<string>`LEFT(${warmupInteractions.body}, 120)`,
             status: warmupInteractions.status,
             placement: warmupInteractions.placement,
             sentAt: warmupInteractions.sentAt,
-            openedAt: warmupInteractions.openedAt,
             fromMailboxId: warmupInteractions.fromMailboxId,
             toMailboxId: warmupInteractions.toMailboxId,
         })
@@ -1539,7 +1539,6 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
                     status: row.status,
                     placement: row.placement,
                     sentAt: row.sentAt,
-                    openedAt: row.openedAt,
                     fromMailboxId: row.fromMailboxId,
                     toMailboxId: row.toMailboxId,
                 });
@@ -1553,13 +1552,12 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
             status: warmupThreads.status,
             messageCount: warmupThreads.messageCount,
             maxMessages: warmupThreads.maxMessages,
-            partnerMailboxId: warmupThreads.partnerMailboxId,
         })
             .from(warmupThreads)
             .where(inArray(warmupThreads.id, threadIds))
             .limit(threadIds.length) : [];
 
-        const threadMetaMap = new Map(threads.map((t: any) => [t.id, { messageCount: t.messageCount, maxMessages: t.maxMessages, partnerMailboxId: t.partnerMailboxId, threadStatus: t.status }]));
+        const threadMetaMap = new Map(threads.map((t: any) => [t.id, { messageCount: t.messageCount, maxMessages: t.maxMessages, threadStatus: t.status }]));
 
         // Resolve integration emails
         const allIntegrationIds = Array.from(new Set(Array.from(integrationIdMap.values()).filter(Boolean)));
@@ -1585,7 +1583,6 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
                 status: conv.status,
                 placement: conv.placement,
                 sentAt: conv.sentAt,
-                openedAt: conv.openedAt,
                 direction: conv.lastMessage,
                 messageCount: meta?.messageCount || 0,
                 maxMessages: meta?.maxMessages || 0,

@@ -22,7 +22,7 @@ export class PushNotificationService {
     await Promise.allSettled(googleAccounts.map(async (account) => {
       try {
         await gmailOAuth.watch(account.userId, account.providerAccountId || '');
-        socketService.emitToUser(account.userId, 'sync:status', {
+        socketService.emitToUser(account.userId, 'sync_status', {
             provider: 'google',
             status: 'connected',
             realtime: true,
@@ -37,7 +37,7 @@ export class PushNotificationService {
     await Promise.allSettled(outlookAccounts.map(async (account) => {
       try {
         await this.outlookOAuth.createSubscription(account.userId);
-        socketService.emitToUser(account.userId, 'sync:status', {
+        socketService.emitToUser(account.userId, 'sync_status', {
             provider: 'outlook',
             status: 'connected',
             realtime: true,

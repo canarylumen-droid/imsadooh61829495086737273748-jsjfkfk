@@ -12,6 +12,7 @@
 import type { Express } from "express";
 import { db } from "@shared/lib/db/db.js";
 import { sql } from "drizzle-orm";
+import { requireAuth } from '../middleware/auth.js';
 
 const VERIFICATION_LOG_PREFIX = "🔍 [VERIFICATION]";
 
@@ -157,6 +158,13 @@ async function verifyDatabaseConnection() {
  * Register all verification routes
  */
 export function registerVerificationRoutes(app: Express) {
+  // Protect all verification routes with shared secret
+  app.use('/api/verify', (req, res, next) => {
+    const secret = req.headers['x-verification-secret'];
+    if (secret === process.env.VERIFICATION_SECRET) return next();
+    return res.status(401).json({ error: 'Unauthorized' });
+  });
+
   // ENDPOINT 1: Environment Variables Verification
   app.get("/api/verify/env", async (req, res) => {
     try {

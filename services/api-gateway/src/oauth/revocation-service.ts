@@ -41,8 +41,8 @@ export class RevocationService {
 
       // 3. Clear all Redis queues/jobs for this user so nothing processes after deletion
       try {
-        const redis = (await import('@shared/lib/redis/redis.js')).getRedisClient;
-        const client = redis();
+        const { getRedisClient } = await import('@shared/lib/redis/redis.js');
+        const client = await getRedisClient();
         if (client) {
           // Pattern-delete all user-scoped keys
           const keys = await client.keys(`*:${userId}:*`);

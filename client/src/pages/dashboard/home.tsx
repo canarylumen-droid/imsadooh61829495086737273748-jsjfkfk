@@ -283,7 +283,7 @@ export default function DashboardHome() {
       return res.json();
     },
     refetchOnWindowFocus: false,
-    enabled: !!activities && activities.length > 0 && !!user,
+    enabled: !!user,
   });
 
   const { data: campaigns } = useQuery<any[]>({

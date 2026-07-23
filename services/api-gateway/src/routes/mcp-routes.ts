@@ -8,6 +8,17 @@ import { apiKeyRateLimiter } from '../middleware/rate-limit.js';
 
 const router = Router();
 
+const TOOL_INPUT_SCHEMAS: Record<string, Record<string, any>> = {
+  get_campaigns: {},
+  get_leads: { status: { type: 'string', description: 'Filter by lead status' }, limit: { type: 'number', description: 'Max results (default 100)' } },
+  get_analytics: {},
+  get_inbox: { limit: { type: 'number', description: 'Max messages (default 50)' } },
+  send_message: { to: { type: 'string', description: 'Recipient email' }, subject: { type: 'string' }, body: { type: 'string' } },
+  manage_webhooks: { action: { type: 'string', enum: ['list', 'create'] }, url: { type: 'string' }, events: { type: 'array', items: { type: 'string' } } },
+  delete_lead: { leadId: { type: 'string', description: 'Lead ID to delete' } },
+  delete_account: {},
+};
+
 const MCP_TOOLS: Record<string, { description: string; neededScope?: string; blocked?: boolean }> = {
   get_campaigns: { description: 'List campaigns and performance' },
   get_leads: { description: 'Query leads by status, date, category' },
@@ -35,8 +46,8 @@ async function validateApiKey(rawKey: string): Promise<{ valid: boolean; userId?
     return { valid: false, error: 'API key not found' };
   }
   const row = result.rows[0] as any;
-  const scopes: string[] = [];
   const permissionLevel = row.scope || 'read_write';
+  const scopes: string[] = permissionLevel === 'read_write' ? ['read_write', 'send_message', 'manage_webhooks'] : [];
   await db.execute(sql`UPDATE api_keys SET last_used_at = NOW() WHERE id = ${row.id}`);
   return { valid: true, userId: row.user_id, apiKeyId: row.id, scopes, permissionLevel };
 }
@@ -77,8 +88,15 @@ async function runTool(toolName: string, args: any, userId: string, permissionLe
       if (!args.to || !args.subject || !args.body) {
         return mcpError(400, 'send_message requires: to, subject, body');
       }
+      const intResult = await db.execute(sql`
+        SELECT id FROM integrations WHERE user_id = ${userId} AND connected = true ORDER BY created_at ASC LIMIT 1
+      `);
+      if (intResult.rows.length === 0) {
+        return mcpError(400, 'No connected mailbox found. Connect a mailbox first.');
+      }
+      const integrationId = (intResult.rows[0] as any).id;
       const { sendEmail } = await import('@shared/lib/channels/email.js');
-      await sendEmail(userId, args.to, args.body, args.subject);
+      await sendEmail(userId, args.to, args.body, args.subject, integrationId);
       return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: 'Message sent' }) }] };
     }
     case 'manage_webhooks': {
@@ -88,7 +106,8 @@ async function runTool(toolName: string, args: any, userId: string, permissionLe
       }
       if (args.action === 'create') {
         if (!args.url || !args.events) return mcpError(400, 'manage_webhooks create requires: url, events');
-        await db.execute(sql`INSERT INTO webhooks (user_id, url, events, is_active) VALUES (${userId}, ${args.url}, ${JSON.stringify(args.events)}, true)`);
+        const eventsValue = typeof args.events === 'string' ? args.events : JSON.stringify(args.events || []);
+        await db.execute(sql`INSERT INTO webhooks (user_id, url, events, is_active) VALUES (${userId}, ${args.url}, ${eventsValue}, true)`);
         return { content: [{ type: 'text', text: JSON.stringify({ success: true }) }] };
       }
       return mcpError(400, 'manage_webhooks action must be "list" or "create"');
@@ -152,7 +171,14 @@ router.post('/mcp', apiKeyRateLimiter, async (req: Request, res: Response): Prom
       res.json({
         jsonrpc: '2.0',
         id: req.body.id || 1,
-        result: { tools: Object.entries(MCP_TOOLS).map(([n, c]) => ({ name: n, description: c.description })) },
+        result: { tools: Object.entries(MCP_TOOLS).map(([n, c]) => ({
+          name: n,
+          description: c.description,
+          inputSchema: {
+            type: 'object',
+            properties: TOOL_INPUT_SCHEMAS[n as keyof typeof TOOL_INPUT_SCHEMAS] || {},
+          },
+        })) },
       });
       return;
     }
@@ -161,11 +187,19 @@ router.post('/mcp', apiKeyRateLimiter, async (req: Request, res: Response): Prom
     const success = !result.isError;
     await logMcpCall(validation.userId!, validation.apiKeyId!, tool, args, success, result.isError ? result.content[0]?.text : null);
 
-    res.json({
-      jsonrpc: '2.0',
-      id: req.body.id || 1,
-      result,
-    });
+    if (result.isError) {
+      res.json({
+        jsonrpc: '2.0',
+        id: req.body.id || 1,
+        error: { code: -32000, message: result.content[0]?.text || 'Tool execution failed', data: result },
+      });
+    } else {
+      res.json({
+        jsonrpc: '2.0',
+        id: req.body.id || 1,
+        result,
+      });
+    }
   } catch (error: any) {
     console.error('[MCP] Error:', error);
     res.status(500).json({ error: 'Internal server error', message: error.message });

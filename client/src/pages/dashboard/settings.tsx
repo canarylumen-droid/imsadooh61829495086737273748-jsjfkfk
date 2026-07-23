@@ -129,7 +129,7 @@ export default function SettingsPage() {
   const [newKeyName, setNewKeyName] = useState("");
   const [newKeyScope, setNewKeyScope] = useState("read_write");
   const [showCreateKey, setShowCreateKey] = useState(false);
-  const { data: user, isLoading } = useQuery<UserProfile | null>({
+  const { data: user, isLoading, isError } = useQuery<UserProfile | null>({
     queryKey: ["/api/user/profile"],
     refetchOnMount: true,
     staleTime: 0,
@@ -325,6 +325,7 @@ export default function SettingsPage() {
     setTimeout(() => setCopiedField(null), 2000);
   };
 
+  if (isError) return <div className="flex justify-center p-20"><p className="text-red-500 text-sm">Failed to load settings. <button className="underline" onClick={() => window.location.reload()}>Reload page</button></p></div>;
   if (isLoading || !user) return <div className="flex justify-center p-20"><PremiumLoader text="Loading Settings..." /></div>;
 
   return (

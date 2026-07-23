@@ -222,7 +222,7 @@ export class SeedFleetManager {
         email: availableSeed.email,
         provider: availableSeed.provider,
         status: 'active',
-        poolType: 'domain',
+        poolType: 'enterprise',
         registeredDomain: domain,
         anchorRole: 'seed',
         dailyLimit: availableSeed.dailyLimit,

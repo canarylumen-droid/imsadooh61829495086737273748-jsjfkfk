@@ -146,17 +146,20 @@ const API_ENDPOINTS: EndpointSection[] = [
   "jsonrpc": "2.0",
   "result": {
     "tools": [
-      { "name": "list_leads", "description": "List leads with filters", "inputSchema": { ... } },
-      { "name": "get_lead", "description": "Get single lead by ID", "inputSchema": { ... } },
-      { "name": "send_message", "description": "Send a message to a lead", "inputSchema": { ... } },
-      { "name": "list_campaigns", "description": "List campaigns", "inputSchema": { ... } },
-      { "name": "get_dashboard_stats", "description": "Get KPI summary", "inputSchema": { ... } }
+      { "name": "get_campaigns", "description": "List campaigns and performance", "inputSchema": { "type": "object", "properties": {} }, "scope": "read" },
+      { "name": "get_leads", "description": "Query leads by status, date, category", "inputSchema": { "type": "object", "properties": { "status": { "type": "string" }, "limit": { "type": "number" } } }, "scope": "read" },
+      { "name": "get_analytics", "description": "Dashboard analytics data", "inputSchema": { "type": "object", "properties": {} }, "scope": "read" },
+      { "name": "get_inbox", "description": "Read inbox messages", "inputSchema": { "type": "object", "properties": { "limit": { "type": "number" } } }, "scope": "read" },
+      { "name": "send_message", "description": "Send outreach messages", "inputSchema": { "type": "object", "properties": { "to": { "type": "string" }, "subject": { "type": "string" }, "body": { "type": "string" } } }, "scope": "read_write" },
+      { "name": "manage_webhooks", "description": "Create & manage webhooks", "inputSchema": { "type": "object", "properties": { "action": { "type": "string", "enum": ["list","create"] }, "url": { "type": "string" }, "events": { "type": "array", "items": { "type": "string" } } } }, "scope": "read_write" },
+      { "name": "delete_lead", "description": "Delete a lead permanently", "inputSchema": { "type": "object", "properties": { "leadId": { "type": "string" } } }, "scope": "read_write + dangerous" },
+      { "name": "delete_account", "description": "Delete user account (blocked via API key — use dashboard)", "inputSchema": { "type": "object", "properties": {} }, "scope": "blocked" }
     ]
   },
   "id": 1
 }`,
         errorExample: `HTTP 401: { "error": "Invalid API key" }`,
-        notes: "API key must have 'Authorization: Bearer audnix_...' header. 'read' keys can only list/get data. 'read_write' keys can also send messages and update leads.",
+        notes: "API key must have 'Authorization: Bearer audnix_...' header. 'read' keys can only use get_* tools. 'read_write' keys can also use send_message and manage_webhooks. delete_lead requires the 'dangerous' scope. delete_account is blocked for API key access.",
         scopes: "depends on key permission_level",
       },
     ],

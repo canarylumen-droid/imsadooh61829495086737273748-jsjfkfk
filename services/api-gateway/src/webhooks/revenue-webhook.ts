@@ -4,8 +4,31 @@ import { leads, deals, messages, pendingPayments, notifications, auditTrail, cam
 import { eq, and, or, sql, inArray } from 'drizzle-orm';
 import { storage } from '@shared/lib/storage/storage.js';
 import { wsSync } from "@shared/lib/realtime/websocket-sync.js";
+import crypto from 'crypto';
 
 const router = Router();
+
+// Verify revenue webhook origin via Stripe webhook secret
+router.use((req, res, next) => {
+  const sig = req.headers['stripe-signature'];
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (sig && secret) {
+    const payload = JSON.stringify(req.body);
+    const expected = crypto.createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
+    const received = Array.isArray(sig) ? sig[0] : sig;
+    const parts = received.split(',').reduce((acc: any, p: string) => {
+      const [k, v] = p.trim().split('=');
+      acc[k] = v;
+      return acc;
+    }, {});
+    if (parts.v1 === expected) return next();
+  }
+  // Fallback: check shared webhook secret header
+  const headerSecret = req.headers['x-webhook-secret'];
+  if (headerSecret === process.env.REVENUE_WEBHOOK_SECRET) return next();
+
+  return res.status(401).json({ error: 'Unauthorized' });
+});
 
 /**
  * Enterprise Revenue Webhook

@@ -219,7 +219,7 @@ export default function InboxPage() {
   useEffect(() => {
     if (!socket) return;
 
-    // Track sync:status per integration with completion detection
+    // Track sync_status per integration with completion detection
     const onSyncStatus = (data: any) => {
       setSyncStatus(prev => {
         const existing = prev[data.integrationId];
@@ -253,12 +253,12 @@ export default function InboxPage() {
       setTimeout(() => setLastActivity(null), 3000);
     };
 
-    socket.on('sync:status', onSyncStatus);
+    socket.on('sync_status', onSyncStatus);
     socket.on('activity_updated', onActivity);
     socket.on('messages_updated', onActivity);
     socket.on('new_mail', onNewMail);
     return () => {
-      socket.off('sync:status', onSyncStatus);
+      socket.off('sync_status', onSyncStatus);
       socket.off('activity_updated', onActivity);
       socket.off('messages_updated', onActivity);
       socket.off('new_mail', onNewMail);
@@ -532,7 +532,14 @@ export default function InboxPage() {
   });
 
   const { data: warmupInboxData, isLoading: warmupInboxLoading } = useQuery<any>({
-    queryKey: ["/api/warmup/inbox"],
+    queryKey: ["/api/warmup/inbox", { integrationId: selectedMailboxId }],
+    queryFn: async () => {
+      const url = new URL("/api/warmup/inbox", window.location.origin);
+      if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch warmup inbox");
+      return res.json();
+    },
     enabled: showWarmup,
     placeholderData: (prev: any) => prev,
     staleTime: 10_000,
@@ -1130,6 +1137,25 @@ export default function InboxPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messagesData?.messages, isGenerating, typedText]);
+
+  const formatMessageDate = useCallback((dateStr: string) => {
+    const d = new Date(dateStr);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (d.toDateString() === today.toDateString()) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    if (d.getFullYear() === today.getFullYear()) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+  }, []);
+
+  const sortedMessages = useMemo(() => {
+    if (!messagesData?.messages) return [];
+    return [...messagesData.messages].sort((a: any, b: any) =>
+      new Date(a.createdAt || a.created_at).getTime() - new Date(b.createdAt || b.created_at).getTime()
+    );
+  }, [messagesData?.messages]);
 
   const ChannelIcon = activeLead ? (channelIcons[activeLead.channel as keyof typeof channelIcons] || Mail) : Mail;
 
@@ -2060,23 +2086,22 @@ export default function InboxPage() {
                         <p className="text-xs text-muted-foreground/50">Start a conversation to see messages here.</p>
                       </div>
                     </div>
-                  ) : [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()).map((msg: any, _idx: number) => {
-                    const prevMsg = _idx > 0 ? [...(messagesData?.messages || [])].sort((a: any, b: any) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[_idx - 1] : null;
+                  ) : sortedMessages.map((msg: any, _idx: number) => {
+                    const prevMsg = _idx > 0 ? sortedMessages[_idx - 1] : null;
                     const showHeader = !prevMsg || prevMsg.subject !== msg.subject;
-                    const msgDate = msg.createdAt ? new Date(msg.createdAt).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' }) : null;
-                    const prevDate = prevMsg?.createdAt ? new Date(prevMsg.createdAt).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' }) : null;
-                    const showDateSep = msgDate && (!prevMsg || msgDate !== prevDate);
+                    const msgDate = msg.createdAt ? formatMessageDate(msg.createdAt) : null;
+                    const prevDate = prevMsg?.createdAt ? formatMessageDate(prevMsg.createdAt) : null;
+                    const showDateSep = msg.createdAt && (!prevMsg?.createdAt || msgDate !== prevDate);
                     const dateLabel = (() => {
-                      if (!msgDate) return '';
-                      const today = new Date().toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' });
-                      const yesterday = new Date(Date.now() - 86400000).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' });
-                      if (msgDate === today) return 'Today';
-                      if (msgDate === yesterday) return 'Yesterday';
-                      const weekAgo = new Date(Date.now() - 604800000).toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, month: 'short', day: 'numeric', year: 'numeric' });
+                      if (!msg.createdAt) return '';
                       const d = new Date(msg.createdAt);
-                      const dow = d.toLocaleDateString('en-US', { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, weekday: 'long' });
-                      if (d > new Date(Date.now() - 604800000)) return dow;
-                      return msgDate;
+                      const today = new Date();
+                      const yesterday = new Date(today);
+                      yesterday.setDate(yesterday.getDate() - 1);
+                      if (d.toDateString() === today.toDateString()) return 'Today';
+                      if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+                      if (d.getFullYear() === today.getFullYear()) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+                      return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
                     })();
                     return (
                     <div key={msg.id} className="flex flex-col w-full">

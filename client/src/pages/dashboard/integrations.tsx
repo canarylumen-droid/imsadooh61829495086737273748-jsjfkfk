@@ -488,61 +488,63 @@ export default function IntegrationsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
     };
 
-    if (socket) {
-      socket.on('stats_updated', handleStatsUpdated);
-      socket.on('integration_health_updated', handleStatsUpdated);
-      socket.on('deliverability_updated', (data: any) => {
-        if (data?.integrationId) {
-          queryClient.setQueryData(["/api/custom-email/status"], (old: any) => {
-            if (!old?.integrations) return old;
-            return {
-              ...old,
-              integrations: old.integrations.map((i: any) =>
-                i.id === data.integrationId
-                  ? {
-                      ...i,
-                      lastPlacement: data.placement || i.lastPlacement,
-                      placementUpdatedAt: Date.now(),
-                      deliveryRate: data.deliveryRate ?? i.deliveryRate,
-                      placementRate: data.inboxRate ?? i.placementRate,
-                      bounceRate: data.bounceRate ?? i.bounceRate,
-                      reputationScore: data.reputationScore ?? i.reputationScore,
-                    }
-                  : i
-              )
-            };
-          });
-        }
+    const handleDeliverabilityUpdated = (data: any) => {
+      if (data?.integrationId) {
+        queryClient.setQueryData(["/api/custom-email/status"], (old: any) => {
+          if (!old?.integrations) return old;
+          return {
+            ...old,
+            integrations: old.integrations.map((i: any) =>
+              i.id === data.integrationId
+                ? {
+                    ...i,
+                    lastPlacement: data.placement || i.lastPlacement,
+                    placementUpdatedAt: Date.now(),
+                    deliveryRate: data.deliveryRate ?? i.deliveryRate,
+                    placementRate: data.inboxRate ?? i.placementRate,
+                    bounceRate: data.bounceRate ?? i.bounceRate,
+                    reputationScore: data.reputationScore ?? i.reputationScore,
+                  }
+                : i
+            )
+          };
+        });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+    };
+
+    const handleBulkImportProgress = (data: any) => {
+      setBulkImportProgress({ total: data.total, completed: data.completed, connected: data.connected, failed: data.failed, done: data.done });
+      if (data.done) {
         queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
         queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
-      });
+        setBulkMailboxRows([]);
+        setBulkMailboxErrors([]);
+        setBulkMailboxFileName("");
+        if (bulkMailboxInputRef.current) bulkMailboxInputRef.current.value = "";
+        setTimeout(() => setBulkImportProgress(null), 8000);
+      }
+    };
+
+    if (socket) {
+      socket.on('stats_updated', handleStatsUpdated);
+      socket.on('deliverability_updated', handleDeliverabilityUpdated);
       socket.on('settings_updated', handleSettingsUpdated);
       socket.on('integration_reputation_updated', handleStatsUpdated);
       socket.on('dns_verified', handleSettingsUpdated);
-      socket.on('bulk_import_progress', (data: any) => {
-        setBulkImportProgress({ total: data.total, completed: data.completed, connected: data.connected, failed: data.failed, done: data.done });
-        if (data.done) {
-          queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-          setBulkMailboxRows([]);
-          setBulkMailboxErrors([]);
-          setBulkMailboxFileName("");
-          if (bulkMailboxInputRef.current) bulkMailboxInputRef.current.value = "";
-          setTimeout(() => setBulkImportProgress(null), 8000);
-        }
-      });
+      socket.on('bulk_import_progress', handleBulkImportProgress);
     }
 
     return () => {
       if (socket) {
         socket.off('stats_updated', handleStatsUpdated);
-        socket.off('integration_health_updated', handleStatsUpdated);
-        socket.off('deliverability_updated', handleStatsUpdated);
+        socket.off('deliverability_updated', handleDeliverabilityUpdated);
         socket.off('settings_updated', handleSettingsUpdated);
         socket.off('integration_reputation_updated', handleStatsUpdated);
         socket.off('dns_verified', handleSettingsUpdated);
-        socket.off('bulk_import_progress');
+        socket.off('bulk_import_progress', handleBulkImportProgress);
       }
     };
   }, [queryClient, socket]);
@@ -613,10 +615,7 @@ export default function IntegrationsPage() {
       });
       queryClient.setQueryData(["/api/channels/calendly"], { connected: false, accountName: null });
       queryClient.setQueryData(["/api/channels/google-calendar"], { connected: false, accountName: null });
-      queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/channels/google-calendar"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({ title: "Disconnected", description: "Integration removed successfully." });
     }
@@ -732,7 +731,6 @@ export default function IntegrationsPage() {
           integrations: (old.integrations || []).filter((i: any) => i.id !== integrationId)
         };
       });
-      queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
       toast({ title: "Email Disconnected" });
@@ -1317,7 +1315,7 @@ export default function IntegrationsPage() {
                                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/50">Setup Steps</p>
                                   <div className="space-y-2">
                                     {appPasswordGuide.steps.map((step: string, idx: number) => (
-                                      <div key={idx} className="flex gap-3">
+                                      <div key={`step-${idx}`} className="flex gap-3">
                                         <div className="h-4 w-4 rounded-full bg-indigo-500/10 flex items-center justify-center text-[8px] font-bold text-indigo-500 mt-0.5 shrink-0">{idx + 1}</div>
                                         <p className="text-[10px] text-muted-foreground leading-tight">{step}</p>
                                       </div>
@@ -1958,8 +1956,8 @@ export default function IntegrationsPage() {
                         <div className="space-y-2">
                           <p className="text-[9px] font-bold text-muted-foreground/60 uppercase">Recent DNS Checks</p>
                           <div className="space-y-1.5">
-                            {stats.domainVerifications.map((v: any, idx: number) => (
-                              <div key={idx} className="flex flex-col gap-1.5 bg-white/5 p-3 rounded-xl border border-border/50">
+                            {stats.domainVerifications.map((v: any) => (
+                              <div key={v.domain || v.id} className="flex flex-col gap-1.5 bg-white/5 p-3 rounded-xl border border-border/50">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[10px] font-bold text-foreground/80">{v.domain}</span>
                                   <Badge className={cn(
