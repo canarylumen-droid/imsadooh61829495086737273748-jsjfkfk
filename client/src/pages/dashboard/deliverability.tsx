@@ -336,12 +336,10 @@ export default function DeliverabilityPage() {
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">DNS</p>
                           <p className="text-sm font-bold">
-                            {(mb as any).dnsValid === undefined || (mb as any).dnsValid === null ? (
-                              <span className="text-muted-foreground/40">—</span>
+                            {(mb as any).dnsValid === true ? (
+                              <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-500">Valid</Badge>
                             ) : (
-                              <Badge variant="outline" className={cn("text-[9px]", (mb as any).dnsValid ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500")}>
-                                {(mb as any).dnsValid ? 'Valid' : 'Issues'}
-                              </Badge>
+                              <span className="text-muted-foreground/40">—</span>
                             )}
                           </p>
                         </div>

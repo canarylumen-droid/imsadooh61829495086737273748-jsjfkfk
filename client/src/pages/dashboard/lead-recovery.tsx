@@ -176,6 +176,12 @@ function LeadRecoveryContent() {
             </div>
           </div>
           <div className="divide-y divide-border/30">
+            {!store.isActive && store.leads.length > 0 && (
+              <div className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
+                <p className="text-xs text-amber-300/80">Recovery is inactive — sync paused. Toggle the switch above to resume.</p>
+              </div>
+            )}
             {store.leads.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
                 <div className="w-12 h-12 bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 rounded-xl flex items-center justify-center mb-4">
@@ -190,13 +196,6 @@ function LeadRecoveryContent() {
                     <p className="text-sm font-semibold text-foreground">No mailboxes connected</p>
                     <p className="text-xs text-muted-foreground mt-1 max-w-xs">
                       Connect an email mailbox in Settings &gt; Integrations first, then return here to recover cold leads.
-                    </p>
-                  </>
-                ) : !store.isActive ? (
-                  <>
-                    <p className="text-sm font-semibold text-foreground">Recovery is inactive</p>
-                    <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-                      Toggle the Recovery switch above to activate Lead Recovery, then click Sync 90 days to scan your mailboxes.
                     </p>
                   </>
                 ) : (
