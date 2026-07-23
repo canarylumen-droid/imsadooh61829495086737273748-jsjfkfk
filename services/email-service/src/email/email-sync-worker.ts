@@ -330,7 +330,7 @@ class EmailSyncWorker {
               'x-audnix-warmup': bodyContent.includes('x-audnix-warmup') ? 'yes' : undefined,
             },
           };
-        })), () => { }, direction) : { imported: 0, skipped: 0, errors: [] };
+        }), () => { }, direction) : { imported: 0, skipped: 0, errors: [] };
       };
 
       const [inbound, outbound] = await Promise.all([

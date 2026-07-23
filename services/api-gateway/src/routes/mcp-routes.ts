@@ -27,7 +27,7 @@ async function validateApiKey(rawKey: string): Promise<{ valid: boolean; userId?
   if (!rawKey.startsWith('audnix_')) {
     return { valid: false, error: 'Invalid API key format. Key must start with audnix_' };
   }
-  const hashedKey = crypto.createHash('sha256').update(rawKey).digest('hex');
+  const hashedKey = crypto.createHash('sha512').update(rawKey).digest('hex');
   const result = await db.execute(sql`
     SELECT id, user_id, scope, created_at FROM api_keys WHERE key = ${hashedKey}
   `);
