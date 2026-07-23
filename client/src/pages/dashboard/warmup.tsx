@@ -128,8 +128,8 @@ export default function WarmupPage() {
     : null;
   const hasReputationData = warmupStatuses.some(m => m.totalSent > 0);
 
-  const getStageLabel = (pct: number) => {
-    if (pct <= 0) return "Not Started";
+  const getStageLabel = (pct: number, isActive = false) => {
+    if (pct <= 0) return isActive ? "Waiting..." : "Not Started";
     if (pct <= 10) return "Day 1-2: Warming Up";
     if (pct <= 25) return "Day 3-5: Building Trust";
     if (pct <= 50) return "Day 6-10: Gaining Momentum";
@@ -443,7 +443,7 @@ export default function WarmupPage() {
                         {mb.provider} • <span className="font-semibold text-foreground/80">{warmupCount}</span>/{mb.dailyLimit} today • cap {mb.capLimit || 50}
                       </p>
                     </div>
-                    <Badge className="bg-emerald-500/10 text-emerald-500 border-emerald-500/20 text-[9px] shrink-0 ml-2">Active</Badge>
+                    <Badge className={cn("text-[9px] shrink-0 ml-2", warmupCount > 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20")}>{warmupCount > 0 ? "Active" : "Idle"}</Badge>
                   </div>
 
                   {/* Progress bar + percent */}
@@ -462,7 +462,7 @@ export default function WarmupPage() {
                     </div>
                   </div>
 
-                  <p className="text-[10px] text-muted-foreground mb-2">{getStageLabel(mb.warmupPercent)}</p>
+                  <p className="text-[10px] text-muted-foreground mb-2">{getStageLabel(mb.warmupPercent, true)}</p>
 
                   {/* Stats grid: sent / opened / bounced / spam / rep */}
                   <div className="grid grid-cols-5 gap-2">
