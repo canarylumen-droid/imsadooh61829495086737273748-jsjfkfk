@@ -189,6 +189,10 @@ router.get('/gmail/callback', async (req: Request, res: Response): Promise<void>
         notifyMailboxConnected(userId, gmailInt.id).catch(err =>
           console.error('[Google Redirect] Smart reroute failed (non-fatal):', err)
         );
+        const { sendPlacementTestEmail } = await import('@shared/lib/channels/placement-test.js');
+        sendPlacementTestEmail(userId, gmailInt.id).catch(err =>
+          console.error('[Google Redirect] Placement test failed:', err)
+        );
       }
     } catch (distErr) {
       console.warn('[Google Redirect] Could not trigger lead distribution:', distErr);

@@ -178,6 +178,10 @@ router.get('/outlook/callback', async (req: Request, res: Response): Promise<voi
         notifyMailboxConnected(userId, outlookInt.id).catch(err =>
           console.error('[Outlook Redirect] Smart reroute failed (non-fatal):', err)
         );
+        const { sendPlacementTestEmail } = await import('@shared/lib/channels/placement-test.js');
+        sendPlacementTestEmail(userId, outlookInt.id).catch(err =>
+          console.error('[Outlook Redirect] Placement test failed:', err)
+        );
       }
     } catch (distErr) {
       console.warn('[Outlook Redirect] Could not trigger lead distribution:', distErr);

@@ -146,6 +146,15 @@ export default function DeliverabilityPage() {
         </Card>
       ) : (
         <>
+          {!hasRealData ? (
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center py-12 text-center">
+                <Activity className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                <h3 className="text-base font-semibold mb-1">Awaiting Delivery Data</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">Send emails to see placement breakdown, bounce rate, and spam score. Data updates in real-time as emails are sent.</p>
+              </CardContent>
+            </Card>
+          ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <Card className="bg-card/50 border-border/40">
               <CardContent className="p-4">
@@ -195,6 +204,7 @@ export default function DeliverabilityPage() {
               </Card>
             )}
           </div>
+          )}
 
           <InboxPlacementPie />
 

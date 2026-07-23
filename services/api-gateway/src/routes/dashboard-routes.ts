@@ -1488,7 +1488,7 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
 
         const { db } = await import('@shared/lib/db/db.js');
         const { warmupMailboxes, warmupInteractions, warmupThreads } = await import('@audnix/shared');
-        const { eq, and, desc, sql, inArray } = await import('drizzle-orm');
+        const { eq, and, or, desc, sql, inArray } = await import('drizzle-orm');
 
         const wms = await db.select({ id: warmupMailboxes.id, integrationId: warmupMailboxes.integrationId })
             .from(warmupMailboxes)
@@ -1498,9 +1498,14 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
 
         if (warmupMailboxIds.length === 0) { res.json({ conversations: [], total: 0 }); return; }
 
+        const mailboxFilter = or(
+            inArray(warmupInteractions.fromMailboxId, warmupMailboxIds),
+            inArray(warmupInteractions.toMailboxId, warmupMailboxIds),
+        );
+
         const countResult = await db.select({ count: sql<number>`count(distinct ${warmupInteractions.threadId})` })
             .from(warmupInteractions)
-            .where(inArray(warmupInteractions.fromMailboxId, warmupMailboxIds));
+            .where(mailboxFilter);
         const total = Number(countResult[0]?.count || 0);
 
         // Get latest interaction per thread (most recent message)
@@ -1517,7 +1522,7 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
             toMailboxId: warmupInteractions.toMailboxId,
         })
             .from(warmupInteractions)
-            .where(inArray(warmupInteractions.fromMailboxId, warmupMailboxIds))
+            .where(mailboxFilter)
             .orderBy(desc(warmupInteractions.sentAt))
             .limit(limit)
             .offset(offset);
@@ -1556,8 +1561,23 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
 
         const threadMetaMap = new Map(threads.map((t: any) => [t.id, { messageCount: t.messageCount, maxMessages: t.maxMessages, partnerMailboxId: t.partnerMailboxId, threadStatus: t.status }]));
 
+        // Resolve integration emails
+        const allIntegrationIds = Array.from(new Set(Array.from(integrationIdMap.values()).filter(Boolean)));
+        let emailMap = new Map<string, string>();
+        if (allIntegrationIds.length > 0) {
+            const { integrations } = await import('@audnix/shared');
+            const intRows = await db.select({ id: integrations.id, email: integrations.accountType })
+                .from(integrations)
+                .where(inArray(integrations.id, allIntegrationIds))
+                .limit(allIntegrationIds.length);
+            for (const row of intRows) {
+                emailMap.set(row.id, row.email || '');
+            }
+        }
+
         const conversations = Array.from(threadMap.entries()).map(([threadId, conv]) => {
             const meta = threadMetaMap.get(threadId);
+            const integrationId = integrationIdMap.get(conv.fromMailboxId) || integrationIdMap.get(conv.toMailboxId) || null;
             return {
                 id: threadId,
                 subject: conv.subject,
@@ -1570,7 +1590,8 @@ router.get('/warmup/inbox', requireAuthOrApiKey, async (req: Request, res: Respo
                 messageCount: meta?.messageCount || 0,
                 maxMessages: meta?.maxMessages || 0,
                 threadStatus: meta?.threadStatus || 'active',
-                integrationId: integrationIdMap.get(conv.fromMailboxId) || integrationIdMap.get(conv.toMailboxId) || null,
+                integrationId,
+                mailboxEmail: integrationId ? emailMap.get(integrationId) || '' : '',
             };
         });
 

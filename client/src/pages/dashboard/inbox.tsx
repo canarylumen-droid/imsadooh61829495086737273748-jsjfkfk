@@ -1367,18 +1367,22 @@ export default function InboxPage() {
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-border/5">
             {showWarmup ? (
-              warmupInboxLoading ? (
+              warmupInboxLoading && !warmupInboxData ? (
                 <div className="p-4 space-y-4">
                   {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
                 </div>
-              ) : !warmupInboxData?.conversations?.length ? (
+              ) : !warmupInboxData?.conversations || !warmupInboxData?.conversations?.length ? (
                 <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[400px] animate-in fade-in zoom-in duration-700">
                   <div className="max-w-xs">
                     <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/20 flex items-center justify-center mb-6 mx-auto">
                       <Activity className="h-10 w-10 text-amber-400" />
                     </div>
                     <p className="text-sm font-bold text-foreground/80">No warmup conversations</p>
-                    <p className="text-xs text-muted-foreground mt-2">Warmup emails and replies will appear here as they are exchanged.</p>
+                    <p className="text-xs text-muted-foreground mt-2">Warmup emails and replies between your mailboxes and seed accounts will appear here as they are exchanged.</p>
+                    <Button variant="outline" size="sm" className="mt-4 gap-1.5" onClick={() => setLocation('/dashboard/warmup')}>
+                      <Activity className="h-3.5 w-3.5" />
+                      Go to Warmup Dashboard
+                    </Button>
                   </div>
                 </div>
               ) : (
@@ -1397,9 +1401,14 @@ export default function InboxPage() {
                     >
                       <div className="flex gap-3 items-center w-full">
                         <div className="flex-1 min-w-0 space-y-0.5">
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-0.5">
+                            {conv.mailboxEmail && (
+                              <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0 mr-1.5 truncate max-w-[120px]">
+                                {conv.mailboxEmail}
+                              </span>
+                            )}
                             <span className="text-sm font-semibold truncate flex-1 min-w-0">
-                              {conv.subject || 'Warmup Conversation'}
+                              {conv.subject ? conv.subject.replace(/^(Subject|From|To|Date|Message-ID|Content-Type|MIME-Version|DKIM-Signature|Authentication-Results|Received|X-[^:]*|ARC-[^:]*):\s*/i, '').substring(0, 80) : 'Warmup Conversation'}
                             </span>
                             <span className="text-[9px] text-muted-foreground/50 font-medium shrink-0 ml-auto">
                               {conv.sentAt ? formatDateShort(conv.sentAt) : ''}

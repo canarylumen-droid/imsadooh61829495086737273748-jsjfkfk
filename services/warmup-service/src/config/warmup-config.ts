@@ -20,7 +20,7 @@ export const WARMUP_CONFIG = {
   MIN_WARMUP_PER_DAY: parseInt(process.env.WARMUP_MIN_PER_DAY || '3', 10),
 
   // Reply volleys per warmup send — for each outbound warmup email, generate this many replies back
-  REPLIES_PER_SEND: parseInt(process.env.WARMUP_REPLIES_PER_SEND || '3', 10),
+  REPLIES_PER_SEND: parseInt(process.env.WARMUP_REPLIES_PER_SEND || '1', 10),
 
   // Reply chain timing (seconds between replies in the chain)
   REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '180', 10),

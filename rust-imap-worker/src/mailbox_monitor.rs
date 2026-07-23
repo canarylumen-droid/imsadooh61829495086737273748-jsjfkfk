@@ -572,11 +572,15 @@ fn parse_fetch_response(raw: &str) -> HashMap<u32, HashMap<String, String>> {
 fn extract_body_text(raw: &str) -> String {
     let mut in_body = false;
 
-    // Look for BODY[] {size} pattern or BODY[] followed by content
+    // Only accept BODY[] or BODY.PEEK[] — skip BODY[HEADER.FIELDS
+    let is_body_start = |line: &str| {
+        (line.contains("BODY[]") || line.contains("BODY.PEEK[]")) && line.contains('{')
+    };
+
     let mut past_headers = false;
     let mut body_lines: Vec<String> = Vec::new();
     for line in raw.lines() {
-        if line.contains("BODY[") && line.contains('{') {
+        if is_body_start(line) {
             in_body = true;
             continue;
         }
@@ -648,11 +652,14 @@ fn extract_body_text(raw: &str) -> String {
 /// Extract the raw RFC822 email content (headers + body) from the IMAP FETCH response.
 /// Strips IMAP protocol framing like "* 58 FETCH (BODY[] {size}" and trailing ")" / "A0001 OK".
 fn extract_raw_rfc822(raw: &str) -> String {
-    // Find BODY[ marker with literal size
+    // Only accept BODY[] or BODY.PEEK[] — skip BODY[HEADER.FIELDS
+    let is_body_start = |line: &str| {
+        (line.contains("BODY[]") || line.contains("BODY.PEEK[]")) && line.contains('{')
+    };
     let mut in_body = false;
     let mut lines: Vec<String> = Vec::new();
     for line in raw.lines() {
-        if line.contains("BODY[") && line.contains('{') {
+        if is_body_start(line) {
             in_body = true;
             continue;
         }

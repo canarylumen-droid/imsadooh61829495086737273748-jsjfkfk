@@ -6,7 +6,7 @@
 import { Worker } from 'bullmq';
 import { createFreshConnection } from '@shared/lib/queues/redis-config.js';
 import { db } from '../db/warmup-db.js';
-import { eq, sql } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { warmupMailboxes, warmupThreads, warmupInteractions, integrations } from '@audnix/shared';
 import { WARMUP_CONFIG, getRampLimit } from '../config/warmup-config.js';
 import { pairingEngine } from '../lib/pairing-engine.js';
@@ -96,6 +96,35 @@ export function createOutboundWorker(): Worker {
           .where(eq(integrations.id, sender[0].integrationId))
           .limit(1);
         dynamicLimit = integrationRow?.warmupLimit ?? WARMUP_CONFIG.DAILY_SENT_LIMIT;
+      }
+
+      // Per-partner seed budget: ensure one mailbox doesn't hog the seed's capacity
+      if (sender[0].anchorRole === 'seed' && recipient[0]) {
+        const meta = (sender[0].metadata || {}) as any;
+        const seedAccountId = meta.seedAccountId;
+        if (seedAccountId) {
+          const [partnerResult] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(warmupMailboxes)
+            .where(and(
+              sql`${warmupMailboxes.metadata}->>'seedAccountId' = ${seedAccountId}`,
+              eq(warmupMailboxes.status, 'active')
+            ));
+          const partnerCount = partnerResult?.count ?? 1;
+          const perPartnerBudget = Math.max(1, Math.floor(dynamicLimit / Math.max(partnerCount, 1)));
+
+          const [todayResult] = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(warmupInteractions)
+            .where(and(
+              eq(warmupInteractions.fromMailboxId, sender[0].id),
+              eq(warmupInteractions.toMailboxId, recipient[0].id),
+              sql`${warmupInteractions.sentAt} >= CURRENT_DATE`
+            ));
+          if ((todayResult?.count ?? 0) >= perPartnerBudget) {
+            return;
+          }
+        }
       }
 
       // Apply percentage-based ramp schedule for non-seed mailboxes

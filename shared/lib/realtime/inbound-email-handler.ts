@@ -66,9 +66,11 @@ async function handleInboundEmail(payload: any) {
       // Remove any remaining IMAP response lines
       rfc822 = rfc822.split('\n').filter((l: string) => {
         const t = l.trim();
-        return !t.startsWith('* ') && !t.startsWith('A0') && !t.startsWith('A1') &&
+        if (!t) return false;
+        return !t.startsWith('* ') && !/^A\d{4}\s/.test(t) &&
                !t.startsWith('+ ') && !t.includes('OK FETCH') && !t.includes('OK UID') &&
-               !t.startsWith(')') && !t.startsWith('FLAGS ') && !t.startsWith('UID ');
+               !t.startsWith(')') && !/^FLAGS\s/.test(t) && !/^UID\s/.test(t) &&
+               !/^BODY\[HEADER\.FIELDS/.test(t) && !t.includes('FETCH (UID');
       }).join('\n');
 
       const { simpleParser } = await import('mailparser');
@@ -83,7 +85,13 @@ async function handleInboundEmail(payload: any) {
         }
       }
       // Final safety: if body still looks like IMAP protocol, use empty
-      if (parsedBody && (parsedBody.startsWith('* ') || parsedBody.includes('OK FETCH completed'))) {
+      if (parsedBody && (
+        parsedBody.startsWith('* ') ||
+        /^A\d{4}\s/.test(parsedBody) ||
+        parsedBody.includes('OK FETCH completed') ||
+        parsedBody.includes('FETCH (UID') ||
+        parsedBody.includes('BODY[HEADER.FIELDS')
+      )) {
         parsedBody = '';
       }
     } catch (parseErr: any) {

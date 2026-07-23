@@ -2371,22 +2371,12 @@ class ImapIdleManager {
                                 }
                             };
 
+                            let rawParts: string[] = [];
+
                             msg.on('body', (stream: any) => {
                                 let raw = '';
                                 stream.on('data', (chunk: Buffer) => { raw += chunk.toString('utf8'); });
-                                stream.once('end', () => {
-                                    simpleParser(raw).then(parsed => {
-                                        item.subject  = parsed.subject || '(no subject)';
-                                        item.from     = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
-                                        item.to       = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
-                                        item.date     = parsed.date?.toISOString() || new Date().toISOString();
-                                        item.snippet  = (parsed.text || '').replace(/\s+/g, ' ').trim().slice(0, 200);
-                                    }).catch(() => {
-                                        console.warn('[IMAP] Failed to parse email body during fetchNewMessages');
-                                    }).finally(() => {
-                                        bodyResolved = true;
-                                    });
-                                });
+                                stream.once('end', () => { rawParts.push(raw); });
                             });
 
                             msg.once('attributes', (attrs: any) => {
@@ -2394,7 +2384,22 @@ class ImapIdleManager {
                                 item.messageId = attrs.envelope?.messageId || `imap-${integrationId}-${attrs.uid}`;
                             });
 
-                            msg.once('end', () => pushItem());
+                            msg.once('end', () => {
+                                const combined = rawParts.join('\n');
+                                simpleParser(combined).then(parsed => {
+                                    item.subject = parsed.subject || '(no subject)';
+                                    item.from = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
+                                    item.to = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
+                                    item.date = parsed.date?.toISOString() || new Date().toISOString();
+                                    const bodyText = parsed.text || parsed.html?.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() || '';
+                                    item.snippet = (bodyText || item.subject).replace(/\s+/g, ' ').trim().slice(0, 200);
+                                }).catch(() => {
+                                    console.warn('[IMAP] Failed to parse email body during fetchNewMessages');
+                                }).finally(() => {
+                                    bodyResolved = true;
+                                });
+                                pushItem();
+                            });
                         });
 
                         f.once('error', () => { safeEnd(); resolve(messages); });

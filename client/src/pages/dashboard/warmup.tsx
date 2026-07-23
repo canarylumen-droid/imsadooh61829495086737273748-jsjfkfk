@@ -225,6 +225,33 @@ export default function WarmupPage() {
         </div>
       </div>
 
+      {/* Paused banner */}
+      {warmupStatuses.length > 0 && activeMailboxes.length === 0 && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="p-4 flex items-start gap-3">
+            <Pause className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-300">Warmup Paused</p>
+              <p className="text-xs text-amber-200/70 mt-1">
+                {warmupStatuses.some(m => m.hasActiveCampaigns)
+                  ? "Active campaigns are running — warmup adjusts to stay at 20-25% of your daily capacity. Warmup resumes automatically when campaign volume decreases."
+                  : "Warmup is paused for all mailboxes. Toggle individual mailbox switches above or click Start All to resume."}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 border-amber-500/30 text-amber-400 hover:bg-amber-500/10 ml-auto"
+              onClick={() => handleToggleAll(true)}
+              disabled={toggleWarmupMutation.isPending}
+            >
+              <Play className="h-3.5 w-3.5 mr-1.5" />
+              Start All
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <Card>

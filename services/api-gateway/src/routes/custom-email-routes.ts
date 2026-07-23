@@ -533,6 +533,12 @@ router.post('/connect', requireAuthOrApiKey, async (req: Request, res: Response)
         notifyMailboxConnected(userId, customEmail.id).catch((err: any) =>
           console.error('[Email Connect] Smart reroute failed:', err)
         );
+
+        // ── Immediate placement test ──────────────────────────────
+        const { sendPlacementTestEmail } = await import('@shared/lib/channels/placement-test.js');
+        sendPlacementTestEmail(userId, customEmail.id).catch((err: any) =>
+          console.error('[Email Connect] Placement test failed:', err)
+        );
       }
     } catch (idleErr) {
       console.warn('[Email Connect] Could not trigger background sync:', idleErr);
@@ -756,6 +762,16 @@ router.post('/bulk-import', requireAuthOrApiKey, async (req: Request, res: Respo
           }
         } catch (queueErr) {
           console.warn('[Bulk Email Import] Smart reroute queue failed:', queueErr);
+        }
+        try {
+          const { sendPlacementTestEmail } = await import('@shared/lib/channels/placement-test.js');
+          for (const mailbox of imported) {
+            sendPlacementTestEmail(userId, mailbox.id).catch((err: any) =>
+              console.error('[Bulk Email Import] Placement test failed:', err)
+            );
+          }
+        } catch (queueErr) {
+          console.warn('[Bulk Email Import] Placement test queue failed:', queueErr);
         }
       })();
     }

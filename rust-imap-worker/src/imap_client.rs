@@ -353,6 +353,15 @@ impl ImapConnection {
         if let Some(stream) = &mut self.stream {
             let mut temp = [0u8; 8192];
             loop {
+                // If buffer already has a complete response from a previous read, return it
+                let buf_str = String::from_utf8_lossy(&self.buffer).to_string();
+                if let Some(end) = find_tag_end(&buf_str) {
+                    let result = buf_str[..end].to_string();
+                    let remaining = BytesMut::from(&self.buffer[end..]);
+                    self.buffer = remaining;
+                    return Ok(result);
+                }
+
                 let n = tokio::time::timeout(
                     Duration::from_secs(30),
                     stream.read(&mut temp),
@@ -362,11 +371,16 @@ impl ImapConnection {
                 if n == 0 { break; }
                 self.buffer.extend_from_slice(&temp[..n]);
                 let response = String::from_utf8_lossy(&self.buffer).to_string();
-                if is_complete_response(&response) {
-                    return Ok(response);
+                if let Some(end) = find_tag_end(&response) {
+                    let result = response[..end].to_string();
+                    let remaining = BytesMut::from(&self.buffer[end..]);
+                    self.buffer = remaining;
+                    return Ok(result);
                 }
             }
-            Ok(String::from_utf8_lossy(&self.buffer).to_string())
+            let result = String::from_utf8_lossy(&self.buffer).to_string();
+            self.buffer.clear();
+            Ok(result)
         } else {
             anyhow::bail!("Not connected")
         }
@@ -377,13 +391,17 @@ impl ImapConnection {
     }
 }
 
-fn is_complete_response(response: &str) -> bool {
+fn find_tag_end(response: &str) -> Option<usize> {
     let lines: Vec<&str> = response.lines().collect();
-    if let Some(last_line) = lines.last() {
-        let trimmed = last_line.trim();
+    for (i, line) in lines.iter().enumerate().rev() {
+        let trimmed = line.trim();
         if trimmed.starts_with('A') && (trimmed.contains("OK") || trimmed.contains("NO") || trimmed.contains("BAD")) {
-            return true;
+            let mut pos = 0;
+            for j in 0..=i {
+                pos += lines[j].len() + 1;
+            }
+            return Some(pos);
         }
     }
-    false
+    None
 }
