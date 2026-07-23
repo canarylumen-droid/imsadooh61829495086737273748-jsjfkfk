@@ -417,8 +417,8 @@ export default function AnalyticsPage() {
                                                     data={pieData}
                                                     cx="50%"
                                                     cy="50%"
-                                                    innerRadius={55}
-                                                    outerRadius={80}
+                                                    innerRadius={40}
+                                                    outerRadius={60}
                                                     paddingAngle={5}
                                                     dataKey="value"
                                                 >
@@ -492,14 +492,14 @@ export default function AnalyticsPage() {
 
             <ResponsiveGrid className="grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                 {/* Lead Distribution Pie Chart */}
-                <Card className="bg-card border-border/40 rounded-2xl overflow-hidden">
-                    <CardHeader className="p-8">
+                <Card className="bg-card border-border/40 rounded-2xl">
+                    <CardHeader className="p-6">
                         <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50">Lead Status System</CardTitle>
                     </CardHeader>
-                    <CardContent className="h-[300px] flex items-center justify-center">
+                    <CardContent className="h-[260px] flex items-center justify-center">
                         {analytics?.metrics ? (
-                            <div className="w-full h-full flex items-center justify-center">
-                                <ChartContainer config={{}} className="w-[60%] h-full">
+                            <div className="w-full h-full flex items-center justify-center gap-4">
+                                <ChartContainer config={{}} className="w-[50%] h-full">
                                     <ResponsiveContainer width="100%" height="100%">
                                         {(() => {
                                             const pieData = [
@@ -522,8 +522,8 @@ export default function AnalyticsPage() {
                                                         data={pieData}
                                                         cx="50%"
                                                         cy="50%"
-                                                        innerRadius={50}
-                                                        outerRadius={70}
+                                                        innerRadius={35}
+                                                        outerRadius={55}
                                                         paddingAngle={8}
                                                         dataKey="value"
                                                     >
@@ -537,7 +537,7 @@ export default function AnalyticsPage() {
                                         })()}
                                     </ResponsiveContainer>
                                 </ChartContainer>
-                                <div className="flex flex-col gap-3 justify-center pr-10">
+                                <div className="flex flex-col gap-2 justify-center pr-4">
                                     {[
                                         { label: 'Warm', color: 'bg-blue-500' },
                                         { label: 'Sent', color: 'bg-fuchsia-500' },
@@ -756,26 +756,26 @@ function InboxPlacementSection({ selectedMailboxId, days }: { selectedMailboxId?
     return (
         <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
             {/* Overall Inbox Placement Pie */}
-            <Card className="bg-card border-border/40 rounded-2xl overflow-hidden">
-                <CardHeader className="p-6">
+            <Card className="bg-card border-border/40 rounded-2xl">
+                <CardHeader className="p-4 pb-0">
                     <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
                         <Target className="w-4 h-4 text-emerald-500" /> Inbox Placement
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="h-[250px] flex items-center justify-center px-4">
+                <CardContent className="h-[200px] flex items-center justify-center">
                     {pieData.length === 0 ? (
                         <p className="text-xs text-muted-foreground/40 font-semibold uppercase">No placement data</p>
                     ) : (
-                        <div className="w-full flex items-center gap-4">
-                            <ChartContainer config={{}} className="w-[55%] h-full">
+                        <div className="w-full flex items-center gap-3 px-3">
+                            <ChartContainer config={{}} className="w-[50%] h-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
                                             data={pieData}
                                             cx="50%"
                                             cy="50%"
-                                            innerRadius={45}
-                                            outerRadius={70}
+                                            innerRadius={30}
+                                            outerRadius={50}
                                             paddingAngle={4}
                                             dataKey="value"
                                         >

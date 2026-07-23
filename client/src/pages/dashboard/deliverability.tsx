@@ -351,28 +351,28 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <Card className="bg-card/50 border-border/40">
-        <CardHeader className="p-4 pb-0">
+        <CardHeader className="p-3 pb-0">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
-              <Target className="w-4 h-4 text-emerald-500" /> Inbox Placement ({dayLabel})
+            <CardTitle className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50 flex items-center gap-2">
+              <Target className="w-3.5 h-3.5 text-emerald-500" /> Inbox Placement ({dayLabel})
             </CardTitle>
             <div className="flex bg-muted/50 rounded-lg p-0.5">
               {([1, 7, 30, 60, 90] as const).map(d => (
                 <Button key={d} variant="ghost" size="sm" onClick={() => setPieDays(d)}
-                  className={cn("h-6 text-[9px] font-bold px-2", pieDays === d && "bg-background shadow-sm")}>
+                  className={cn("h-5 text-[8px] font-bold px-1.5", pieDays === d && "bg-background shadow-sm")}>
                   {d === 1 ? '24h' : `${d}d`}
                 </Button>
               ))}
             </div>
           </div>
         </CardHeader>
-        <CardContent className="h-[200px] flex items-center justify-center">
+        <CardContent className="h-[180px] flex items-center justify-center">
           {hasData ? (
-            <div className="w-full flex items-center gap-4">
-              <ChartContainer config={{}} className="w-[50%] h-full">
+            <div className="w-full flex items-center gap-3 px-2">
+              <ChartContainer config={{}} className="w-[45%] h-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={35} outerRadius={70} paddingAngle={3}>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={25} outerRadius={50} paddingAngle={3}>
                       {pieData.map(entry => <Cell key={entry.name} fill={entry.color} />)}
                     </Pie>
                     <ChartTooltip content={<ChartTooltipContent />} />
