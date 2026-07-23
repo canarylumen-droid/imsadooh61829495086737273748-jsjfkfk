@@ -282,6 +282,11 @@ export default function InboxPage() {
         return;
       }
 
+      // Always invalidate current lead's messages when ANY message update comes through
+      if (leadId && targetLeadId !== leadId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/messages", leadId] });
+      }
+
       // 20ms UI Push: Instantly move lead to top and update snippet
       const isOpenEvent = payload?.action === 'email_opened';
       const isClickEvent = payload?.action === 'email_clicked';
@@ -529,6 +534,7 @@ export default function InboxPage() {
     staleTime: 0,
     refetchOnMount: true,
     refetchOnWindowFocus: true,
+    refetchInterval: 30000,
   });
 
   const { data: warmupInboxData, isLoading: warmupInboxLoading } = useQuery<any>({

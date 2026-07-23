@@ -372,7 +372,7 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
               <ChartContainer config={{}} className="w-[50%] h-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={40} outerRadius={80} paddingAngle={3}>
+                    <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={35} outerRadius={70} paddingAngle={3}>
                       {pieData.map(entry => <Cell key={entry.name} fill={entry.color} />)}
                     </Pie>
                     <ChartTooltip content={<ChartTooltipContent />} />

@@ -417,8 +417,8 @@ export default function AnalyticsPage() {
                                                     data={pieData}
                                                     cx="50%"
                                                     cy="50%"
-                                                    innerRadius={80}
-                                                    outerRadius={110}
+                                                    innerRadius={55}
+                                                    outerRadius={80}
                                                     paddingAngle={5}
                                                     dataKey="value"
                                                 >
@@ -522,8 +522,8 @@ export default function AnalyticsPage() {
                                                         data={pieData}
                                                         cx="50%"
                                                         cy="50%"
-                                                        innerRadius={60}
-                                                        outerRadius={80}
+                                                        innerRadius={50}
+                                                        outerRadius={70}
                                                         paddingAngle={8}
                                                         dataKey="value"
                                                     >
@@ -774,8 +774,8 @@ function InboxPlacementSection({ selectedMailboxId, days }: { selectedMailboxId?
                                             data={pieData}
                                             cx="50%"
                                             cy="50%"
-                                            innerRadius={55}
-                                            outerRadius={85}
+                                            innerRadius={45}
+                                            outerRadius={70}
                                             paddingAngle={4}
                                             dataKey="value"
                                         >

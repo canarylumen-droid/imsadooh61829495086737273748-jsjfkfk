@@ -144,7 +144,7 @@ export default function InsightsPage() {
                       Connect Mailbox <ArrowRight className="ml-2 h-4 w-4" />
                     </Button>
                   </Link>
-                  <Link href="/dashboard/outreach">
+                  <Link href="/dashboard/inbox">
                     <Button variant="outline" className="rounded-xl h-11 px-6">
                       Create Campaign
                     </Button>
@@ -160,11 +160,11 @@ export default function InsightsPage() {
                 <p className="text-muted-foreground font-medium max-w-sm mb-8 leading-relaxed">
                   Your mailbox is connected! Insights will generate after your first campaign sends emails and receives replies.
                 </p>
-                <Link href="/dashboard/outreach">
-                  <Button className="rounded-xl h-11 px-6">
-                    Start a Campaign <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
+                <Link href="/dashboard/inbox">
+                    <Button className="rounded-xl h-11 px-6">
+                      Start a Campaign <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
               </>
             ) : (
               <>

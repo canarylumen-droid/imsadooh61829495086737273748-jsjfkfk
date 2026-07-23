@@ -144,18 +144,18 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-[800px] border-border/40 bg-background/95 backdrop-blur-xl p-0 overflow-hidden shadow-2xl [&>button]:opacity-100 [&>button]:text-muted-foreground [&>button]:hover:text-foreground [&>button]:transition-all">
-        <DialogHeader className="p-6 pb-2">
-          <div className="flex items-center justify-between pr-8">
-            <DialogTitle className="text-xl font-black uppercase tracking-widest flex items-center gap-2">
-              <Mail className="w-5 h-5 text-primary" />
-              Campaign Manager
+      <DialogContent className="sm:max-w-[900px] w-[calc(100%-1rem)] border-border/40 bg-background/95 backdrop-blur-xl p-0 overflow-hidden shadow-2xl">
+        <DialogHeader className="p-4 sm:p-6 pb-2">
+          <div className="flex items-center justify-between gap-3">
+            <DialogTitle className="text-lg sm:text-xl font-black uppercase tracking-widest flex items-center gap-2 min-w-0">
+              <Mail className="w-5 h-5 text-primary shrink-0" />
+              <span className="truncate">Campaign Manager</span>
             </DialogTitle>
             <Button 
               onClick={() => { onClose(); onNewCampaign(); }}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1 text-xs uppercase font-black tracking-widest shadow-[0_0_15px_rgba(var(--primary),0.3)]"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1 text-[10px] sm:text-xs uppercase font-black tracking-widest shadow-[0_0_15px_rgba(var(--primary),0.3)] shrink-0"
             >
-              <Plus className="w-4 h-4" /> New Campaign
+              <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> New Campaign
             </Button>
           </div>
         </DialogHeader>
