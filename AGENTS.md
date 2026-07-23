@@ -1346,5 +1346,33 @@ Wire DNS verification through Rust for all paths, trigger on OAuth connect, then
 - MCP key = `audnix_` + 64 hex chars = 70 chars total
 - Always verify hash algo matches between create and validate
 
+## This Session (Jul 23 2026) — Deliverability Fix: Route Mismatch + UI Polish
+
+### Root Cause of "Sent shows 0"
+**Backend route path mismatch**: `email-stats-routes.ts` was mounted at `/api/email/stats` but all frontend queries hit `/api/stats`. Every deliverability API call returned `{"error": "Route not found: GET /api/stats/inbox-placement"}`. The 404 was caught by the JSON error middleware, the query errored silently (no retry), and the page showed "Awaiting Delivery Data" because `placementData` was always `undefined`.
+
+**Fix**: Changed `app.use("/api/email/stats", emailStatsRoutes)` → `app.use("/api/stats", emailStatsRoutes)` in `routes/index.ts:126`.
+
+### UI Fixes (deliverability.tsx)
+1. **"Updates every 2 minutes"** → "Real-time via socket events"
+2. **DNS "Issues" badge**: When `dnsValid` is undefined/null, shows "—" instead of "Issues" (amber badge)
+3. **Pacing**: Shows "—" when `sentCount === 0` instead of `1/41min`
+4. **Reputation KPI**: Only counts mailboxes with defined `reputationScore`. Shows "—" for avg when no score exists
+5. **Per-mailbox reputation**: Shows "—/100" when `reputationScore` undefined
+6. **Empty state**: When a specific mailbox is selected (via MailboxSwitcher), shows "No Data for This Mailbox" instead of "Awaiting Delivery Data"
+
+### email_tracking Investigation
+- Table has only **4 total rows** across all users (all for `fortuneuchendu708@gmail.com`)
+- 2 from Jul 23 (today's sends), 2 older (Jul 19-20)
+- `integration_id`, `placement` columns exist — data is correctly stored
+- `createTrackedEmail()` IS creating records (confirmed 4 rows exist)
+- API query works correctly when route is reachable
+- The 4 rows are: `treasure@outreach.replyflow.pro` (3 rows: 2 inbox, 1 delivered) + `fortune@outreach.replyflow.pro` (1 row: inbox)
+
+### Deploy
+- Commit `95629d2d` pushed to GitHub main
+- EC2: `git pull`, `npx vite build` from root (24.50s), `pm2 restart audnix-api-gateway` — all 17 services online
+- Verify: `curl http://localhost:5000/api/stats/inbox-placement` → now returns 401 (auth required) instead of 404 "Route not found" ✅
+
 ### Deploy
 - Push to GitHub, pull on EC2, build client, restart affected services

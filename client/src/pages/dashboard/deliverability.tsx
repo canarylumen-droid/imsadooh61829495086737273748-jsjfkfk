@@ -1,18 +1,20 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRealtime } from "@/hooks/use-realtime";
 import { useMailbox } from "@/hooks/use-mailbox";
 import { PageWrapper } from '@/components/ui/page-wrapper';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, Target, Loader2 } from 'lucide-react';
+import { RefreshCw, Plus, Shield, AlertTriangle, CheckCircle2, Activity, Mail, Target, Loader2, Edit3, Check, X } from 'lucide-react';
 import { useLocation } from 'wouter';
 import { motion } from 'framer-motion';
 import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { useToast } from '@/hooks/use-toast';
+import { apiRequest } from '@/lib/queryClient';
 
 interface PlacementMailbox {
   integrationId: string;
@@ -110,6 +112,22 @@ export default function DeliverabilityPage() {
   const healthyCount = mailboxesWithRep.filter((m: any) => m.reputationScore >= 70).length;
   const atRiskCount = mailboxesWithRep.filter((m: any) => m.reputationScore < 70 && m.reputationScore >= 40).length;
   const criticalCount = mailboxesWithRep.filter((m: any) => m.reputationScore < 40).length;
+
+  const [editingLimit, setEditingLimit] = useState<{ id: string; value: string } | null>(null);
+  const updateLimitMutation = useMutation({
+    mutationFn: async ({ integrationId, limit }: { integrationId: string; limit: number }) => {
+      await apiRequest("PATCH", `/api/integrations/${integrationId}/outreach-limit`, { initialOutreachLimit: limit });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/integrations'] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
+      toast({ title: "Daily limit updated" });
+      setEditingLimit(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to update limit", description: err.message, variant: "destructive" });
+    }
+  });
 
   const totalBounces = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realBounceCount ?? 0), 0);
   const totalSpam = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realSpamCount ?? 0), 0);
@@ -259,6 +277,36 @@ export default function DeliverabilityPage() {
                              <AlertTriangle className="w-3 h-3 mr-1" />}
                             {healthLabel}
                           </Badge>
+                          {editingLimit?.id === mb.id ? (
+                            <div className="flex items-center gap-1">
+                              <Input
+                                type="number"
+                                min={1}
+                                max={250}
+                                value={editingLimit.value}
+                                onChange={(e) => setEditingLimit({ id: mb.id, value: e.target.value })}
+                                className="h-7 w-16 text-xs px-2"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const val = parseInt(editingLimit.value);
+                                    if (val >= 1 && val <= 250) updateLimitMutation.mutate({ integrationId: mb.id, limit: val });
+                                  }
+                                  if (e.key === 'Escape') setEditingLimit(null);
+                                }}
+                                autoFocus
+                              />
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-500" onClick={() => { const val = parseInt(editingLimit.value); if (val >= 1 && val <= 250) updateLimitMutation.mutate({ integrationId: mb.id, limit: val }); }} disabled={updateLimitMutation.isPending}>
+                                <Check className="h-3 w-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingLimit(null)}>
+                                <X className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button variant="ghost" size="sm" className="h-6 text-[10px] font-bold gap-1 px-2 text-muted-foreground hover:text-foreground" onClick={() => setEditingLimit({ id: mb.id, value: String(dailyLimit) })}>
+                              <Edit3 className="h-2.5 w-2.5" /> {dailyLimit}/day
+                            </Button>
+                          )}
                         </div>
                       </div>
 
