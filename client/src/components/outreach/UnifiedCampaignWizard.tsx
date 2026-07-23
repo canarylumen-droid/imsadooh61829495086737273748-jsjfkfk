@@ -579,7 +579,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
           <button
             key={tag}
             onClick={() => insertTag(tag.replace(/[{}]/g, ""), field)}
-            className="text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary transition-all active:scale-95"
+            className="text-[9px] font-semibold uppercase tracking-widest px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 border border-primary/20 text-primary transition-all active:scale-95"
           >
             {tag.replace(/[{}]/g, "")}
           </button>
@@ -695,7 +695,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
               <Send className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <DialogTitle className="text-lg md:text-2xl font-black tracking-tight uppercase">Campaign Wizard</DialogTitle>
+              <DialogTitle className="text-lg md:text-2xl font-semibold tracking-tight uppercase">Campaign Wizard</DialogTitle>
               <div className="flex gap-2 mt-1">
                 {[1, 2].map(i => <div key={i} className={cn("h-1.5 rounded-full transition-all duration-500", step === i ? "w-8 bg-primary" : "w-2 bg-muted")} />)}
               </div>
@@ -713,12 +713,12 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                     <motion.div key="step1" initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.9fr)] gap-6">
                       <div className="space-y-6">
                         <div className="space-y-3">
-                          <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Campaign Identity</Label>
+                          <Label className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Campaign Identity</Label>
                           <Input value={campaignName} onChange={e => setCampaignName(e.target.value)} placeholder="e.g. Project Nova" className="h-12 bg-muted/20 border-0 font-semibold text-sm rounded-xl" />
                         </div>
                         <div className="space-y-4">
                           <div className="flex flex-wrap items-center justify-between gap-3">
-                            <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Connected Inboxes</Label>
+                            <Label className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Connected Inboxes</Label>
                             <div className="flex items-center gap-2">
                               <Badge variant={exceedsMailboxLimit ? 'destructive' : 'secondary'} className="text-[9px] font-bold uppercase">
                                 {isFinite(campaignLimits.maxMailboxesPerCampaign)
@@ -750,7 +750,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                           <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 mb-4">
                             <div className="flex items-center justify-between gap-4">
                               <div className="flex-1">
-                                <Label className="text-[10px] font-black uppercase tracking-widest opacity-60">Default Per-Mailbox Limit</Label>
+                                <Label className="text-[10px] font-semibold uppercase tracking-widest opacity-60">Default Per-Mailbox Limit</Label>
                                 <div className="flex items-center gap-3 mt-2">
                                   <Input
                                     type="number"
@@ -821,7 +821,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                               return (
                                 <div key={mb.id}
                                   className={cn("p-4 rounded-xl border transition-all", isSelected ? "border-primary bg-primary/5 shadow-sm" : "border-border/40 opacity-70")}>
-                                  <div className="flex items-start justify-between gap-3 mb-3 text-xs font-black">
+                                  <div className="flex items-start justify-between gap-3 mb-3 text-xs font-semibold">
                                     <button
                                       type="button"
                                       onClick={() => isSelected ? setSelectedMailboxes(selectedMailboxes.filter(id => id !== mb.id)) : setSelectedMailboxes([...selectedMailboxes, mb.id])}
@@ -842,12 +842,12 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                   </div>
                                   {isSelected && (
                                     <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-1" onClick={e => e.stopPropagation()}>
-                                      <div className="flex justify-between text-[9px] font-black uppercase tracking-widest">
+                                      <div className="flex justify-between text-[9px] font-semibold uppercase tracking-widest">
                                         <span className="opacity-40">Max per Day (initial + follow-ups)</span>
                                         <span className="text-primary">{mailboxLimits[mb.id] || 35}/day</span>
                                       </div>
                                       <div className="text-[9px] text-muted-foreground/60 italic mb-2">
-                                        Max emails per day (initial + follow-ups, excludes replies). Emails are spread evenly across 24h.
+                                        Spreads evenly across 24h.
                                       </div>
                                       <Slider 
                                         value={[mailboxLimits[mb.id] || 35]} 
@@ -860,7 +860,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                         max={safeCeiling} 
                                         step={5} 
                                       />
-                                      <div className="flex justify-between text-[9px] font-black tracking-wider mt-1">
+                                      <div className="flex justify-between text-[9px] font-semibold tracking-wider mt-1">
                                         <span className="text-muted-foreground/60">~{Math.round((mailboxLimits[mb.id] || 35) / 24)}/hr (1 every {Math.round(1440 / (mailboxLimits[mb.id] || 35))}min)</span>
                                         <span className="text-primary">{mailboxLimits[mb.id] || 35}/day max</span>
                                       </div>
@@ -872,7 +872,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                           <span className="text-amber-400">{initialOutreachLimits[mb.id] ?? 50}/day</span>
                                         </div>
                                         <div className="text-[9px] text-muted-foreground/60 italic mb-2">
-                                          How many to send on day one. The app auto-ramps up toward the max daily cap as reputation builds.
+                                          Day one send rate. Auto-ramps as reputation builds.
                                         </div>
                                         <Slider 
                                           value={[initialOutreachLimits[mb.id] ?? 50]} 
@@ -909,7 +909,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                       </div>
                       <div className="space-y-6">
                         <div className="space-y-4">
-                          <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Target Population</Label>
+                          <Label className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Target Population</Label>
                           <div className="grid grid-cols-2 gap-4">
                             <button onClick={() => setSourceType('database')} className={cn("p-4 rounded-2xl border-2 text-left transition-all", sourceType === 'database' ? "border-primary bg-primary/5 shadow-lg" : "border-border/40")}>
                               <Database className="w-5 h-5 mb-2 opacity-50" />
@@ -970,19 +970,19 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                              <div className="flex items-center gap-2 text-primary">
                                <Sparkles className="w-5 h-5 animate-pulse" />
-                               <span className="text-[10px] font-black uppercase tracking-widest">Growth Engine Plan</span>
+                               <span className="text-[10px] font-semibold uppercase tracking-widest">Growth Engine Plan</span>
                                <Badge variant={exceedsLeadLimit ? 'destructive' : 'secondary'} className="text-[9px] font-bold uppercase">
                                  {leads.length}/{campaignLimits.maxLeadsPerCampaign} Leads
                                </Badge>
                              </div>
                              <div className="flex items-center gap-2">
                                {hasUnsafeMailbox && (
-                                 <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[9px] font-black px-3 py-1">
+                                 <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-[9px] font-semibold px-3 py-1">
                                    REPUTATION RISK
                                  </Badge>
                                )}
                                {totalDailyVolume > 0 && !hasUnsafeMailbox && (
-                                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[9px] font-black px-3 py-1">
+                                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/20 text-[9px] font-semibold px-3 py-1">
                                    HEALTHY VELOCITY
                                  </Badge>
                                )}
@@ -991,21 +991,21 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
                             <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
                               <div>
-                                <p className="text-[9px] uppercase font-black opacity-40 mb-1">Daily Capacity</p>
+                                <p className="text-[9px] uppercase font-semibold opacity-40 mb-1">Daily Capacity</p>
                                 <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-muted-foreground/30" : "text-foreground")}>
                                   ~{totalDailyVolume}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground/60">Total throughput</p>
                               </div>
                               <div>
-                                <p className="text-[9px] uppercase font-black opacity-40 mb-1">Per Mailbox</p>
+                                <p className="text-[9px] uppercase font-semibold opacity-40 mb-1">Per Mailbox</p>
                                 <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-muted-foreground/30" : "text-foreground")}>
                                   {selectedMailboxes.length > 0 ? Math.floor(totalDailyVolume / selectedMailboxes.length) : 0}
                                 </p>
                                 <p className="text-[10px] text-muted-foreground/60">Avg. daily limit</p>
                               </div>
                               <div>
-                                <p className="text-[9px] uppercase font-black opacity-40 text-amber-600 mb-1 flex items-center gap-1">
+                                <p className="text-[9px] uppercase font-semibold opacity-40 text-amber-600 mb-1 flex items-center gap-1">
                                   Boost Buffer
                                 </p>
                                 <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-amber-600/30" : "text-amber-600")}>
@@ -1014,7 +1014,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                 <p className="text-[10px] text-amber-600/60">Reserved headroom</p>
                               </div>
                               <div>
-                                <p className="text-[9px] uppercase font-black opacity-40 text-primary mb-1">
+                                <p className="text-[9px] uppercase font-semibold opacity-40 text-primary mb-1">
                                   {syncLimit === 'all' ? 'Workforce Velocity' : 'Campaign Velocity'}
                                 </p>
                                 <p className={cn("text-2xl font-bold tracking-tight transition-all", totalDailyVolume === 0 ? "text-primary/30" : "text-primary")}>
@@ -1039,7 +1039,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             )}>
                               <div className="flex items-center gap-2 mb-2">
                                 <Sparkles className={cn("w-4 h-4", isExtendedTimeline ? "text-amber-500" : "text-primary")} />
-                                <span className={cn("text-[10px] font-black uppercase tracking-widest", isExtendedTimeline ? "text-amber-600" : "text-primary")}>
+                                <span className={cn("text-[10px] font-semibold uppercase tracking-widest", isExtendedTimeline ? "text-amber-600" : "text-primary")}>
                                   {isExtendedTimeline ? "Timeline Optimization Required" : "High Volume Projection"}
                                 </span>
                               </div>
@@ -1059,7 +1059,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                   {step === 2 && (
                     <motion.div key="step2" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} className="space-y-8">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-6 border-b border-border/10">
-                        <Label className="text-xs font-black uppercase tracking-[0.2em] opacity-40">Sequence Designer ({1 + (enableFollowups ? followups.length : 0)} {enableFollowups ? 'Steps' : 'Email'})</Label>
+                        <Label className="text-xs font-semibold uppercase tracking-[0.2em] opacity-40">Sequence Designer ({1 + (enableFollowups ? followups.length : 0)} {enableFollowups ? 'Steps' : 'Email'})</Label>
                         <Button onClick={handleGenerateSequence} disabled={isGeneratingAI} className="rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground gap-3 font-bold uppercase tracking-wider text-xs px-6 h-11 w-full sm:w-auto">
                           {isGeneratingAI ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />} AI Wizard Generate
                         </Button>
@@ -1069,7 +1069,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         <div className="p-5 sm:p-6 bg-primary/5 rounded-xl border border-primary/20 flex flex-col gap-4 col-span-1 md:col-span-2">
                           <div className="flex items-center justify-between gap-4">
                             <div>
-                              <p className="text-[11px] font-black uppercase text-primary">AI Autonomous Engine</p>
+                              <p className="text-[11px] font-semibold uppercase text-primary">AI Autonomous Engine</p>
                               <p className="text-[10px] opacity-60 italic mt-1 max-w-lg">Autonomously manages follow-ups, bookings, and payments via AI intelligence.</p>
                             </div>
                             <Switch checked={aiAutonomousMode} onCheckedChange={setAiAutonomousMode} className="scale-125 data-[state=checked]:bg-primary" />
@@ -1079,8 +1079,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                             <div className="space-y-4 pt-4 border-t border-primary/10 animate-in fade-in slide-in-from-top-2">
                               <div className="flex items-center justify-between">
                                 <div>
-                                  <p className="text-[10px] font-black uppercase">Let AI Adjust Copy</p>
-                                  <p className="text-[9px] opacity-60 italic mt-1 font-bold text-primary">Per-lead dynamic rewriter. If a lead's reply contradicts your planned follow-up, AI will automatically rewrite the next message.</p>
+                                  <p className="text-[10px] font-semibold uppercase">Let AI Adjust Copy</p>
+                                   <p className="text-[9px] opacity-60 italic mt-1 font-bold text-primary">AI rewrites follow-ups when replies contradict the planned message.</p>
                                 </div>
                                 <Switch checked={aiAdjustCopy} onCheckedChange={setAiAdjustCopy} className="scale-110" />
                               </div>
@@ -1088,28 +1088,28 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                               <div className="p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10 flex items-start gap-3">
                                 <Sparkles className="w-4 h-4 text-emerald-500 mt-0.5" />
                                 <div>
-                                  <p className="text-[10px] font-black uppercase text-emerald-600 tracking-widest">Autonomous pacing active</p>
-                                  <p className="text-[9px] text-emerald-600/70 font-bold">The engine can pace, retry, and rebalance within the selected mailbox limits. Unsafe mailbox limits stay blocked at launch.</p>
+                                  <p className="text-[10px] font-semibold uppercase text-emerald-600 tracking-widest">Autonomous pacing active</p>
+                                   <p className="text-[9px] text-emerald-600/70 font-bold">Paces sends within mailbox limits. Unsafe mailboxes stay blocked.</p>
                                 </div>
                               </div>
                             </div>
                           )}
                         </div>
                         <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 space-y-3">
-                           <Label className="text-[9px] font-black uppercase opacity-40">Reply-To Routing</Label>
+                           <Label className="text-[9px] font-semibold uppercase opacity-40">Reply-To Routing</Label>
                            <Input value={replyTo} onChange={e => setReplyTo(e.target.value)} placeholder="alias@domain.com" className="bg-background border-border/20 font-semibold text-xs h-11 rounded-xl" />
                            <p className="text-[8px] text-muted-foreground/70 font-bold leading-relaxed">When leads reply, their response goes to this address instead of your sending mailbox. Leave empty to use the default sender address.</p>
                         </div>
                         <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 flex items-center justify-between gap-4">
                            <div>
-                             <p className="text-[10px] font-black uppercase">Weekend Protection</p>
+                             <p className="text-[10px] font-semibold uppercase">Weekend Protection</p>
                              <p className="text-[9px] opacity-40 mt-1 text-emerald-600">Pauses sending on Saturdays/Sundays</p>
                            </div>
                            <Switch checked={excludeWeekends} onCheckedChange={setExcludeWeekends} className="scale-110" />
                         </div>
                         <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 flex items-center justify-between gap-4">
                            <div>
-                             <p className="text-[10px] font-black uppercase">Thread Follow-ups</p>
+                             <p className="text-[10px] font-semibold uppercase">Thread Follow-ups</p>
                              <p className="text-[9px] opacity-40 mt-1 text-primary">Replies in the same email thread for better deliverability</p>
                            </div>
                             <Switch checked={threadFollowUp} onCheckedChange={v => {
@@ -1124,7 +1124,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         {/* Enable Follow-ups toggle */}
                         <div className="p-5 sm:p-6 bg-muted/10 rounded-xl border border-border/10 flex items-center justify-between gap-4">
                           <div>
-                            <p className="text-[10px] font-black uppercase">Enable Follow-up Sequence</p>
+                            <p className="text-[10px] font-semibold uppercase">Enable Follow-up Sequence</p>
                             <p className="text-[9px] opacity-40 mt-1">Add automated follow-up emails after the initial send</p>
                           </div>
                           <Switch
@@ -1144,15 +1144,15 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                            <div className="text-[10px] font-black uppercase opacity-40 mb-1">Forecast</div>
+                            <div className="text-[10px] font-semibold uppercase opacity-40 mb-1">Forecast</div>
                             <div className="text-lg font-bold tracking-tight">{totalCampaignVolume.toLocaleString()} <span className="text-[10px] opacity-40 font-normal">EMAILS</span></div>
                           </div>
                           <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
-                            <div className="text-[10px] font-black uppercase opacity-40 mb-1">Batch Completion</div>
+                            <div className="text-[10px] font-semibold uppercase opacity-40 mb-1">Batch Completion</div>
                             <div className="text-lg font-bold tracking-tight">{estimatedDaysToFinish} <span className="text-[10px] opacity-40 font-normal">DAYS</span></div>
                           </div>
                            <div className={cn("p-4 rounded-2xl border transition-all", enableFollowups && totalTimelineDays > 28 ? "bg-orange-500/10 border-orange-500/20" : "bg-primary/5 border-primary/10")}>
-                             <div className="text-[10px] font-black uppercase opacity-40 mb-1">Full Sequence</div>
+                             <div className="text-[10px] font-semibold uppercase opacity-40 mb-1">Full Sequence</div>
                              <div className="text-lg font-bold tracking-tight">{totalTimelineDays} <span className="text-[10px] opacity-40 font-normal">{enableFollowups ? "DAYS" : "DAYS (INITIAL ONLY)"}</span></div>
                              {enableFollowups && delaySummary && (
                                <div className="text-[8px] text-muted-foreground/60 font-bold mt-1 uppercase tracking-wider">Initial → {delaySummary}</div>
@@ -1167,8 +1167,8 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         {enableFollowups && (
                           <div className="space-y-3 pt-2 pb-4 border-b border-border/10">
                             <div className="flex items-center justify-between">
-                              <Label className="text-[10px] font-black uppercase tracking-widest opacity-40">Sequence Duration Goal: {targetDays} Days</Label>
-                              <Badge className="bg-primary/10 text-primary text-[8px] font-black w-fit">{minimumDaysAtCurrentCapacity || 0}d minimum</Badge>
+                              <Label className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Sequence Duration Goal: {targetDays} Days</Label>
+                              <Badge className="bg-primary/10 text-primary text-[8px] font-semibold w-fit">{minimumDaysAtCurrentCapacity || 0}d minimum</Badge>
                             </div>
                             <Slider value={[targetDays]} onValueChange={v => setTargetDays(v[0])} min={1} max={90} step={1} className="py-2" />
                             <p className="text-[10px] text-muted-foreground/60">Set your target timeline. Follow-up delays and mailbox capacity determine the actual pace.</p>
@@ -1181,12 +1181,12 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                         <div className="flex items-center gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
                           <TabsList className="h-16 flex-1 bg-muted/20 p-2 rounded-2xl border border-border/10 flex gap-3 min-w-max">
-                            <TabsTrigger value="S1" className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">Initial Email</TabsTrigger>
+                            <TabsTrigger value="S1" className="flex-1 rounded-xl text-[10px] font-semibold uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">Initial Email</TabsTrigger>
                             {enableFollowups && followups.map((_, i) => (
-                              <TabsTrigger key={`S${i+2}`} value={`S${i+2}`} className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">{`S${i+2}`}</TabsTrigger>
+                              <TabsTrigger key={`S${i+2}`} value={`S${i+2}`} className="flex-1 rounded-xl text-[10px] font-semibold uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">{`S${i+2}`}</TabsTrigger>
                             ))}
                             {!aiAutonomousMode && (
-                              <TabsTrigger value="Auto" className="flex-1 rounded-xl text-[10px] font-black uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">Auto Reply</TabsTrigger>
+                              <TabsTrigger value="Auto" className="flex-1 rounded-xl text-[10px] font-semibold uppercase tracking-tighter data-[state=active]:bg-background data-[state=active]:shadow-xl transition-all h-full px-6">Auto Reply</TabsTrigger>
                             )}
                           </TabsList>
                           
@@ -1214,7 +1214,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                       className="h-16 w-16 rounded-2xl border-dashed border-orange-500/20 hover:border-orange-500/50 hover:bg-orange-500/5 transition-all group"
                                       title="Remove last follow-up step"
                                     >
-                                      <span className="text-[18px] text-orange-500 font-black leading-none">&#8722;</span>
+                                      <span className="text-[18px] text-orange-500 font-semibold leading-none">&#8722;</span>
                                     </Button>
                                     <Button 
                                       variant="outline" 
@@ -1237,7 +1237,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         <TabsContent value="S1" className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
                            <div className="flex items-center gap-2 mb-4">
                              <FileText className="w-4 h-4 text-muted-foreground" />
-                             <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Template</span>
+                             <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Template</span>
                              <Select value={selTemplate} onValueChange={applyTemplate}>
                                <SelectTrigger className="h-8 w-[200px] text-[11px] bg-muted/10 border-border/20 rounded-full">
                                  <SelectValue placeholder="Pre-built templates..." />
@@ -1285,7 +1285,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                   </Button>
                                   <div className="flex items-center gap-2">
                                     <Clock className="w-3 h-3 text-primary/60" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-primary/80">Sends after</span>
+                                    <span className="text-[10px] font-semibold uppercase tracking-widest text-primary/80">Sends after</span>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-4">
@@ -1297,7 +1297,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                       setFollowups(newF);
                                     }}
                                   >
-                                    <SelectTrigger className="w-[130px] h-9 text-[11px] uppercase font-black border-primary/20 bg-primary/5"><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="w-[130px] h-9 text-[11px] uppercase font-semibold border-primary/20 bg-primary/5"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                       {Array.from({ length: 30 }, (_, index) => index + 1).map(d => (
                                         <SelectItem key={d} value={d.toString()}>{d} {d === 1 ? 'Day' : 'Days'}</SelectItem>
@@ -1305,7 +1305,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                                     </SelectContent>
                                   </Select>
                                   <div className="flex items-center gap-2">
-                                    <Label className="text-[9px] font-black uppercase tracking-widest opacity-40">Breakup</Label>
+                                    <Label className="text-[9px] font-semibold uppercase tracking-widest opacity-40">Breakup</Label>
                                     <Switch 
                                       checked={f.isBreakup} 
                                       onCheckedChange={v => {
@@ -1366,7 +1366,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
 
                          {!aiAutonomousMode && (
                          <TabsContent value="Auto" className="space-y-6">
-                              <div className="p-4 bg-muted/10 border border-border/10 rounded-2xl text-[10px] font-bold">Static Auto-Reply: Sent when a lead first replies (only used when AI mode is off).</div>
+                               <div className="p-4 bg-muted/10 border border-border/10 rounded-2xl text-[10px] font-bold">Static auto-reply sent when lead first replies (AI mode off).</div>
                               <div className="space-y-2">
                                 {renderVarDropdown("auto")}
                                 <Textarea value={autoReplyBody} onChange={e => setAutoReplyBody(e.target.value)} className="min-h-[250px] bg-muted/5 border border-border/40 rounded-xl p-6 text-sm font-sans" placeholder="Thanks for reaching out! We'll be with you soon..." />
@@ -1380,7 +1380,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                         <div className="p-5 rounded-xl border border-border/20 bg-card/50">
                           <div className="flex items-center gap-2 mb-4">
                             <Mail className="h-4 w-4 text-muted-foreground" />
-                            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Unsubscribe</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Unsubscribe</span>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
                             {unsubscribeOptions.map(opt => (
@@ -1425,7 +1425,7 @@ export default function UnifiedCampaignWizard({ isOpen, onClose, onSuccess, init
                          <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto">
                            <CheckCircle2 className="h-6 w-6 text-emerald-500" />
                          </div>
-                         <h3 className="text-lg font-black tracking-tight">Campaign Launched</h3>
+                         <h3 className="text-lg font-semibold tracking-tight">Campaign Launched</h3>
                          <p className="text-sm text-muted-foreground">{launchProgress.name} is now active</p>
                        </div>
                        <div className="space-y-3">

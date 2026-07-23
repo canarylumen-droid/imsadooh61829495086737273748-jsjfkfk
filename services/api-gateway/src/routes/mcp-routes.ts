@@ -11,8 +11,15 @@ const router = Router();
 const TOOL_INPUT_SCHEMAS: Record<string, Record<string, any>> = {
   get_campaigns: {},
   get_leads: { status: { type: 'string', description: 'Filter by lead status' }, limit: { type: 'number', description: 'Max results (default 100)' } },
+  get_lead: { leadId: { type: 'string', description: 'Lead ID' } },
+  update_lead: { leadId: { type: 'string', description: 'Lead ID' }, status: { type: 'string', description: 'New status' } },
   get_analytics: {},
   get_inbox: { limit: { type: 'number', description: 'Max messages (default 50)' } },
+  get_messages: { leadId: { type: 'string', description: 'Lead ID to get messages for' }, limit: { type: 'number', description: 'Max messages (default 20)' } },
+  get_integrations: {},
+  get_deals: {},
+  get_deliverability: {},
+  get_warmup: {},
   send_message: { to: { type: 'string', description: 'Recipient email' }, subject: { type: 'string' }, body: { type: 'string' } },
   manage_webhooks: { action: { type: 'string', enum: ['list', 'create'] }, url: { type: 'string' }, events: { type: 'array', items: { type: 'string' } } },
   delete_lead: { leadId: { type: 'string', description: 'Lead ID to delete' } },
@@ -22,8 +29,15 @@ const TOOL_INPUT_SCHEMAS: Record<string, Record<string, any>> = {
 const MCP_TOOLS: Record<string, { description: string; neededScope?: string; blocked?: boolean }> = {
   get_campaigns: { description: 'List campaigns and performance' },
   get_leads: { description: 'Query leads by status, date, category' },
+  get_lead: { description: 'Get a single lead by ID' },
+  update_lead: { description: 'Update lead status', neededScope: 'send_message' },
   get_analytics: { description: 'Dashboard analytics data' },
   get_inbox: { description: 'Read inbox messages' },
+  get_messages: { description: 'Get messages for a lead' },
+  get_integrations: { description: 'List connected mailboxes' },
+  get_deals: { description: 'Get deals pipeline' },
+  get_deliverability: { description: 'Get deliverability stats' },
+  get_warmup: { description: 'Get warmup status' },
   send_message: { description: 'Send outreach messages', neededScope: 'send_message' },
   manage_webhooks: { description: 'Create & manage webhooks', neededScope: 'manage_webhooks' },
   delete_lead: { description: 'Delete a lead permanently', neededScope: 'dangerous' },
@@ -83,6 +97,41 @@ async function runTool(toolName: string, args: any, userId: string, permissionLe
     case 'get_inbox': {
       const result = await db.execute(sql`SELECT id, subject, LEFT(body, 100) as snippet, created_at, direction, provider FROM messages WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 50`);
       return { content: [{ type: 'text', text: JSON.stringify(result.rows) }] };
+    }
+    case 'get_lead': {
+      if (!args.leadId) return mcpError(400, 'get_lead requires: leadId');
+      const lead = await db.execute(sql`SELECT id, email, name, status, company, phone, created_at FROM leads WHERE id = ${args.leadId} AND user_id = ${userId} LIMIT 1`);
+      if (lead.rows.length === 0) return mcpError(404, 'Lead not found');
+      return { content: [{ type: 'text', text: JSON.stringify(lead.rows[0]) }] };
+    }
+    case 'update_lead': {
+      if (!args.leadId || !args.status) return mcpError(400, 'update_lead requires: leadId, status');
+      const validStatuses = ['new', 'contacted', 'replied', 'converted', 'not_interested', 'unsubscribed', 'cold', 'booked', 'warm'];
+      if (!validStatuses.includes(args.status)) return mcpError(400, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
+      await db.execute(sql`UPDATE leads SET status = ${args.status} WHERE id = ${args.leadId} AND user_id = ${userId}`);
+      return { content: [{ type: 'text', text: JSON.stringify({ success: true, message: `Lead ${args.leadId} updated to ${args.status}` }) }] };
+    }
+    case 'get_messages': {
+      if (!args.leadId) return mcpError(400, 'get_messages requires: leadId');
+      const limit = args.limit || 20;
+      const msgs = await db.execute(sql`SELECT id, subject, LEFT(body, 200) as snippet, created_at, direction FROM messages WHERE lead_id = ${args.leadId} AND user_id = ${userId} ORDER BY created_at DESC LIMIT ${limit}`);
+      return { content: [{ type: 'text', text: JSON.stringify(msgs.rows) }] };
+    }
+    case 'get_integrations': {
+      const ints = await db.execute(sql`SELECT id, email, provider, connected, warmup_status FROM integrations WHERE user_id = ${userId} ORDER BY created_at ASC`);
+      return { content: [{ type: 'text', text: JSON.stringify(ints.rows) }] };
+    }
+    case 'get_deals': {
+      const deals = await db.execute(sql`SELECT id, name, value, stage, contact_email, status FROM deals_pipeline WHERE user_id = ${userId} ORDER BY created_at DESC LIMIT 50`);
+      return { content: [{ type: 'text', text: JSON.stringify(deals.rows) }] };
+    }
+    case 'get_deliverability': {
+      const stats = await db.execute(sql`SELECT placement, COUNT(*) as count FROM email_tracking WHERE user_id = ${userId} GROUP BY placement`);
+      return { content: [{ type: 'text', text: JSON.stringify(stats.rows) }] };
+    }
+    case 'get_warmup': {
+      const warmup = await db.execute(sql`SELECT id, email, status, daily_sent_count, reputation_score FROM warmup_mailboxes WHERE integration_id IN (SELECT id FROM integrations WHERE user_id = ${userId})`);
+      return { content: [{ type: 'text', text: JSON.stringify(warmup.rows) }] };
     }
     case 'send_message': {
       if (!args.to || !args.subject || !args.body) {

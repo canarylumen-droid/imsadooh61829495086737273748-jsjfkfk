@@ -568,7 +568,7 @@ export default function AnalyticsPage() {
                         <h3 className="text-lg font-bold tracking-tight">AI Decision Engine</h3>
                     </div>
                     <p className="text-sm text-muted-foreground leading-relaxed mb-6 font-medium">
-                        Audnix logs every deterministic decision cycle. The **Transparency Audit Log** provides transparency into how the AI interprets leads, handles objections, and triggers automation rules.
+                        Track AI decisions per lead — what the AI interpreted, why it chose that action, and which rules fired.
                     </p>
                     <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 rounded-xl bg-muted/30 border border-border/50">
@@ -650,7 +650,7 @@ export default function AnalyticsPage() {
                             <h2 className="text-xl font-bold tracking-tight flex items-center gap-3">
                                 <Activity className="w-5 h-5 text-primary" /> Transparency Audit Log
                             </h2>
-                            <p className="text-xs text-muted-foreground mt-1 lowercase first-letter:uppercase font-semibold">Historical trace of all AI decision cycles and lead intersections</p>
+                            <p className="text-xs text-muted-foreground mt-1 lowercase first-letter:uppercase font-semibold">AI decision log per lead</p>
                         </div>
                         <ScrollArea className="flex-1 p-8">
                             <div className="space-y-8">
