@@ -64,7 +64,7 @@ export default function DeliverabilityPage() {
 
   const { data: integrationsData, isLoading, refetch } = useQuery({
     queryKey: ['/api/integrations'],
-    select: (d: any) => (d.integrations || d || []).filter((i: any) => ['gmail', 'outlook', 'custom_email'].includes(i.provider)),
+    select: (d: any) => (d.integrations || d || []).filter((i: any) => ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected),
   });
 
   const { data: placementData } = useQuery<InboxPlacementData>({
