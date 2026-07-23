@@ -714,6 +714,20 @@ export async function runDatabaseMigrations() {
                     CREATE INDEX dal_email_idx ON deleted_accounts_log(email);
                 END IF;
 
+                -- MCP logs for API key usage tracking
+                IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='mcp_logs') THEN
+                    CREATE TABLE mcp_logs (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        user_id UUID,
+                        api_key_id UUID,
+                        tool_name TEXT,
+                        input JSONB,
+                        success BOOLEAN,
+                        error TEXT,
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                END IF;
+
             END $$;
         `); });
         console.log("✅ Emergency schema synchronization completed.");
