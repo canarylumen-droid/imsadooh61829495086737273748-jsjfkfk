@@ -81,6 +81,7 @@ export default function InsightsPage() {
   const insights = insightsData?.summary || null;
   const hasRealData = !!insightsData && (
     !!insights ||
+    hasCampaign ||
     insightsData.trends.leadGrowth !== 0 ||
     insightsData.trends.conversionGrowth !== 0 ||
     insightsData.predictions.expectedConversions > 0 ||

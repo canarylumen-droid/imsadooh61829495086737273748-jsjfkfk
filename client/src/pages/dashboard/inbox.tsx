@@ -742,6 +742,30 @@ export default function InboxPage() {
   const isHtml = (text: string) => /<[a-z][\s\S]*>/i.test(text);
   const stripHtml = (text: string) => text.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').replace(/\s+/g, ' ').trim();
 
+  // Strip quoted reply text — keeps only the actual reply, removes forwarded/quoted content
+  const stripQuotedText = (text: string) => {
+    const markers = [
+      /\n-{2,}original\s+message-{2,}\s*\n/i,
+      /\n_{2,}original\s+message_{2,}\s*\n/i,
+      /\nOn\s+.+?\bwrote:\s*\n/i,
+      /\nFrom:.*?\nSent:.*?\nTo:.*?\n/i,
+      /\nFrom:\s+[^\n]+\n(?:To|Cc|Bcc|Sent|Date):/i,
+      /\n>+\s*.+/,
+    ];
+    let stripped = text;
+    for (const marker of markers) {
+      const match = stripped.match(marker);
+      if (match && match.index !== undefined) {
+        const before = stripped.substring(0, match.index).trim();
+        if (before.length > 0) {
+          stripped = before;
+          break;
+        }
+      }
+    }
+    return stripped.replace(/^>+\s?/gm, '').trim();
+  };
+
   // Highlighting helper
   const HighlightText = useCallback(({ text, query }: { text: string, query: string }) => {
     if (!query) return <>{text}</>;
@@ -1663,7 +1687,7 @@ export default function InboxPage() {
                                   {lead.snippet && lead.status !== 'new' && lead.metadata?.lastMessageDirection === 'outbound' && !lead.metadata?.lastMessageIsRead && (
                                     <Check className="h-3 w-3 shrink-0 text-muted-foreground/50" />
                                   )}
-                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{(lead.snippet ? stripHtml(lead.snippet).replace(/^(References|In-Reply-To|Message-ID|Content-Type|MIME-Version|Date|From|To|Subject|DKIM-Signature|Authentication-Results|Received|X-|ARC-).*$/gm, '').trim().substring(0, 120) : "No messages") || "No messages"}</span>
+                                  <span className="overflow-hidden text-ellipsis whitespace-nowrap min-w-0">{(lead.snippet ? stripQuotedText(stripHtml(lead.snippet)).replace(/^(References|In-Reply-To|Message-ID|Content-Type|MIME-Version|Date|From|To|Subject|DKIM-Signature|Authentication-Results|Received|X-|ARC-).*$/gm, '').trim().substring(0, 120) : "No messages") || "No messages"}</span>
                                 </span>
                               )}
                             </p>
@@ -1761,7 +1785,7 @@ export default function InboxPage() {
                             <Badge variant="outline" className="text-[8px] h-4 px-1 text-emerald-500 border-emerald-500/30">Delivered</Badge>
                           )}
                         </div>
-                        <p className="text-xs whitespace-pre-wrap break-words">{msg.body || '(no content)'}</p>
+                        <p className="text-xs whitespace-pre-wrap break-words">{stripQuotedText(msg.body || '' ) || '(no content)'}</p>
                       </div>
                     </div>
                   ))
@@ -2217,6 +2241,8 @@ export default function InboxPage() {
                               let displayText = msg.body || msg.content || '';
                               // Strip unresolved variables {{...}}
                               displayText = displayText.replace(/\{\{[^}]+\}\}/g, '');
+                              // Strip quoted reply text (> On ... wrote:, ---Original Message---)
+                              displayText = stripQuotedText(displayText);
                               // Strip raw HTML if detected
                               const isHtmlContent = isHtml(displayText);
                               if (isHtmlContent) {
@@ -2224,6 +2250,14 @@ export default function InboxPage() {
                               }
                               return <HighlightText text={displayText} query={searchQuery} />;
                             })()}
+                          </div>
+                          {/* From/To label */}
+                          <div className="text-[9px] mt-2 opacity-40 font-medium">
+                            {msg.direction === 'inbound'
+                              ? <span>From: {activeLead?.name || activeLead?.email || 'Unknown'}</span>
+                              : activeLead?.email
+                                ? <span>To: {activeLead.email}</span>
+                                : null}
                           </div>
                         <button
                           onClick={() => setReplyToMsg(msg)}
