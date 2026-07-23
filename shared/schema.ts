@@ -712,7 +712,10 @@ export const emailTracking = pgTable("email_tracking", {
   integrationId: uuid("integration_id").references(() => integrations.id, { onDelete: "set null" }),
   recipientEmail: text("recipient_email").notNull(),
   subject: text("subject"),
+  messageId: text("message_id"),
   token: text("token").notNull().unique(),
+  placement: text("placement").notNull().default('unknown'),
+  placementUpdatedAt: timestamp("placement_updated_at"),
   sentAt: timestamp("sent_at").notNull(),
   firstOpenedAt: timestamp("first_opened_at"),
   firstClickedAt: timestamp("first_clicked_at"),
@@ -725,6 +728,7 @@ export const emailTracking = pgTable("email_tracking", {
   emailTrackingIntegrationIdIdx: index("email_tracking_integration_id_idx").on(table.integrationId),
   emailTrackingTokenIdx: index("email_tracking_token_idx").on(table.token),
   emailTrackingLeadIdIdx: index("email_tracking_lead_id_idx").on(table.leadId),
+  emailTrackingPlacementIdx: index("email_tracking_placement_idx").on(table.placement),
 }));
 
 export const emailEvents = pgTable("email_events", {

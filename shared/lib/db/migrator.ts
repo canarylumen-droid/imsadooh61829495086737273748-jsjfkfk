@@ -677,6 +677,9 @@ export async function runDatabaseMigrations() {
                     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='email_tracking' AND column_name='placement_updated_at') THEN
                         ALTER TABLE email_tracking ADD COLUMN placement_updated_at TIMESTAMP;
                     END IF;
+                    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='email_tracking' AND column_name='message_id') THEN
+                        ALTER TABLE email_tracking ADD COLUMN message_id TEXT;
+                    END IF;
                     IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'email_tracking_integration_id_idx') THEN
                         CREATE INDEX email_tracking_integration_id_idx ON email_tracking(integration_id);
                     END IF;

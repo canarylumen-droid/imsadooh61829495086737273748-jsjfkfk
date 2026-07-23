@@ -1295,6 +1295,27 @@ Wire DNS verification through Rust for all paths, trigger on OAuth connect, then
 - `services/lead-recovery-worker/src/worker.ts:43-67` — Redis subscription connection check (from prior session)
 - `client/src/pages/dashboard/integrations.tsx:406,1682` — DNS badge pending/amber state (from prior session)
 
+## This Session (Jul 23 2026) — Warmup Inbox Inline Viewer + Thread Messages Endpoint
+
+### Changes
+1. **Backend: thread messages endpoint** (`dashboard-routes.ts`): Added `GET /api/warmup/thread/:threadId/messages` — returns all warmup interaction messages for a thread with body, direction, placement, status, and timestamps. Verifies user owns at least one mailbox involved in the thread.
+
+2. **Frontend: inline warmup message viewer** (`inbox.tsx`):
+   - Replaced broken `warmupDetailsData` query with `warmupMessagesData` query to `/api/warmup/thread/:threadId/messages`
+   - Added `selectedWarmupThreadId` state — clicking a warmup conversation sets it, opening an inline viewer (not navigating to warmup page)
+   - Warmup viewer has back button → list, integrated "Dashboard" nav button
+   - Message bubbles: outbound right-aligned (primary/amber), inbound left-aligned (muted). Shows Sent/Received label, timestamp, Spam/Delivered badges
+   - Skeleton loading state, empty state
+   - Resets `selectedWarmupThreadId` when toggling warmup/archive modes
+
+### Deploy
+- `git push github main` then on EC2:
+  ```bash
+  cd /home/ubuntu/app && git pull
+  cd /home/ubuntu/app/client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client
+  pm2 restart audnix-api-gateway audnix-socket-server
+  ```
+
 ## This Session (Jul 23 2026) — API Gateway 502 Fix + MCP Hash Mismatch
 
 ### Root Causes

@@ -547,9 +547,16 @@ export default function InboxPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: warmupDetailsData, isLoading: warmupDetailsLoading } = useQuery<any>({
-    queryKey: ["/api/warmup/activity", { threadId: showWarmup && leadId ? leadId : undefined }],
-    enabled: showWarmup && !!leadId,
+  const [selectedWarmupThreadId, setSelectedWarmupThreadId] = useState<string | null>(null);
+
+  const { data: warmupMessagesData, isLoading: warmupMessagesLoading } = useQuery<any>({
+    queryKey: ["/api/warmup/thread", selectedWarmupThreadId, "messages"],
+    queryFn: async () => {
+      const res = await fetch(`/api/warmup/thread/${selectedWarmupThreadId}/messages`);
+      if (!res.ok) throw new Error("Failed to fetch warmup messages");
+      return res.json();
+    },
+    enabled: showWarmup && !!selectedWarmupThreadId,
     placeholderData: (prev: any) => prev,
     staleTime: 5_000,
   });
@@ -1283,7 +1290,7 @@ export default function InboxPage() {
                   variant={showArchived ? "secondary" : hasArchivedLeads ? "outline" : "ghost"}
                   size="icon"
                   className={cn("h-8 w-8", showArchived && "text-primary")}
-                  onClick={() => { setShowArchived(!showArchived); if (showWarmup) setShowWarmup(false); }}
+                  onClick={() => { setShowArchived(!showArchived); if (showWarmup) { setShowWarmup(false); setSelectedWarmupThreadId(null); } }}
                   title={showArchived ? "Hide Archived" : hasArchivedLeads ? "Show Archived" : "No archived leads"}
                 >
                   <Archive className="h-4 w-4" />
@@ -1292,7 +1299,7 @@ export default function InboxPage() {
                   variant={showWarmup ? "secondary" : "ghost"}
                   size="sm"
                   className={cn("h-8 gap-1.5 text-xs", showWarmup && "text-amber-500")}
-                  onClick={() => { setShowWarmup(!showWarmup); if (showArchived) setShowArchived(false); setFilterStatus('all'); }}
+                  onClick={() => { setShowWarmup(!showWarmup); if (showArchived) setShowArchived(false); setFilterStatus('all'); setSelectedWarmupThreadId(null); }}
                   title="Warmup conversations"
                 >
                   <Activity className="h-3.5 w-3.5" />
@@ -1419,12 +1426,11 @@ export default function InboxPage() {
                     <div
                       key={conv.id}
                       onClick={() => {
-                        setSelectedLeadIds([]);
-                        setLocation('/dashboard/warmup');
+                        setSelectedWarmupThreadId(conv.id);
                       }}
                       className={cn(
                         "p-3 cursor-pointer border-b border-border/10 transition-all relative group flex gap-3",
-                        leadId === conv.id ? "bg-amber-500/10" : "hover:bg-muted/30"
+                        selectedWarmupThreadId === conv.id ? "bg-amber-500/10" : "hover:bg-muted/30"
                       )}
                     >
                       <div className="flex gap-3 items-center w-full">
@@ -1679,19 +1685,76 @@ export default function InboxPage() {
                 </p>
               </div>
             </div>
+          ) : showWarmup && selectedWarmupThreadId ? (
+            <div className="flex-1 flex flex-col h-full min-w-0">
+              <div className="flex items-center gap-2 p-3 border-b border-border/10">
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedWarmupThreadId(null)}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-amber-400" />
+                  <span className="text-sm font-semibold">Warmup</span>
+                </div>
+                <div className="ml-auto">
+                  <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => setLocation('/dashboard/warmup')}>
+                    Dashboard
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {warmupMessagesLoading ? (
+                  <div className="space-y-3 p-4">
+                    {[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+                  </div>
+                ) : !warmupMessagesData?.messages?.length ? (
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <p className="text-sm text-muted-foreground">No messages yet</p>
+                  </div>
+                ) : (
+                  warmupMessagesData.messages.map((msg: any) => (
+                    <div key={msg.id} className={cn(
+                      "flex gap-2",
+                      msg.direction === 'outbound' ? "justify-end" : "justify-start"
+                    )}>
+                      <div className={cn(
+                        "max-w-[80%] rounded-xl p-3 border",
+                        msg.direction === 'outbound'
+                          ? "bg-primary/10 border-primary/20"
+                          : "bg-muted/50 border-border/20"
+                      )}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] font-medium text-muted-foreground">
+                            {msg.direction === 'outbound' ? 'Sent' : 'Received'}
+                          </span>
+                          {msg.sentAt && (
+                            <span className="text-[9px] text-muted-foreground/50">
+                              {new Date(msg.sentAt).toLocaleString()}
+                            </span>
+                          )}
+                          {msg.placement === 'spam' && (
+                            <Badge variant="outline" className="text-[8px] h-4 px-1 text-amber-500 border-amber-500/30">Spam</Badge>
+                          )}
+                          {msg.status === 'delivered' && (
+                            <Badge variant="outline" className="text-[8px] h-4 px-1 text-emerald-500 border-emerald-500/30">Delivered</Badge>
+                          )}
+                        </div>
+                        <p className="text-xs whitespace-pre-wrap break-words">{msg.body || '(no content)'}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
           ) : showWarmup ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center space-y-4 max-w-sm px-6">
                 <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto">
                   <Activity className="h-8 w-8 text-amber-400" />
                 </div>
-                <h3 className="text-lg font-bold">Warmup Conversation</h3>
+                <h3 className="text-lg font-bold">Warmup Conversations</h3>
                 <p className="text-sm text-muted-foreground">
-                  Warmup details and full conversation history are available on the Warmup Dashboard.
+                  Select a warmup conversation from the list to view its messages.
                 </p>
-                <Button variant="outline" size="sm" onClick={() => setLocation('/dashboard/warmup')}>
-                  Open Warmup Dashboard
-                </Button>
               </div>
             </div>
           ) : (

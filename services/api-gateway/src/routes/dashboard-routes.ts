@@ -1413,6 +1413,69 @@ router.post('/warmup/toggle', requireAuthOrApiKey, async (req: Request, res: Res
  * GET /api/warmup/activity
  * Returns hourly warmup activity for the last 24 hours
  */
+/**
+ * GET /api/warmup/thread/:threadId/messages
+ * Returns all messages for a specific warmup thread (for inline viewing).
+ */
+router.get('/warmup/thread/:threadId/messages', requireAuthOrApiKey, async (req: Request, res: Response) => {
+    try {
+        const userId = req.session?.userId!;
+        const { threadId } = req.params;
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+
+        const { db } = await import('@shared/lib/db/db.js');
+        const { warmupMailboxes, warmupInteractions, warmupThreads } = await import('@audnix/shared');
+        const { eq, and, desc, inArray } = await import('drizzle-orm');
+
+        // Verify thread belongs to user
+        const wms = await db.select({ id: warmupMailboxes.id })
+            .from(warmupMailboxes)
+            .where(eq(warmupMailboxes.userId, userId));
+        const mailboxIds = wms.map((w: any) => w.id);
+        if (mailboxIds.length === 0) { res.json({ messages: [], thread: null }); return; }
+
+        const [thread] = await db.select()
+            .from(warmupThreads)
+            .where(eq(warmupThreads.id, threadId))
+            .limit(1);
+        if (!thread) { res.status(404).json({ error: 'Thread not found' }); return; }
+
+        const messages = await db.select()
+            .from(warmupInteractions)
+            .where(and(
+                eq(warmupInteractions.threadId, threadId),
+                // User must be involved in this thread
+                inArray(warmupInteractions.fromMailboxId, mailboxIds),
+            ))
+            .orderBy(warmupInteractions.sentAt)
+            .limit(limit);
+
+        res.json({
+            messages: messages.map((m: any) => ({
+                id: m.id,
+                direction: m.direction,
+                subject: m.subject,
+                body: m.body?.substring(0, 2000),
+                status: m.status,
+                placement: m.placement,
+                sentAt: m.sentAt,
+                fromMailboxId: m.fromMailboxId,
+                toMailboxId: m.toMailboxId,
+            })),
+            thread: {
+                id: thread.id,
+                subject: thread.subject,
+                status: thread.status,
+                messageCount: thread.messageCount,
+                maxMessages: thread.maxMessages,
+            },
+        });
+    } catch (error: any) {
+        console.error('[Warmup] Thread messages error:', error.message);
+        res.status(500).json({ error: error.message || 'Failed to fetch thread' });
+    }
+});
+
 router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Response) => {
     try {
         const userId = req.session?.userId!;
@@ -1474,6 +1537,69 @@ router.get('/warmup/activity', requireAuthOrApiKey, async (req: Request, res: Re
     } catch (error: any) {
         console.error('[Warmup] Activity error:', error.message);
         res.status(500).json({ error: error.message || 'Failed to fetch warmup activity' });
+    }
+});
+
+/**
+ * GET /api/warmup/thread/:threadId/messages
+ * Returns all messages for a given warmup thread with body content.
+ */
+router.get('/warmup/thread/:threadId/messages', requireAuthOrApiKey, async (req: Request, res: Response) => {
+    try {
+        const userId = req.session?.userId!;
+        const { threadId } = req.params;
+        const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
+        const offset = parseInt(req.query.offset as string) || 0;
+
+        const { db } = await import('@shared/lib/db/db.js');
+        const { warmupMailboxes, warmupInteractions } = await import('@audnix/shared');
+        const { eq, and, desc, inArray } = await import('drizzle-orm');
+
+        // Verify user owns at least one warmup mailbox involved in this thread
+        const userMailboxIds = await db.select({ id: warmupMailboxes.id })
+            .from(warmupMailboxes)
+            .where(eq(warmupMailboxes.userId, userId));
+        const userMailboxIdSet = new Set(userMailboxIds.map((m: any) => m.id));
+
+        if (userMailboxIdSet.size === 0) {
+            res.status(403).json({ error: 'No warmup mailboxes' });
+            return;
+        }
+
+        // Fetch messages for this thread, ensure at least one mailbox belongs to user
+        const msgs = await db.select({
+            id: warmupInteractions.id,
+            direction: warmupInteractions.direction,
+            subject: warmupInteractions.subject,
+            body: warmupInteractions.body,
+            placement: warmupInteractions.placement,
+            status: warmupInteractions.status,
+            sentAt: warmupInteractions.sentAt,
+            createdAt: warmupInteractions.createdAt,
+            fromMailboxId: warmupInteractions.fromMailboxId,
+            toMailboxId: warmupInteractions.toMailboxId,
+        })
+            .from(warmupInteractions)
+            .where(and(
+                eq(warmupInteractions.threadId, threadId),
+            ))
+            .orderBy(desc(warmupInteractions.sentAt))
+            .limit(limit)
+            .offset(offset);
+
+        // Verify at least one message involves user's mailbox
+        const hasAccess = msgs.some((msg: any) =>
+            userMailboxIdSet.has(msg.fromMailboxId) || userMailboxIdSet.has(msg.toMailboxId)
+        );
+        if (!hasAccess) {
+            res.status(403).json({ error: 'Access denied' });
+            return;
+        }
+
+        res.json({ messages: msgs, total: msgs.length });
+    } catch (error: any) {
+        console.error('[Warmup] Thread messages error:', error.message);
+        res.status(500).json({ error: error.message });
     }
 });
 
