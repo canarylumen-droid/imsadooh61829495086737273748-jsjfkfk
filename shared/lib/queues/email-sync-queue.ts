@@ -191,8 +191,9 @@ export function startEmailSyncWorker() {
                 const isNewLead = !lead && !isWarmupSeed;
 
                 // Fire all notifications IMMEDIATELY — before any DB write
+                // Warmup seed replies: skip lead/message notifications (no lead, no false stats)
                 await Promise.all([
-                  clusterSync.notifyNewMail(userId, {
+                  isWarmupSeed ? Promise.resolve() : clusterSync.notifyNewMail(userId, {
                     integrationId,
                     messageId: msg.messageId || `imap-${integrationId}-${msg.uid}`,
                     subject: msg.subject,
@@ -201,20 +202,20 @@ export function startEmailSyncWorker() {
                     date: msg.date,
                     isNew: !!lead,
                   }),
-                  isNewLead ? Promise.resolve() : clusterSync.notifyMessagesUpdated(userId, {
+                  isNewLead || isWarmupSeed ? Promise.resolve() : clusterSync.notifyMessagesUpdated(userId, {
                     leadId: lead!.id,
                     direction: 'inbound',
                   }),
-                  isNewLead ? Promise.resolve() : clusterSync.notifyLeadsUpdated(userId, {
+                  isNewLead || isWarmupSeed ? Promise.resolve() : clusterSync.notifyLeadsUpdated(userId, {
                     leadId: lead!.id,
                     status: 'replied',
                     action: 'replied',
                   }),
-                  clusterSync.notifyStatsUpdated(userId, {
+                  isWarmupSeed ? Promise.resolve() : clusterSync.notifyStatsUpdated(userId, {
                     integrationId,
                     type: isNewLead ? 'new_lead' : 'reply',
                   }),
-                  clusterSync.notifyStatsCacheInvalidate(userId),
+                  isWarmupSeed ? Promise.resolve() : clusterSync.notifyStatsCacheInvalidate(userId),
                 ]);
 
                 // ── PHASE 2: Save to DB (background) ─────────────────────────────

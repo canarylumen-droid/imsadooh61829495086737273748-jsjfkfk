@@ -46,7 +46,7 @@ interface HealthCheckResult {
 
 class MailboxHealthService {
   private checkInterval: NodeJS.Timeout | null = null;
-  private readonly CHECK_INTERVAL_MS = 5 * 60 * 1000; // Part 9: Increased from 2m to 5m to reduce OAuth token refresh collisions
+  private readonly CHECK_INTERVAL_MS = 2 * 60 * 1000; // Fast health checks for real-time DNS/reputation updates
   private isChecking = false;
   private readonly SPAM_BOUNCE_THRESHOLD = 0.02; // 2% bounce rate = Google Warning
   private readonly SPAM_BOUNCE_CRITICAL = 0.05; // 5% bounce rate = Google Block / Pause
@@ -169,24 +169,22 @@ class MailboxHealthService {
         await this.markMailboxHealthy(integration);
       }
 
-      // [NEW] DNS Health Check for custom domains
-      if (integration.provider === 'custom_email') {
-        const dnsResult = await this.checkDNSHealth(integration);
-        result.dnsValid = dnsResult.valid;
-        result.dnsDetails = dnsResult.details;
-        
-        if (!dnsResult.valid) {
-          result.warning = `DNS issues detected: ${dnsResult.missing.join(', ')}`;
-          // Update integration metadata with DNS status
-          const currentMeta = decryptToJSON(integration.encryptedMeta) || {};
-          await storage.updateIntegrationById(integration.id, {
-            encryptedMeta: encryptJSON({
-              ...currentMeta,
-              dns_health: dnsResult.details,
-              dns_last_checked: new Date()
-            })
-          });
-        }
+      // DNS Health Check for all providers (Gmail, Outlook, custom SMTP)
+      const dnsResult = await this.checkDNSHealth(integration);
+      result.dnsValid = dnsResult.valid;
+      result.dnsDetails = dnsResult.details;
+      
+      if (!dnsResult.valid) {
+        result.warning = `DNS issues detected: ${dnsResult.missing.join(', ')}`;
+        // Update integration metadata with DNS status
+        const currentMeta = decryptToJSON(integration.encryptedMeta) || {};
+        await storage.updateIntegrationById(integration.id, {
+          encryptedMeta: encryptJSON({
+            ...currentMeta,
+            dns_health: dnsResult.details,
+            dns_last_checked: new Date()
+          })
+        });
       }
 
       // Update last health check time
