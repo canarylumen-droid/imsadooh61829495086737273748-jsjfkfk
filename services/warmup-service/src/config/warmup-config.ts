@@ -9,8 +9,8 @@ export const WARMUP_CONFIG = {
   DAILY_SENT_LIMIT: parseInt(process.env.WARMUP_DAILY_SENT_LIMIT || '15', 10),
   DAILY_RECEIVED_LIMIT: parseInt(process.env.WARMUP_DAILY_RECEIVED_LIMIT || '15', 10),
 
-  // Warmup hourly rate limit — max 1 warmup email per mailbox per hour
-  MAX_WARMUP_PER_HOUR: parseInt(process.env.WARMUP_MAX_PER_HOUR || '1', 10),
+  // Warmup hourly rate limit — max 2 warmup emails per mailbox per hour
+  MAX_WARMUP_PER_HOUR: parseInt(process.env.WARMUP_MAX_PER_HOUR || '2', 10),
 
   // Warmup cap percent — percentage of mailbox cap_limit used when no campaign active
   // e.g. 25% of 50 = 12-13 emails (range 10-15 acceptable). Never exceeds DAILY_SENT_LIMIT (15).
@@ -29,8 +29,8 @@ export const WARMUP_CONFIG = {
   // Threading
   MIN_MESSAGES_PER_THREAD: 3,
   MAX_MESSAGES_PER_THREAD: 6,
-  MIN_THREAD_INTERVAL_HOURS: 4,
-  MAX_THREAD_INTERVAL_HOURS: 12,
+  MIN_THREAD_INTERVAL_HOURS: 2,
+  MAX_THREAD_INTERVAL_HOURS: 8,
 
   // Send delays (seconds)
   MIN_SEND_DELAY_SECONDS: 30,

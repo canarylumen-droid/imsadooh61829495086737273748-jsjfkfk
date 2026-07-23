@@ -247,7 +247,7 @@ export class WarmupScheduler {
         .from(warmupInteractions)
         .where(
           and(
-            eq(warmupInteractions.senderMailboxId, mb.id),
+            eq(warmupInteractions.fromMailboxId, mb.id),
             sql`sent_at >= ${thisHourStart.toISOString()}::timestamp`
           )
         )
@@ -255,11 +255,14 @@ export class WarmupScheduler {
 
       if (Number(hourlyCount[0]?.count ?? 0) >= WARMUP_CONFIG.MAX_WARMUP_PER_HOUR) continue;
 
-      // ── 24H DISTRIBUTION ─────────────────────────────────────────────
-      // Evenly spread sends across 24 hours by assigning each mailbox a 
-      // preferred send hour based on hash of its ID.
-      const mailboxHour = parseInt(mb.id.slice(-2), 16) % 24;
-      if (currentHour !== mailboxHour) continue; // Only schedule during this mailbox's slot
+      // ── SEND WINDOW DISTRIBUTION ────────────────────────────────────
+      // Spread sends across the day by assigning each mailbox 2-3 send
+      // windows. Based on hash of mailbox ID, picks windows every 8-12h.
+      const mailboxBase = parseInt(mb.id.slice(-2), 16);
+      const windows = mailboxBase % 2 === 0
+        ? [0, 8, 16]   // windows at hours 0, 8, 16
+        : [4, 12, 20];  // windows at hours 4, 12, 20
+      if (!windows.includes(currentHour)) continue;
 
       // Check thread cap
       const activeThreadCount = (mb.activeThreadIds || []).length;
