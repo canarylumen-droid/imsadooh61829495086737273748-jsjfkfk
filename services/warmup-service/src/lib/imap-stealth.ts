@@ -131,7 +131,7 @@ export class ImapStealth {
           warmupMessages.push({
             uid: message.uid,
             messageId: message.envelope?.messageId,
-            seen: message.flags?.includes('\\Seen') || false,
+            seen: (typeof message.flags?.has === 'function' ? message.flags.has('\\Seen') : false) || false,
           });
         }
       }
@@ -229,7 +229,7 @@ export class ImapStealth {
           warmupMessages.push({
             uid: message.uid,
             messageId: message.envelope?.messageId,
-            seen: message.flags?.includes('\\Seen') || false,
+            seen: (typeof message.flags?.has === 'function' ? message.flags.has('\\Seen') : false) || false,
           });
         }
       }
