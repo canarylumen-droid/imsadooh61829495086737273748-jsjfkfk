@@ -259,13 +259,10 @@ export default function DeliverabilityPage() {
                              <AlertTriangle className="w-3 h-3 mr-1" />}
                             {healthLabel}
                           </Badge>
-                          <Badge variant="outline" className="text-[9px] font-bold text-muted-foreground">
-                            {dailyLimit}/day
-                          </Badge>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mt-4 pt-3 border-t border-border/20">
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4 pt-3 border-t border-border/20">
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Sent</p>
                           <p className="text-sm font-bold">{sentCount}</p>
@@ -300,10 +297,6 @@ export default function DeliverabilityPage() {
                             )}
                           </p>
                         </div>
-                        <div>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Pacing</p>
-                          <p className="text-sm font-bold"><span className="text-muted-foreground/40">—</span></p>
-                        </div>
                       </div>
                     </CardContent>
                   </Card>
@@ -333,8 +326,11 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
 
   const { totals } = data || { totals: { sent: 0, inbox: 0, spam: 0, bounce: 0, rate: '0%' } };
 
+  const pending = totals.sent - totals.inbox - totals.spam - totals.bounce;
+
   const pieData = [
     { name: 'Inbox', value: totals.inbox, color: '#10b981' },
+    { name: 'Pending', value: pending, color: '#6b7280' },
     { name: 'Spam', value: totals.spam, color: '#ef4444' },
     { name: 'Bounce', value: totals.bounce, color: '#f59e0b' },
   ].filter(d => d.value > 0);
@@ -385,7 +381,7 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
                   </div>
                 ))}
                 <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/20">
-                  {totals.sent} tracked{hasRealPlacement ? ` · ${totals.rate} inbox` : ''}
+                  {totals.sent} tracked{hasRealPlacement ? ` · ${totals.rate} inbox` : pending > 0 ? ' · awaiting opens/placement' : ''}
                 </p>
               </div>
             </div>

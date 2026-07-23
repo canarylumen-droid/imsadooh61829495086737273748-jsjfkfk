@@ -319,7 +319,7 @@ export default function AnalyticsPage() {
                             </div>
                         </div>
                     </CardHeader>
-                    <CardContent className="h-[260px] sm:h-[300px] md:h-[400px] p-2 sm:p-4 md:p-8">
+                    <CardContent className={cn("h-[260px] sm:h-[300px] md:h-[400px]", chartType === "area" ? "p-2 sm:p-4 md:p-8" : "p-1")}>
                         {chartType === "area" ? (
                             <ChartContainer config={chartConfig} className="w-full h-full">
                                 <ResponsiveContainer width="100%" height="100%">
