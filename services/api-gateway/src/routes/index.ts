@@ -183,10 +183,10 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
 
   // Catch-all for unmatched API routes — return JSON instead of Express HTML
   app.use("/api/*", (req, res) => {
-    res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+    res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
   });
-  app.use("/mcp/*", (req, res) => {
-    res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+  app.use("/mcp", (req, res) => {
+    res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
   });
 
   // Global error handler — return JSON instead of HTML for unhandled errors
