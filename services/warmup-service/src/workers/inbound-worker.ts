@@ -89,7 +89,7 @@ async function handleExpectReply(data: any) {
     .where(eq(warmupInteractions.messageId, expectedMessageId))
     .limit(1);
 
-  if (interaction[0]?.openedAt) {
+  if ((interaction[0] as any)?.openedAt) {
     console.log(`[Warmup][Inbound] ✅ Warmup email ${expectedMessageId} was opened!`);
     // Fire socket event for real-time UI update
     const thread = await db

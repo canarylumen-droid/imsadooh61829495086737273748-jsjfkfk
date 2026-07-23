@@ -2046,8 +2046,7 @@ class ImapIdleManager {
             for (const [key, lastSeen] of this.lastActivity.entries()) {
                 const [integrationId, folderName] = key.split(':');
                 // Skip custom_email — Rust IMAP worker handles all of them
-                const int = this.connections.get(integrationId);
-                if (int?.provider === 'custom_email') continue;
+                if (!this.connections.has(integrationId)) continue;
                 const idleTime = now - lastSeen.getTime();
                 if (idleTime > this.ZOMBIE_TIMEOUT_MS) {
                     // Check if this integration is now managed by the autonomous worker cluster
@@ -2395,7 +2394,7 @@ class ImapIdleManager {
                                     item.from = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
                                     item.to = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';
                                     item.date = parsed.date?.toISOString() || new Date().toISOString();
-                                    const bodyText = parsed.text || parsed.html?.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() || '';
+                                    const bodyText = parsed.text || (typeof parsed.html === 'string' ? parsed.html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim() : '') || '';
                                     item.snippet = (bodyText || item.subject).replace(/\s+/g, ' ').trim().slice(0, 200);
                                 }).catch(() => {
                                     console.warn('[IMAP] Failed to parse email body during fetchNewMessages');

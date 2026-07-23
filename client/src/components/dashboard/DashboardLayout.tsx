@@ -80,7 +80,7 @@ import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/ui/Logo";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
-import { BellRing, ShieldCheck, Info, Terminal } from "lucide-react";
+import { BellRing, ShieldCheck, Info } from "lucide-react";
 import { useRealtime, RealtimeProvider } from "@/hooks/use-realtime";
 import { formatDistanceToNow } from "date-fns";
 import { Switch } from "@/components/ui/switch";

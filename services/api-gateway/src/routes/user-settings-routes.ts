@@ -558,7 +558,7 @@ async function processExpiredDeletions(): Promise<void> {
       try {
         console.log(`[AccountDeletion] Processing expired deletion for user ${row.id}`);
         const userResult = await db.execute(sql`SELECT email FROM users WHERE id = ${row.id}::uuid`);
-        const email = userResult.rows?.[0]?.email;
+        const email = userResult.rows?.[0]?.email as string | undefined;
         await revocationService.revokeAllAndDestroyUser(row.id, email);
         console.log(`[AccountDeletion] Successfully deleted user ${row.id}${email ? ` (${email})` : ''}`);
       } catch (err) {

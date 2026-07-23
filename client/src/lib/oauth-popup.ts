@@ -1,11 +1,13 @@
 export function openOAuthPopup(
   url: string,
-  options?: { onComplete?: () => void; title?: string }
+  options?: { onComplete?: () => void; onStart?: () => void; title?: string }
 ): void {
   const width = 600;
   const height = 700;
   const left = window.screenX + (window.innerWidth - width) / 2;
   const top = window.screenY + (window.innerHeight - height) / 2;
+
+  options?.onStart?.();
 
   const popup = window.open(
     url,

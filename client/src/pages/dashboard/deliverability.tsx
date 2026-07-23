@@ -292,19 +292,19 @@ export default function DeliverabilityPage() {
                                 type="number"
                                 min={1}
                                 max={250}
-                                value={editingLimit.value}
+                                value={editingLimit!.value}
                                 onChange={(e) => setEditingLimit({ id: mb.id, value: e.target.value })}
                                 className="h-7 w-16 text-xs px-2"
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
-                                    const val = parseInt(editingLimit.value);
+                                    const val = parseInt(editingLimit!.value);
                                     if (val >= 1 && val <= 250) updateLimitMutation.mutate({ integrationId: mb.id, limit: val });
                                   }
                                   if (e.key === 'Escape') setEditingLimit(null);
                                 }}
                                 autoFocus
                               />
-                              <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-500" onClick={() => { const val = parseInt(editingLimit.value); if (val >= 1 && val <= 250) updateLimitMutation.mutate({ integrationId: mb.id, limit: val }); }} disabled={updateLimitMutation.isPending}>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-emerald-500" onClick={() => { const val = parseInt(editingLimit!.value); if (val >= 1 && val <= 250) updateLimitMutation.mutate({ integrationId: mb.id, limit: val }); }} disabled={updateLimitMutation.isPending}>
                                 <Check className="h-3 w-3" />
                               </Button>
                               <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" onClick={() => setEditingLimit(null)}>

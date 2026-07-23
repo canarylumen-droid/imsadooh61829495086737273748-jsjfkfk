@@ -41,6 +41,7 @@ interface MailboxWarmup {
   totalSpam: number;
   warmupStatus: string;
   hasActiveCampaigns?: boolean;
+  capLimit?: number;
 }
 
 const ITEMS_PER_PAGE = 20;

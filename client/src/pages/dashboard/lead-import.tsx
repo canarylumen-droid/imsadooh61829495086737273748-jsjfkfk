@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { useMailbox } from "@/hooks/use-mailbox";
-import { Upload, Loader2, CheckCircle2, Sparkles, Send, FileText } from "lucide-react";
+import { Upload, Loader2, CheckCircle2, Sparkles, Send, FileText, AlertTriangle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { motion } from "framer-motion";
 import { useRealtime } from "@/hooks/use-realtime";
 import { PdfIcon, CsvIcon } from "@/components/ui/CustomIcons";
@@ -39,12 +40,34 @@ export default function LeadImportPage() {
   const [enableAi, setEnableAi] = useState(true);
   const [progress, setProgress] = useState(0);
   const [importStatusText, setImportStatusText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
   const [manualPasteText, setManualPasteText] = useState("");
   const [pasteMode, setPasteMode] = useState(false);
   const [importResults, setImportResults] = useState<{ imported: number; skipped: number; filtered?: number; leads?: any[] } | null>(null);
   const [isOutreachModalOpen, setIsOutreachModalOpen] = useState(false);
   const [leadStats, setLeadStats] = useState<{ total: number; planLimit: number } | null>(null);
   const [recoveryStats, setRecoveryStats] = useState<{ totalRecovered: number; recoveredToday: number; byIntent: Record<string, number> } | null>(null);
+
+  const sanitizeError = (text: string, status: number): string => {
+    if (!text) return `Import failed. Server returned ${status}.`;
+    const trimmed = text.trim();
+    if (trimmed.startsWith('<') || trimmed.startsWith('<!DOCTYPE')) {
+      return 'The server is temporarily unavailable. Please try again in a few minutes.';
+    }
+    try {
+      const data = JSON.parse(trimmed);
+      if (data.error && typeof data.error === 'string') return data.error;
+      if (data.message && typeof data.message === 'string') return data.message;
+    } catch {}
+    return `Import failed. Please try again. (${status})`;
+  };
+
+  const clearImport = () => {
+    setImportError(null);
+    setProgress(0);
+    setImportStatusText("");
+    setImporting(false);
+  };
 
   const refreshLeadStats = async () => {
     try {
@@ -69,6 +92,7 @@ export default function LeadImportPage() {
       return;
     }
 
+    setImportError(null);
     setImporting(true);
     setProgress(20);
     setImportStatusText("Parsing text with AI...");
@@ -84,7 +108,12 @@ export default function LeadImportPage() {
         credentials: 'include'
       });
 
-      if (!parseRes.ok) throw new Error("Failed to parse text");
+      if (!parseRes.ok) {
+        const text = await parseRes.text().catch(() => '');
+        const msg = sanitizeError(text, parseRes.status);
+        setImportError(msg);
+        throw new Error(msg);
+      }
       const { leads: extractedLeads } = await parseRes.json();
       setProgress(60);
 
@@ -110,7 +139,7 @@ export default function LeadImportPage() {
       toast({ title: "Manual Import Success", description: `Imported ${result.leadsImported || result.imported || 0} leads.` });
       refreshLeadStats();
     } catch (e: any) {
-      toast({ title: "Manual import failed", description: e.message, variant: "destructive" });
+      setImportError(e.message || "Manual import failed");
     } finally {
       setTimeout(() => {
         setImporting(false);
@@ -171,6 +200,7 @@ export default function LeadImportPage() {
 
     setFile(selectedFile);
     setImportResults(null);
+    setImportError(null);
   };
 
   useEffect(() => {
@@ -214,6 +244,7 @@ export default function LeadImportPage() {
   const handleImport = async () => {
     if (!file) return;
 
+    setImportError(null);
     setImporting(true);
     setProgress(10);
     const formData = new FormData();
@@ -249,9 +280,9 @@ export default function LeadImportPage() {
 
       if (!response.ok) {
         const text = await response.text().catch(() => '');
-        let errorData: any = {};
-        try { errorData = JSON.parse(text); } catch {}
-        throw new Error(errorData?.error || text?.slice(0, 200) || `Server returned ${response.status}`);
+        const msg = sanitizeError(text, response.status);
+        setImportError(msg);
+        throw new Error(msg);
       }
 
       const result = await response.json();
@@ -296,12 +327,8 @@ export default function LeadImportPage() {
       }
 
     } catch (error: any) {
+      setImportError(error.message || `Could not process ${isPDF ? 'PDF' : 'CSV'} file`);
       setProgress(0);
-      toast({
-        title: "Import failed",
-        description: error.message || `Could not process ${isPDF ? 'PDF' : 'CSV'} file`,
-        variant: "destructive"
-      });
     } finally {
       // Ensure we stop loading state if we are NOT showing the modal
       // If result.preview is true, we keep loading (actually we stopped it inside the success block for preview)
@@ -331,6 +358,7 @@ export default function LeadImportPage() {
   const handleFinalizeImport = async () => {
     if (!importResults?.leads || importResults.leads.length === 0) return;
 
+    setImportError(null);
     setImporting(true); // Reuse loading state provided to modal
     setImportStatusText("Checking MX records & spam filters...");
     try {
@@ -365,8 +393,10 @@ export default function LeadImportPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to finalize import");
+        const text = await response.text().catch(() => '');
+        const msg = sanitizeError(text, response.status);
+        setImportError(msg);
+        throw new Error(msg);
       }
 
       const result = await response.json();
@@ -635,6 +665,15 @@ export default function LeadImportPage() {
                 {importStatusText || (progress < 30 ? 'Uploading file...' : progress < 70 ? 'Processing engagement data...' : 'Finalizing leads...')}
               </p>
             </div>
+          )}
+
+          {importError && (
+            <Alert variant="destructive" className="rounded-xl border-red-500/20 bg-red-500/5">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-xs sm:text-sm font-medium">
+                {importError}
+              </AlertDescription>
+            </Alert>
           )}
 
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center">

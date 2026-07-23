@@ -331,6 +331,19 @@ export class WarmupScheduler {
       // ── SEED BALANCING ────────────────────────────────────────────────
       // Prevent all seeds from sending to all targets at once.
       // Distribute across time by staggering based on seed-target pair hash.
+      // Max 1 seed per pool type per hour to avoid ISP flagging.
+      if (isSeed) {
+        const thisHourSeeds = await db.execute(sql`
+          SELECT COUNT(*) as cnt FROM warmup_interactions wi
+          JOIN warmup_mailboxes wm ON wi.from_mailbox_id = wm.id
+          WHERE wm.anchor_role = 'seed'
+            AND wm.pool_type = ${mb.poolType}::text
+            AND wi.created_at > NOW() - INTERVAL '1 hour'
+        `);
+        const seedCount = parseInt((thisHourSeeds.rows as any[])[0]?.cnt || '0');
+        if (seedCount >= 1) continue;
+      }
+
       const partner = await pairingEngine.findPartner(mb);
       if (!partner) continue;
 

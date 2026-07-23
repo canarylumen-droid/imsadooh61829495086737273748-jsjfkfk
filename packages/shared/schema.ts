@@ -1983,3 +1983,10 @@ export type InsertWarmupDomainCluster = typeof warmupDomainClusters.$inferInsert
 export type WarmupSeedAccount = typeof warmupSeedAccounts.$inferSelect;
 export type InsertWarmupSeedAccount = typeof warmupSeedAccounts.$inferInsert;
 export type InsertWarmupPoolState = typeof warmupPoolState.$inferInsert;
+
+export const deletedAccountsLog = pgTable("deleted_accounts_log", {
+  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  deletedAt: timestamp("deleted_at").notNull().defaultNow(),
+  reason: text("reason"),
+});

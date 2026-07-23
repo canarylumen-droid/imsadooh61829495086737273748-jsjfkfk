@@ -131,7 +131,7 @@ export default function InboxPage() {
   }
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { selectedMailboxId, mailboxes } = useMailbox();
+  const { selectedMailboxId, setSelectedMailboxId, mailboxes } = useMailbox();
   const mailboxLookup = useMemo(() => Object.fromEntries((mailboxes||[]).map((m: any) => [m.id, m])), [mailboxes]);
   const [processLead, setProcessLead] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
