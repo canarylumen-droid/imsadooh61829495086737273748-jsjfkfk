@@ -14,7 +14,7 @@ import { threadManager } from '../lib/thread-manager.js';
 import { llmCopywriter } from '../lib/llm-copywriter.js';
 import { smtpSender } from '../lib/smtp-sender.js';
 import { imapStealth } from '../lib/imap-stealth.js';
-import { warmupInboundQueue } from '../queues/warmup-queues.js';
+import { warmupInboundQueue, warmupOutboundQueue } from '../queues/warmup-queues.js';
 import { seedFleetManager } from '../engine/seed-fleet-manager.js';
 import { reputationRecovery } from '../engine/reputation-recovery.js';
 import crypto from 'crypto';
@@ -47,6 +47,7 @@ export function createOutboundWorker(): Worker {
   return new Worker(
     WARMUP_CONFIG.OUTBOUND_QUEUE_NAME,
     async (job) => {
+      job.data = job.data || {};
       const { threadId, interactionType, volley, totalVolleys, parentMessageId } = job.data;
       if (!threadId) throw new Error('Missing threadId in outbound job');
 
@@ -57,6 +58,19 @@ export function createOutboundWorker(): Worker {
         .limit(1);
 
       if (!thread[0] || thread[0].status === 'completed') return;
+
+      // Dedup guard: skip if interaction already recorded for this thread/job
+      if (job.name === 'send-first') {
+        const existing = await db
+          .select({ id: warmupInteractions.id })
+          .from(warmupInteractions)
+          .where(eq(warmupInteractions.threadId, threadId))
+          .limit(1);
+        if (existing.length > 0) {
+          console.log(`[Warmup][Outbound] Skipping send-first — interaction already exists for thread ${threadId}`);
+          return;
+        }
+      }
 
       const sender = await db
         .select()
