@@ -103,12 +103,13 @@ export default function DeliverabilityPage() {
 
   const hasRealData = enrichedMailboxes.some(m => m._hasRealData);
 
-  const avgScore = mailboxes.length > 0
-    ? Number((mailboxes.reduce((s: number, m: any) => s + (m.reputationScore ?? 0), 0) / mailboxes.length).toFixed(2))
-    : 0;
-  const healthyCount = mailboxes.filter((m: any) => (m.reputationScore ?? 0) >= 70).length;
-  const atRiskCount = mailboxes.filter((m: any) => (m.reputationScore ?? 0) < 70 && (m.reputationScore ?? 0) >= 40).length;
-  const criticalCount = mailboxes.filter((m: any) => (m.reputationScore ?? 0) < 40).length;
+  const mailboxesWithRep = mailboxes.filter((m: any) => m.reputationScore !== undefined && m.reputationScore !== null);
+  const avgScore = mailboxesWithRep.length > 0
+    ? Number((mailboxesWithRep.reduce((s: number, m: any) => s + m.reputationScore, 0) / mailboxesWithRep.length).toFixed(2))
+    : null;
+  const healthyCount = mailboxesWithRep.filter((m: any) => m.reputationScore >= 70).length;
+  const atRiskCount = mailboxesWithRep.filter((m: any) => m.reputationScore < 70 && m.reputationScore >= 40).length;
+  const criticalCount = mailboxesWithRep.filter((m: any) => m.reputationScore < 40).length;
 
   const totalBounces = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realBounceCount ?? 0), 0);
   const totalSpam = enrichedMailboxes.reduce((s: number, m: any) => s + (m._realSpamCount ?? 0), 0);
@@ -123,7 +124,7 @@ export default function DeliverabilityPage() {
           <Shield className="h-6 w-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold tracking-tight">Deliverability & Reputation</h1>
-            <p className="text-sm text-muted-foreground">Per-mailbox spam score, blacklist status, DNS health, and bounce monitoring. Updates every 2 minutes.</p>
+            <p className="text-sm text-muted-foreground">Per-mailbox spam score, blacklist status, DNS health, and bounce monitoring. Real-time via socket events.</p>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={async () => { setIsRefreshing(true); await Promise.all([refetch(), queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] })]); setIsRefreshing(false); }} disabled={isRefreshing}>
@@ -150,8 +151,8 @@ export default function DeliverabilityPage() {
             <Card className="border-dashed">
               <CardContent className="flex flex-col items-center py-12 text-center">
                 <Activity className="h-10 w-10 text-muted-foreground/40 mb-3" />
-                <h3 className="text-base font-semibold mb-1">Awaiting Delivery Data</h3>
-                <p className="text-sm text-muted-foreground max-w-sm">Send emails to see placement breakdown, bounce rate, and spam score. Data updates in real-time as emails are sent.</p>
+                <h3 className="text-base font-semibold mb-1">{selectedMailboxId ? 'No Data for This Mailbox' : 'Awaiting Delivery Data'}</h3>
+                <p className="text-sm text-muted-foreground max-w-sm">{selectedMailboxId ? 'This mailbox has no tracked email activity yet. Send emails to see placement data.' : 'Send emails to see placement breakdown, bounce rate, and spam score. Data updates in real-time.'}</p>
               </CardContent>
             </Card>
           ) : (
@@ -159,10 +160,14 @@ export default function DeliverabilityPage() {
             <Card className="bg-card/50 border-border/40">
               <CardContent className="p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/60 mb-1">Average Reputation</p>
-                <p className={cn("text-2xl font-black", avgScore >= 70 ? "text-emerald-500" : avgScore >= 40 ? "text-amber-500" : "text-red-500")}>
-                  {avgScore.toFixed(2)}
-                  <span className="text-sm font-medium text-muted-foreground/60 ml-1">/100</span>
-                </p>
+                {avgScore !== null ? (
+                  <p className={cn("text-2xl font-black", avgScore >= 70 ? "text-emerald-500" : avgScore >= 40 ? "text-amber-500" : "text-red-500")}>
+                    {avgScore.toFixed(2)}
+                    <span className="text-sm font-medium text-muted-foreground/60 ml-1">/100</span>
+                  </p>
+                ) : (
+                  <p className="text-2xl font-black text-muted-foreground/40">—</p>
+                )}
               </CardContent>
             </Card>
             <Card className="bg-card/50 border-border/40">
@@ -234,9 +239,15 @@ export default function DeliverabilityPage() {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-3">
-                          <div className={cn("px-3 py-1 rounded-full border text-xs font-bold", scoreBg, scoreColor)}>
-                            {score.toFixed(2)}/100
-                          </div>
+                          {mb.reputationScore !== undefined && mb.reputationScore !== null ? (
+                            <div className={cn("px-3 py-1 rounded-full border text-xs font-bold", scoreBg, scoreColor)}>
+                              {score.toFixed(2)}/100
+                            </div>
+                          ) : (
+                            <div className="px-3 py-1 rounded-full border text-xs font-bold text-muted-foreground/40 border-border/40">
+                              —/100
+                            </div>
+                          )}
                           <Badge variant="outline" className={cn(
                             "text-[9px] uppercase font-black tracking-wider",
                             healthLabel === "Healthy" ? "text-emerald-500 border-emerald-500/30" :
@@ -280,14 +291,18 @@ export default function DeliverabilityPage() {
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">DNS</p>
                           <p className="text-sm font-bold">
-                            <Badge variant="outline" className={cn("text-[9px]", (mb as any).dnsValid ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500")}>
-                              {(mb as any).dnsValid ? 'Valid' : 'Issues'}
-                            </Badge>
+                            {(mb as any).dnsValid === undefined || (mb as any).dnsValid === null ? (
+                              <span className="text-muted-foreground/40">—</span>
+                            ) : (
+                              <Badge variant="outline" className={cn("text-[9px]", (mb as any).dnsValid ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500")}>
+                                {(mb as any).dnsValid ? 'Valid' : 'Issues'}
+                              </Badge>
+                            )}
                           </p>
                         </div>
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Pacing</p>
-                          <p className="text-sm font-bold">1/{Math.round(1440 / Math.max(1, dailyLimit))}min</p>
+                          <p className="text-sm font-bold">{sentCount > 0 ? `1/${Math.round(1440 / Math.max(1, dailyLimit))}min` : <span className="text-muted-foreground/40">—</span>}</p>
                         </div>
                       </div>
                     </CardContent>
