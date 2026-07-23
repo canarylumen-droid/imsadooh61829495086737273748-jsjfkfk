@@ -287,6 +287,27 @@ export default function AuthPage() {
     }
   }, [user, setLocation]);
 
+  // Last-used device badge
+  const [lastDeviceBadge] = useState<React.ReactNode>(() => {
+    try {
+      const raw = localStorage.getItem('auth_device');
+      if (!raw) return null;
+      const d = JSON.parse(raw);
+      const browserMatch = d.browser?.match(/(Chrome|Firefox|Safari|Edge|Opera)\/\S+/);
+      const browserName = browserMatch?.[1] || 'Browser';
+      const daysAgo = Math.floor((Date.now() - new Date(d.lastAt).getTime()) / 86400000);
+      return (
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span className="text-[10px] text-muted-foreground">
+            Last used: {browserName} on {d.platform || 'Unknown'}
+            {daysAgo > 0 ? ` · ${daysAgo}d ago` : ' · Just now'}
+          </span>
+        </div>
+      );
+    } catch (e) { return null; }
+  });
+
   // Check OTP status and incomplete setup on page load
   useEffect(() => {
     const checkOtpStatus = async () => {
@@ -411,9 +432,21 @@ export default function AuthPage() {
       const data = await response.json().catch(() => ({}));
 
       if (!response.ok) {
+        const errMsg = data.error || "";
+        if (errMsg.includes("No account found") || errMsg.includes("no account")) {
+          toast({
+            title: "No Account Found",
+            description: "This email isn't registered. Would you like to sign up?",
+            variant: "destructive",
+          });
+          setLoading(false);
+          setIsLogin(false);
+          setLocation("/signup");
+          return;
+        }
         toast({
           title: "Login Failed",
-          description: data.error || "Invalid credentials",
+          description: errMsg || "Invalid credentials",
           variant: "destructive",
         });
         setLoading(false);
@@ -452,6 +485,12 @@ export default function AuthPage() {
       }
 
       localStorage.setItem('auth_last_active', Date.now().toString());
+
+      localStorage.setItem('auth_device', JSON.stringify({
+        browser: navigator.userAgent,
+        platform: navigator.platform,
+        lastAt: new Date().toISOString(),
+      }));
 
       // Invalidate user cache so dashboard's AuthGuard sees the logged-in user
       queryClient.invalidateQueries({ queryKey: ['user'] });
@@ -739,9 +778,9 @@ export default function AuthPage() {
             className="inline-flex items-center gap-3 mb-4"
           >
             <img src="/logo.svg" alt="Audnix AI" className="h-10 w-auto" />
-            <span className="text-2xl font-bold tracking-tight text-foreground">Audnix AI</span>
+            <span className="text-lg sm:text-2xl font-bold tracking-tight text-foreground">Audnix AI</span>
           </motion.a>
-          <p className="text-muted-foreground">
+          <p className="text-muted-foreground text-xs sm:text-sm">
             {isLogin ? "Sign in to your account" : signupStep === 2 ? "Verify your email" : signupStep === 3 ? "Complete your profile" : "Create your account"}
           </p>
         </div>
@@ -895,6 +934,7 @@ export default function AuthPage() {
                   exit={{ opacity: 0, x: 10 }}
                   className="space-y-4"
                 >
+                  {isLogin && lastDeviceBadge}
                   <div className="space-y-2">
                     <Label htmlFor="email">Email</Label>
                     <div className="relative">
@@ -1130,7 +1170,7 @@ export default function AuthPage() {
                         className="w-full h-11 bg-primary hover:bg-primary/90"
                       >
                         {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                        Complete Registration
+                        Complete Sign Up
                       </Button>
                     </div>
                   )}
@@ -1140,13 +1180,11 @@ export default function AuthPage() {
           </CardContent>
         </Card>
 
-        <div className="mt-8 text-center text-xs text-white/20">
-          <p>
-            By continuing, you agree to our
-            <a href="/terms-of-service" className="mx-1 text-white/40 hover:text-primary underline">Terms of Service</a>
-            and
-            <a href="/privacy-policy" className="mx-1 text-white/40 hover:text-primary underline">Privacy Policy</a>.
-          </p>
+        <div className="mt-6 text-center text-[10px] text-white/30 leading-relaxed">
+          By continuing, you agree to our{" "}
+          <a href="/terms-of-service" className="text-white/50 hover:text-primary underline underline-offset-2">Terms</a>
+          {" & "}
+          <a href="/privacy-policy" className="text-white/50 hover:text-primary underline underline-offset-2">Privacy Policy</a>.
         </div>
       </motion.div>
     </div>

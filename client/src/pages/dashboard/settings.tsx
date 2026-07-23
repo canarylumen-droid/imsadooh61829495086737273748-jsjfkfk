@@ -557,7 +557,10 @@ export default function SettingsPage() {
                               const res = await fetch('/api/oauth/connect/calendly', { credentials: 'include' });
                               if (!res.ok) throw new Error('Failed to connect');
                               const data = await res.json();
-                              if (data.authUrl) window.location.href = data.authUrl;
+                              if (data.authUrl) {
+                                const { openOAuthPopup } = await import('@/lib/oauth-popup');
+                                openOAuthPopup(data.authUrl, { onComplete: () => queryClient.invalidateQueries({ queryKey: ["/api/integrations"] }) });
+                              }
                             } catch (e) {
                               toast({ title: 'Connection failed', description: 'Could not start Calendly OAuth', variant: 'destructive' });
                             }

@@ -50,8 +50,8 @@ export function CalendlyConnectUI() {
 
       if (res.ok) {
         const data = await res.json();
-        // Redirect to Calendly OAuth page
-        window.location.href = data.authUrl;
+        const { openOAuthPopup } = await import('@/lib/oauth-popup');
+        openOAuthPopup(data.authUrl, { onComplete: fetchStatus });
       } else {
         toast({ title: 'Error', description: 'Failed to start OAuth flow', variant: 'destructive' });
       }

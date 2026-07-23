@@ -798,7 +798,12 @@ export default function IntegrationsPage() {
       }
       const data = await response.json();
       if (data.authUrl) {
-        window.location.href = data.authUrl;
+        const { openOAuthPopup } = await import('@/lib/oauth-popup');
+        openOAuthPopup(data.authUrl, { onComplete: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/channels"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/dashboard/warmup-status"] });
+        }});
       } else {
         throw new Error(data.error || "No auth URL returned");
       }

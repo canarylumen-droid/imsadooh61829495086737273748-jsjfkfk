@@ -496,7 +496,13 @@ export default function CalendarPage() {
         throw new Error(err.error || "Failed to start Google connection");
       }
       const data = await response.json();
-      if (data.authUrl) window.location.href = data.authUrl;
+      if (data.authUrl) {
+        const { openOAuthPopup } = await import('@/lib/oauth-popup');
+        openOAuthPopup(data.authUrl, { onComplete: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/oauth/google-calendar/events"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
+        }});
+      }
       return data;
     },
     onError: (err: any) => {
@@ -531,8 +537,10 @@ export default function CalendarPage() {
       }
       const data = await res.json();
       if (data.authUrl) {
-        // Force a fresh redirect — avoids stale browser state after disconnect
-        window.location.replace(data.authUrl);
+        const { openOAuthPopup } = await import('@/lib/oauth-popup');
+        openOAuthPopup(data.authUrl, { onComplete: () => {
+          queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
+        }});
       } else {
         throw new Error("No authorization URL returned");
       }
