@@ -1298,7 +1298,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                 const isEnrolled = !!wm;
                 const warmupStatus = wm?.status || int.warmupStatus || 'none';
                 const isWarmingUp = wm?.status === 'active';
-                const capLimit = wm?.dailyLimit ?? (int as any).warmupLimit ?? 50;
+                const capLimit = (int as any).initialOutreachLimit ?? (int as any).warmupLimit ?? (int as any).dailyLimit ?? 50;
                 // Match scheduler logic: 25% of cap (max 15) when no campaign, 20% when active
                 let dailyLimit = Math.min(Math.max(3, Math.round(capLimit * 0.25)), 15);
                 if (hasActiveCampaigns) {
@@ -1346,6 +1346,7 @@ router.get('/warmup-status', requireAuthOrApiKey, async (req: Request, res: Resp
                     isWarmingUp,
                     isEnrolled,
                     dailyLimit,
+                    capLimit,
                     dailySentCount,
                     dailyReceivedCount,
                     daysSinceConnected,

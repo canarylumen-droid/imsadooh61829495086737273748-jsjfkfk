@@ -302,7 +302,7 @@ export default function DeliverabilityPage() {
                         </div>
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">Pacing</p>
-                          <p className="text-sm font-bold">{sentCount > 0 ? `1/${Math.round(1440 / Math.max(1, dailyLimit))}min` : <span className="text-muted-foreground/40">—</span>}</p>
+                          <p className="text-sm font-bold"><span className="text-muted-foreground/40">—</span></p>
                         </div>
                       </div>
                     </CardContent>
@@ -333,11 +333,8 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
 
   const { totals } = data || { totals: { sent: 0, inbox: 0, spam: 0, bounce: 0, rate: '0%' } };
 
-  const pending = totals.sent - totals.inbox - totals.spam - totals.bounce;
-
   const pieData = [
     { name: 'Inbox', value: totals.inbox, color: '#10b981' },
-    { name: 'Pending', value: pending, color: '#6b7280' },
     { name: 'Spam', value: totals.spam, color: '#ef4444' },
     { name: 'Bounce', value: totals.bounce, color: '#f59e0b' },
   ].filter(d => d.value > 0);
@@ -388,7 +385,7 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
                   </div>
                 ))}
                 <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/20">
-                  {totals.sent} tracked{hasRealPlacement ? ` · ${totals.rate} inbox` : pending > 0 ? ' · awaiting opens' : ''}
+                  {totals.sent} tracked{hasRealPlacement ? ` · ${totals.rate} inbox` : ''}
                 </p>
               </div>
             </div>

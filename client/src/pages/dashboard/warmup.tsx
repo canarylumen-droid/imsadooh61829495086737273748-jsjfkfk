@@ -433,6 +433,7 @@ export default function WarmupPage() {
             {activeMailboxes.map((mb) => {
               const warmupCount = mb.dailySentCount;
               const todayProgress = mb.dailyLimit > 0 ? Math.min(100, Math.round((warmupCount / mb.dailyLimit) * 100)) : 0;
+              const hasStats = mb.totalSent > 0 || mb.totalOpened > 0 || mb.totalBounced > 0 || mb.totalSpam > 0;
               return (
                 <div key={mb.mailboxId} className="p-4 rounded-xl bg-primary/5 border border-primary/10">
                   <div className="flex items-start justify-between mb-3">
@@ -474,7 +475,7 @@ export default function WarmupPage() {
                       <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Opened</p>
                     </div>
                     <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
-                      <p className="text-sm font-bold text-red-500">{mb.totalBounced}</p>
+                      <p className={cn("text-sm font-bold", mb.totalBounced > 0 ? "text-red-500" : "text-muted-foreground")}>{mb.totalBounced}</p>
                       <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Bounced</p>
                     </div>
                     <div className="p-2 rounded-lg bg-background/50 border border-border/30 text-center">
@@ -488,6 +489,9 @@ export default function WarmupPage() {
                       <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Rep</p>
                     </div>
                   </div>
+                  {!hasStats && (
+                    <p className="text-[9px] text-muted-foreground/50 text-center mt-2 italic">No warming activity yet — data appears once sent</p>
+                  )}
                 </div>
               );
             })}
