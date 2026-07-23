@@ -787,21 +787,22 @@ function InboxPlacementSection({ selectedMailboxId, days }: { selectedMailboxId?
                                     </PieChart>
                                 </ResponsiveContainer>
                             </ChartContainer>
-                            <div className="flex flex-col gap-2 text-xs font-semibold">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                    <span>Inbox: {totals.inbox} ({totals.rate})</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
-                                    <span>Spam: {totals.spam}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                                    <span>Bounce: {totals.bounce}</span>
-                                </div>
-                                <div className="text-muted-foreground/40 mt-1">
-                                    Total sent: {totals.sent}
+                            <div className="space-y-2">
+                                {pieData.map(entry => {
+                                    const pct = totals.sent > 0 ? ((entry.value / totals.sent) * 100).toFixed(0) : '0';
+                                    return (
+                                        <div key={entry.name} className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                                            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12">{entry.name}</span>
+                                            <span className="text-xs font-bold tabular-nums">{entry.value}</span>
+                                            <span className="text-[10px] text-muted-foreground/60">({pct}%)</span>
+                                        </div>
+                                    );
+                                })}
+                                <div className="flex items-center gap-2 pt-1 border-t border-border/20">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12">Total</span>
+                                    <span className="text-xs font-bold tabular-nums">{totals.sent}</span>
+                                    <Badge variant="outline" className="text-[9px] text-emerald-500 border-emerald-500/30 bg-emerald-500/5 ml-auto">{totals.rate} inbox</Badge>
                                 </div>
                             </div>
                         </div>

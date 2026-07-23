@@ -420,17 +420,30 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
                   </PieChart>
                 </ResponsiveContainer>
               </ChartContainer>
-              <div className="space-y-2">
-                {pieData.map(entry => (
-                  <div key={entry.name} className="flex items-center gap-2 text-xs">
-                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="font-medium">{entry.name}</span>
-                    <span className="text-muted-foreground">{entry.value}</span>
-                  </div>
-                ))}
-                <p className="text-[10px] text-muted-foreground pt-1 border-t border-border/20">
-                  {totals.sent} tracked{hasRealPlacement ? ` · ${totals.rate} inbox` : pending > 0 ? ' · awaiting opens/placement' : ''}
-                </p>
+              <div className="space-y-3">
+                {pieData.map(entry => {
+                  const pct = totals.sent > 0 ? ((entry.value / totals.sent) * 100).toFixed(0) : '0';
+                  return (
+                    <div key={entry.name} className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: entry.color }} />
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12">{entry.name}</span>
+                      <span className="text-xs font-bold tabular-nums">{entry.value}</span>
+                      <span className="text-[10px] text-muted-foreground/60">({pct}%)</span>
+                    </div>
+                  );
+                })}
+                <div className="flex items-center gap-2 pt-2 border-t border-border/20">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground w-12">Total</span>
+                  <span className="text-xs font-bold tabular-nums">{totals.sent}</span>
+                  {hasRealPlacement && (
+                    <Badge variant="outline" className="text-[9px] text-emerald-500 border-emerald-500/30 bg-emerald-500/5 ml-auto">
+                      {totals.rate} inbox
+                    </Badge>
+                  )}
+                  {!hasRealPlacement && pending > 0 && (
+                    <span className="text-[9px] text-muted-foreground/60 ml-auto">awaiting opens/placement</span>
+                  )}
+                </div>
               </div>
             </div>
           ) : (
