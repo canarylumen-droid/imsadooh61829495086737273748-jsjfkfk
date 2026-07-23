@@ -386,6 +386,19 @@ export default function IntegrationsPage() {
     refetchOnMount: true,
   });
 
+  const { data: placementData } = useQuery<{ totals: { sent: number; inbox: number; spam: number; bounce: number; rate: string }; mailboxes: Array<{ integrationId: string; sent: number; inbox: number; spam: number; bounce: number; inboxRate: number }> }>({
+    queryKey: ["/api/stats/inbox-placement", { integrationId: selectedMailboxId, days: 30 }],
+    staleTime: 15_000,
+  });
+  const placementByIntegration = useMemo(() => {
+    if (!placementData?.mailboxes) return {};
+    const map: Record<string, { sent: number; inbox: number; spam: number; bounce: number; inboxRate: number }> = {};
+    for (const mb of placementData.mailboxes) {
+      map[mb.integrationId] = mb;
+    }
+    return map;
+  }, [placementData]);
+
   const getDailyLimit = () => {
     const tier = (getActivePlanId(userData)).toLowerCase();
     if (tier === 'enterprise') return 1000000; // Effectively Unlimited in UI
@@ -481,6 +494,7 @@ export default function IntegrationsPage() {
     const handleStatsUpdated = () => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
     };
     const handleSettingsUpdated = () => {
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
@@ -513,6 +527,7 @@ export default function IntegrationsPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/custom-email/status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/stats/inbox-placement"] });
     };
 
     const handleBulkImportProgress = (data: any) => {
@@ -577,10 +592,18 @@ export default function IntegrationsPage() {
   const INITIAL_VISIBLE = 5;
   const pagedMailboxes = useMemo(() => {
     const base = filteredMailboxes.slice(mailboxPage * MAILBOXES_PER_PAGE, (mailboxPage + 1) * MAILBOXES_PER_PAGE);
-    if (mailboxSearch.trim()) return base; // search overrides compact view
-    if (showAllMailboxes) return base;
-    return base.slice(0, INITIAL_VISIBLE);
-  }, [filteredMailboxes, mailboxPage, showAllMailboxes, mailboxSearch]);
+    const enriched = base.map(mb => {
+      const p = placementByIntegration[mb.id];
+      if (!p) return mb;
+      const deliveryRate = p.sent > 0 ? Math.round(((p.inbox + p.spam) / p.sent) * 100) : undefined;
+      const bounceRate = p.sent > 0 ? Math.round((p.bounce / p.sent) * 100) : undefined;
+      const placementRate = p.sent > 0 ? Math.round(p.inboxRate) : undefined;
+      return { ...mb, deliveryRate: mb.deliveryRate ?? deliveryRate, bounceRate: mb.bounceRate ?? bounceRate, placementRate: mb.placementRate ?? placementRate };
+    });
+    if (mailboxSearch.trim()) return enriched;
+    if (showAllMailboxes) return enriched;
+    return enriched.slice(0, INITIAL_VISIBLE);
+  }, [filteredMailboxes, mailboxPage, showAllMailboxes, mailboxSearch, placementByIntegration]);
 
   const resetMailboxPagination = useCallback(() => setMailboxPage(0), []);
 

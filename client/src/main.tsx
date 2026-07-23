@@ -19,6 +19,15 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   });
 }
 
+// Suppress console.log/warn in production to keep dev tools clean
+if (import.meta.env.PROD) {
+  const noop = () => {};
+  console.log = noop;
+  console.warn = noop;
+  console.info = noop;
+  console.debug = noop;
+}
+
 // Handle Vite chunk load errors gracefully
 window.addEventListener('error', (e) => {
   if (e.message.includes('Failed to fetch dynamically imported module') ||
