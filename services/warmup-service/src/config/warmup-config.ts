@@ -10,7 +10,7 @@ export const WARMUP_CONFIG = {
   DAILY_RECEIVED_LIMIT: parseInt(process.env.WARMUP_DAILY_RECEIVED_LIMIT || '15', 10),
 
   // Warmup hourly rate limit — max 2 warmup emails per mailbox per hour
-  MAX_WARMUP_PER_HOUR: parseInt(process.env.WARMUP_MAX_PER_HOUR || '2', 10),
+  MAX_WARMUP_PER_HOUR: parseInt(process.env.WARMUP_MAX_PER_HOUR || '4', 10),
 
   // Warmup cap percent — percentage of mailbox cap_limit used when no campaign active
   // e.g. 25% of 50 = 12-13 emails (range 10-15 acceptable). Never exceeds DAILY_SENT_LIMIT (15).

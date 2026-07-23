@@ -256,12 +256,12 @@ export class WarmupScheduler {
       if (Number(hourlyCount[0]?.count ?? 0) >= WARMUP_CONFIG.MAX_WARMUP_PER_HOUR) continue;
 
       // ── SEND WINDOW DISTRIBUTION ────────────────────────────────────
-      // Spread sends across the day by assigning each mailbox 3 send
-      // windows (every 8 hours) based on hash of mailbox ID.
+      // Spread sends across the day to avoid ISP flagging.
+      // Each mailbox gets send windows staggered by hash.
       const mailboxBase = parseInt(mb.id.slice(-2), 16);
       const windows = mailboxBase % 2 === 0
-        ? [0, 6, 12, 18]  // windows at hours 0, 6, 12, 18
-        : [2, 8, 14, 20]; // windows at hours 2, 8, 14, 20
+        ? [0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
+        : [1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23];
       if (!windows.includes(currentHour)) continue;
 
       // Check thread cap
