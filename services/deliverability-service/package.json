@@ -18,7 +18,7 @@
     "dotenv": "^16.4.5",
     "drizzle-orm": "^0.45.2",
     "express": "^4.21.0",
-    "imapflow": "^1.0.170",
+    "imapflow": "^1.4.9",
     "mailparser": "^3.7.1",
     "node-cron": "^4.6.0",
     "postgres": "^3.4.9",
