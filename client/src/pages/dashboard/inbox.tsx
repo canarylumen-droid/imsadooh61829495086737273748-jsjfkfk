@@ -1402,7 +1402,28 @@ export default function InboxPage() {
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-border/5">
             {showWarmup ? (
-              warmupInboxLoading && !warmupInboxData ? (
+              <>
+              <div className="flex items-center gap-2 px-3 py-2 border-b border-border/5 sticky top-0 bg-background z-10">
+                <Activity className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Warmup</span>
+                <div className="ml-auto flex items-center gap-2">
+                  <select
+                    value={selectedMailboxId || 'all'}
+                    onChange={e => setSelectedMailboxId(e.target.value === 'all' ? undefined : e.target.value)}
+                    className="h-7 text-[10px] rounded-md border border-border/30 bg-background px-2 outline-none"
+                  >
+                    <option value="all">All mailboxes</option>
+                    {mailboxes?.filter((m: any) => m.connected).map((m: any) => (
+                      <option key={m.id} value={m.id}>{m.email?.split('@')[0]}</option>
+                    ))}
+                  </select>
+                  <Button variant="ghost" size="sm" className="h-7 text-[10px] gap-1" onClick={() => setLocation('/dashboard/warmup')}>
+                    <Activity className="h-3 w-3" />
+                    Dashboard
+                  </Button>
+                </div>
+              </div>
+              {warmupInboxLoading && !warmupInboxData ? (
                 <div className="p-4 space-y-4">
                   {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}
                 </div>
@@ -1462,7 +1483,8 @@ export default function InboxPage() {
                     </div>
                   ))}
                 </div>
-              )
+              )}
+              </>
             ) : ((leadsFetching && allLeads.length === 0) || (channelsLoading && !hasLoadedLeadsRef.current && !channelsError)) && page === 0 ? (
               <div className="p-4 space-y-4">
                 {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-20 w-full rounded-2xl" />)}

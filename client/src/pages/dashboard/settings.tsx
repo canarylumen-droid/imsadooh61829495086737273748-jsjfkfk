@@ -715,367 +715,42 @@ export default function SettingsPage() {
 
         {/* Developer tab */}
         <TabsContent value="developer" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* API Keys */}
-            <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm lg:col-span-2">
-              <CardHeader className="pb-4 flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl flex items-center gap-2">
-                    <Key className="h-5 w-5 text-primary" />
-                    API Keys
-                  </CardTitle>
-                  <CardDescription>Authenticate API requests with a Bearer token. Keys start with <code className="text-primary font-mono text-xs">audnix_</code> for brand consistency. <a href="/developer" className="text-primary hover:underline font-bold" target="_blank" rel="noopener noreferrer">View full API docs →</a></CardDescription>
-                </div>
-                <Button
-                  onClick={() => setShowCreateKey(true)}
-                  className="rounded-xl font-bold text-xs h-10"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Key
-                </Button>
-              </CardHeader>
-              <CardContent>
-                {showCreateKey && (
-                  <div className="mb-6 p-5 bg-muted/20 rounded-2xl border border-border/30 space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Key Name</Label>
-                        <Input
-                          value={newKeyName}
-                          onChange={e => setNewKeyName(e.target.value)}
-                          placeholder="e.g. Production API"
-                          className="rounded-xl h-11 bg-background border-border/40"
-                          onKeyDown={e => {
-                            if (e.key === 'Enter' && newKeyName.trim() && !createApiKeyMutation.isPending) {
-                              createApiKeyMutation.mutate({ name: newKeyName.trim(), scope: newKeyScope });
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Permissions</Label>
-                        <Select value={newKeyScope} onValueChange={setNewKeyScope}>
-                          <SelectTrigger className="rounded-xl h-11 bg-background border-border/40">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="read_write">
-                              <div className="flex items-center gap-2">
-                                <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
-                                <span>Read & Write</span>
-                              </div>
-                            </SelectItem>
-                            <SelectItem value="read_only">
-                              <div className="flex items-center gap-2">
-                                <Eye className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span>Read Only</span>
-                              </div>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-                    <div className="flex justify-end gap-2 pt-2">
-                      <Button variant="ghost" onClick={() => { setShowCreateKey(false); setNewKeyName(""); setNewKeyScope("read_write"); }} className="rounded-xl">
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={() => {
-                          if (newKeyName.trim()) createApiKeyMutation.mutate({ name: newKeyName.trim(), scope: newKeyScope });
-                        }}
-                        disabled={!newKeyName.trim() || createApiKeyMutation.isPending}
-                        className="rounded-xl font-bold"
-                      >
-                        {createApiKeyMutation.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : <>Generate Key</>}
-                      </Button>
-                    </div>
+          <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
+            <CardHeader>
+              <CardTitle className="text-xl flex items-center gap-2">
+                <Terminal className="h-5 w-5 text-primary" />
+                Developer Tools
+              </CardTitle>
+              <CardDescription>
+                Manage API keys, explore the API, and configure MCP server integration.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <a href="/dashboard/developer" className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors">
+                  <Key className="h-8 w-8 text-primary shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold">API Keys</p>
+                    <p className="text-[10px] text-muted-foreground">Create & manage keys</p>
                   </div>
-                )}
-
-                {showNewKey && (
-                  <div className="mb-6 p-5 bg-primary/5 rounded-2xl border border-primary/20 space-y-4">
-                    <div className="flex items-start justify-between gap-2 text-primary">
-                      <div className="flex items-center gap-2">
-                        <Key className="h-5 w-5" />
-                        <span className="font-bold text-sm">Your API Key</span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setShowNewKey(null)}
-                        className="h-6 w-6 rounded-full -mt-0.5 -mr-1"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Copy this key now. <strong>You won't be able to see it again</strong> for security reasons.
-                      If you lose it, delete and recreate.
-                    </p>
-                    <div className="flex gap-2">
-                      <code className="flex-1 p-3 bg-background rounded-xl border border-border/40 text-xs font-mono break-all select-all">
-                        {showNewKey}
-                      </code>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => {
-                          navigator.clipboard.writeText(showNewKey);
-                          setCopiedField('API Key');
-                          toast({
-                            title: "API Key Copied",
-                            description: "Paste it somewhere safe — you won't see it again.",
-                          });
-                          setTimeout(() => setCopiedField(null), 2000);
-                        }}
-                        className="rounded-xl shrink-0 h-11 w-11"
-                      >
-                        {copiedField === 'API Key' ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                      </Button>
-                    </div>
-                    <div className="flex items-center gap-2 p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
-                      <ShieldAlert className="h-4 w-4 text-amber-500 shrink-0" />
-                      <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
-                        Treat this like a password. Never share it or commit it to code.
-                      </p>
-                    </div>
+                </a>
+                <a href="/developer" className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors">
+                  <Terminal className="h-8 w-8 text-primary shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold">API Docs</p>
+                    <p className="text-[10px] text-muted-foreground">Full API reference</p>
                   </div>
-                )}
-
-                {apiKeys && apiKeys.length > 0 ? (
-                  <div className="space-y-3">
-                    {apiKeys.map((apiKey) => (
-                      <ApiKeyRow
-                        key={apiKey.id}
-                        apiKey={apiKey}
-                        onDelete={(id) => deleteApiKeyMutation.mutate(id)}
-                        onEdit={(id, name) => editKeyNameMutation.mutate({ id, name })}
-                        onCopy={(text) => {
-                          navigator.clipboard.writeText(text);
-                          toast({ title: "Copied", description: "API key fingerprint copied." });
-                        }}
-                      />
-                    ))}
+                </a>
+                <a href="/dashboard/mcp-server" className="flex items-center gap-3 p-4 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors">
+                  <Server className="h-8 w-8 text-primary shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold">MCP Server</p>
+                    <p className="text-[10px] text-muted-foreground">LLM agent integration</p>
                   </div>
-                ) : (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <Key className="h-10 w-10 mx-auto mb-4 opacity-20" />
-                    <p className="font-bold text-sm">No API keys yet</p>
-                    <p className="text-xs mt-1">Create your first key to access the Audnix API programmatically.</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Quick Start Example */}
-            <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Terminal className="h-5 w-5 text-primary" />
-                  Quick Start
-                </CardTitle>
-                <CardDescription>Use your API key with curl from anywhere — no IP whitelist needed.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 bg-muted/10 rounded-xl border border-border/20">
-                  <code className="text-xs font-mono leading-relaxed block whitespace-pre-wrap text-foreground">{`# List your leads
-curl -H "Authorization: Bearer audnix_..." \\
-  ${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/leads
-
-# Get campaign stats
-curl -H "Authorization: Bearer audnix_..." \\
-  ${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/outreach/campaigns
-
-# Dashboard analytics
-curl -H "Authorization: Bearer audnix_..." \\
-  ${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/api/dashboard/stats`}</code>
-                </div>
-                <div className="p-3 bg-primary/5 rounded-xl border border-primary/10">
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    <strong className="text-foreground">No IP restrictions.</strong> Your API key is your identity.
-                    All endpoints return data scoped to your account. Auth/login endpoints are not accessible via API key.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* MCP Server */}
-            <Card className="border-border/40 shadow-sm rounded-2xl bg-card/50 backdrop-blur-sm lg:col-span-2">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl flex items-center gap-2">
-                  <Server className="h-5 w-5 text-primary" />
-                  MCP Server
-                </CardTitle>
-                <CardDescription>Connect any LLM agent — Claude, GPT, Gemini, Cursor, and 5000+ more MCP-compatible clients.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* LLM Provider Badges */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/50 mr-2">Compatible:</span>
-                  {[
-                    ["Claude", "#d97706"],
-                    ["Gemini", "#4285F4"],
-                    ["ChatGPT", "#10a37f"],
-                    ["Cursor", "#6c47ff"],
-                    ["Copilot", "#0078d4"],
-                    ["Cline", "#f97316"],
-                    ["Continue", "#7c3aed"],
-                    ["Windsurf", "#06b6d4"],
-                    ["OpenCode", "#06b6d4"],
-                    ["Claude Code", "#d97706"],
-                  ].map(([name, color]) => (
-                    <div key={name} className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border/30" style={{backgroundColor: `${color}08`}}>
-                      <div className="w-2 h-2 rounded-full" style={{backgroundColor: color}} />
-                      <span className="text-[10px] font-bold text-muted-foreground">{name}</span>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Server URL */}
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Server URL</Label>
-                  <div className="flex gap-2">
-                    <code className="flex-1 p-3 bg-muted/20 rounded-xl border border-border/40 text-xs font-mono select-all">
-                      {typeof window !== 'undefined' ? `${window.location.origin}/mcp` : 'https://audnixai.com/mcp'}
-                    </code>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => handleCopyToClipboard(`${window.location.origin}/mcp`, 'MCP URL')}
-                      className="rounded-xl shrink-0 h-11 w-11"
-                    >
-                      {copiedField === 'MCP URL' ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Config Blocks for Different LLMs */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {[
-                    {
-                      title: "Claude Desktop",
-                      code: `{
-  "mcpServers": {
-    "audnix": {
-      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
-    }
-  }
-}`,
-                      key: "claude-config"
-                    },
-                    {
-                      title: "VS Code / Cursor",
-                      code: `{
-  "mcp": {
-    "servers": {
-      "audnix": {
-        "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
-        "headers": {
-          "Authorization": "Bearer YOUR_API_KEY"
-        }
-      }
-    }
-  }
-}`,
-                      key: "vscode-config"
-                    },
-                    {
-                      title: "OpenAI GPT (Custom GPT)",
-                      code: `{
-  "actions": [{
-    "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
-    "headers": {
-      "Authorization": "Bearer YOUR_API_KEY"
-    }
-  }]
-}`,
-                      key: "openai-config"
-                    },
-                    {
-                      title: "OpenCode / Cline",
-                      code: `{
-  "mcpServers": {
-    "audnix": {
-      "type": "url",
-      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://audnixai.com'}/mcp",
-      "headers": {
-        "Authorization": "Bearer YOUR_API_KEY"
-      }
-    }
-  }
-}`,
-                      key: "opencode-config"
-                    },
-                  ].map((config) => (
-                    <div key={config.key} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground">{config.title}</h4>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-lg"
-                          onClick={() => handleCopyToClipboard(config.code, config.key)}
-                        >
-                          {copiedField === config.key ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
-                        </Button>
-                      </div>
-                      <div className="p-3 bg-muted/10 rounded-xl border border-border/20 relative group">
-                        <code className="text-[10px] font-mono leading-relaxed block whitespace-pre-wrap text-foreground/80">{config.code}</code>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <Separator className="bg-border/20" />
-
-                {/* Available MCP Tools */}
-                <div>
-                  <h4 className="font-bold text-xs uppercase tracking-wider text-muted-foreground mb-3">Available Tools</h4>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {[
-                      { name: "get_leads", desc: "Query leads by status, date, category", danger: false },
-                      { name: "get_campaigns", desc: "List campaigns and performance", danger: false },
-                      { name: "get_analytics", desc: "Dashboard analytics data", danger: false },
-                      { name: "get_inbox", desc: "Read inbox messages", danger: false },
-                      { name: "send_message", desc: "Send outreach messages", danger: true },
-                      { name: "manage_webhooks", desc: "Create & manage webhooks", danger: true },
-                    ].map((tool) => (
-                      <div key={tool.name} className="flex items-center gap-2 p-2.5 bg-muted/5 rounded-xl border border-border/20">
-                        <div className={`p-1 rounded-lg ${tool.danger ? 'bg-amber-500/10' : 'bg-primary/10'}`}>
-                          <Terminal className={`h-3 w-3 ${tool.danger ? 'text-amber-500' : 'text-primary'}`} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <code className="text-[10px] font-bold font-mono truncate">{tool.name}</code>
-                            {tool.danger && <span className="text-[7px] font-bold uppercase text-amber-500 shrink-0">⚠️</span>}
-                          </div>
-                          <p className="text-[9px] text-muted-foreground truncate">{tool.desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Permission Info */}
-                <div className="p-4 bg-gradient-to-br from-primary/5 to-purple-500/5 rounded-2xl border border-primary/15">
-                  <div className="flex items-start gap-3">
-                    <Shield className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="font-bold text-sm mb-1">Permissions & Safety</h4>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        <strong className="text-foreground">Account deletion is NOT possible</strong> via MCP or API key — there is no tool or endpoint for it.
-                        Deleting leads requires user confirmation. Auth, billing, and admin endpoints are blocked.
-                        A skill file is available for LLM agents (<code className="text-[9px] font-mono bg-primary/10 px-1 rounded">audnix-mcp.md</code>) that explains all rules automatically.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </a>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Voice AI tab */}
