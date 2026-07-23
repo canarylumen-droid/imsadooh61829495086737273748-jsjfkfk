@@ -1295,5 +1295,35 @@ Wire DNS verification through Rust for all paths, trigger on OAuth connect, then
 - `services/lead-recovery-worker/src/worker.ts:43-67` — Redis subscription connection check (from prior session)
 - `client/src/pages/dashboard/integrations.tsx:406,1682` — DNS badge pending/amber state (from prior session)
 
+## This Session (Jul 23 2026) — API Gateway 502 Fix + MCP Hash Mismatch
+
+### Root Causes
+1. **`email-sync-worker.ts:333`** — Syntax error (`))` → `)`) caused esbuild TransformError, preventing API gateway startup. All 502 errors traced here.
+2. **`mcp-routes.ts:30`** — `validateApiKey()` used SHA-256, but keys stored with SHA-512. Every key returned "API key not found".
+
+### Fixes
+- `services/email-service/src/email/email-sync-worker.ts:333` — removed extra `)`
+- `services/api-gateway/src/routes/mcp-routes.ts:30` — `sha256` → `sha512`
+
+### Verified
+- API gateway health check 200
+- MCP `tools/list` returns 8 tools (JSON-RPC 2.0) — 200
+- MCP `tools/call get_campaigns` returns 200
+- Pushed to GitHub (`50b0746f`)
+
+### DB
+- DB host: `database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com` (prod)
+- Only 2 users: `fortuneuchendu708@gmail.com` + `test-prod@audnixai.com`
+- Password column is `password` (not `password_hash`)
+- Reset password: `UPDATE users SET password='$HASH' WHERE email='...'` (generate bcrypt with Node.js)
+- API key table: `api_keys` with columns `id, user_id, name, key, scope` (NOT permission_level/scopes/is_active)
+- `messages` table: no `from_addr`, `snippet`, `date` — use `subject`, `LEFT(body,100)`, `created_at`
+- `email_tracking` needs `placement` column added via `ALTER TABLE`
+
+### MCP Users (Aug 2026)
+- For testing, use fortune@ replyflow accounts, login via HTTPS, create key with `scope: read_write`
+- MCP key = `audnix_` + 64 hex chars = 70 chars total
+- Always verify hash algo matches between create and validate
+
 ### Deploy
-- Push to GitHub, pull on EC2, build client, restart warmup worker + API gateway + Rust sender
+- Push to GitHub, pull on EC2, build client, restart affected services
