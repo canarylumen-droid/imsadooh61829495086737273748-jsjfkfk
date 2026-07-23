@@ -129,7 +129,7 @@ export class ThreadManager {
         messageCount: newCount,
         lastMessageId: messageId,
         references: thread[0].lastMessageId
-          ? sql`${warmupThreads.references} || to_jsonb(${thread[0].lastMessageId}::text)`
+          ? sql`COALESCE(references || to_jsonb(${thread[0].lastMessageId}::text), to_jsonb(${thread[0].lastMessageId}::text))`
           : warmupThreads.references,
         status: isComplete ? 'completed' : 'active',
         lastInteractionAt: new Date(),
