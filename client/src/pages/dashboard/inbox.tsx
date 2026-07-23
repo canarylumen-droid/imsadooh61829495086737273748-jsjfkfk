@@ -558,7 +558,8 @@ export default function InboxPage() {
     },
     enabled: showWarmup && !!selectedWarmupThreadId,
     placeholderData: (prev: any) => prev,
-    staleTime: 5_000,
+    staleTime: 10_000,
+    refetchInterval: 10_000,
   });
 
   const { data: channelStatus, isLoading: channelsLoading, isError: channelsError } = useQuery<any>({

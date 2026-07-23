@@ -401,7 +401,43 @@ export class DrizzleStorage implements IStorage {
 
     // We do NOT use revocationService here directly to avoid circular dependencies.
     // Instead, the route handler calling deleteUser should orchestrate revocationService.revokeAllAndDestroyUser.
-    
+
+    // Anonymize all PII before delete to prevent recovery from RDS automated snapshots.
+    // RDS snapshots are immutable point-in-time copies — if a snapshot was taken before deletion,
+    // it would contain the user's PII (email, name, tokens, etc). By zeroing out all PII fields
+    // BEFORE the DELETE, we ensure that:
+    //   1. Any snapshot taken during/after this window has no recoverable PII
+    //   2. Old snapshots will age out per the backup retention period (default 7-35 days)
+    // This is required for GDPR "right to be forgotten" compliance.
+    await db
+      .update(users)
+      .set({
+        email: `deleted-${id.slice(0, 8)}@audnixai.com`,
+        name: '[deleted]',
+        username: null,
+        avatar: null,
+        company: null,
+        businessName: null,
+        password: null,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        calendarLink: null,
+        brandGuidelinePdfUrl: null,
+        brandGuidelinePdfText: null,
+        calendlyAccessToken: null,
+        calendlyRefreshToken: null,
+        calendlyUserUri: null,
+        businessLogo: null,
+        defaultPaymentLink: null,
+        offerDescription: null,
+        offerDescription2: null,
+        appLink: null,
+        intelligenceMetadata: sql`'{}'::jsonb`,
+        metadata: sql`'{}'::jsonb`,
+        config: sql`'{}'::jsonb`,
+      })
+      .where(eq(users.id, id));
+
     // Deleting the user will cascade (if DB constraints are set) or we manually clean up.
     // Drizzle/Postgres usually handles cascades on foreign keys.
     await db.delete(users).where(eq(users.id, id));

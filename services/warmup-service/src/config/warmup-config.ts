@@ -23,8 +23,9 @@ export const WARMUP_CONFIG = {
   REPLIES_PER_SEND: parseInt(process.env.WARMUP_REPLIES_PER_SEND || '1', 10),
 
   // Reply chain timing (seconds between replies in the chain)
-  REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '180', 10),
-  REPLY_CHAIN_MAX_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MAX_DELAY || '360', 10),
+  // Increased from 3-6min to 30-60min to prevent rapid bot replies that look unnatural.
+  REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '1800', 10),
+  REPLY_CHAIN_MAX_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MAX_DELAY || '3600', 10),
 
   // Threading
   MIN_MESSAGES_PER_THREAD: 3,
@@ -42,15 +43,13 @@ export const WARMUP_CONFIG = {
   PER_THREAD_STAGGER_MAX_MINUTES: parseInt(process.env.WARMUP_THREAD_STAGGER_MINUTES || '30', 10),
 
   // Reply expectation (minutes)
-  // Seeds reply fast (1-5min). User mailboxes get their own pacing via ramp limits.
-  MIN_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MIN_REPLY_EXPECTATION_MINUTES || '1', 10),
-  MAX_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MAX_REPLY_EXPECTATION_MINUTES || '5', 10),
+  MIN_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MIN_REPLY_EXPECTATION_MINUTES || '30', 10),
+  MAX_REPLY_EXPECTATION_MINUTES: parseInt(process.env.WARMUP_MAX_REPLY_EXPECTATION_MINUTES || '60', 10),
 
   // Seed-to-user reply pacing (minutes)
-  // After each seed email, the next reply is delayed by this range.
-  // Progressively increases: reply 1 = 5-10min, reply 2 = 8-18min, reply 3 = 12-28min
-  SEED_REPLY_MIN_DELAY_MINUTES: 1,
-  SEED_REPLY_MAX_DELAY_MINUTES: 3,
+  // Progressively increases: reply 1 = 30-60min, reply 2 = 60-120min, reply 3 = 120-240min
+  SEED_REPLY_MIN_DELAY_MINUTES: 30,
+  SEED_REPLY_MAX_DELAY_MINUTES: 60,
 
   HIDDEN_FOLDER_NAME: process.env.WARMUP_HIDDEN_FOLDER || '.Warmup-Archive',
   IMAP_TIMEOUT_MS: parseInt(process.env.WARMUP_IMAP_TIMEOUT_MS || '15000', 10),

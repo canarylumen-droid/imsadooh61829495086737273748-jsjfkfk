@@ -181,6 +181,14 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   app.use("/api", featureFlagRouter);
   registerAnalyticsRoutes(app); // Phase 14: KPI & Conversion Analytics
 
+  // Catch-all for unmatched API routes — return JSON instead of Express HTML
+  app.use("/api/*", (req, res) => {
+    res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+  });
+  app.use("/mcp/*", (req, res) => {
+    res.status(404).json({ error: `Route not found: ${req.method} ${req.path}` });
+  });
+
   // Global error handler — return JSON instead of HTML for unhandled errors
   app.use((err: any, req: any, res: any, next: any) => {
     if (res.headersSent) return next(err);

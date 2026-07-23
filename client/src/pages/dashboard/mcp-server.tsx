@@ -233,7 +233,13 @@ function McpServerPage() {
                     return;
                   }
                   const j = await r.json();
-                  setTestRes(r.ok ? "Connected" : `Error: ${j.error || r.statusText}`);
+                  if (r.ok) {
+                    const tools = j.result?.tools || j.tools || [];
+                    const names = tools.map((t: any) => t.name).join(", ");
+                    setTestRes(`Connected – ${tools.length} tool${tools.length !== 1 ? "s" : ""} available: ${names || "none"}`);
+                  } else {
+                    setTestRes(`Error: ${j.error || r.statusText}`);
+                  }
                   toast({ title: r.ok ? "OK" : "Failed", variant: r.ok ? "default" : "destructive" });
                 } catch (e: any) {
                   setTestRes(`Error: ${e.message}`);
