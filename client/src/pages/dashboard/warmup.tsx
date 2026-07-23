@@ -443,7 +443,7 @@ export default function WarmupPage() {
                         {mb.provider} • <span className="font-semibold text-foreground/80">{warmupCount}</span>/{mb.dailyLimit} today • cap {mb.capLimit || 50}
                       </p>
                     </div>
-                    <Badge className={cn("text-[9px] shrink-0 ml-2", warmupCount > 0 ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20")}>{warmupCount > 0 ? "Active" : "Idle"}</Badge>
+                    <Badge className={cn("text-[9px] shrink-0 ml-2", mb.warmupStatus === 'active' ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border-amber-500/20")}>{mb.warmupStatus === 'active' ? (warmupCount > 0 ? "Active" : "Starting...") : "Paused"}</Badge>
                   </div>
 
                   {/* Progress bar + percent */}
@@ -455,8 +455,8 @@ export default function WarmupPage() {
                       </div>
                       <div className="h-2 bg-muted/30 rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-500"
-                          style={{ width: `${Math.max(1, todayProgress)}%` }}
+                          className={cn("h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-500", todayProgress === 0 && mb.warmupStatus === 'active' && "animate-pulse")}
+                          style={{ width: `${Math.max(todayProgress === 0 && mb.warmupStatus === 'active' ? 2 : 1, todayProgress)}%` }}
                         />
                       </div>
                     </div>

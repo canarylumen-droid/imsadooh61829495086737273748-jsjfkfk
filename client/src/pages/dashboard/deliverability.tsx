@@ -339,8 +339,8 @@ export default function DeliverabilityPage() {
                             {(mb as any).dnsValid === undefined || (mb as any).dnsValid === null ? (
                               <span className="text-muted-foreground/40">—</span>
                             ) : (
-                              <Badge variant="outline" className={cn("text-[9px]", (mb as any).dnsValid ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500")}>
-                                {(mb as any).dnsValid ? 'Valid' : 'Pending'}
+                              <Badge variant="outline" className={cn("text-[9px]", (mb as any).dnsValid ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500")}>
+                                {(mb as any).dnsValid ? 'Valid' : 'Issues'}
                               </Badge>
                             )}
                           </p>
@@ -390,7 +390,7 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
   const hasData = totals.sent > 0;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 gap-4">
       <Card className="bg-card/50 border-border/40">
         <CardHeader className="p-3 pb-0">
           <div className="flex items-center justify-between">
