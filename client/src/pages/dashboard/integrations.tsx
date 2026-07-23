@@ -449,7 +449,8 @@ export default function IntegrationsPage() {
         'invalid_state': 'Session expired. Please try connecting again.',
         'gmail_denied': 'Gmail authorization was denied.',
         'outlook_denied': 'Outlook authorization was denied.',
-        'instagram_denied': 'Instagram authorization was denied.'
+        'instagram_denied': 'Instagram authorization was denied.',
+        'limit_reached': 'Mailbox limit reached for your plan. Please upgrade to add more mailboxes.'
       };
       toast({
         title: "Connection Failed",

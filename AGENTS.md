@@ -1316,7 +1316,7 @@ Wire DNS verification through Rust for all paths, trigger on OAuth connect, then
   pm2 restart audnix-api-gateway audnix-socket-server
   ```
 
-## This Session (Jul 23 2026) — API Gateway 502 Fix + MCP Hash Mismatch
+## This Session (Jul 23 2026) — Lead Recovery 403 Banner + MCP UI Cleanup
 
 ### Root Causes
 1. **`email-sync-worker.ts:333`** — Syntax error (`))` → `)`) caused esbuild TransformError, preventing API gateway startup. All 502 errors traced here.
@@ -1441,3 +1441,22 @@ Startup → provisionFromEnv() → creates warmup_mailboxes + warmup_seed_accoun
 ### Deploy
 - Push to GitHub (`50b0746f` + new commit), pull on EC2, build client, restart `audnix-worker-email` only (no other services need restart for IMAP fix)
 - Verify: `pm2 logs audnix-worker-email --lines 20 --nostream` should show no more `custom_email` connection attempts
+
+## This Session (Jul 23 2026) — Lead Recovery 403 Banner + MCP UI Cleanup
+
+### Lead Recovery 403 Fix
+- **Root cause**: `apiRequest()` calls `throwIfResNotOk()` which throws `Error("403: {...}")` before the store's `if (!res.ok)` check can parse status. The store's 403 handling was dead code.
+- **Fix**: `loadStatus()`, `loadLeads()`, `loadEvents()` now use `fetch` directly (not `apiRequest`). 403 is checked before `throwIfResNotOk` can fire. Clean "Upgrade to Pro" message shown in an amber upgrade banner with CTA button. No "failed to load recovery" toasts for trial users.
+
+### MCP UI Cleanup
+- **"delete_account is blocked" badge removed**: Filtered out `blocked` tools from both the "Available Tools" card and the test results display.
+- **Clean connection message**: Changed "Connected – 8 tools available: get_campaigns, ..." → "Connected — get_campaigns, get_leads, get_analytics, ..." (no count, no blocked tools).
+
+### Files Changed
+- `client/src/stores/leadRecoveryStore.tsx` — `fetch` not `apiRequest`, handle 403 silently, clean error msg
+- `client/src/pages/dashboard/lead-recovery.tsx` — amber upgrade banner with CTA button
+- `client/src/pages/dashboard/mcp-server.tsx` — filter blocked tools, clean connection message
+- `AGENTS.md` — this entry
+
+### Deploy
+- `git push github main` (`cbc97f1c`), EC2: git pull, vite build (23.84s), restart api-gateway + socket-server
