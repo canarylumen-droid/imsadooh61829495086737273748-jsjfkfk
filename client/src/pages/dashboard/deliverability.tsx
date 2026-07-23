@@ -366,7 +366,7 @@ function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }
         <CardContent className="h-[180px] flex items-center justify-center">
           {hasData ? (
             <div className="w-full flex items-center gap-3 px-2">
-              <ChartContainer config={{}} className="w-[45%] h-full">
+              <ChartContainer config={{}} className="w-[45%] h-full aspect-auto">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={25} outerRadius={50} paddingAngle={3}>

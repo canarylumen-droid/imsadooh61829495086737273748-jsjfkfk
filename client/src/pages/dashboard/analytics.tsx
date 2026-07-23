@@ -233,7 +233,7 @@ export default function AnalyticsPage() {
 
             <ResponsiveGrid className="grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
                 {/* Main Growth Chart */}
-                <Card className="lg:col-span-2 bg-card border-border/40 rounded-2xl overflow-hidden">
+                <Card className="lg:col-span-2 bg-card border-border/40 rounded-2xl">
                     <CardHeader className="p-4 sm:p-6 md:p-8 pb-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4">
                         <CardTitle className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50 text-center sm:text-left">Engagement Velocity</CardTitle>
                         <div className="flex flex-wrap justify-center gap-4">
@@ -394,7 +394,7 @@ export default function AnalyticsPage() {
                                 </ResponsiveContainer>
                             </ChartContainer>
                         ) : (
-                            <ChartContainer config={chartConfig} className="h-full w-full">
+                            <ChartContainer config={chartConfig} className="h-full w-full aspect-auto">
                                 <ResponsiveContainer width="100%" height="100%">
                                     {(() => {
                                         const pieData = [
@@ -499,7 +499,7 @@ export default function AnalyticsPage() {
                     <CardContent className="h-[260px] flex items-center justify-center">
                         {analytics?.metrics ? (
                             <div className="w-full h-full flex items-center justify-center gap-4">
-                                <ChartContainer config={{}} className="w-[50%] h-full">
+                                <ChartContainer config={{}} className="w-[50%] h-full aspect-auto">
                                     <ResponsiveContainer width="100%" height="100%">
                                         {(() => {
                                             const pieData = [
@@ -767,7 +767,7 @@ function InboxPlacementSection({ selectedMailboxId, days }: { selectedMailboxId?
                         <p className="text-xs text-muted-foreground/40 font-semibold uppercase">No placement data</p>
                     ) : (
                         <div className="w-full flex items-center gap-3 px-3">
-                            <ChartContainer config={{}} className="w-[50%] h-full">
+                            <ChartContainer config={{}} className="w-[50%] h-full aspect-auto">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <PieChart>
                                         <Pie
