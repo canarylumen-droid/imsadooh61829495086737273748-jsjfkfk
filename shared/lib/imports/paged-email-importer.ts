@@ -243,19 +243,18 @@ async function processEmailForLead(
       // Ignore duplicates
     }
 
-    // Notify UI of new message and potentially lead status change
+    // Notify UI of new message and potentially lead status change via Redis pub/sub (works cross-process)
     try {
-      const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');
+      const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
 
-      // Notify broad updates for real-time feel
-      wsSync.notifyMessagesUpdated(userId, {
+      clusterSync.notifyMessagesUpdated(userId, {
         type: 'INSERT',
+        event: 'INSERT',
         messageId: (newMessage as any).id,
         direction
       });
 
-      // Always notify leads updated to refresh counts/badges
-      wsSync.notifyLeadsUpdated(userId, {
+      clusterSync.notifyLeadsUpdated(userId, {
         leadId: lead.id,
         action: direction === 'inbound' ? 'message_received' : 'message_sent'
       });
@@ -275,8 +274,6 @@ async function processEmailForLead(
             }
           });
 
-          // Notify UI to play sound and show toast
-          const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
           clusterSync.notifyNotification(userId, {
             type: 'lead_activity',
             title: 'New Reply Received',
@@ -287,15 +284,13 @@ async function processEmailForLead(
         } catch (notifErr) {
           console.error('[Email Import] Notification failed:', notifErr);
         }
-        // Fire activity update for toasts and analytics
-        wsSync.notifyActivityUpdated(userId, {
+        clusterSync.notifyActivityUpdated(userId, {
           type: 'email_received',
           leadId: lead.id,
           messageId: (newMessage as any).id
         });
       } else {
-        // Also notify activity for sent emails
-        wsSync.notifyActivityUpdated(userId, {
+        clusterSync.notifyActivityUpdated(userId, {
           type: 'email_sent',
           leadId: lead.id,
           messageId: (newMessage as any).id

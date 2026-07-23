@@ -1181,25 +1181,13 @@ export class DrizzleStorage implements IStorage {
         }
       }
 
-      // Notify both updates
-      wsSync.notifyMessagesUpdated(message.userId, { event: 'INSERT', message: result[0] });
-      wsSync.notifyLeadsUpdated(message.userId, { event: 'UPDATE', leadId: message.leadId });
-
-      // Phase 11: Invalidate dashboard stats for Zero Refresh sync
-      // Use Redis pub/sub for cross-process cache invalidation
+      // Notify both updates via Redis pub/sub (works cross-process, including workers where wsSync.io is null)
       try {
+        clusterSync.notifyMessagesUpdated(message.userId, { event: 'INSERT', message: result[0] });
+        clusterSync.notifyLeadsUpdated(message.userId, { event: 'UPDATE', leadId: message.leadId });
         clusterSync.notifyStatsCacheInvalidate(message.userId);
         clusterSync.notifyStatsUpdated(message.userId);
-      } catch (err) { console.warn('[Storage] Stats cache invalidate failed:', err); }
-
-
-      // Phase 8: Emit direct thread update to dashboard for instant conversation sync
-      import('@shared/lib/realtime/socket-service.js').then(({ socketService }) => {
-        socketService.getIo()?.to(`user:${message.userId}`).emit('thread:update', {
-          leadId: message.leadId,
-          message: result[0]
-        });
-      }).catch(err => console.error('[SocketService] Failed to emit thread:update', err));
+      } catch (err) { console.warn('[Storage] Notify failed:', err); }
 
       // --- Campaign Auto-Reply Trigger ---
       // Only triggers when the campaign is active — paused/completed campaigns
