@@ -67,6 +67,12 @@ export default function DeliverabilityPage() {
     select: (d: any) => (d.integrations || d || []).filter((i: any) => ['gmail', 'outlook', 'custom_email'].includes(i.provider) && i.connected),
   });
 
+  const { data: domainVerifications } = useQuery({
+    queryKey: ["/api/stats/domain-reputation", { days: 30, integrationId: selectedMailboxId }],
+    select: (d: any) => d?.domainVerifications || [],
+    enabled: !!integrationsData,
+  });
+
   const { data: placementData } = useQuery<InboxPlacementData>({
     queryKey: ["/api/stats/inbox-placement", { days: placementDays, integrationId: selectedMailboxId }],
     queryFn: async () => {
@@ -232,7 +238,10 @@ export default function DeliverabilityPage() {
           <InboxPlacementPie selectedMailboxId={selectedMailboxId} />
 
           <div className="space-y-3">
-            {enrichedMailboxes.map((mb: any, i: number) => {
+              {enrichedMailboxes.map((mb: any, i: number) => {
+                const domain = mb.email?.split('@')[1] || '';
+                const verif = domainVerifications?.find((v: any) => v.domain === domain);
+                const dnsOk = verif?.spfValid && verif?.dkimValid && verif?.dmarcValid;
               const score = mb.reputationScore ?? 0;
               const scoreColor = score >= 70 ? "text-emerald-500" : score >= 40 ? "text-amber-500" : "text-red-500";
               const scoreBg = score >= 70 ? "bg-emerald-500/10 border-emerald-500/20" : score >= 40 ? "bg-amber-500/10 border-amber-500/20" : "bg-red-500/10 border-red-500/20";
@@ -336,8 +345,10 @@ export default function DeliverabilityPage() {
                         <div>
                           <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/60">DNS</p>
                           <p className="text-sm font-bold">
-                            {(mb as any).dnsValid === true ? (
-                              <Badge variant="outline" className="text-[9px] bg-emerald-500/10 text-emerald-500">Valid</Badge>
+                            {verif ? (
+                              <Badge variant="outline" className={cn("text-[9px]", dnsOk ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500")}>
+                                {dnsOk ? 'Valid' : 'Issues'}
+                              </Badge>
                             ) : (
                               <span className="text-muted-foreground/40">—</span>
                             )}

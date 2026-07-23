@@ -106,6 +106,17 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   });
 
 
+  // Redirect browser navigations to data API endpoints — prevents raw JSON exposure
+  app.use("/api", (req, res, next) => {
+    const accept = req.headers.accept || '';
+    const browserOnly = ['/api/auth/', '/api/oauth/', '/api/webhooks/', '/api/health', '/api/unsubscribe', '/api/cron/', '/api/email-tracking/'];
+    const isBrowserPath = browserOnly.some(p => req.path.startsWith(p));
+    if (accept.includes('text/html') && !isBrowserPath) {
+      return res.redirect('/dashboard/home');
+    }
+    next();
+  });
+
   // Mount all other routes
   app.use("/api/organizations", organizationRouter);
 

@@ -540,6 +540,9 @@ export default function CalendarPage() {
         const { openOAuthPopup } = await import('@/lib/oauth-popup');
         openOAuthPopup(data.authUrl, { onComplete: () => {
           queryClient.invalidateQueries({ queryKey: ["/api/calendar/events"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/calendar/settings"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/channels/"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
         }});
       } else {
         throw new Error("No authorization URL returned");

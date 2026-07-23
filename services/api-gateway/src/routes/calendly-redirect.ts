@@ -47,7 +47,14 @@ router.get('/calendly/callback', async (req: Request, res: Response): Promise<vo
     const userId = stateData.userId;
 
     // Re-attach userId to session (OAuth redirect may create a new browser context)
+    // Regenerate session to prevent session fixation, then set userId
     if ((req as any).session) {
+      await new Promise<void>((resolve, reject) => {
+        (req as any).session.regenerate((err: any) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
       (req as any).session.userId = userId;
     }
 

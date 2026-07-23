@@ -248,8 +248,10 @@ export default function LeadImportPage() {
       setImportStatusText("Analyzing lead data...");
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || 'Import failed');
+        const text = await response.text().catch(() => '');
+        let errorData: any = {};
+        try { errorData = JSON.parse(text); } catch {}
+        throw new Error(errorData?.error || text?.slice(0, 200) || `Server returned ${response.status}`);
       }
 
       const result = await response.json();

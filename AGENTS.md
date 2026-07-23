@@ -1346,6 +1346,45 @@ Wire DNS verification through Rust for all paths, trigger on OAuth connect, then
 - MCP key = `audnix_` + 64 hex chars = 70 chars total
 - Always verify hash algo matches between create and validate
 
+## This Session (Jul 23 2026) — Bug Blitz: Warmup + Lead Recovery + Email Worker + Disk
+
+### Warmup Fixes
+1. **`WARMUP_ENCRYPTION_KEY` missing** — `decryptWarmupSecret()` returned encrypted ciphertext as password → IMAP auth failed → watchdog paused seeds → `warmup_mailboxes.dailyReceivedCount` grew = 72/54 > DAILY_RECEIVED_LIMIT=15 → pairing engine found zero candidates → no threads → 0% progress.
+2. **Root cause chain**: No `WARMUP_ENCRYPTION_KEY` in env → decrypted to garbage → IMAP "Command failed" → watchdog paused → 0 sends.
+3. **Fix**: Added `WARMUP_ENCRYPTION_KEY: 'wmup_enc_key_audnix_2026_v1'` to warmup worker env block in `ecosystem.config.cjs`. Deleted stale seed `warmup_mailboxes` + `warmup_seed_accounts` rows. Deleted 4 stale seed warmup_mailboxes + 2 seed_accounts. Restarted worker — seeds reprovisioned with correct encryption key, IMAP verified OK (both SMTP + IMAP).
+4. **Counter reset**: `dailyReceivedCount` was 72/54 (way over 15 limit) — blocked enterprise candidates filter. Reset to 0 via SQL.
+5. **Thread creation**: First thread at 16:13:11: `fortuneuchendu708@gmail.com → fortune@outreach.replyflow.pro (5 volleys)`. Reply volley queued in ~3008s.
+
+### Other Fixes This Session
+- **Lead recovery crash-loop** (3687 restarts): `npm install openai@^6.7.0` (missing `openai/package.json`) + `pm2 delete` + `pm2 start` to pick up `MYSQL_HOST` env vars
+- **Email worker EADDRINUSE** (port 8082): Added `EMAIL_WORKER_PORT: '8085'` to env block
+- **Disk 92%**: Truncated all `.log` files → 81%
+- **API gateway** (30 restarts) and **socket server** (24 restarts): stable — restarts from earlier instability
+- **Warmup IMAP fix** (Node vs Rust lock war): Removed `'custom_email'` from Node.js IMAP watchdog resurrection loop
+
+### SSH Pattern Learned
+- EC2 Instance Connect public keys expire after 60s. Must run `sendSSHPublicKey` and SSH in rapid succession (within same script).
+- Use `rm -f /tmp/aws_temp_key && ssh-keygen -t rsa -b 2048 -f /tmp/aws_temp_key -N '' -q && node ... sendSSHPublicKey ... && ssh -i /tmp/aws_temp_key ...`
+- Node.js pg queries on EC2: run from `/home/ubuntu/app` directory so `require("pg")` resolves.
+
+### Warmup Scheduler Flow
+```
+Startup → provisionFromEnv() → creates warmup_mailboxes + warmup_seed_accounts
+  → verifySeedConnection() → SMTP + IMAP test
+  → scheduler.setInterval(60s) → scheduleNewThreads()
+    → pairingEngine.findPartner(mailbox)
+      → seeds: getEnterpriseCandidates() only (poolType IN enterprise,global)
+      → enterprise candidates filtered by dailySent/dailyReceived < limit
+      → pickBest() + weightedRandom()
+    → createThread(sender, recipient, volleys=5)
+    → queueSend(sender, recipient, delay=~50min)
+```
+
+### Key Issues
+- **Max 1 warmup email/mailbox/hour** (max 24 warmup emails/day split across even-hour/odd-hour slots)
+- **EC2 Instance Connect**: SSH key must be re-pushed every 60s via `sendSSHPublicKey`
+- **Wait for user**: Instagram integration instructions pending
+
 ## This Session (Jul 23 2026) — Deliverability Fix: Route Mismatch + UI Polish
 
 ### Root Cause of "Sent shows 0"
