@@ -2169,24 +2169,31 @@ export default function IntegrationsPage() {
                       </div>
                     </div>
 
-                    {/* DNS badges */}
-                    <div className="flex flex-wrap gap-1">
-                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
-                        mailbox.dns?.spf ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
-                      )}>SPF</Badge>
-                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
-                        mailbox.dns?.dkim ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
-                      )}>DKIM</Badge>
-                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
-                        mailbox.dns?.dmarc ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
-                      )}>DMARC</Badge>
-                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
-                        mailbox.dns?.mx ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
-                      )}>MX</Badge>
-                      <Badge className={cn("text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5",
-                        !mailbox.dns?.blacklist ? "bg-emerald-500/10 text-emerald-500" : "bg-red-500/10 text-red-500"
-                      )}>BL</Badge>
-                    </div>
+                    {/* DNS badges — same logic as main page */}
+                    <TooltipProvider delayDuration={300}>
+                      <div className="flex flex-wrap gap-1">
+                        {(['spf', 'dkim', 'dmarc', 'mx', 'blacklist'] as const).map((record) => {
+                          const badge = getDnsBadge(record, mailbox.email || '');
+                          if (!badge) return null;
+                          return (
+                            <Tooltip key={record}>
+                              <TooltipTrigger asChild>
+                                <Badge className={cn(
+                                  "text-[7px] font-bold uppercase tracking-wider px-1.5 py-0.5 border cursor-help",
+                                  badge.isPending ? "bg-amber-500/10 text-amber-500 border-amber-500/20" :
+                                  badge.isPresent ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" :
+                                  "bg-red-500/10 text-red-500 border-red-500/20"
+                                )}>{badge.label}</Badge>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="max-w-[250px] text-[10px] leading-tight">
+                                <p className="font-bold mb-1">{badge.label}</p>
+                                <p className="text-muted-foreground">{badge.tooltip}</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    </TooltipProvider>
 
                     {/* Stats grid */}
                     <div className="grid grid-cols-4 gap-2">

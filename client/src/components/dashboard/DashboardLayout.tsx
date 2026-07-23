@@ -80,7 +80,7 @@ import { Badge } from "@/components/ui/badge";
 import { Logo } from "@/components/ui/Logo";
 import { PremiumLoader } from "@/components/ui/premium-loader";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
-import { BellRing, ShieldCheck, Info } from "lucide-react";
+import { BellRing, ShieldCheck, Info, Terminal } from "lucide-react";
 import { useRealtime, RealtimeProvider } from "@/hooks/use-realtime";
 import { formatDistanceToNow } from "date-fns";
 import { Switch } from "@/components/ui/switch";
@@ -265,6 +265,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
     label: "Developer",
       items: [
         { label: "Developer", icon: Key, path: "/dashboard/developer" },
+        { label: "MCP Server", icon: Terminal, path: "/dashboard/mcp-server" },
       ],
     },
     {
@@ -669,6 +670,10 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
                     <DropdownMenuItem onClick={() => handleNavigate('/dashboard/settings?tab=developer')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
                       <Code className="mr-3 h-4 w-4" />
                       API Keys
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleNavigate('/dashboard/mcp-server')} className="rounded-xl cursor-pointer py-2.5 font-bold text-xs uppercase tracking-wider">
+                      <Terminal className="mr-3 h-4 w-4" />
+                      MCP Server
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
                   <DropdownMenuSeparator className="my-1 mx-2" />

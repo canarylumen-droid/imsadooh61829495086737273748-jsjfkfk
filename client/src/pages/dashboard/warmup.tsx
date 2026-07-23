@@ -104,6 +104,9 @@ export default function WarmupPage() {
   const activityPeriods: { period: string; sends: number; opens: number; bounces: number; spam: number }[] = activityData?.periods || [];
   const isHourly = activityData?.hourly ?? true;
 
+  const anyActive = warmupStatuses.some(m => m.warmupStatus === 'active');
+  const showStopAll = optimisticAllActive !== null ? optimisticAllActive : anyActive;
+
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return warmupStatuses;
     const q = searchQuery.toLowerCase();
@@ -147,20 +150,26 @@ export default function WarmupPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/warmup-status"] });
+      setTimeout(() => setOptimisticAllActive(null), 1000);
       toast({ title: "Warmup Updated", description: "Mailbox warmup settings saved." });
     },
     onError: (err: any) => {
+      setOptimisticAllActive(null);
       toast({ title: "Failed", description: err?.message || 'Unknown error', variant: "destructive" });
     }
   });
 
+  const [optimisticAllActive, setOptimisticAllActive] = useState<boolean | null>(null);
+
   const handleToggleAll = (enabled: boolean) => {
+    setOptimisticAllActive(enabled);
     const ids = warmupStatuses.map(m => m.mailboxId);
     toggleWarmupMutation.mutate({ mailboxIds: ids, enabled });
   };
 
   const handleToggleMailbox = (mailboxId: string, currentStatus: string) => {
     const enabled = currentStatus !== 'active';
+    setOptimisticAllActive(null);
     toggleWarmupMutation.mutate({ mailboxIds: [mailboxId], enabled });
   };
 
@@ -238,10 +247,10 @@ export default function WarmupPage() {
               size="sm"
               variant="outline"
               className="rounded-xl gap-2"
-              onClick={() => handleToggleAll(warmupStatuses.some(m => m.warmupStatus === 'active') ? false : true)}
+              onClick={() => handleToggleAll(!showStopAll)}
               disabled={toggleWarmupMutation.isPending}
             >
-              {warmupStatuses.some(m => m.warmupStatus === 'active') ? (
+              {showStopAll ? (
                 <><Pause className="h-3.5 w-3.5" /> Stop All</>
               ) : (
                 <><Play className="h-3.5 w-3.5" /> Start All</>
