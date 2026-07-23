@@ -1,351 +1,165 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-  DialogFooter, DialogTrigger, DialogClose,
-} from "@/components/ui/dialog";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useRealtime } from "@/hooks/use-realtime";
 import { apiRequest } from "@/lib/queryClient";
 import { toast } from "@/hooks/use-toast";
-import { Key, Copy, Check, Trash2, Loader2, Plus, Eye, EyeOff, Shield, Pencil, X } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
-import { PageWrapper } from "@/components/ui/page-wrapper";
+import { Key, Copy, Check, Terminal, Loader2, RefreshCw } from "lucide-react";
 
-type ApiKey = {
-  id: string;
-  name: string;
-  permissionLevel: string;
-  createdAt: string | null;
-  lastUsedAt: string | null;
-};
+type ApiKey = { id: string; name: string; permissionLevel: string; createdAt: string | null };
 
-function DeveloperPage() {
-  const { socket, isConnected } = useRealtime();
+function ApiKeysTab() {
   const qc = useQueryClient();
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [createName, setCreateName] = useState("");
-  const [createPermission, setCreatePermission] = useState("read_write");
-  const [newKeyData, setNewKeyData] = useState<{ key: string; name: string; permissionLevel: string } | null>(null);
-  const [showFullKey, setShowFullKey] = useState(false);
-  const [renameTarget, setRenameTarget] = useState<{ id: string; name: string } | null>(null);
-  const [renameName, setRenameName] = useState("");
+  const [keyData, setKeyData] = useState<{ key: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    if (!socket) return;
-    const handler = () => qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
-    socket.on("keys_updated", handler);
-    return () => { socket.off("keys_updated", handler); };
-  }, [socket, qc]);
+  const { data: kd } = useQuery<{ key: ApiKey | null }>({ queryKey: ["/api/mcp/key/current"] });
 
-  const { data: keysData, isLoading } = useQuery<{ keys: ApiKey[] }>({
-    queryKey: ["/api/mcp/keys"],
-    refetchInterval: isConnected ? false : 15000,
+  const generate = useMutation({
+    mutationFn: () => apiRequest("POST", "/api/mcp/key/create", { name: "API Key", permission_level: "read_write" }).then(r => r.json()),
+    onSuccess: d => {
+      setKeyData({ key: d.key, name: d.name });
+      toast({ title: "Key generated" });
+      qc.invalidateQueries({ queryKey: ["/api/mcp/key/current"] });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
-  const keys = keysData?.keys || [];
-
-  const createKey = useMutation({
-    mutationFn: (d: { name: string; permission_level: string }) =>
-      apiRequest("POST", "/api/mcp/key/create", d).then(async r => {
-        if (!r.ok) {
-          const err = await r.json();
-          throw new Error(err.error || "Failed to create key");
-        }
-        return r.json();
-      }),
-    onSuccess: (d) => {
-      setNewKeyData({ key: d.key, name: d.name, permissionLevel: d.permissionLevel || createPermission });
-      setShowFullKey(true);
-      setDialogOpen(false);
-      setCreateName("");
-      setCreatePermission("read_write");
-      toast({ title: "API key created" });
-      qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
+  const regenerate = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", "/api/mcp/key/regenerate", { id }).then(r => r.json()),
+    onSuccess: d => {
+      setKeyData({ key: d.key, name: "API Key" });
+      toast({ title: "Key regenerated" });
+      qc.invalidateQueries({ queryKey: ["/api/mcp/key/current"] });
     },
-    onError: (e: Error) =>
-      toast({ title: "Failed to create key", description: e.message, variant: "destructive" }),
-  });
-
-  const renameKey = useMutation({
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
-      apiRequest("PATCH", `/api/mcp/key/${id}`, { name }).then(async r => {
-        if (!r.ok) { const err = await r.json(); throw new Error(err.error || "Failed to rename"); }
-        return r.json();
-      }),
-    onSuccess: () => {
-      toast({ title: "Key renamed" });
-      setRenameTarget(null);
-      qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
-    },
-    onError: (e: Error) =>
-      toast({ title: "Failed to rename", description: e.message, variant: "destructive" }),
-  });
-
-  const deleteKey = useMutation({
-    mutationFn: (id: string) => apiRequest("DELETE", `/api/mcp/key/${id}`),
-    onSuccess: () => {
-      toast({ title: "Key deleted" });
-      qc.invalidateQueries({ queryKey: ["/api/mcp/keys"] });
-    },
-    onError: (e: Error) =>
-      toast({ title: "Failed to delete key", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 
   const copyKey = async (t: string) => {
-    try {
-      await navigator.clipboard.writeText(t);
-      toast({ title: "Copied" });
-    } catch {
-      toast({ title: "Failed to copy", variant: "destructive" });
-    }
+    try { await navigator.clipboard.writeText(t); setCopied(true); setTimeout(() => setCopied(false), 2000); }
+    catch { toast({ title: "Failed to copy", variant: "destructive" }); }
   };
 
+  const displayKey = keyData?.key || (kd?.key ? `audnix_${kd.key.id?.substring(0, 4)}...${kd.key.id?.substring(kd.key.id.length - 4)}` : null);
+
   return (
-    <PageWrapper className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">API Keys</h1>
-          <p className="text-muted-foreground mt-0.5 text-sm">Generate and manage API keys</p>
-        </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create key
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Generate an API key with full access</p>
+
+      {keyData?.key && (
+        <Card className="bg-white/5 border-emerald-500/30">
+          <CardContent className="p-4 space-y-3">
+            <code className="block p-3 bg-black/50 rounded-lg border border-white/10 font-mono text-xs break-all select-all">
+              {keyData.key}
+            </code>
+            <Button size="sm" variant="outline" className="border-white/10" onClick={() => copyKey(keyData.key)}>
+              {copied ? <Check className="h-4 w-4 mr-1 text-green-400" /> : <Copy className="h-4 w-4 mr-1" />}
+              Copy
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Create API key</DialogTitle>
-              <DialogDescription>Name your key and choose its permission level.</DialogDescription>
-            </DialogHeader>
-            <div className="py-3 space-y-4">
-              <div>
-                <Label>Name</Label>
-                <Input
-                  value={createName}
-                  onChange={e => setCreateName(e.target.value)}
-                  placeholder="My API key"
-                  className="mt-1.5"
-                />
-              </div>
-              <div>
-                <Label>Permission</Label>
-                <Select value={createPermission} onValueChange={setCreatePermission}>
-                  <SelectTrigger className="mt-1.5">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="read_only">
-                      <span className="flex items-center gap-2">
-                        <Shield className="h-3.5 w-3.5 text-sky-500" />
-                        Read only — can view data
-                      </span>
-                    </SelectItem>
-                    <SelectItem value="read_write">
-                      <span className="flex items-center gap-2">
-                        <Shield className="h-3.5 w-3.5 text-amber-500" />
-                        Read & Write — can view and modify data
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!keyData && kd?.key && (
+        <Card className="bg-white/5 border-white/10">
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="min-w-0 flex-1 mr-3">
+              <p className="text-xs text-muted-foreground mb-1">Current key</p>
+              <code className="text-xs font-mono break-all">{displayKey}</code>
             </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button
-                onClick={() => createKey.mutate({
-                  name: createName || "My API key",
-                  permission_level: createPermission,
-                })}
-                disabled={createKey.isPending || !createName.trim()}
-              >
-                {createKey.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                Generate
+            <div className="flex gap-1 shrink-0">
+              <Button variant="outline" size="icon" className="border-white/10 h-8 w-8" onClick={() => copyKey(displayKey || "")}>
+                {copied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
               </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <Button variant="outline" size="icon" className="border-white/10 h-8 w-8" onClick={() => { if (confirm("Regenerate?")) regenerate.mutate(kd.key!.id); }}>
+                <RefreshCw className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {!keyData && !kd?.key && (
+        <Card className="bg-white/5 border-white/10">
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">No API key yet</p>
+          </CardContent>
+        </Card>
+      )}
+
+      <Button onClick={() => generate.mutate()} disabled={generate.isPending} className="w-full sm:w-auto">
+        {generate.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Key className="h-4 w-4 mr-2" />}
+        {keyData || kd?.key ? "Generate new key" : "Generate key"}
+      </Button>
+    </div>
+  );
+}
+
+function McpTab() {
+  const { data: kd } = useQuery<{ key: ApiKey | null }>({ queryKey: ["/api/mcp/key/current"] });
+  const baseUrl = window.location.origin;
+  const keyLabel = kd?.key ? `audnix_${kd.key.id?.substring(0, 4)}...` : "<YOUR_API_KEY>";
+
+  return (
+    <div className="space-y-4 text-sm">
+      <p className="text-xs text-muted-foreground">Connect AI assistants to your data via MCP</p>
+
+      <div className="p-3 bg-black/50 rounded-lg border border-white/10">
+        <p className="text-xs text-muted-foreground mb-1">Endpoint</p>
+        <code className="text-xs font-mono break-all">{baseUrl}/mcp</code>
       </div>
 
-      {/* API Key reveal modal — shows full key once, then gone */}
-      <Dialog open={showFullKey && !!newKeyData} onOpenChange={(open) => { if (!open) setShowFullKey(false); }}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Key className="h-5 w-5 text-emerald-500" />
-              Your API Key
-            </DialogTitle>
-            <DialogDescription>
-              Copy this key now. <strong>You won't be able to see it again</strong> for security reasons.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="font-semibold text-foreground">{newKeyData?.name}</span>
-              <Badge variant="outline" className="text-[9px]">
-                {newKeyData?.permissionLevel === "read_only" ? "Read only" : "Read & Write"}
-              </Badge>
-            </div>
-            <div className="flex gap-2">
-              <code className="flex-1 p-3 bg-muted rounded-xl border font-mono text-xs break-all select-all">
-                {newKeyData?.key}
-              </code>
-              <Button
-                variant="outline"
-                size="icon"
-                className="rounded-xl shrink-0 h-11 w-11"
-                onClick={() => {
-                  if (newKeyData?.key) copyKey(newKeyData.key);
-                  setCopied(true);
-                  setTimeout(() => {
-                    setCopied(false);
-                    setShowFullKey(false);
-                    setNewKeyData(null);
-                  }, 1200);
-                }}
-              >
-                {copied ? <Check className="h-4 w-4 text-emerald-500" /> : <Copy className="h-4 w-4" />}
-              </Button>
-            </div>
-            <div className="flex items-center gap-2 p-3 bg-amber-500/10 rounded-xl border border-amber-500/20">
-              <Shield className="h-4 w-4 text-amber-500 shrink-0" />
-              <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
-                Treat this like a password. Never share it or commit it to code.
-              </p>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="default"
-              className="w-full"
-              onClick={() => {
-                if (newKeyData?.key) copyKey(newKeyData.key);
-                setCopied(true);
-                setTimeout(() => {
-                  setCopied(false);
-                  setShowFullKey(false);
-                  setNewKeyData(null);
-                }, 1200);
-              }}
-            >
-              {copied ? <><Check className="h-4 w-4 mr-2 text-emerald-500" /> Copied</> : <><Copy className="h-4 w-4 mr-2" /> Copy & Close</>}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <div className="p-3 bg-black/50 rounded-lg border border-white/10">
+        <p className="text-xs text-muted-foreground mb-1">cURL test</p>
+        <pre className="text-xs font-mono whitespace-pre-wrap break-all">curl -X POST "{baseUrl}/mcp" \
+  -H "Authorization: Bearer {keyLabel}" \
+  -H "Content-Type: application/json" \
+  -d '{{"jsonrpc":"2.0","method":"tools/list","id":1}}'</pre>
+      </div>
 
-      <Card>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Key</TableHead>
-                <TableHead>Permission</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>Last used</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12">
-                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mx-auto" />
-                  </TableCell>
-                </TableRow>
-              ) : keys.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-sm text-muted-foreground">
-                    No API keys yet.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                keys.map(k => (
-                  <TableRow key={k.id} className="hover:bg-muted/30">
-                    <TableCell className="font-medium">{k.name}</TableCell>
-                    <TableCell>
-                      <code className="text-xs font-mono text-muted-foreground">
-                        audnix_{k.id?.substring(0, 4)}...{k.id?.slice(-4)}
-                      </code>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={k.permissionLevel === "read_only" ? "secondary" : "default"} className="text-[10px]">
-                        {k.permissionLevel === "read_only" ? "Read" : "Read/Write"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {k.createdAt ? formatDistanceToNow(new Date(k.createdAt), { addSuffix: true }) : "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {k.lastUsedAt ? formatDistanceToNow(new Date(k.lastUsedAt), { addSuffix: true }) : "Never"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-primary"
-                          onClick={() => { setRenameTarget({ id: k.id, name: k.name }); setRenameName(k.name); }}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          onClick={() => { if (confirm(`Delete "${k.name}"?`)) deleteKey.mutate(k.id); }}
-                          disabled={deleteKey.isPending}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+      <div className="p-3 bg-black/50 rounded-lg border border-white/10">
+        <p className="text-xs text-muted-foreground mb-1">MCP config</p>
+        <pre className="text-xs font-mono whitespace-pre-wrap break-all">{"{"}
+  "mcpServers": {"{"}
+    "audnix": {"{"}
+      "url": "{baseUrl}/mcp",
+      "headers": {"{"} "Authorization": "Bearer {keyLabel}" {"}"}
+    {"}"}
+  {"}"}
+{"}"}</pre>
+      </div>
+    </div>
+  );
+}
+
+function DeveloperPage() {
+  return (
+    <div className="min-h-screen bg-black text-white p-4 md:p-6">
+      <div className="flex items-center gap-2 mb-6">
+        <Key className="h-5 w-5 text-primary" />
+        <h1 className="text-xl font-bold">Developer</h1>
+      </div>
+
+      <Card className="bg-white/5 border-white/10">
+        <CardContent className="p-4">
+          <Tabs defaultValue="api">
+            <TabsList className="bg-white/5 border border-white/10 mb-4">
+              <TabsTrigger value="api" className="data-[state=active]:bg-white/10">
+                <Key className="h-4 w-4 mr-1.5" />
+                API Keys
+              </TabsTrigger>
+              <TabsTrigger value="mcp" className="data-[state=active]:bg-white/10">
+                <Terminal className="h-4 w-4 mr-1.5" />
+                MCP
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="api"><ApiKeysTab /></TabsContent>
+            <TabsContent value="mcp"><McpTab /></TabsContent>
+          </Tabs>
+        </CardContent>
       </Card>
-
-      <Dialog open={!!renameTarget} onOpenChange={(o) => { if (!o) setRenameTarget(null); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Rename API key</DialogTitle>
-          </DialogHeader>
-          <div className="py-3">
-            <Label>Name</Label>
-            <Input value={renameName} onChange={e => setRenameName(e.target.value)} className="mt-1.5" />
-          </div>
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Cancel</Button>
-            </DialogClose>
-            <Button onClick={() => renameTarget && renameKey.mutate({ id: renameTarget.id, name: renameName })} disabled={renameKey.isPending || !renameName.trim()}>
-              {renameKey.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-              Save
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </PageWrapper>
+    </div>
   );
 }
 

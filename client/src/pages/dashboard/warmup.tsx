@@ -117,7 +117,7 @@ export default function WarmupPage() {
 
   const activeMailboxes = warmupStatuses.filter(m => m.warmupStatus === 'active');
   const fullyWarmedMailboxes = warmupStatuses.filter(m => m.warmupPercent >= 100 && m.totalSent > 0);
-  const hasMailboxConnected = mailboxes.length > 0;
+  const hasMailboxConnected = mailboxes.length > 0 || warmupStatuses.length > 0;
 
   const avgReputation = warmupStatuses.length > 0
     ? Math.round(warmupStatuses.reduce((s, m) => s + (m.reputationScore || 0), 0) / warmupStatuses.length)

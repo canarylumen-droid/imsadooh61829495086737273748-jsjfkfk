@@ -1,9 +1,6 @@
 import React from "react";
-import { RefreshCw, Home } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { motion } from "framer-motion";
 
-const CHUNK_ERROR_KEY = "opencode_chunk_reload_count";
+const CHUNK_ERROR_KEY = "oc_chunk_reload";
 
 interface Props {
   children: React.ReactNode;
@@ -11,28 +8,24 @@ interface Props {
 
 interface State {
   hasError: boolean;
-  isChunkError: boolean;
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, isChunkError: false };
+    this.state = { hasError: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    const isChunk = error?.message?.includes("dynamically imported module") || error?.message?.includes("Loading chunk");
-    return { hasError: true, isChunkError: isChunk };
+  static getDerivedStateFromError(_error: Error): State {
+    return { hasError: true };
   }
 
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  componentDidCatch(error: Error) {
     const isChunk = error?.message?.includes("dynamically imported module") || error?.message?.includes("Loading chunk");
 
     if (isChunk) {
-      // Enterprise-level silence: no console, no dialog. Just reload silently.
       const count = parseInt(sessionStorage.getItem(CHUNK_ERROR_KEY) || "0", 10);
-      if (count > 1) {
-        // Max 2 silent reloads, then show fallback
+      if (count >= 2) {
         sessionStorage.removeItem(CHUNK_ERROR_KEY);
         return;
       }
@@ -41,52 +34,22 @@ export class ErrorBoundary extends React.Component<Props, State> {
       return;
     }
 
-    console.error(error, errorInfo);
+    this.setState({ hasError: true });
   }
 
   public render() {
     if (this.state.hasError) {
-      // Chunk errors are already handled in componentDidCatch — if state persists past reload limit, show fallback
       return (
-        <div className="min-h-screen w-full flex items-center justify-center bg-background p-6">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="relative z-10 w-full max-w-sm text-center"
-          >
-            <div className="bg-card border border-border/30 rounded-2xl p-8 shadow-2xl">
-              <div className="mb-6 flex flex-col items-center">
-                <div className="h-12 w-12 rounded-xl bg-destructive/10 flex items-center justify-center text-destructive mb-4">
-                  <span className="text-xl font-bold">!</span>
-                </div>
-
-                <h2 className="text-lg font-bold text-foreground mb-2">
-                  Something went wrong
-                </h2>
-
-                <p className="text-muted-foreground text-sm mb-6">
-                  An unexpected error occurred. Reloading usually fixes it.
-                </p>
-
-                <div className="flex flex-col gap-3 w-full">
-                  <Button
-                    onClick={() => window.location.reload()}
-                    className="h-10 rounded-lg font-medium text-sm"
-                  >
-                    <RefreshCw className="mr-2 h-4 w-4" /> Reload Page
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    onClick={() => window.location.href = "/dashboard"}
-                    className="h-10 rounded-lg font-medium text-sm"
-                  >
-                    <Home className="mr-2 h-4 w-4" /> Go to Dashboard
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+        <div className="min-h-screen bg-background flex items-center justify-center p-4">
+          <div className="text-center max-w-xs">
+            <p className="text-muted-foreground text-sm mb-4">Something went wrong</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-primary text-sm underline hover:no-underline"
+            >
+              Reload
+            </button>
+          </div>
         </div>
       );
     }

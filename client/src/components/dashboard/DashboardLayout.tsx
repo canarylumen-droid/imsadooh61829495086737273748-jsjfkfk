@@ -264,8 +264,7 @@ export function DashboardLayout({ children, fullHeight = false }: { children: Re
   {
     label: "Developer",
       items: [
-        { label: "API Keys", icon: Key, path: "/dashboard/developer" },
-        { label: "MCP Server", icon: Terminal, path: "/dashboard/mcp-server" },
+        { label: "Developer", icon: Key, path: "/dashboard/developer" },
       ],
     },
     {
