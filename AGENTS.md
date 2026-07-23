@@ -1374,5 +1374,31 @@ Wire DNS verification through Rust for all paths, trigger on OAuth connect, then
 - EC2: `git pull`, `npx vite build` from root (24.50s), `pm2 restart audnix-api-gateway` — all 17 services online
 - Verify: `curl http://localhost:5000/api/stats/inbox-placement` → now returns 401 (auth required) instead of 404 "Route not found" ✅
 
+## This Session (Jul 23 2026) — IMAP Lock War Fix + Screenshot Protection + RDS
+
+### Root Cause: IMAP Replies Not Appearing in UI
+**Node.js email worker watchdog vs Rust IMAP worker fight over `custom_email` mailbox connections**:
+- `imap-idle-manager.ts:2068` iterated ALL providers including `custom_email` in its watchdog resurrection loop (Phase 21)
+- Rust IMAP worker (`audnix-rust-imap-worker`) already holds Redis distributed locks (`imap:active:*`) for all custom_email mailboxes
+- Node watchdog's Redis check (`imap-idle-manager.ts:2080-2084`) sometimes fails or the lock expires momentarily → Node creates ANOTHER IMAP connection
+- Two workers hold connections to the same mailbox → `"Lost distributed lock"` / `"Could not re-acquire lock"` every ~18s
+- During the lock flip, new emails arriving from warmup seeds or user campaigns can be missed entirely → replies never pushed to UI
+
+### Fixes
+1. **IMAP lock war** (imap-idle-manager.ts:2068): Removed `'custom_email'` from providers array in watchdog resurrection loop. Zombie detection now also skips custom_email by checking connection provider. Only gmail/outlook handled by Node.js.
+2. **API key screenshot protection** (developer.tsx:161-176): Added `blur-sm` filter on newly created API key in dialog — only reveals on hover. Added warning text "Do not share or screenshot this key". Applied `user-select: none` and `-webkit-user-select: none` to the key container.
+3. **Console log suppression** (main.tsx): In production, `console.log`, `console.warn`, `console.info`, `console.debug` replaced with no-ops. `console.error` preserved.
+4. **Integration rates from API** (integrations.tsx): Now queries `/api/stats/inbox-placement` directly and merges rates into mailbox objects. Socket handlers invalidate inbox-placement query.
+5. **Warmup inbox cleanup** (inbox.tsx): Compact conversation list (arrow + subject + count + date). Streamlined message viewer with Back + Refresh + Spam badge.
+6. **DNS badge relabel** (deliverability.tsx): "Issues" → "Pending" for `dnsValid` false.
+7. **Build rebuilt**: Forced `vite build` on latest git state — new chunk hash `index-Dfqqf19t.js`.
+
+### RDS Snapshots
+- AWS credentials in `opencode.json` do NOT have RDS permissions (EC2/S3 only)
+- RDS instance `database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com` is not accessible via these creds
+- To configure: log into AWS Console → RDS → database-1 → Maintenance & backups → set automated snapshots
+- Or use the AWS account that owns the RDS instance
+
 ### Deploy
-- Push to GitHub, pull on EC2, build client, restart affected services
+- Push to GitHub (`50b0746f` + new commit), pull on EC2, build client, restart `audnix-worker-email` only (no other services need restart for IMAP fix)
+- Verify: `pm2 logs audnix-worker-email --lines 20 --nostream` should show no more `custom_email` connection attempts

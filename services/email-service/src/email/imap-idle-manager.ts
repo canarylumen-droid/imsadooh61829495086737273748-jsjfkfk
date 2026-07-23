@@ -2045,6 +2045,9 @@ class ImapIdleManager {
             const redis = await getRedisClient();
             for (const [key, lastSeen] of this.lastActivity.entries()) {
                 const [integrationId, folderName] = key.split(':');
+                // Skip custom_email — Rust IMAP worker handles all of them
+                const int = this.connections.get(integrationId);
+                if (int?.provider === 'custom_email') continue;
                 const idleTime = now - lastSeen.getTime();
                 if (idleTime > this.ZOMBIE_TIMEOUT_MS) {
                     // Check if this integration is now managed by the autonomous worker cluster
@@ -2065,7 +2068,8 @@ class ImapIdleManager {
             // Phase 21: Active Resurrection
             // Proactively scan for any mailbox that SHOULD be connected but has dropped.
             try {
-                const providers = ['gmail', 'outlook', 'custom_email'];
+                // custom_email is handled entirely by the Rust IMAP worker — never touch it here
+                const providers = ['gmail', 'outlook'];
                 for (const provider of providers) {
                     const integrations = await storage.getIntegrationsByProvider(provider);
                     for (const integration of integrations) {

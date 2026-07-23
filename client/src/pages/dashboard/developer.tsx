@@ -157,9 +157,13 @@ function DeveloperPage() {
               Copy this key now. You won't be able to see it again.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-              <code className="flex-1 font-mono text-sm break-all select-all">
+          <div className="space-y-3 select-none" style={{ WebkitUserSelect: 'none', userSelect: 'none' }}>
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 group">
+              <code
+                className="flex-1 font-mono text-sm break-all blur-sm hover:blur-none transition-all duration-200 cursor-pointer select-none"
+                style={{ WebkitUserSelect: 'none', userSelect: 'none', WebkitTouchCallout: 'none' }}
+                title="Hover to reveal"
+              >
                 {newKeyData?.key}
               </code>
               <Button size="sm" variant="outline" onClick={() => { if (newKeyData) copyKey(newKeyData.key); }}>
@@ -167,6 +171,7 @@ function DeveloperPage() {
                 Copy
               </Button>
             </div>
+            <p className="text-[10px] text-amber-500/80 font-medium">Reveal key by hovering over it. Do not share or screenshot this key.</p>
             <p className="text-xs text-muted-foreground">
               Permission: <Badge variant="secondary" className="text-[10px] ml-1">{newKeyData?.permissionLevel === "read_only" ? "Read only" : "Read/Write"}</Badge>
             </p>
