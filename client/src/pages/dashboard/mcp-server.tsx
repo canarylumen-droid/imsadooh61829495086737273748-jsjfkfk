@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useQuery } from "@tanstack/react-query";
+
 import { toast } from "@/hooks/use-toast";
 import {
   Terminal, Copy, Check, Play, Server, Search, ArrowUpRight,
@@ -89,10 +89,7 @@ function McpServerPage() {
   const [selLLM, setSelLLM] = useState("claude");
   const [llmQ, setLlmQ] = useState("");
   const [testRes, setTestRes] = useState<string | null>(null);
-
-  const { data: kd } = useQuery<{ key: any }>({ queryKey: ["/api/mcp/key/current"] });
-
-  const rawKey = kd?.key?.name || "";
+  const [testKey, setTestKey] = useState("");
 
   const filtered = useMemo(() => {
     if (!llmQ) return LLM_TABS;
@@ -101,7 +98,7 @@ function McpServerPage() {
   }, [llmQ]);
 
   const baseUrl = window.location.origin;
-  const keyLabel = rawKey ? `audnix_${rawKey.substring(0, 4)}...` : "<YOUR_API_KEY>";
+  const keyLabel = "<YOUR_API_KEY>";
 
   const copy = async (t: string) => {
     try { await navigator.clipboard.writeText(t); toast({ title: "Copied" }); }
@@ -109,7 +106,7 @@ function McpServerPage() {
   };
 
   const llmConfig = (llmId: string): string => {
-    const k = rawKey || "<YOUR_API_KEY>";
+    const k = testKey || "<YOUR_API_KEY>";
     const cfg = `"mcpServers": {\n    "audnix": {\n      "url": "${baseUrl}/mcp",\n      "headers": { "Authorization": "Bearer ${k}" }\n    }\n  }`;
     const map: Record<string, string> = {
       claude: `{\n  ${cfg}\n}`,
@@ -195,14 +192,24 @@ function McpServerPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-0 md:pt-0 space-y-3">
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">Paste your API key to test the connection:</p>
+              <Input
+                value={testKey}
+                onChange={e => setTestKey(e.target.value)}
+                placeholder="audnix_..."
+                className="bg-white/5 border-white/10 text-xs font-mono"
+              />
+            </div>
             <Button
               className="w-full"
+              disabled={!testKey.startsWith('audnix_')}
               onClick={async () => {
                 setTestRes(null);
                 try {
                   const r = await fetch("/mcp", {
                     method: "POST",
-                    headers: { Authorization: `Bearer ${rawKey}`, "Content-Type": "application/json" },
+                    headers: { Authorization: `Bearer ${testKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }),
                   });
                   const j = await r.json();
@@ -295,7 +302,8 @@ function McpServerPage() {
       </Card>
 
       <p className="text-center text-xs text-muted-foreground/40">
-        API keys are managed on the <a href="/dashboard/developer" className="text-primary hover:underline">Developer</a> page
+        API keys are created and managed on the <a href="/dashboard/developer" className="text-primary hover:underline" target="_blank" rel="noopener noreferrer">Developer</a> page.
+        Copy your key there and paste it above to test and generate configs.
       </p>
     </div>
   );

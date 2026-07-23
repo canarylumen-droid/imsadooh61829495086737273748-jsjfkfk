@@ -102,10 +102,6 @@ export default function DealsPage() {
     retry: false,
   });
 
-  const { data: userProfile } = useQuery({
-    queryKey: ["/api/user/profile"],
-    retry: false,
-  });
 
   const { data: revenueAnalytics } = useQuery<RevenueAnalyticsResponse>({
     queryKey: ["/api/deals/analytics", { integrationId: selectedMailboxId }],

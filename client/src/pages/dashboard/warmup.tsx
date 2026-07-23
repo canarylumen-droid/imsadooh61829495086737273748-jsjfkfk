@@ -20,7 +20,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsToolti
 import {
   Shield, Mail, Clock, AlertTriangle, CheckCircle2, Thermometer,
   Loader2, Play, Plus, Search, ChevronDown, Activity, Pause,
-  TrendingUp, BarChart3, Sparkles, Info
+  TrendingUp, BarChart3, Sparkles, Info, RefreshCw
 } from "lucide-react";
 
 interface MailboxWarmup {
@@ -163,6 +163,32 @@ export default function WarmupPage() {
     const enabled = currentStatus !== 'active';
     toggleWarmupMutation.mutate({ mailboxIds: [mailboxId], enabled });
   };
+
+  // Error state
+  if (isError) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">Email Warmup</h1>
+            <p className="text-muted-foreground text-sm">Mailbox warmup and sender reputation</p>
+          </div>
+        </div>
+        <Card>
+          <CardContent className="p-12 text-center">
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+              <AlertTriangle className="h-6 w-6 text-red-500" />
+            </div>
+            <h3 className="text-lg font-medium mb-2">Failed to load warmup data</h3>
+            <p className="text-sm text-muted-foreground mb-4">Could not fetch warmup status. Try again or check your connection.</p>
+            <Button className="rounded-xl gap-2" onClick={() => window.location.reload()}>
+              <RefreshCw className="h-4 w-4" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!hasMailboxConnected) {
     return (
@@ -479,17 +505,6 @@ export default function WarmupPage() {
                   className="h-8 w-full sm:w-48 rounded-lg border border-border/50 bg-background pl-8 pr-3 text-xs outline-none focus:ring-1 focus:ring-primary/20"
                 />
               </div>
-              {warmupStatuses.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="rounded-lg h-8 text-xs gap-1"
-                  onClick={() => handleToggleAll(true)}
-                  disabled={toggleWarmupMutation.isPending}
-                >
-                  <Play className="h-3 w-3" /> Start All
-                </Button>
-              )}
             </div>
           </div>
         </CardHeader>

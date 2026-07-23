@@ -1,4 +1,4 @@
-
+﻿
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRealtime } from "@/hooks/use-realtime";
@@ -865,6 +865,8 @@ export default function InboxPage() {
           return { ...oldData, messages: deduped };
         }
       );
+      queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
     },
     onSettled: () => {
       sendInFlightRef.current = false;

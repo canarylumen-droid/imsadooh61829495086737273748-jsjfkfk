@@ -206,7 +206,7 @@ export default function DeliverabilityPage() {
           </div>
           )}
 
-          <InboxPlacementPie />
+          <InboxPlacementPie selectedMailboxId={selectedMailboxId} />
 
           <div className="space-y-3">
             {enrichedMailboxes.map((mb: any, i: number) => {
@@ -302,10 +302,18 @@ export default function DeliverabilityPage() {
   );
 }
 
-function InboxPlacementPie() {
+function InboxPlacementPie({ selectedMailboxId }: { selectedMailboxId?: string }) {
   const [pieDays, setPieDays] = useState<1 | 7 | 30 | 60 | 90>(30);
   const { data } = useQuery<InboxPlacementData>({
-    queryKey: ["/api/stats/inbox-placement", { days: pieDays }],
+    queryKey: ["/api/stats/inbox-placement", { days: pieDays, integrationId: selectedMailboxId }],
+    queryFn: async () => {
+      const url = new URL("/api/stats/inbox-placement", window.location.origin);
+      url.searchParams.set("days", String(pieDays));
+      if (selectedMailboxId) url.searchParams.set("integrationId", selectedMailboxId);
+      const res = await fetch(url.toString());
+      if (!res.ok) throw new Error("Failed to fetch inbox placement");
+      return res.json();
+    },
   });
 
   const { totals } = data || { totals: { sent: 0, inbox: 0, spam: 0, bounce: 0, rate: '0%' } };

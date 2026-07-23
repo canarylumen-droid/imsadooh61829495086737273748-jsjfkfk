@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, createContext, useContext, ReactNode } from 'react';
+﻿import { useEffect, useState, useRef, createContext, useContext, ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { io, Socket } from 'socket.io-client';
 import { useToast } from '@/hooks/use-toast';
@@ -520,16 +520,10 @@ export function RealtimeProvider({ children, userId }: RealtimeProviderProps) {
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
     });
 
-    socketInstance.on('campaign_stats_updated', (data: any) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/outreach/campaigns'] });
-      if (data?.campaignId) {
-        queryClient.invalidateQueries({ queryKey: [`/api/outreach/campaigns/${data.campaignId}/progress`] });
-      }
-      queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });
-    });
-
     socketInstance.on('campaign_stats_updated', (payload: any) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/outreach/campaigns'] });
       if (payload?.campaignId) {
+        queryClient.invalidateQueries({ queryKey: [`/api/outreach/campaigns/${payload.campaignId}/progress`] });
         queryClient.invalidateQueries({ queryKey: [`/api/outreach/campaigns/${payload.campaignId}/stats`] });
       }
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard/stats'] });

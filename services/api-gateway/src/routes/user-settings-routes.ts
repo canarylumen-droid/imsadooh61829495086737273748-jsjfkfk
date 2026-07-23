@@ -502,6 +502,27 @@ router.delete('/account', requireAuthOrApiKey, async (req: Request, res: Respons
       return;
     }
 
+    // Guard: verify deletion was scheduled AND the scheduled time has passed
+    const statusResult = await db.execute(sql`
+      SELECT metadata->>'scheduledDeletionAt' as scheduled_deletion_at FROM users WHERE id = ${userId}
+    `);
+    const scheduledAt = statusResult.rows[0]?.scheduled_deletion_at as string | undefined;
+    if (!scheduledAt) {
+      res.status(400).json({ error: 'No deletion scheduled. Use /api/account/schedule-deletion first.' });
+      return;
+    }
+    const now = new Date();
+    const deletionDate = new Date(scheduledAt);
+    if (deletionDate > now) {
+      const remaining = deletionDate.getTime() - now.getTime();
+      const h = Math.floor(remaining / (1000 * 60 * 60));
+      const m = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+      res.status(400).json({
+        error: `Deletion not yet due. ${h}h ${m}m remaining. Use /api/account/cancel-deletion to undo.`
+      });
+      return;
+    }
+
     await revocationService.revokeAllAndDestroyUser(userId, (req as any).session?.email);
 
     try {

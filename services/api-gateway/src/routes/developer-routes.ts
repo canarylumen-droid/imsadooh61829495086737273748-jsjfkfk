@@ -36,7 +36,7 @@ router.post('/verify-key', apiLimiter, async (req: Request, res: Response): Prom
       res.json({ valid: false, error: 'Invalid key format. Must start with audnix_' });
       return;
     }
-    const hashedKey = crypto.createHash('sha256').update(key).digest('hex');
+    const hashedKey = crypto.createHash('sha512').update(key).digest('hex');
     const result = await db.execute(sql`
       SELECT id, name, scope, permission_level, is_active, last_used_at, created_at
       FROM api_keys WHERE key = ${hashedKey}

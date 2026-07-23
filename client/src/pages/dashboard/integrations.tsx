@@ -469,14 +469,6 @@ export default function IntegrationsPage() {
         queryClient.invalidateQueries({ queryKey: ["/api/user/profile"] });
         queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
         queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ["/api/integrations"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/channels/all"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/channels/calendly"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/channels/google-calendar"] });
-          queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-        }, 1500);
       }
 
       const newUrl = window.location.pathname;

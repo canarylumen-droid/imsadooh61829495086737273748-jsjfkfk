@@ -1181,22 +1181,9 @@ function ScheduledDeletionCard() {
     }
   };
 
-  useEffect(() => {
-    if (!scheduledAt || remainingMs > 0 || deletingNow) return;
-    setDeletingNow(true);
-    const timer = setTimeout(() => {
-      (async () => {
-        try {
-          await apiRequest("DELETE", "/api/account");
-          window.location.href = "/";
-        } catch (e: any) {
-          toast({ title: "Deletion failed", description: e.message, variant: "destructive" });
-          setDeletingNow(false);
-        }
-      })();
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [scheduledAt, remainingMs, deletingNow]);
+  // Deletion is executed server-side by a cron (every 60s).
+  // The countdown is visual only — no client-side deletion call.
+  const expired = scheduledAt && remainingMs <= 0;
 
   return (
     <Card>
@@ -1224,6 +1211,19 @@ function ScheduledDeletionCard() {
             <p className="text-xs text-muted-foreground">Clearing your data and logging you out...</p>
           </motion.div>
         ) : scheduledAt ? (
+          expired ? (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="p-4 rounded-2xl bg-destructive/5 border border-destructive/20 text-center space-y-2"
+            >
+              <Clock className="h-6 w-6 text-destructive mx-auto" />
+              <p className="text-sm font-semibold text-destructive">Deletion pending</p>
+              <p className="text-xs text-muted-foreground">
+                Your account is scheduled for permanent deletion. The system will process this shortly.
+              </p>
+            </motion.div>
+          ) : (
           <div className="space-y-4">
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -1279,6 +1279,7 @@ function ScheduledDeletionCard() {
               </Button>
             </motion.div>
           </div>
+          )
         ) : (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
