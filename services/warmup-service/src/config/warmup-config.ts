@@ -29,12 +29,12 @@ export const WARMUP_CONFIG = {
   // Threading
   MIN_MESSAGES_PER_THREAD: 3,
   MAX_MESSAGES_PER_THREAD: 6,
-  MIN_THREAD_INTERVAL_HOURS: 2,
-  MAX_THREAD_INTERVAL_HOURS: 8,
+  MIN_THREAD_INTERVAL_HOURS: 0.1,
+  MAX_THREAD_INTERVAL_HOURS: 2,
 
   // Send delays (seconds)
-  MIN_SEND_DELAY_SECONDS: 30,
-  MAX_SEND_DELAY_SECONDS: 90,
+  MIN_SEND_DELAY_SECONDS: 5,
+  MAX_SEND_DELAY_SECONDS: 15,
 
   // Per-mailbox stagger when creating threads (minutes)
   // Spreads out seed email arrival from 500+ mailboxes to avoid spike.
@@ -49,8 +49,8 @@ export const WARMUP_CONFIG = {
   // Seed-to-user reply pacing (minutes)
   // After each seed email, the next reply is delayed by this range.
   // Progressively increases: reply 1 = 5-10min, reply 2 = 8-18min, reply 3 = 12-28min
-  SEED_REPLY_MIN_DELAY_MINUTES: 5,
-  SEED_REPLY_MAX_DELAY_MINUTES: 15,
+  SEED_REPLY_MIN_DELAY_MINUTES: 1,
+  SEED_REPLY_MAX_DELAY_MINUTES: 3,
 
   HIDDEN_FOLDER_NAME: process.env.WARMUP_HIDDEN_FOLDER || '.Warmup-Archive',
   IMAP_TIMEOUT_MS: parseInt(process.env.WARMUP_IMAP_TIMEOUT_MS || '15000', 10),
