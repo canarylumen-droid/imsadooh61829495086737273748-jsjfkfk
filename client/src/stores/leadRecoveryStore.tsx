@@ -97,18 +97,14 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await apiRequest("GET", "/api/lead-recovery/status");
+      const res = await fetch("/api/lead-recovery/status", { credentials: "include" });
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
-        const msg = err.error || err.message || `HTTP ${res.status}`;
-        if (res.status === 403 && msg === 'Pro plan required') {
-          setError('Lead Recovery is available on Pro and Enterprise plans. Upgrade to unlock.');
-        } else if (res.status === 403) {
-          setError(msg);
-        } else {
-          throw new Error(msg);
+        if (res.status === 403) {
+          setError('Upgrade to Pro for AI-powered recovery of cold leads, missed replies, and dormant conversations.');
+          return;
         }
-        return;
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(`${res.status}: ${text}`);
       }
       const data = await res.json();
       setError(null);
@@ -120,33 +116,44 @@ export function LeadRecoveryProvider({ children }: { children: React.ReactNode }
       setPromptConfigured(Boolean(data.promptConfigured));
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown error';
+      if (msg.includes('Pro plan') || msg.includes('403')) {
+        setError('Upgrade to Pro for AI-powered recovery of cold leads, missed replies, and dormant conversations.');
+        return;
+      }
       setError(msg);
       console.warn('[LeadRecovery] Failed to load status:', e);
-      toast({ title: 'Failed to load recovery status', description: msg, variant: 'destructive' });
     }
   }, []);
 
   const loadLeads = useCallback(async () => {
     try {
       const params = selectedMailboxId !== "all" ? `?mailboxId=${encodeURIComponent(selectedMailboxId)}` : "";
-      const res = await apiRequest("GET", `/api/lead-recovery/leads${params}`);
+      const res = await fetch(`/api/lead-recovery/leads${params}`, { credentials: "include" });
+      if (!res.ok) {
+        if (res.status === 403) { setLeads([]); return; }
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(`${res.status}: ${text}`);
+      }
       const data = await res.json();
       setLeads(data.leads || []);
     } catch (e) {
       console.warn('[LeadRecovery] Failed to load leads:', e);
-      toast({ title: 'Failed to load recovery leads', variant: 'destructive' });
     }
   }, [selectedMailboxId]);
 
   const loadEvents = useCallback(async () => {
     try {
       const params = selectedMailboxId !== "all" ? `?mailboxId=${encodeURIComponent(selectedMailboxId)}` : "";
-      const res = await apiRequest("GET", `/api/lead-recovery/events${params}`);
+      const res = await fetch(`/api/lead-recovery/events${params}`, { credentials: "include" });
+      if (!res.ok) {
+        if (res.status === 403) { setEvents([]); return; }
+        const text = await res.text().catch(() => res.statusText);
+        throw new Error(`${res.status}: ${text}`);
+      }
       const data = await res.json();
       setEvents(data.events || []);
     } catch (e) {
       console.warn('[LeadRecovery] Failed to load events:', e);
-      toast({ title: 'Failed to load recovery events', variant: 'destructive' });
     }
   }, [selectedMailboxId]);
 

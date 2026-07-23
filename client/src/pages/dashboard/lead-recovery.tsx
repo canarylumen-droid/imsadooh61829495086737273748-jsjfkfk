@@ -77,12 +77,31 @@ function LeadRecoveryContent() {
 
   return (
     <div className="space-y-6">
-      {store.error && (
+      {store.error && !store.error.includes('Upgrade to Pro') && (
         <div className="flex items-start gap-3 rounded-lg border border-red-500/20 bg-red-500/5 p-4">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-500" />
           <div className="space-y-1">
             <p className="text-sm font-semibold text-red-500">Lead Recovery Unavailable</p>
             <p className="text-xs text-muted-foreground">{store.error.replace(/<[^>]+>/g, '')}</p>
+          </div>
+        </div>
+      )}
+      {store.error && store.error.includes('Upgrade to Pro') && (
+        <div className="rounded-lg border border-amber-500/20 bg-gradient-to-r from-amber-500/5 to-orange-500/5 p-4 md:p-6">
+          <div className="flex items-start gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-amber-500/20 bg-amber-500/10">
+              <Sparkles className="h-5 w-5 text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-amber-300">Lead Recovery requires Pro</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{store.error.replace(/<[^>]+>/g, '')}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" className="h-7 text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30" onClick={() => window.open('/dashboard/settings?tab=billing', '_self')}>
+                  <Sparkles className="mr-1 h-3 w-3" />
+                  Upgrade to Pro
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       )}

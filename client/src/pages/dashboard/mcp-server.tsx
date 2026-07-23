@@ -234,9 +234,10 @@ function McpServerPage() {
                   }
                   const j = await r.json();
                   if (r.ok) {
-                    const tools = j.result?.tools || j.tools || [];
-                    const names = tools.map((t: any) => t.name).join(", ");
-                    setTestRes(`Connected – ${tools.length} tool${tools.length !== 1 ? "s" : ""} available: ${names || "none"}`);
+                    const allTools = j.result?.tools || j.tools || [];
+                    const available = allTools.filter((t: any) => !t.blocked);
+                    const names = available.map((t: any) => t.name).join(", ");
+                    setTestRes(`Connected — ${names || "none"}`);
                   } else {
                     setTestRes(`Error: ${j.error || r.statusText}`);
                   }
@@ -268,14 +269,12 @@ function McpServerPage() {
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-0 md:pt-0">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {tools.map((t: any) => (
+              {tools.filter((t: any) => !t.blocked).map((t: any) => (
                 <div key={t.name} className="flex items-start gap-3 p-3 rounded-lg border border-white/10 hover:border-primary/30 transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <code className="text-xs font-mono text-primary">{t.name}</code>
-                      {t.blocked ? (
-                        <Badge variant="outline" className="text-[9px] border-red-500/30 text-red-400">blocked</Badge>
-                      ) : t.needsScope === 'dangerous' ? (
+                      {t.needsScope === 'dangerous' ? (
                         <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">dangerous</Badge>
                       ) : t.needsScope ? (
                         <Badge variant="outline" className="text-[9px] border-sky-500/30 text-sky-400">{t.needsScope}</Badge>
