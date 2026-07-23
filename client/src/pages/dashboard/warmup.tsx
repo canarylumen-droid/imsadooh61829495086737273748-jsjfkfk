@@ -54,6 +54,7 @@ export default function WarmupPage() {
   const [page, setPage] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const [warmupDays, setWarmupDays] = useState(1);
+  const [optimisticAllActive, setOptimisticAllActive] = useState<boolean | null>(null);
   const pollingMs = isConnected ? false : 15000;
 
   useEffect(() => {
@@ -158,8 +159,6 @@ export default function WarmupPage() {
       toast({ title: "Failed", description: err?.message || 'Unknown error', variant: "destructive" });
     }
   });
-
-  const [optimisticAllActive, setOptimisticAllActive] = useState<boolean | null>(null);
 
   const handleToggleAll = (enabled: boolean) => {
     setOptimisticAllActive(enabled);

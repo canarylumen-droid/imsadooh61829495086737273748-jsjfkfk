@@ -225,6 +225,13 @@ function McpServerPage() {
                     headers: { Authorization: `Bearer ${testKey}`, "Content-Type": "application/json" },
                     body: JSON.stringify({ jsonrpc: "2.0", method: "tools/list", id: 1 }),
                   });
+                  const ct = r.headers.get("content-type") || "";
+                  if (!ct.includes("application/json")) {
+                    const text = await r.text();
+                    setTestRes(`Error: Server returned ${ct || "unknown"} (expected JSON). Check that the MCP endpoint is reaching the API gateway.`);
+                    toast({ title: "Wrong response type", description: "Got non-JSON response — likely serving SPA index.html. Use the full URL or check routing.", variant: "destructive" });
+                    return;
+                  }
                   const j = await r.json();
                   setTestRes(r.ok ? "Connected" : `Error: ${j.error || r.statusText}`);
                   toast({ title: r.ok ? "OK" : "Failed", variant: r.ok ? "default" : "destructive" });

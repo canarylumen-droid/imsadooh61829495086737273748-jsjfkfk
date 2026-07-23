@@ -146,36 +146,39 @@ function DeveloperPage() {
         </Dialog>
       </div>
 
-      {newKeyData && showFullKey && (
-        <Card className="border-emerald-500/30">
-          <CardContent className="p-5">
-            <div className="flex items-start gap-4">
-              <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center shrink-0">
-                <Key className="h-5 w-5 text-emerald-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-emerald-300">{newKeyData.name}</p>
-                <p className="text-sm text-muted-foreground mb-3">Copy this key now. You won't see it again.</p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 p-2.5 bg-black/50 rounded-lg border font-mono text-sm break-all select-all">
-                    {newKeyData.key}
-                  </code>
-                  <Button onClick={() => copyKey(newKeyData.key)}>
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copy
-                  </Button>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowFullKey(false)}
-                className="text-muted-foreground hover:text-foreground mt-1"
-              >
-                <Eye className="h-4 w-4" />
-              </button>
+      <Dialog open={newKeyData !== null && showFullKey} onOpenChange={(open) => { if (!open) { setShowFullKey(false); setNewKeyData(null); } }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Key className="h-5 w-5 text-emerald-400" />
+              {newKeyData?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Copy this key now. You won't be able to see it again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+              <code className="flex-1 font-mono text-sm break-all select-all">
+                {newKeyData?.key}
+              </code>
+              <Button size="sm" variant="outline" onClick={() => { if (newKeyData) copyKey(newKeyData.key); }}>
+                <Copy className="h-3.5 w-3.5 mr-1.5" />
+                Copy
+              </Button>
             </div>
-          </CardContent>
-        </Card>
-      )}
+            <p className="text-xs text-muted-foreground">
+              Permission: <Badge variant="secondary" className="text-[10px] ml-1">{newKeyData?.permissionLevel === "read_only" ? "Read only" : "Read/Write"}</Badge>
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { if (newKeyData) copyKey(newKeyData.key); setNewKeyData(null); setShowFullKey(false); }}>
+              <Check className="h-4 w-4 mr-2" />
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Card>
         <div className="overflow-x-auto">
