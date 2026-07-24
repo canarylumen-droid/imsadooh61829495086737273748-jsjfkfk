@@ -39,8 +39,8 @@ describe('IMAP Idle Manager - Real-Time Speed', () => {
     expect(imap).not.toContain('30 * 1000); // 30s heartbeat');
   });
 
-  it('fallback poll should be 5s (was 30s)', () => {
-    expect(imap).toContain('POLL_INTERVAL_MS = 5 * 1000');
+  it('fallback poll should be 1s (was 30s)', () => {
+    expect(imap).toContain('POLL_INTERVAL_MS = 1000');
   });
 
   it('watchdog sweep should be 15s (was 60s)', () => {
@@ -123,14 +123,14 @@ describe('Client - Real-Time UI', () => {
     expect(integrations).toContain('useRealtime');
   });
 
-  it('use-realtime should handle spam_detected WebSocket event', () => {
-    expect(useRealtime).toContain("socketInstance.on('spam_detected'");
+  it('use-realtime should handle deliverability_updated WebSocket event', () => {
+    expect(useRealtime).toContain("socketInstance.on('deliverability_updated'");
     expect(useRealtime).toContain("socketInstance.on('new_mail'");
     expect(useRealtime).toContain("socketInstance.on('mailbox_status'");
     expect(useRealtime).toContain("socketInstance.on('integration_reputation_updated'");
   });
 
-  it('spam_detected handler should invalidate analytics + placement queries', () => {
+  it('deliverability_updated handler should invalidate analytics + placement queries', () => {
     expect(useRealtime).toContain("queryClient.invalidateQueries({ queryKey: ['/api/stats/inbox-placement']");
     expect(useRealtime).toContain("queryClient.invalidateQueries({ queryKey: ['/api/stats/domain-reputation']");
   });

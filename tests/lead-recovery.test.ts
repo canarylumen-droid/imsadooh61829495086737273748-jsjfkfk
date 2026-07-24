@@ -198,14 +198,14 @@ describe('LeadRecoveryRoutes — Clean imports', () => {
 describe('checkMailboxCampaignStatus — Real implementation', () => {
   it('Uses Drizzle to query outreachCampaigns', () => {
     expect(mailboxService).toContain("from(outreachCampaigns)");
-    expect(mailboxService).toContain("eq(outreachCampaigns.status, 'active')");
+    expect(mailboxService).toContain('eq(outreachCampaigns.status, "active")');
   });
 
   it('Uses db import not stub return as primary logic', () => {
     expect(mailboxService).toContain("from \"@shared/lib/db/db.js\"");
     // The catch fallback still returns the default, but the primary path uses real DB query
     expect(mailboxService).toContain(".from(outreachCampaigns)");
-    expect(mailboxService).toContain("eq(outreachCampaigns.status, 'active')");
+    expect(mailboxService).toContain('eq(outreachCampaigns.status, "active")');
   });
 });
 
