@@ -302,7 +302,12 @@ router.post(['/logout', '/signout'], (req: Request, res: Response): void => {
       res.status(500).json({ error: 'Logout failed' });
       return;
     }
-    res.clearCookie(SESSION_COOKIE_NAME);
+    res.clearCookie(SESSION_COOKIE_NAME, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/"
+    });
     res.json({ success: true, message: 'Logged out successfully' });
   });
 });

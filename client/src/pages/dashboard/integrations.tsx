@@ -413,11 +413,30 @@ export default function IntegrationsPage() {
   const getDnsBadge = (record: 'spf' | 'dkim' | 'dmarc' | 'mx' | 'blacklist', mailboxEmail: string) => {
     if (!stats?.health?.dns) return null;
     const label = record === 'blacklist' ? 'BL' : record.toUpperCase();
-    const domain = mailboxEmail?.split('@')[1] || '';
+    const domain = mailboxEmail?.split('@')[1]?.toLowerCase() || '';
+    
+    // Consumer email domains don't have controllable DNS records
+    const consumerDomains = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'msn.com', 'yahoo.com', 'aol.com', 'icloud.com', 'me.com', 'mac.com']);
+    const isConsumerDomain = consumerDomains.has(domain);
+    
     const verification = stats?.domainVerifications?.find((v: any) => v.domain === domain);
     const result = verification?.result?.[record === 'blacklist' ? 'blacklist' : record];
+    
+    // For consumer domains: SPF/MX are valid (provider-managed), DKIM/DMARC/BL are N/A
+    if (isConsumerDomain) {
+      if (record === 'spf' || record === 'mx') {
+        return { isPresent: true, label, tooltip: `${label}: managed by ${domain.split('.')[0]}`, isPending: false };
+      }
+      if (record === 'dkim' || record === 'dmarc') {
+        return { isPresent: false, label, tooltip: `${label}: not applicable for consumer ${domain}`, isPending: false };
+      }
+      if (record === 'blacklist') {
+        return { isPresent: true, label, tooltip: 'Not blacklisted (provider-managed)', isPending: false };
+      }
+    }
+    
     const isPresent = result !== undefined
-      ? (record === 'blacklist' ? !result?.listedOn?.length : !!result?.record || !!result?.records?.length)
+      ? (record === 'blacklist' ? !result?.listedOn?.length : !!result?.record || !!result?.records?.length || Array.isArray(result))
       : (record === 'blacklist' ? !stats.health.dns.blacklist : !!stats.health.dns[record]);
     const isPending = !verification && !stats?.health?.dns?.[record];
     let tooltip = '';
@@ -426,7 +445,8 @@ export default function IntegrationsPage() {
     } else if (record === 'blacklist') {
       tooltip = isPresent ? 'Not blacklisted' : `Blacklisted on: ${result?.listedOn?.join(', ') || 'unknown RBL'}`;
     } else if (record === 'mx') {
-      tooltip = isPresent ? `MX: ${result?.records?.map((r: any) => `${r.exchange} (priority ${r.priority})`).join(', ') || 'found'}` : 'No MX records found';
+      const mxRecords = Array.isArray(result) ? result : result?.records;
+      tooltip = isPresent ? `MX: ${mxRecords?.map((r: any) => `${r.exchange} (priority ${r.priority})`).join(', ') || 'found'}` : 'No MX records found';
     } else {
       tooltip = isPresent
         ? `${label}: ${result?.record?.substring(0, 80) || 'valid'}`
