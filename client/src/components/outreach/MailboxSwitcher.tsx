@@ -108,7 +108,7 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
                             </div>
                         </div>
                     )}
-                    <div className="px-3 py-1 text-[9px] font-black text-muted-foreground/50 uppercase tracking-[0.2em]">
+                    <div className="px-3 py-1 text-[9px] font-semibold text-muted-foreground/50 uppercase tracking-[0.2em]">
                         {mailboxSearch ? `${filteredMailboxes.length} result${filteredMailboxes.length !== 1 ? "s" : ""}` : `${mailboxes.length} Connected`}
                     </div>
                     {visibleMailboxes.map((mailbox) => (
@@ -123,7 +123,7 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
                                         "h-2 w-2 rounded-full shrink-0",
                                         mailbox.connected ? "bg-emerald-500" : "bg-muted"
                                     )} />
-                                    <span className="truncate text-foreground/90 font-black">
+                                    <span className="truncate text-foreground/90 font-bold">
                                         {mailbox.accountType || mailbox.email || (mailbox.provider === 'custom_email' ? 'Custom Email' : mailbox.provider)}
                                     </span>
                                 </div>
@@ -144,7 +144,7 @@ export function MailboxSwitcher({ className, value, onValueChange }: MailboxSwit
 
                     <SelectItem 
                         value="add_new" 
-                        className="font-black text-[10px] uppercase tracking-widest py-3.5 px-3 cursor-pointer rounded-xl text-primary bg-primary/5 hover:bg-primary/10 focus:bg-primary/15 transition-all mb-1"
+                        className="font-semibold text-[10px] uppercase tracking-widest py-3.5 px-3 cursor-pointer rounded-xl text-primary bg-primary/5 hover:bg-primary/10 focus:bg-primary/15 transition-all mb-1"
                     >
                         <div className="flex items-center gap-3">
                             <div className="p-1 rounded-md bg-primary/10">

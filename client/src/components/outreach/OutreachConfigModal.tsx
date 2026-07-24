@@ -277,7 +277,7 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
                             <div className="space-y-8 pb-10">
                                 {/* Settings Card */}
                                 <div className="space-y-4">
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Campaign Details</h3>
+                                    <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Campaign Details</h3>
                                     <div className="space-y-4">
                                         <div className="space-y-2">
                                             <Label className="text-xs font-bold">Campaign Name</Label>
@@ -290,7 +290,7 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
                                         </div>
                                     </div>
 
-                                    <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground pt-4">Campaign Logic</h3>
+                                    <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground pt-4">Campaign Logic</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         <div className="p-4 bg-muted/30 rounded-2xl border border-border/50 space-y-3">
                                             <div className="flex items-center justify-between">
@@ -327,7 +327,7 @@ export default function OutreachConfigModal({ isOpen, onClose, leads, onSuccess 
                                 {/* Templates */}
                                 <Tabs defaultValue="initial" className="w-full">
                                     <div className="flex items-center justify-between mb-4">
-                                        <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">Message Sequence</h3>
+                                        <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Message Sequence</h3>
                                         <TabsList className="h-8">
                                             <TabsTrigger value="initial" className="text-xs h-6 px-3">Step 1: Initial</TabsTrigger>
                                             <TabsTrigger value="followup" className="text-xs h-6 px-3">Step 2: FU 1</TabsTrigger>

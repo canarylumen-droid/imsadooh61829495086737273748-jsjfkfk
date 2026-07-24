@@ -139,7 +139,7 @@ export const ReputationTrendChart = () => {
         </CardTitle>
         <div className="flex items-center gap-2">
           {finalScore != null && finalScore < 70 && (
-            <Badge variant="outline" className="text-[8px] font-black uppercase tracking-widest border-0 bg-rose-500/10 text-rose-400">
+            <Badge variant="outline" className="text-[8px] font-semibold uppercase tracking-widest border-0 bg-rose-500/10 text-rose-400">
               <AlertTriangle className="w-2.5 h-2.5 mr-1" />
               HIGH RISK
             </Badge>
@@ -171,7 +171,7 @@ export const ReputationTrendChart = () => {
                 />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className={cn("text-2xl font-black tracking-tight", scoreColor)}>
+                <span className={cn("text-2xl font-semibold tracking-tight", scoreColor)}>
                   {finalScore !== null ? `${finalScore}` : '--'}
                   <span className="text-xs font-bold text-muted-foreground/60 ml-0.5">%</span>
                 </span>
@@ -179,13 +179,13 @@ export const ReputationTrendChart = () => {
             </div>
             <div className="space-y-1">
               <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest">Seed Score</p>
-              <p className={cn("text-lg font-black", data?.seedScore >= 85 ? "text-emerald-400" : data?.seedScore >= 70 ? "text-amber-400" : "text-rose-400")}>
+              <p className={cn("text-lg font-semibold", data?.seedScore >= 85 ? "text-emerald-400" : data?.seedScore >= 70 ? "text-amber-400" : "text-rose-400")}>
                 {data?.seedScore ?? 0}%
               </p>
               {data?.postmasterScore !== null && (
                 <>
                   <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest mt-2">Postmaster</p>
-                  <p className={cn("text-lg font-black", (data?.postmasterScore ?? 0) >= 90 ? "text-emerald-400" : "text-amber-400")}>
+                  <p className={cn("text-lg font-semibold", (data?.postmasterScore ?? 0) >= 90 ? "text-emerald-400" : "text-amber-400")}>
                     {data?.postmasterScore ?? 0}%
                   </p>
                 </>
@@ -196,12 +196,12 @@ export const ReputationTrendChart = () => {
             {data?.providerBreakdown?.map((pb) => (
               <div key={pb.provider} className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-muted/20 flex items-center justify-center">
-                  <span className="text-[9px] font-black text-muted-foreground/60">{providerIcon(pb.provider)}</span>
+                  <span className="text-[9px] font-semibold text-muted-foreground/60">{providerIcon(pb.provider)}</span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] font-bold text-muted-foreground">{providerLabel(pb.provider)}</span>
                   <span className={cn(
-                    "text-xs font-black",
+                    "text-xs font-semibold",
                     pb.rate >= 85 ? "text-emerald-400" : pb.rate >= 70 ? "text-amber-400" : "text-rose-400"
                   )}>
                     {pb.rate}%

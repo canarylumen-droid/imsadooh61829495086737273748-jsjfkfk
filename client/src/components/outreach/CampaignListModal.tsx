@@ -147,13 +147,13 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
       <DialogContent className="sm:max-w-[900px] w-[calc(100%-1rem)] border-border/40 bg-background/95 backdrop-blur-xl p-0 overflow-hidden shadow-2xl">
         <DialogHeader className="p-4 sm:p-6 pb-2">
           <div className="flex items-center justify-between gap-3">
-            <DialogTitle className="text-lg sm:text-xl font-black uppercase tracking-widest flex items-center gap-2 min-w-0">
+            <DialogTitle className="text-lg sm:text-xl font-semibold uppercase tracking-widest flex items-center gap-2 min-w-0">
               <Mail className="w-5 h-5 text-primary shrink-0" />
               <span className="truncate">Campaign Manager</span>
             </DialogTitle>
             <Button 
               onClick={() => { onClose(); onNewCampaign(); }}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1 text-[10px] sm:text-xs uppercase font-black tracking-widest shadow-[0_0_15px_rgba(var(--primary),0.3)] shrink-0"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground gap-1 text-[10px] sm:text-xs uppercase font-semibold tracking-widest shadow-[0_0_15px_rgba(var(--primary),0.3)] shrink-0"
             >
               <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> New Campaign
             </Button>
@@ -169,11 +169,11 @@ export function CampaignListModal({ isOpen, onClose, onNewCampaign }: CampaignLi
           ) : !campaigns || campaigns.length === 0 ? (
             <div className="flex flex-col items-center justify-center p-12 text-center bg-muted/20 rounded-2xl border border-border/10">
               <Mail className="w-12 h-12 text-muted-foreground/30 mb-4" />
-              <h3 className="font-black uppercase tracking-widest mb-2">No Active Campaigns</h3>
+              <h3 className="font-bold uppercase tracking-widest mb-2">No Active Campaigns</h3>
               <p className="text-xs text-muted-foreground max-w-sm mb-6">
                 Launch your first AI-driven outreach sequence to start generating high-ticket conversations.
               </p>
-              <Button onClick={() => { onClose(); onNewCampaign(); }} className="bg-primary text-primary-foreground text-xs uppercase font-black tracking-widest">
+              <Button onClick={() => { onClose(); onNewCampaign(); }} className="bg-primary text-primary-foreground text-xs uppercase font-semibold tracking-widest">
                 Create First Campaign
               </Button>
             </div>

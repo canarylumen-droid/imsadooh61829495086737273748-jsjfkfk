@@ -128,7 +128,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
           <div>
             <p className="text-[10px] font-bold text-muted-foreground/40 uppercase tracking-widest">Health Score</p>
             <h3 className={cn(
-              "text-xl font-black tracking-tighter",
+              "text-xl font-semibold tracking-tighter",
               isPending ? "text-sky-400" : (score! >= 80 ? "text-emerald-400" : score! >= 60 ? "text-amber-400" : "text-rose-400")
             )}>
               {isPending ? "..." : `${score!.toFixed(0)}%`}
@@ -176,7 +176,7 @@ export const ReputationCard: React.FC<ReputationCardProps> = ({
             <div key={label} className="p-2 rounded-lg bg-muted/10 border border-border/5">
               <p className="text-[8px] font-bold text-muted-foreground/40 uppercase tracking-widest">{label}</p>
               <div className="flex items-center justify-between">
-                <p className={`text-base font-black ${color} tracking-tighter`}>{value}</p>
+                <p className={`text-base font-semibold ${color} tracking-tighter`}>{value}</p>
                 <Icon className="w-2.5 h-2.5 text-muted-foreground/20" />
               </div>
             </div>
