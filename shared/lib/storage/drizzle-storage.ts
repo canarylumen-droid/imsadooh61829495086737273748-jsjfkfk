@@ -810,7 +810,7 @@ export class DrizzleStorage implements IStorage {
   }
 
 
-  async updateLead(id: string, updates: Partial<Lead>): Promise<Lead | undefined> {
+  async updateLead(id: string, updates: Partial<Lead>, options?: { suppressNotification?: boolean }): Promise<Lead | undefined> {
     checkDatabase();
     if (!isValidUUID(id)) return undefined;
 
@@ -841,14 +841,14 @@ export class DrizzleStorage implements IStorage {
       } catch (err) { console.warn('[Storage] Stats cache invalidate failed:', err); }
 
 
-      // Trigger notification on status change
-      if (oldLead && updates.status && oldLead.status !== updates.status) {
+      if (options?.suppressNotification) {
+        // Caller handles their own notification (e.g. ai-routes.ts)
+      } else if (oldLead && updates.status && oldLead.status !== updates.status) {
         let shouldNotify = false;
         let notificationTitle = '📈 Lead Status Updated';
         let notificationMessage = `${result.name} moved from ${oldLead.status} to ${updates.status}.`;
         
-        // Suppress noisy status changes
-        if (['replied', 'warm', 'booked', 'converted'].includes(updates.status)) {
+        if (['replied', 'booked', 'converted'].includes(updates.status)) {
            shouldNotify = true;
            if (updates.status === 'replied') {
              notificationTitle = '💬 Lead Replied!';

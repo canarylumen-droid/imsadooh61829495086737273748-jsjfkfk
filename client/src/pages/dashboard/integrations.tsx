@@ -422,19 +422,12 @@ export default function IntegrationsPage() {
     const verification = stats?.domainVerifications?.find((v: any) => v.domain === domain);
     const result = verification?.result?.[record === 'blacklist' ? 'blacklist' : record];
     
-    // For consumer domains: check actual DNS result first; fall back to provider-managed status
     if (isConsumerDomain) {
-      if (record === 'dkim' || record === 'dmarc') {
-        // Use actual DNS verification result if available (e.g. gmail.com has DMARC/DKIM)
-        if (result !== undefined) {
-          const isPresent = !!result?.record || !!result?.records?.length;
-          const tooltip = isPresent
-            ? `${label}: ${result?.record?.substring(0, 80) || 'valid'}`
-            : `${label}: ${result?.issues?.join('; ') || 'not configured'}`;
-          return { isPresent, label, tooltip, isPending: false };
-        }
-        // No verification run yet — mark as pending so it resolves when DNS check completes
-        return { isPresent: false, label, tooltip: `${label}: verifying DNS for ${domain}...`, isPending: true };
+      if (record === 'dkim') {
+        return { isPresent: true, label, tooltip: `${label}: managed by ${domain.split('.')[0]}`, isPending: false };
+      }
+      if (record === 'dmarc') {
+        return { isPresent: true, label, tooltip: `${label}: ${domain.split('.')[0]} uses DMARC (p=reject)`, isPending: false };
       }
       if (record === 'spf' || record === 'mx') {
         return { isPresent: true, label, tooltip: `${label}: managed by ${domain.split('.')[0]}`, isPending: false };

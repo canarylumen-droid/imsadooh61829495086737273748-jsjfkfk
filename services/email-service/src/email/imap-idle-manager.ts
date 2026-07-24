@@ -2420,6 +2420,7 @@ class ImapIdleManager {
                             msg.once('end', () => {
                                 const combined = rawParts.join('\n');
                                 simpleParser(combined).then(parsed => {
+                                    item.messageId = parsed.messageId || item.messageId;
                                     item.subject = parsed.subject || '(no subject)';
                                     item.from = Array.isArray(parsed.from) ? parsed.from[0]?.text : parsed.from?.text || '';
                                     item.to = Array.isArray(parsed.to) ? parsed.to[0]?.text : parsed.to?.text || '';

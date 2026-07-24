@@ -67,7 +67,7 @@ export interface IStorage {
   getLeadBySocialId(socialId: string, channel: string): Promise<Lead | undefined>;
   createLead(lead: Partial<InsertLead> & { userId: string; name: string; channel: string }, options?: { suppressNotification?: boolean }): Promise<Lead>;
   createLeadsBatch(leads: Array<Partial<InsertLead> & { userId: string; name: string; channel: string }>, options?: { suppressNotification?: boolean }): Promise<Lead[]>;
-  updateLead(id: string, updates: Partial<Lead>): Promise<Lead | undefined>;
+  updateLead(id: string, updates: Partial<Lead>, options?: { suppressNotification?: boolean }): Promise<Lead | undefined>;
   reserveLeadForAction(leadId: string, workerName: string, durationMs?: number): Promise<boolean>;
   archiveLead(id: string, userId: string, archived: boolean): Promise<Lead | undefined>;
   deleteLead(id: string, userId: string): Promise<void>;
@@ -606,7 +606,7 @@ export class MemStorage implements IStorage {
   async createLeadsBatch(insertLeads: Array<Partial<InsertLead> & { userId: string; name: string; channel: string }>, options?: { suppressNotification?: boolean }): Promise<Lead[]> {
     return drizzleStorage.createLeadsBatch(insertLeads, options);
   }
-  async updateLead(id: string, updates: Partial<Lead>): Promise<Lead | undefined> {
+  async updateLead(id: string, updates: Partial<Lead>, options?: { suppressNotification?: boolean }): Promise<Lead | undefined> {
     const lead = this.leads.get(id);
     if (!lead) return undefined;
     const updated = { ...lead, ...updates, updatedAt: new Date() };

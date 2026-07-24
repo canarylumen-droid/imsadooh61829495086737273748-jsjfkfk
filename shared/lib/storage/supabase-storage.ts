@@ -319,7 +319,7 @@ export class SupabaseStorage implements IStorage {
     return this.mapLeadFromDb(data);
   }
 
-  async updateLead(id: string, updates: Partial<Lead>): Promise<Lead | undefined> {
+  async updateLead(id: string, updates: Partial<Lead>, options?: { suppressNotification?: boolean }): Promise<Lead | undefined> {
     const dbUpdates: any = { updated_at: new Date() };
     if (updates.name !== undefined) dbUpdates.name = updates.name;
     if (updates.organizationId !== undefined) dbUpdates.organization_id = updates.organizationId;

@@ -893,7 +893,7 @@ router.post("/reply/:leadId", requireAuthOrApiKey, async (req: Request, res: Res
     const updatedLead = await storage.updateLead(leadId as string, {
       status: finalStatus as any,
       lastMessageAt: new Date()
-    });
+    }, { suppressNotification: true });
 
     // Notify via WebSocket
     const { wsSync } = await import('@shared/lib/realtime/websocket-sync.js');

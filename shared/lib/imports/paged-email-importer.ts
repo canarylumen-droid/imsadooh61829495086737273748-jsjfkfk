@@ -260,30 +260,6 @@ async function processEmailForLead(
       });
 
       if (direction === 'inbound') {
-        // Create actual notification for inbound replies (never for historical)
-        try {
-          await storage.createNotification({
-            userId,
-            type: 'inbound_email',
-            title: 'New Reply Received',
-            message: `From ${email.from || lead.email}: "${email.subject}"`,
-            metadata: {
-              leadId: lead.id,
-              threadId: threadId,
-              messageId: (newMessage as any).id
-            }
-          });
-
-          clusterSync.notifyNotification(userId, {
-            type: 'lead_activity',
-            title: 'New Reply Received',
-            message: `${email.from || lead.email} replied to your outreach.`,
-            leadId: lead.id,
-            playSound: true
-          });
-        } catch (notifErr) {
-          console.error('[Email Import] Notification failed:', notifErr);
-        }
         clusterSync.notifyActivityUpdated(userId, {
           type: 'email_received',
           leadId: lead.id,
@@ -532,13 +508,19 @@ async function processEmailForLead(
                 }
               });
 
-              // Create persistent notification
+              // Create campaign-specific notification
+              const campaignName = activeCampaign?.name || 'your campaign';
               await storage.createNotification({
                 userId,
                 type: 'lead_reply',
-                title: '📩 New Reply Received',
-                message: `${lead.name} replied to your outreach.`,
-                actionUrl: `/dashboard/inbox?leadId=${lead.id}`
+                title: '📩 Campaign Reply',
+                message: `${lead.name} replied to ${campaignName}.`,
+                actionUrl: `/dashboard/inbox?leadId=${lead.id}&campaignId=${entry.campaignId}`,
+                metadata: {
+                  leadId: lead.id,
+                  campaignId: entry.campaignId,
+                  campaignName
+                }
               });
             } catch (notifyErr) {
               console.error('Failed to notify reply activity:', notifyErr);

@@ -604,7 +604,7 @@ export default function InboxPage() {
   );
 
   useEffect(() => {
-    if (Array.isArray(leadsData?.leads)) {
+    if (leadsData && Array.isArray(leadsData.leads) && !leadsFetching) {
       setTypingLeadId(null);
       setAllLeads(prev => {
         if (page === 0) return leadsData.leads;
@@ -614,7 +614,7 @@ export default function InboxPage() {
       });
       hasLoadedLeadsRef.current = true;
     }
-  }, [leadsData]);
+  }, [leadsData, leadsFetching]);
 
   useEffect(() => {
     if (leadsError) {
