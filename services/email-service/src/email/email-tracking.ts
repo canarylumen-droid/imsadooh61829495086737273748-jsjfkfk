@@ -146,6 +146,24 @@ export async function createTrackedEmail(data: EmailTrackingData): Promise<{ tok
 
 export async function recordEmailEvent(event: EmailEvent): Promise<void> {
   try {
+    // Filter out automated email security scanners and bots from marking emails as "opened"
+    const ua = (event.userAgent || '').toLowerCase();
+    const isBotOrScanner = event.type === 'open' && (
+      ua.includes('googleimageproxy') ||
+      ua.includes('microsoft office') ||
+      ua.includes('outlook-ios') ||
+      ua.includes('applebot') ||
+      ua.includes('yahooseeker') ||
+      ua.includes('barracuda') ||
+      ua.includes('proofpoint') ||
+      ua.includes('mimecast') ||
+      ua.includes('symantec') ||
+      ua.includes('spamassassin') ||
+      ua.includes('bot') ||
+      ua.includes('crawler') ||
+      ua.includes('spider')
+    );
+
     await db.execute(sql`
       INSERT INTO email_events (
         id, token, event_type, ip_address, user_agent, link_url, created_at
@@ -166,7 +184,7 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
       )
     `);
 
-    // Get userId and leadId to notify
+    // Get userId and lead_id to notify
     const trackResult = await db.execute(sql`
       SELECT user_id, lead_id, integration_id, recipient_email, subject 
       FROM email_tracking 
@@ -174,6 +192,27 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
     `);
 
     const trackingInfo = trackResult.rows[0] as any;
+
+    // If it's an email security scanner bot, record delivery placement update but DO NOT mark as opened
+    if (isBotOrScanner) {
+      if (trackingInfo) {
+        const { clusterSync } = await import('@shared/lib/realtime/redis-pubsub.js');
+        // Update placement to inbox (scanner loaded pixel = delivered to inbox)
+        await db.execute(sql`
+          UPDATE email_tracking 
+          SET placement = CASE WHEN placement IN ('unknown', 'delivered') THEN 'inbox' ELSE placement END,
+              placement_updated_at = COALESCE(placement_updated_at, ${event.timestamp.toISOString()})
+          WHERE token = ${event.messageId}
+        `).catch(() => {});
+        
+        await clusterSync.notifyDeliverabilityUpdated(trackingInfo.user_id, {
+          integrationId: trackingInfo.integration_id,
+          placement: 'inbox',
+          source: 'security_scanner_proxy'
+        });
+      }
+      return;
+    }
 
     // FIRE SOCKET EVENTS FIRST — instant UI update before DB writes
     const socketPromises: Promise<any>[] = [];
