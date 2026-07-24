@@ -27,10 +27,17 @@ export class ErrorBoundary extends React.Component<Props, State> {
       const count = parseInt(sessionStorage.getItem(CHUNK_ERROR_KEY) || "0", 10);
       if (count >= 2) {
         sessionStorage.removeItem(CHUNK_ERROR_KEY);
+        this.setState({ hasError: true });
         return;
       }
       sessionStorage.setItem(CHUNK_ERROR_KEY, String(count + 1));
-      window.location.reload();
+      const cacheBust = "_cb=" + Date.now();
+      const hasCacheBust = window.location.search.includes("_cb=");
+      if (hasCacheBust) {
+        window.location.href = window.location.pathname + "?" + cacheBust;
+      } else {
+        window.location.replace(window.location.pathname + (window.location.search ? "&" : "?") + cacheBust);
+      }
       return;
     }
 
@@ -44,7 +51,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
           <div className="text-center max-w-xs">
             <p className="text-muted-foreground text-sm mb-4">Something went wrong</p>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => window.location.href = window.location.pathname + "?_cb=" + Date.now()}
               className="text-primary text-sm underline hover:no-underline"
             >
               Reload

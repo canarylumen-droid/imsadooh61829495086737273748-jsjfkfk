@@ -193,11 +193,24 @@ function Router() {
 }
 
 // Auto-reload on chunk load failures (deployment cache mismatch) — silent, enterprise-level
+const CHUNK_RETRY_KEY = "oc_chunk_retry";
 window.addEventListener("unhandledrejection", (e) => {
   const msg = e.reason?.message || "";
   if (msg.includes("dynamically imported module") || msg.includes("Loading chunk") || msg.includes("import(")) {
     e.preventDefault();
-    window.location.reload();
+    const retries = parseInt(sessionStorage.getItem(CHUNK_RETRY_KEY) || "0", 10);
+    if (retries >= 2) {
+      sessionStorage.removeItem(CHUNK_RETRY_KEY);
+      return;
+    }
+    sessionStorage.setItem(CHUNK_RETRY_KEY, String(retries + 1));
+    const cacheBust = "_cb=" + Date.now();
+    const hasCacheBust = window.location.search.includes("_cb=");
+    if (hasCacheBust) {
+      window.location.href = window.location.pathname + "?" + cacheBust;
+    } else {
+      window.location.replace(window.location.pathname + (window.location.search ? "&" : "?") + cacheBust);
+    }
   }
 });
 

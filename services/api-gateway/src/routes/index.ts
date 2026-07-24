@@ -68,22 +68,32 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   for (const p of [path.join(process.cwd(), "dist", "public"), path.join(process.cwd(), "dist", "dist", "public"), path.join(process.cwd(), "client", "dist")]) {
     if (fs.existsSync(p)) { staticDistPath = p; break; }
   }
-  const sendPublicFile = (fileName: string, res: Response) => {
+  const sendPublicFile = (fileName: string, res: Response, cacheSecs?: number) => {
     if (staticDistPath) {
       const filePath = path.join(staticDistPath, fileName);
-      if (fs.existsSync(filePath)) return res.sendFile(filePath);
+      if (fs.existsSync(filePath)) {
+        if (cacheSecs !== undefined) {
+          res.setHeader("Cache-Control", `public, max-age=${cacheSecs}, immutable`);
+        }
+        return res.sendFile(filePath);
+      }
     }
     res.status(404).end();
   };
 
-  app.get("/robots.txt", (req, res) => sendPublicFile("robots.txt", res));
-  app.get("/sitemap.xml", (req, res) => sendPublicFile("sitemap.xml", res));
-  app.get("/favicon.ico", (req, res) => sendPublicFile("favicon.ico", res));
-  app.get("/favicon.svg", (req, res) => sendPublicFile("favicon.svg", res));
-  app.get("/manifest.json", (req, res) => sendPublicFile("manifest.json", res));
-  app.get("/logo.svg", (req, res) => sendPublicFile("logo.svg", res));
-  app.get("/logo.png", (req, res) => sendPublicFile("logo.png", res));
-  app.get("/", (req, res) => sendPublicFile("index.html", res));
+  const sendIndexHtml = (res: Response) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    sendPublicFile("index.html", res);
+  };
+
+  app.get("/robots.txt", (req, res) => sendPublicFile("robots.txt", res, 86400));
+  app.get("/sitemap.xml", (req, res) => sendPublicFile("sitemap.xml", res, 86400));
+  app.get("/favicon.ico", (req, res) => sendPublicFile("favicon.ico", res, 86400));
+  app.get("/favicon.svg", (req, res) => sendPublicFile("favicon.svg", res, 86400));
+  app.get("/manifest.json", (req, res) => sendPublicFile("manifest.json", res, 86400));
+  app.get("/logo.svg", (req, res) => sendPublicFile("logo.svg", res, 86400));
+  app.get("/logo.png", (req, res) => sendPublicFile("logo.png", res, 86400));
+  app.get("/", (req, res) => sendIndexHtml(res));
 
   // Stealth tracking routes mounted at root level so pixel URLs like
   // {baseUrl}/t/{token} work without an obvious /api/email-tracking/ prefix.
@@ -198,6 +208,12 @@ export async function registerRoutes(app: Express): Promise<http.Server> {
   });
   app.use("/mcp", (req, res) => {
     res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
+  });
+
+  // SPA catch-all — serve index.html with no-cache for client-side routing
+  app.get("*", (req, res) => {
+    if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) return;
+    sendIndexHtml(res);
   });
 
   // Global error handler — return JSON instead of HTML for unhandled errors
