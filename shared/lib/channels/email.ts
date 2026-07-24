@@ -224,7 +224,7 @@ async function withRustFallback<T>(
       if (result) {
         const parsed = JSON.parse(result[1]);
         if (parsed.job_id === jobId) {
-          if (parsed.status === 'sent') return { messageId: parsed.job_id } as T;
+          if (parsed.status === 'sent') return { messageId: parsed.job_id, telemetryPlacement: parsed.telemetry_placement } as T;
           throw new Error(parsed.error || 'Rust send failed');
         }
         // Not our job — push back for another consumer
@@ -1020,7 +1020,7 @@ export async function sendEmail(
         targetUrl: firstUrl,
         metadata: { trackingId, integrationId: integration.id, ...(options.isTest ? { isTest: true } : {}) }
       });
-      // Fire-and-forget: update placement to 'delivered' (SMTP 250 = MTA accepted)
+      // SMTP 250 = MTA accepted — always 'delivered' (not 'inbox', which requires confirmation)
       updateSendPlacement({
         trackingId,
         userId,

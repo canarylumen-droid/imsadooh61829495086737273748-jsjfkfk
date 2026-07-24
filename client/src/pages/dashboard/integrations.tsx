@@ -422,13 +422,22 @@ export default function IntegrationsPage() {
     const verification = stats?.domainVerifications?.find((v: any) => v.domain === domain);
     const result = verification?.result?.[record === 'blacklist' ? 'blacklist' : record];
     
-    // For consumer domains: SPF/MX are valid (provider-managed), DKIM/DMARC/BL are N/A
+    // For consumer domains: check actual DNS result first; fall back to provider-managed status
     if (isConsumerDomain) {
+      if (record === 'dkim' || record === 'dmarc') {
+        // Use actual DNS verification result if available (e.g. gmail.com has DMARC/DKIM)
+        if (result !== undefined) {
+          const isPresent = !!result?.record || !!result?.records?.length;
+          const tooltip = isPresent
+            ? `${label}: ${result?.record?.substring(0, 80) || 'valid'}`
+            : `${label}: ${result?.issues?.join('; ') || 'not configured'}`;
+          return { isPresent, label, tooltip, isPending: false };
+        }
+        // No verification run yet — mark as pending so it resolves when DNS check completes
+        return { isPresent: false, label, tooltip: `${label}: verifying DNS for ${domain}...`, isPending: true };
+      }
       if (record === 'spf' || record === 'mx') {
         return { isPresent: true, label, tooltip: `${label}: managed by ${domain.split('.')[0]}`, isPending: false };
-      }
-      if (record === 'dkim' || record === 'dmarc') {
-        return { isPresent: false, label, tooltip: `${label}: not applicable for consumer ${domain}`, isPending: false };
       }
       if (record === 'blacklist') {
         return { isPresent: true, label, tooltip: 'Not blacklisted (provider-managed)', isPending: false };
@@ -596,7 +605,14 @@ export default function IntegrationsPage() {
   const totalIntegrationPages = useMemo(() =>
     (integrationsData as any)?.pages ?? 1, [integrationsData]
   );
-  const allMailboxes = useMemo(() => customEmailStatus?.integrations || [], [customEmailStatus]);
+  const allMailboxes = useMemo(() => {
+    const fromStatus = customEmailStatus?.integrations || [];
+    const fromIntegrations = Array.isArray(integrations) ? integrations
+      .filter((i: any) => (i.provider === 'gmail' || i.provider === 'outlook'))
+      .map((i: any) => ({ ...i, email: i.email || i.accountType || '' })) : [];
+    const seen = new Set(fromStatus.map((m: any) => m.id));
+    return [...fromStatus, ...fromIntegrations.filter((i: any) => !seen.has(i.id))];
+  }, [customEmailStatus, integrations]);
   const hasMailboxesConnected = allMailboxes.length > 0;
 
   const filteredMailboxes = useMemo(() => {
@@ -931,10 +947,7 @@ export default function IntegrationsPage() {
     return capabilities.mailboxLimit;
   };
 
-  const connectedMailboxesCount = useMemo(() =>
-    (customEmailStatus?.integrations?.length || 0) +
-    (integrations.filter((i: any) => i.provider === 'gmail' || i.provider === 'outlook').length || 0)
-  , [customEmailStatus, integrations]);
+  const connectedMailboxesCount = useMemo(() => allMailboxes.length, [allMailboxes]);
 
   const limit = getMailboxLimit();
   const isAtMailboxLimit = limit !== -1 && connectedMailboxesCount >= limit;

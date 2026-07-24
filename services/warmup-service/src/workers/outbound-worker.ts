@@ -295,7 +295,7 @@ export function createOutboundWorker(): Worker {
         // ── REPLY CHAIN ────────────────────────────────────────────────
         // After each successful warmup send, queue 2-3 replies back in the thread.
         // Each reply uses proper In-Reply-To / References threading.
-        // Progressive spacing: reply 1 @ 3-6min, reply 2 @ 6-12min, reply 3 @ 12-24min.
+        // Progressive spacing: reply 1 @ 10-20min, reply 2 @ 20-40min, reply 3 @ 40-80min.
         // This mimics natural human conversation and avoids Gmail spam flagging.
         const repliesPerSend = WARMUP_CONFIG.REPLIES_PER_SEND; // default 3
         for (let v = 1; v <= repliesPerSend; v++) {

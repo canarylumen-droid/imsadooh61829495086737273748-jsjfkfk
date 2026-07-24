@@ -21,12 +21,11 @@ export const WARMUP_CONFIG = {
   MIN_WARMUP_PER_DAY: parseInt(process.env.WARMUP_MIN_PER_DAY || '3', 10),
 
   // Reply volleys per warmup send — for each outbound warmup email, generate this many replies back
-  REPLIES_PER_SEND: parseInt(process.env.WARMUP_REPLIES_PER_SEND || '1', 10),
+  REPLIES_PER_SEND: parseInt(process.env.WARMUP_REPLIES_PER_SEND || '3', 10),
 
   // Reply chain timing (seconds between replies in the chain)
-  // Increased from 3-6min to 30-60min to prevent rapid bot replies that look unnatural.
-  REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '1800', 10),
-  REPLY_CHAIN_MAX_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MAX_DELAY || '3600', 10),
+  REPLY_CHAIN_MIN_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MIN_DELAY || '600', 10), // 10 min
+  REPLY_CHAIN_MAX_DELAY_SECONDS: parseInt(process.env.WARMUP_CHAIN_MAX_DELAY || '1200', 10), // 20 min
 
   // Threading
   MIN_MESSAGES_PER_THREAD: 3,

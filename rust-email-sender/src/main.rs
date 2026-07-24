@@ -293,11 +293,13 @@ async fn main() -> Result<()> {
                     let domain = job.recipient.split('@').nth(1).unwrap_or("unknown").to_string();
 
                     // Run SMTP telemetry probe before sending (cached per MX host)
+                    let mut telemetry_placement: Option<String> = None;
                     if let Ok(mx_records) = resolver.resolve_mx(&domain).await {
                         if let Some(mx) = mx_records.first() {
                             let mx_host = mx.exchange.trim_end_matches('.').to_string();
                             match tele.probe(&job.recipient, &domain, &mx_host).await {
                                 Ok(report) => {
+                                    telemetry_placement = serde_json::to_value(&report.suspected_placement).ok().and_then(|v| v.as_str().map(String::from));
                                     if matches!(report.suspected_placement, telemetry::PlacementGuess::TarpittedSpamQueue | telemetry::PlacementGuess::Rejected | telemetry::PlacementGuess::GreylistedOrThrottled) {
                                         log::warn!("[{}] Telemetry risk: {:?} for {} via {} ({}ms)", job.id, report.suspected_placement, job.recipient, mx_host, report.rcpt_latency_ms);
                                     } else {
@@ -310,11 +312,6 @@ async fn main() -> Result<()> {
                             }
                         }
                     }
-
-                    let telemetry_placement: Option<String> = match &report {
-                        Ok(r) => serde_json::to_value(&r.suspected_placement).ok().and_then(|v| v.as_str().map(String::from)),
-                        Err(_) => None,
-                    };
 
                     let result = pool.send_via_job(&job).await;
 
