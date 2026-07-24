@@ -76,11 +76,16 @@ impl SmtpTelemetry {
         sender_domain: &str,
         mx_host: &str,
     ) -> Result<TelemetryReport> {
+        // Note: AWS EC2 blocks outbound port 25 by default.
+        // Port 587 (submission) is used as a best-effort alternative.
+        // MX hosts typically only listen on :25, so telemetry may fail
+        // for many providers from EC2. This is non-fatal — placement
+        // is determined by post-send signals (opens, bounces, seed monitor).
         let addr = format!("{}:587", mx_host);
 
         let start_connect = TokioInstant::now();
         let stream = tokio::time::timeout(
-            Duration::from_secs(5),
+            Duration::from_secs(2),
             TcpStream::connect(&addr),
         ).await??;
         let connect_latency_ms = start_connect.elapsed().as_millis();
