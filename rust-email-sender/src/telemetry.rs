@@ -7,7 +7,8 @@ use tokio::net::TcpStream;
 use tokio::time::Instant as TokioInstant;
 use log::debug;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum PlacementGuess {
     InboxConfident,
     TarpittedSpamQueue,
@@ -75,7 +76,7 @@ impl SmtpTelemetry {
         sender_domain: &str,
         mx_host: &str,
     ) -> Result<TelemetryReport> {
-        let addr = format!("{}:25", mx_host);
+        let addr = format!("{}:587", mx_host);
 
         let start_connect = TokioInstant::now();
         let stream = tokio::time::timeout(

@@ -1557,6 +1557,17 @@ async function processSendBatch(data: SendBatchJobData, jobId?: string): Promise
               .where(eq(campaignLeads.id, leadEntry.id)));
             continue;
           }
+          // ── CONTENT-LEVEL DUPLICATE GUARD ──────────────────────────────
+          // Check if same content was sent to this lead recently (24h window)
+          const { DuplicateSendGuard } = await import('@shared/lib/guards/duplicate-send-guard.js');
+          const dupCheck = await DuplicateSendGuard.isDuplicate(lead.id, subject, body);
+          if (dupCheck.isDuplicate) {
+            console.log(`[CampaignWorker] 🛑 DUPLICATE BLOCKED for lead ${lead.id}: ${dupCheck.reason}`);
+            await withDbRetry(() => db.update(campaignLeads)
+              .set({ status: 'failed', error: `[Duplicate Guard] ${dupCheck.reason}` })
+              .where(eq(campaignLeads.id, leadEntry.id)));
+            continue;
+          }
           await deliverCampaignEmail(userId, campaign, lead, leadEntry, integrationId);
           recordProviderOutcome(integrationId, lead.email, 'sent').catch((err: any) => {
             console.warn(`[CampaignWorker] ⚠️ Failed to record provider outcome: ${err.message}`);

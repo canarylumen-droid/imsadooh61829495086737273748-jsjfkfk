@@ -158,6 +158,22 @@ export function startEmailSyncWorker() {
                 const [seedAccount] = await db.select().from(warmupSeedAccounts).where(eq(warmupSeedAccounts.email, senderAddr));
                 const isWarmupSeed = !!seedAccount;
 
+                // ── IMMEDIATE INBOX SWEEP for warmup seed emails ────────────────
+                if (isWarmupSeed) {
+                  try {
+                    const { Queue: WarmupQueue } = await import('bullmq');
+                    const warmupQ = new WarmupQueue('warmup-inbound', { connection: createFreshConnection() as any });
+                    const { warmupMailboxes: wmSchema } = await import('@audnix/shared');
+                    const [wm] = await db.select().from(wmSchema).where(eq(wmSchema.integrationId, integrationId)).limit(1);
+                    if (wm) {
+                      await warmupQ.add('inbox-sweep', { mailboxId: wm.id });
+                    }
+                    await warmupQ.close();
+                  } catch (e) {
+                    console.warn('[EmailSyncQueue] Failed to trigger warmup inbox sweep:', (e as Error)?.message);
+                  }
+                }
+
                 let lead = null;
                 let senderName = senderAddr.split('@')[0];
                 if (!isWarmupSeed) {

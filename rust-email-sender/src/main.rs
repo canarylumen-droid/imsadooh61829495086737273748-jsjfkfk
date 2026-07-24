@@ -110,7 +110,7 @@ async fn main() -> Result<()> {
             let mut redis = rq;
             loop {
                 let job_opt: Option<Vec<String>> = redis.clone()
-                    .brpop(&[&mvq], 0.0).await.unwrap_or(None);
+                    .brpop(&[&mvq], 10.0).await.unwrap_or(None);
                 if let Some(mut parts) = job_opt {
                     if parts.len() < 2 { continue; }
                     let _queue_name = parts.remove(0);
@@ -165,7 +165,7 @@ async fn main() -> Result<()> {
             let mut redis = rq;
             loop {
                 let job_opt: Option<Vec<String>> = redis.clone()
-                    .brpop(&[&sq], 0.0).await.unwrap_or(None);
+                    .brpop(&[&sq], 10.0).await.unwrap_or(None);
                 if let Some(mut parts) = job_opt {
                     if parts.len() < 2 { continue; }
                     let _queue_name = parts.remove(0);
@@ -200,7 +200,7 @@ async fn main() -> Result<()> {
             let mut redis = rq;
             loop {
                 let job_opt: Option<Vec<String>> = redis.clone()
-                    .brpop(&[&mxq], 0.0).await.unwrap_or(None);
+                    .brpop(&[&mxq], 10.0).await.unwrap_or(None);
                 if let Some(mut parts) = job_opt {
                     if parts.len() < 2 { continue; }
                     let _queue_name = parts.remove(0);
@@ -264,7 +264,7 @@ async fn main() -> Result<()> {
     // Main loop: event-driven — blocks on BRPOP with infinite timeout (zero polling)
     loop {
         let job_opt: Option<Vec<String>> = redis_conn.clone()
-            .brpop(&[&email_queue, &dns_queue], 0.0).await.ok();
+            .brpop(&[&email_queue, &dns_queue], 10.0).await.ok();
 
         if let Some(mut parts) = job_opt {
             if parts.len() < 2 { continue; }
@@ -311,6 +311,11 @@ async fn main() -> Result<()> {
                         }
                     }
 
+                    let telemetry_placement: Option<String> = match &report {
+                        Ok(r) => serde_json::to_value(&r.suspected_placement).ok().and_then(|v| v.as_str().map(String::from)),
+                        Err(_) => None,
+                    };
+
                     let result = pool.send_via_job(&job).await;
 
                     let result_json = serde_json::json!({
@@ -323,6 +328,7 @@ async fn main() -> Result<()> {
                             Ok(_) => None,
                             Err(e) => Some(e.to_string()),
                         },
+                        "telemetry_placement": telemetry_placement,
                         "timestamp": chrono::Utc::now().to_rfc3339(),
                     });
 

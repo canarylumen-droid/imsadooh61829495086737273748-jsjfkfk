@@ -203,6 +203,36 @@ class ImapIdleManager {
         console.log(`✅ [IMAP] Integration ${integrationId} fully disconnected and all state cleared.`);
     }
 
+    /**
+     * Trigger an immediate email sync for all active integrations belonging to a user.
+     * Fetches new messages from inbox, sent, and spam folders using existing IDLE connections.
+     * Emits sync_status events for real-time frontend feedback.
+     */
+    public async syncNow(userId: string): Promise<void> {
+        const synced: string[] = [];
+        for (const [integrationId, folderMap] of this.connections.entries()) {
+            const imap = folderMap?.values().next().value;
+            if (!imap || imap.state !== 'authenticated') continue;
+            const folders = this.folders.get(integrationId);
+            if (!folders) continue;
+
+            wsSync.notifySyncStatus(userId, { syncing: true, integrationId });
+            try {
+                for (const inbox of folders.inbox) await this.fetchNewEmails(integrationId, userId, imap, inbox, 'inbound');
+                for (const sent of folders.sent) await this.fetchNewEmails(integrationId, userId, imap, sent, 'outbound');
+                for (const spam of folders.spam) await this.fetchNewEmails(integrationId, userId, imap, spam, 'inbound', true);
+                synced.push(integrationId);
+            } catch (e) {
+                console.warn(`[IMAP] syncNow error for ${integrationId}:`, (e as Error)?.message);
+            } finally {
+                wsSync.notifySyncStatus(userId, { syncing: false, integrationId });
+            }
+        }
+        if (synced.length > 0) {
+            console.log(`[IMAP] syncNow: synced ${synced.length} integrations for user ${userId}`);
+        }
+    }
+
     public async syncConnections(): Promise<void> {
         if (quotaService.isRestricted()) {
             console.log('[IMAPIdleManager] Skipping connection sync: Database quota restricted');

@@ -144,6 +144,7 @@ export default function InboxPage() {
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
   const [isCampaignModalOpen, setIsCampaignModalOpen] = useState(false);
   const [isCampaignListOpen, setIsCampaignListOpen] = useState(false);
+  const [syncingNow, setIsSyncingNow] = useState(false);
 
   // Handle Global Search params
   useEffect(() => {
@@ -336,10 +337,11 @@ export default function InboxPage() {
           (oldData: any) => {
             if (!oldData || !oldData.messages) return oldData;
 
-            const exact = oldData.messages.some((m: any) => m.id === msgData.id);
+            const msgs = oldData.messages;
+            const exact = msgs.some((m: any) => m.id === msgData.id);
             if (exact) return oldData;
 
-            const tempIdx = oldData.messages.findIndex((m: any) =>
+            const tempIdx = msgs.findIndex((m: any) =>
               m.id?.startsWith?.('temp-') && !m.id?.startsWith?.('temp-msg')
             );
 
@@ -354,16 +356,24 @@ export default function InboxPage() {
               metadata: msgData.metadata || {}
             };
 
+            let updated: any[];
             if (tempIdx !== -1) {
-              const updated = [...oldData.messages];
+              updated = [...msgs];
               updated[tempIdx] = newMsg;
-              return { ...oldData, messages: updated };
+            } else {
+              updated = [...msgs, newMsg];
             }
 
-            return {
-              ...oldData,
-              messages: [...oldData.messages, newMsg]
-            };
+            // Universal dedup: remove any duplicate IDs (handles race between socket + onSuccess)
+            const seen = new Set<string>();
+            const deduped = updated.filter((m: any) => {
+              if (!m.id) return true;
+              if (seen.has(m.id)) return false;
+              seen.add(m.id);
+              return true;
+            });
+
+            return { ...oldData, messages: deduped };
           }
         );
       }
@@ -893,16 +903,19 @@ export default function InboxPage() {
           if (!oldData || !oldData.messages) return oldData;
           const msgs = oldData.messages;
           const tempIdx = msgs.findIndex((m: any) => m.id === context.tempId);
-          if (tempIdx === -1) {
+          let updated: any[];
+          if (tempIdx !== -1) {
+            updated = [...msgs];
+            updated[tempIdx] = { ...data.message };
+          } else {
             const exists = msgs.some((m: any) => m.id === realId);
-            if (!exists) return { ...oldData, messages: [...msgs, { ...data.message }] };
-            return oldData;
+            if (exists) return oldData;
+            updated = [...msgs, { ...data.message }];
           }
-          const updated = [...msgs];
-          updated[tempIdx] = { ...data.message };
+          // Universal dedup: remove any duplicate IDs (handles race between socket + HTTP)
           const seen = new Set<string>();
           const deduped = updated.filter((m: any) => {
-            if (m.id === context.tempId) return false;
+            if (!m.id) return true;
             if (seen.has(m.id)) return false;
             seen.add(m.id);
             return true;
@@ -1256,15 +1269,20 @@ export default function InboxPage() {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                <Button variant="ghost" size="icon" disabled={backendSyncing} onClick={async () => {
+                <Button variant="ghost" size="icon" disabled={backendSyncing || syncingNow} onClick={async () => {
                   try {
+                    setIsSyncingNow(true);
                     await fetch("/api/custom-email/sync-now", { method: "POST", credentials: "include" });
-                  } catch {}
-                  queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
-                  queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
-                  toast({ title: "Syncing...", description: "Fetching latest messages from the cloud." });
+                    queryClient.invalidateQueries({ queryKey: ["/api/leads"] });
+                    queryClient.invalidateQueries({ queryKey: ["/api/messages"] });
+                    toast({ title: "Syncing...", description: "Fetching latest messages from the cloud." });
+                    // Safety timeout: clear local syncing state after 15s
+                    setTimeout(() => setIsSyncingNow(false), 15000);
+                  } catch {
+                    setIsSyncingNow(false);
+                  }
                 }}>
-                  <RefreshCw className={cn("h-4 w-4", backendSyncing && "animate-spin text-primary")} />
+                  <RefreshCw className={cn("h-4 w-4", (backendSyncing || syncingNow) && "animate-spin text-primary")} />
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

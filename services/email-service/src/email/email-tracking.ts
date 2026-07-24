@@ -150,6 +150,8 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
     const ua = (event.userAgent || '').toLowerCase();
     const isBotOrScanner = event.type === 'open' && (
       ua.includes('googleimageproxy') ||
+      ua.includes('googlesafety') ||
+      ua.includes('googlecloud') ||
       ua.includes('microsoft office') ||
       ua.includes('outlook-ios') ||
       ua.includes('applebot') ||
@@ -159,9 +161,27 @@ export async function recordEmailEvent(event: EmailEvent): Promise<void> {
       ua.includes('mimecast') ||
       ua.includes('symantec') ||
       ua.includes('spamassassin') ||
+      ua.includes('trendmicro') ||
+      ua.includes('kaspersky') ||
+      ua.includes('mcafee') ||
+      ua.includes('forcepoint') ||
+      ua.includes('zscaler') ||
+      ua.includes('cisco') ||
+      ua.includes('fireeye') ||
+      ua.includes('f-secure') ||
+      ua.includes('checkpoint') ||
+      ua.includes('fortinet') ||
+      ua.includes('virustotal') ||
+      ua.includes('urlscan') ||
+      ua.includes('cloudflare') ||
+      ua.includes('threat') ||
+      ua.includes('phish') ||
+      ua.includes('abuse') ||
+      ua.includes('mailscanner') ||
       ua.includes('bot') ||
       ua.includes('crawler') ||
-      ua.includes('spider')
+      ua.includes('spider') ||
+      ua.includes('scan')
     );
 
     await db.execute(sql`

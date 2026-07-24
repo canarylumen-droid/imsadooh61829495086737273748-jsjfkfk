@@ -7,6 +7,35 @@ This file is automatically loaded at the start of every session. Use it to store
 - I can also update this file when I learn something important about the project
 - Keep it organized with sections for different topics
 
+## This Session (Jul 24 2026) — Immediate Warmup Sweep + Seed Pairing Fix + Sync Button
+
+### Fix 1: Sync button actually fetches emails
+- **Root cause**: `/api/custom-email/sync-now` called `imapIdleManager.syncConnections()` which only manages connection lifecycle (opens/closes IDLE connections), does NOT fetch new emails from IMAP. The frontend button showed spin animation but nothing changed.
+- **Fix**: Added `public async syncNow(userId)` method to `imap-idle-manager.ts` that iterates all active IMAP connections for the user, calls `fetchNewEmails` on inbox/sent/spam folders, and emits `sync_status` socket events for real-time UI feedback. The endpoint now calls `syncNow()` instead of `syncConnections()`.
+- **Frontend**: Added local `syncingNow` state with 15s safety timeout so the button provides immediate spinner feedback even before socket events arrive. Button is disabled while `backendSyncing || syncingNow`.
+
+### Fix 2: Duplicate reply rendering in inbox
+- **Root cause**: Race condition between socket `messages_updated` handler and HTTP `sendMutation.onSuccess` handler. Both independently add the same message to the React Query cache. The `handleMessagesUpdated` checks for existing ID (`m.id === msgData.id`), and the `onSuccess` checks for temp ID replacement, but the timing between the two paths could leave duplicates.
+- **Fix**: Added universal dedup by message ID in BOTH handlers. After any cache modification, messages are filtered through a `Set<string>` that removes duplicate IDs. Applied to both the socket handler (`inbox.tsx:handleMessagesUpdated`) and the mutation `onSuccess` handler.
+
+### Fix 3: Immediate warmup inbox sweep (milliseconds, not 5 minutes)
+- **Root cause**: Warmup inbox sweep runs on a 5-minute timer (`INBOX_SWEEP_INTERVAL_MS: 5 * 60 * 1000` in warmup-config.ts). When a warmup seed reply arrives in the user's INBOX via IMAP IDLE push, it stays there for up to 5 minutes before the sweep worker moves it to the hidden folder. The IMAP idle manager's `fetchNewEmails` already detects and filters warmup emails (`x-audnix-warmup` header at line 1064) but just drops them without moving.
+- **Fix**: In `email-sync-queue.ts`, when `isWarmupSeed` is detected (line 159), immediately enqueue an `inbox-sweep` job on the warmup inbound queue (`warmup-inbound`). The warmup worker picks this up instantly and runs `sweepInboxToHidden()` for that specific mailbox using ImapFlow. This reduces the sweep delay from 0-5 minutes to ~1-2 seconds.
+- **Files**: `shared/lib/queues/email-sync-queue.ts`
+
+### Fix 4: Seeds no longer pair with other seeds
+- **Root cause**: `pairing-engine.ts:findPartnerForAnchor()` uses `getAnchorCandidates()` which returns both `anchor` AND `seed` role mailboxes. When `isSeed` is true, the filter at line 73-77 uses `(isSeed || c.anchorRole === 'anchor' || ...)`, which short-circuits to `true` for ALL remaining candidates — including other seeds. Similarly, the fallback `getEnterpriseCandidates()` path doesn't filter by anchor role at all.
+- **Fix**: Changed filter to `c.anchorRole !== 'seed'` when `isSeed` is true. Also added the same filter to the fallback enterprise candidates path. Seeds now only pair with non-seed (anchor/member) enterprise mailboxes.
+- **Files**: `services/warmup-service/src/lib/pairing-engine.ts`
+
+### Deploy
+- `git push github main` then on EC2:
+  ```bash
+  cd /home/ubuntu/app && git pull
+  NODE_OPTIONS='--max-old-space-size=2048' npx vite build
+  pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-warmup
+  ```
+
 ---
 
 ## Project Overview
@@ -1308,12 +1337,66 @@ Wire DNS verification through Rust for all paths, trigger on OAuth connect, then
    - Skeleton loading state, empty state
    - Resets `selectedWarmupThreadId` when toggling warmup/archive modes
 
+---
+
+## This Session (Jul 24 2026) — SMTP Telemetry Test + Rust Sender BRPOP Fix
+
+### SMTP Telemetry Test: canarylumen1@gmail.com
+**Goal**: Test Rust SMTP telemetry probe (pre-send MX timing analysis) to predict spam/inbox placement without seed accounts.
+
+**Test execution**:
+1. Set `RUST_LOG=debug` on EC2 Rust sender, rebuilt from source with `info!` level telemetry log
+2. Pushed 3 properly-formatted EmailJob JSON to `email-send-queue` (from `treasure@outreach.replyflow.pro` to `canarylumen1@gmail.com`)
+3. Rust sender was stuck — BRPOP with `0.0` timeout never returned even with items in queue. Root cause: `redis-rs` ConnectionManager `clone()` bug with blocking operations after a connection gets into a stale state.
+4. After `pm2 restart`, Rust sender consumed ONE job: `[dad4d16d] Sent to canarylumen1@gmail.com`
+5. Telemetry log: **`Telemetry skipped (non-fatal): deadline has elapsed`** — the TCP probe to `gmail-smtp-in.l.google.com:25` timed out after 5s.
+
+**Root cause of timeout**: AWS EC2 **blocks outbound SMTP port 25** by default. The probe connected to port 25 and hung until the 5-second deadline expired. The email itself was sent successfully via `admin.mail.replyflow.pro:587` (TLS submission port).
+
+### Rust Sender BRPOP Fix
+- **Root cause**: BRPOP with `0.0` (infinite) timeout on `redis-rs` ConnectionManager clones causes the Redis client to get stuck in blocked state (`flags=b`) even when list items exist. After first BRPOP returns, the subsequent BRPOP on the same connection/manager never returns.
+- **Fix**: Changed ALL `brpop(..., 0.0)` → `brpop(..., 10.0)` (10-second timeout) across the main loop, mailbox-verify handler, scheduling handler, and MX batch handler. With a finite timeout, if BRPOP gets stuck it'll retry after 10s.
+- **Files**: `rust-email-sender/src/main.rs` (4 BRPOP calls changed)
+
+### SMTP Telemetry Port Fix
+- **Root cause**: `telemetry.rs` probes the MX host on port 25. AWS EC2 blocks outbound port 25 (anti-spam policy). Port 587 (submission) is open and is the standard SMTP submission port.
+- **Fix**: Changed `telemetry.rs` to probe on port 587 instead of 25. This is the port that the actual email sender already uses for delivery. The SMTP EHLO/MAIL FROM/RCPT TO handshake behavior is the same.
+- **Files**: `rust-email-sender/src/telemetry.rs`
+
+### Combined Spam Detection Architecture (success.md approach)
+The application uses a **multi-signal** approach to determine inbox/spam placement (no single source is definitive):
+
+| Signal | Source | Placement Set | Latency |
+|---|---|---|---|
+| SMTP 250 OK (MTA accepted) | Rust/Node SMTP send | `delivered` | ~1s |
+| Open tracking pixel `/t/:token` | Node.js Express route | `inbox` | seconds-minutes |
+| Click tracking | Node.js redirect | `inbox` | seconds-minutes |
+| Spam folder IMAP scan | Rust seed monitor / Node spam-monitor | `spam` | 1-30min |
+| Bounce DSN detection | IMAP inbox scan / SES bounce webhook | `bounced` | 1-60min |
+| FBL complaint webhook | SES/SendGrid FBL endpoint | `spam` | minutes-hours |
+| SMTP Telemetry (pre-send) | Rust TCP probe to MX:587 | N/A (informational only) | ~1s |
+| DMARC/RUF forensic report | Rust IMAP listener on forensics inbox | `spam`/`inbox` | hours |
+
+**Key design decisions**:
+- **SMTP Telemetry is NOT used for final placement**. It's an informational signal. `updateSendPlacement()` always sets `'delivered'` (MTA accepted = ground truth). The final `'inbox'`/`'spam'` comes only from real confirmations (opens, seed monitor, spam folder scan).
+- **Telemetry runs on port 587** (submission), not port 25 (blocked by EC2). Same SMTP handshake, same timing analysis.
+- **Telemetry caching**: 5-minute MX-level cache in `DashMap` so repeated sends to the same MX don't re-probe.
+- **Telemetry can detect**: Tarpitting (RCPT TO > 1200ms → `TarpittedSpamQueue`), greylisting (SMTP 4xx), outright rejection (SMTP 5xx). These are strong spam signals sent to `log::warn!`.
+- **Telemetry CANNOT detect**: Post-SMTP content filtering (Gmail's spam filter runs after 250 OK). Only opens/clicks/spam-folder-scan can confirm post-SMTP placement.
+
+### Status
+- Email sent to `canarylumen1@gmail.com` from `treasure@outreach.replyflow.pro`. User should check inbox/spam and report back.
+- EC2 port 25 blocked — telemetry probe now uses port 587.
+- BRPOP timeout changed from infinite to 10s to prevent connection stuck state.
+- RUST_LOG restored to `info` on EC2.
+
 ### Deploy
 - `git push github main` then on EC2:
   ```bash
   cd /home/ubuntu/app && git pull
-  cd /home/ubuntu/app/client && NODE_OPTIONS='--max-old-space-size=2048' npm run build:client
-  pm2 restart audnix-api-gateway audnix-socket-server
+  cd rust-email-sender && cargo build --release
+  cd /home/ubuntu/app/client && NODE_OPTIONS='--max-old-space-size=2048' npx vite build
+  pm2 restart audnix-rust-email-sender audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-warmup
   ```
 
 ## This Session (Jul 23 2026) — Lead Recovery 403 Banner + MCP UI Cleanup
@@ -1460,3 +1543,50 @@ Startup → provisionFromEnv() → creates warmup_mailboxes + warmup_seed_accoun
 
 ### Deploy
 - `git push github main` (`cbc97f1c`), EC2: git pull, vite build (23.84s), restart api-gateway + socket-server
+
+---
+
+## This Session (Jul 24 2026) — Immediate Warmup Sweep + Seed Pairing Fix + Sync Button + Reply Chain Config
+
+### Fix 1: Sync button actually fetches emails
+- **Root cause**: `/api/custom-email/sync-now` called `imapIdleManager.syncConnections()` which only manages connection lifecycle (opens/closes IDLE connections), does NOT fetch new emails from IMAP. The frontend button showed spin animation but nothing changed.
+- **Fix**: Added `public async syncNow(userId)` method to `imap-idle-manager.ts` that iterates all active IMAP connections for the user, calls `fetchNewEmails` on inbox/sent/spam folders, and emits `sync_status` socket events for real-time UI feedback. The endpoint now calls `syncNow()` instead of `syncConnections()`.
+- **Frontend**: Added local `syncingNow` state with 15s safety timeout so the button provides immediate spinner feedback even before socket events arrive. Button is disabled while `backendSyncing || syncingNow`.
+
+### Fix 2: Duplicate reply rendering in inbox
+- **Root cause**: Race condition between socket `messages_updated` handler and HTTP `sendMutation.onSuccess` handler. Both independently add the same message to the React Query cache. The `handleMessagesUpdated` checks for existing ID (`m.id === msgData.id`), and the `onSuccess` checks for temp ID replacement, but the timing between the two paths could leave duplicates.
+- **Fix**: Added universal dedup by message ID in BOTH handlers. After any cache modification, messages are filtered through a `Set<string>` that removes duplicate IDs. Applied to both the socket handler (`inbox.tsx:handleMessagesUpdated`) and the mutation `onSuccess` handler.
+
+### Fix 3: Immediate warmup inbox sweep (milliseconds, not 5 minutes)
+- **Root cause**: Warmup inbox sweep runs on a 5-minute timer (`INBOX_SWEEP_INTERVAL_MS: 5 * 60 * 1000` in warmup-config.ts). When a warmup seed reply arrives in the user's INBOX via IMAP IDLE push, it stays there for up to 5 minutes before the sweep worker moves it to the hidden folder. The IMAP idle manager's `fetchNewEmails` already detects and filters warmup emails (`x-audnix-warmup` header at line 1064) but just drops them without moving.
+- **Fix**: In `email-sync-queue.ts`, when `isWarmupSeed` is detected (line 159), immediately enqueue an `inbox-sweep` job on the warmup inbound queue (`warmup-inbound`). The warmup worker picks this up instantly and runs `sweepInboxToHidden()` for that specific mailbox using ImapFlow. This reduces the sweep delay from 0-5 minutes to ~1-2 seconds.
+- **Files**: `shared/lib/queues/email-sync-queue.ts`
+
+### Fix 4: Seeds no longer pair with other seeds
+- **Root cause**: `pairing-engine.ts:findPartnerForAnchor()` uses `getAnchorCandidates()` which returns both `anchor` AND `seed` role mailboxes. When `isSeed` is true, the filter at line 73-77 uses `(isSeed || c.anchorRole === 'anchor' || ...)`, which short-circuits to `true` for ALL remaining candidates — including other seeds. Similarly, the fallback `getEnterpriseCandidates()` path doesn't filter by anchor role at all.
+- **Fix**: Changed filter to `c.anchorRole !== 'seed'` when `isSeed` is true. Also added the same filter to the fallback enterprise candidates path. Seeds now only pair with non-seed (anchor/member) enterprise mailboxes.
+- **Files**: `services/warmup-service/src/lib/pairing-engine.ts`
+
+### Fix 5: Reply chain config (3 replies, 10-20min delays)
+- **Changed**: `REPLIES_PER_SEND` from 1 → 3 (seed replies 3 times per warmup send)
+- **Changed**: `REPLY_CHAIN_MIN_DELAY_SECONDS` from 1800 → 600 (10 min base delay)
+- **Changed**: `REPLY_CHAIN_MAX_DELAY_SECONDS` from 3600 → 1200 (20 min max delay)
+- **Progressive timing**: Reply 1 @ 10-20min, Reply 2 @ 20-40min, Reply 3 @ 40-80min
+- **Files**: `services/warmup-service/src/config/warmup-config.ts`, `services/warmup-service/src/workers/outbound-worker.ts`
+
+### Warmup Behavior Summary (for reference)
+- **User→Seed**: User mailbox sends 1 warmup email every 1-2 hours (max 15/day, max 1/hour)
+- **Seed replies**: Seed mailbox automatically replies 3 times (reply chain) with progressive delays (10-20min, 20-40min, 40-80min)
+- **Spam → Inbox**: If warmup email lands in seed's Spam/Promotions, Rust seed monitor moves to INBOX + marks \NotJunk \Flagged to train ISP
+- **Instant sweep**: When seed reply arrives in user's INBOX, email-sync-queue detects warmup seed sender, enqueues immediate inbox-sweep job (~1-2s). User's inbox stays clean
+- **No seed↔seed**: Seeds only pair with non-seed (anchor/member) enterprise mailboxes
+- **No user↔user**: User mailboxes never pair with other user mailboxes
+- **No leads**: Warmup emails never interact with prospect leads — filtered by `x-audnix-warmup` header AND seed account check
+
+### Deploy
+- `git push github main` then on EC2:
+  ```bash
+  cd /home/ubuntu/app && git pull
+  NODE_OPTIONS='--max-old-space-size=2048' npx vite build
+  pm2 restart audnix-api-gateway audnix-socket-server audnix-worker-email audnix-worker-warmup
+  ```

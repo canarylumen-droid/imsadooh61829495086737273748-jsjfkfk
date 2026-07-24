@@ -72,7 +72,7 @@ export class PairingEngine {
     );
     const filtered = poolFiltered.filter(c =>
       c.mailboxId !== mailbox.id &&
-      (isSeed || c.anchorRole === 'anchor' || c.anchorRole === 'seed' ||
+      (isSeed ? c.anchorRole !== 'seed' : c.anchorRole === 'anchor' || c.anchorRole === 'seed' ||
        (c.registeredDomain !== mailbox.registeredDomain))
     );
 
@@ -120,7 +120,10 @@ export class PairingEngine {
 
     // For seeds or if nothing found above, try enterprise-only candidates
     const enterpriseCandidates = await this.getEnterpriseCandidates(mailbox.id);
-    const filteredEnterprise = enterpriseCandidates.filter(c => c.mailboxId !== mailbox.id);
+    const filteredEnterprise = enterpriseCandidates.filter(c =>
+      c.mailboxId !== mailbox.id &&
+      (!isSeed || c.anchorRole !== 'seed')
+    );
     if (filteredEnterprise.length > 0) {
       return this.pickBest(mailbox, filteredEnterprise);
     }

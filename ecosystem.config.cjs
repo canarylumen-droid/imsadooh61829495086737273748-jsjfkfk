@@ -15,7 +15,8 @@ module.exports = {
         PORT: 5000,
         API_DISABLE_SOCKET: 'true',
         DISABLE_STATIC_SERVE: 'true',
-        S3_REGION: 'us-east-1'
+        S3_REGION: 'us-east-1',
+        NODE_OPTIONS: '--max-old-space-size=256'
       },
       error_file: './logs/api-error.log',
       out_file: './logs/api-out.log',
@@ -39,7 +40,8 @@ module.exports = {
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'socket',
         PORT: 5001,
-        S3_REGION: 'us-east-1'
+        S3_REGION: 'us-east-1',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/socket-error.log',
       out_file: './logs/socket-out.log',
@@ -61,7 +63,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'email',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=256'
       },
       error_file: './logs/email-error.log',
       out_file: './logs/email-out.log',
@@ -84,7 +87,8 @@ module.exports = {
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'imap',
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
-        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify'
+        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify',
+        NODE_OPTIONS: '--max-old-space-size=256'
       },
       error_file: './logs/imap-error.log',
       out_file: './logs/imap-out.log',
@@ -106,7 +110,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'ai',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=256'
       },
       error_file: './logs/ai-error.log',
       out_file: './logs/ai-out.log',
@@ -128,7 +133,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'outreach',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=256'
       },
       error_file: './logs/outreach-error.log',
       out_file: './logs/outreach-out.log',
@@ -155,7 +161,8 @@ module.exports = {
         MYSQL_HOST: 'database-3.cuns46ao86xu.us-east-1.rds.amazonaws.com',
         MYSQL_USER: 'admin',
         MYSQL_PASSWORD: 'TrexJetTechnology2008!.',
-        MYSQL_DATABASE: 'lead_recovery'
+        MYSQL_DATABASE: 'lead_recovery',
+        NODE_OPTIONS: '--max-old-space-size=256'
       },
       error_file: './logs/lead-recovery-error.log',
       out_file: './logs/lead-recovery-out.log',
@@ -177,7 +184,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'social',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/social-error.log',
       out_file: './logs/social-out.log',
@@ -199,7 +207,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'billing',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/billing-error.log',
       out_file: './logs/billing-out.log',
@@ -221,7 +230,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'orchestrator',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/orchestrator-error.log',
       out_file: './logs/orchestrator-out.log',
@@ -243,7 +253,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'rag',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/rag-error.log',
       out_file: './logs/rag-out.log',
@@ -265,7 +276,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'knowledge',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/knowledge-error.log',
       out_file: './logs/knowledge-out.log',
@@ -287,7 +299,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'audit',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/audit-error.log',
       out_file: './logs/audit-out.log',
@@ -309,7 +322,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'vectordb',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/vectordb-error.log',
       out_file: './logs/vectordb-out.log',
@@ -334,7 +348,8 @@ module.exports = {
         APP_ROLE: 'warmup',
         IS_WORKER: 'true',
         REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
-        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify'
+        DATABASE_URL_POOL: 'postgresql://postgres:44L8h5adNgVuAzr@database-1.cuns46ao86xu.us-east-1.rds.amazonaws.com:5432/postgres?sslmode=no-verify',
+        NODE_OPTIONS: '--max-old-space-size=256'
       },
       error_file: './logs/warmup-error.log',
       out_file: './logs/warmup-out.log',
@@ -356,7 +371,8 @@ module.exports = {
         NODE_ENV: 'production',
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'deliverability',
-        PORT: '3100'
+        PORT: '3100',
+        NODE_OPTIONS: '--max-old-space-size=128'
       },
       error_file: './logs/deliverability-error.log',
       out_file: './logs/deliverability-out.log',
@@ -379,7 +395,8 @@ module.exports = {
         NEW_EMAIL_BACKEND: 'rust',
         APP_ROLE: 'infra-scaler',
         QUEUE_AUTOSCALER_ENABLED: 'true',
-        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379'
+        REDIS_URL: 'redis://:devpassword@127.0.0.1:6379',
+        NODE_OPTIONS: '--max-old-space-size=64'
       },
       error_file: './logs/infra-scaler-error.log',
       out_file: './logs/infra-scaler-out.log',

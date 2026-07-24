@@ -1545,9 +1545,10 @@ router.post('/sync-now', requireAuthOrApiKey, async (req: Request, res: Response
     const userId = getCurrentUserId(req)!;
     const { imapIdleManager } = await import('@services/email-service/src/email/imap-idle-manager.js');
 
-    // Trigger sync in background
-    // @ts-ignore
-    imapIdleManager.syncConnections();
+    // Fire-and-forget: sync all active IMAP connections for this user
+    imapIdleManager.syncNow(userId).catch((err: any) => {
+      console.warn('[SyncNow] Background sync error:', err?.message);
+    });
 
     res.json({
       success: true,
